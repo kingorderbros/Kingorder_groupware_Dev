@@ -1,0 +1,41 @@
+# GitHub → Cloudflare Pages 배포 (개발환경 · 2026-09-16)
+#   이 폴더(개발환경)가 **그룹웨어 저장소의 루트**라는 전제입니다 (README 참고).
+#   · develop 브랜치 push  → dev 프로젝트(kingorder-groupware-dev)  · 설정 = dev Secrets
+#   · main 브랜치 push     → prod 프로젝트(kingorder-groupware)     · 설정 = prod Secrets
+# 필요한 GitHub Secrets
+#   CLOUDFLARE_API_TOKEN · CLOUDFLARE_ACCOUNT_ID
+#   SUPABASE_URL_DEV · SUPABASE_ANON_KEY_DEV · SUPABASE_URL_PROD · SUPABASE_ANON_KEY_PROD
+# (functions 가 쓰는 SUPABASE_SERVICE_ROLE_KEY 는 GitHub 이 아니라 Cloudflare Pages 환경변수에 둡니다)
+name: deploy-pages
+on:
+  push:
+    branches: [develop, main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions: { contents: read, deployments: write }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - name: 문법 · 샘플 데이터 검사
+        run: npm run check
+      - name: 실행 환경 설정 파일 채우기
+        env:
+          IS_PROD: ${{ github.ref_name == 'main' }}
+          URL_DEV: ${{ secrets.SUPABASE_URL_DEV }}
+          KEY_DEV: ${{ secrets.SUPABASE_ANON_KEY_DEV }}
+          URL_PROD: ${{ secrets.SUPABASE_URL_PROD }}
+          KEY_PROD: ${{ secrets.SUPABASE_ANON_KEY_PROD }}
+        run: |
+          if [ "$IS_PROD" = "true" ]; then ENV=prod; URL="$URL_PROD"; KEY="$KEY_PROD"; else ENV=dev; URL="$URL_DEV"; KEY="$KEY_DEV"; fi
+          printf "window.KOB_CONFIG = { env: '%s', supabaseUrl: '%s', supabaseAnonKey: '%s', apiBase: '' };\n" "$ENV" "$URL" "$KEY" > config/app-config.js
+          echo "config → $ENV ($URL)"
+      - name: Cloudflare Pages 배포
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy . --project-name ${{ github.ref_name == 'main' && 'kingorder-groupware' || 'kingorder-groupware-dev' }}

@@ -1,0 +1,22 @@
+# 비밀 · 로컬 설정
+.dev.vars
+.env
+.env.*
+!.env.example
+config/app-config.prod.js
+
+# Node / wrangler
+node_modules/
+.wrangler/
+
+# OS
+.DS_Store
+._*
+Thumbs.db
+desktop.ini
+~$*
+
+# 목업에서 넘어온 백업 · 산출물은 여기 두지 않습니다
+백업/
+_to_delete/
+*.bak

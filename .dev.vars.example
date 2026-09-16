@@ -1,0 +1,5 @@
+# 로컬 실행용 환경변수 본보기 — 복사해서 .dev.vars 로 이름을 바꾸고 값을 채웁니다 (.dev.vars 는 git 에 올라가지 않습니다)
+# 법인차량 API 와 로그인 계정 관리(/api/auth/* — 계정 만들기 · 비밀번호 초기화)가 이 값을 씁니다
+SUPABASE_URL=https://sejoauspxqrnsrhevwkj.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=sb_publishable_PsJccufYuppaXddEzERiPQ_aNHSZIkv
+KOB_ENV=dev

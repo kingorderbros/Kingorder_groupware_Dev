@@ -1,0 +1,9 @@
+# Cloudflare Pages 설정 (개발환경 · 2026-09-16)
+# 정적 파일은 이 폴더 전체, /api/* 는 functions/ 의 Pages Functions 가 받습니다.
+name = "kingorder-groupware-dev"
+pages_build_output_dir = "."
+compatibility_date = "2026-09-01"
+
+# 환경변수(SUPABASE_URL · SUPABASE_SERVICE_ROLE_KEY · KOB_ENV)는 여기 적지 않습니다 —
+#   · 로컬:  .dev.vars 파일 (git 에 올리지 않음)
+#   · 배포:  Cloudflare 대시보드 › Pages 프로젝트 › Settings › Environment variables (Production / Preview 각각)
