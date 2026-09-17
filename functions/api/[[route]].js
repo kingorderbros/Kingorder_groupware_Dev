@@ -1,7 +1,7 @@
 /**
  * 법인차량 API — Cloudflare Pages Functions (개발환경 · 2026-09-16)
  *
- * 목업의 server.js(Node · data/*.json 파일 저장)를 그대로 옮겼습니다. 저장은 Supabase 표 두 개에 합니다.
+ * 시연본의 server.js(Node · data/*.json 파일 저장)를 그대로 옮겼습니다. 저장은 Supabase 표 두 개에 합니다.
  *   vehicle_logs(id text pk, data jsonb)          운행일지
  *   vehicle_reservations(id text pk, data jsonb)  차량 예약
  * 차량 · 운전자 목록은 화면이 저장소(app_store)에 둔 값(gwVehicles.v1 · gwUsers.v1)을 읽습니다 — 서버에 따로 박아 두지 않습니다.

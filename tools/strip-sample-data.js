@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * 목업(소스/Index_ver1.0.html) → 개발환경 index.html 변환 (2026-09-16)
+ * 시연본(소스/Index_ver1.0.html) → 개발환경 index.html 변환 (2026-09-16)
  *
  *   node tools/strip-sample-data.js ../소스/Index_ver1.0.html index.html
  *
@@ -11,8 +11,8 @@
  *   4) API_BASE 를 config/app-config.js 의 값으로
  *   5) 본체 스크립트를 <script type="text/x-kob-main"> 로 감싸, js/kob-store.js 가 저장소를 먼저 불러온 뒤 실행하게 함
  *
- * 원본(소스 폴더)은 건드리지 않습니다. 목업을 고친 뒤 다시 돌리면 개발환경 index.html 이 새로 만들어집니다.
- * (개발환경에서 index.html 을 직접 고쳤다면 이 스크립트를 다시 돌리기 전에 그 변경을 목업에도 반영해야 합니다)
+ * 원본(소스 폴더)은 건드리지 않습니다. 시연본을 고친 뒤 다시 돌리면 개발환경 index.html 이 새로 만들어집니다.
+ * (개발환경에서 index.html 을 직접 고쳤다면 이 스크립트를 다시 돌리기 전에 그 변경을 시연본에도 반영해야 합니다)
  */
 const fs = require('fs');
 const path = require('path');
@@ -22,9 +22,9 @@ const SRC = path.resolve(srcArg || path.join(__dirname, '..', '..', '소스', 'I
 const OUT = path.resolve(outArg || path.join(__dirname, '..', 'index.html'));
 
 // 2026-09-16 부터 개발환경 index.html 에만 있는 기능(로그인 비밀번호 · 조직도 admin 제외 …)이 생겼습니다.
-// 이 스크립트는 목업에서 새로 뽑으므로 그 기능이 사라집니다. 알고 돌리는 경우에만 --force 를 붙입니다.
+// 이 스크립트는 시연본에서 새로 뽑으므로 그 기능이 사라집니다. 알고 돌리는 경우에만 --force 를 붙입니다.
 if (fs.existsSync(OUT) && fs.readFileSync(OUT, 'utf8').includes('js/kob-auth.js') && !process.argv.includes('--force')) {
-    console.error('중단: ' + OUT + ' 에는 목업에 없는 개발환경 전용 기능(로그인 비밀번호 등)이 들어 있습니다.');
+    console.error('중단: ' + OUT + ' 에는 시연본에 없는 개발환경 전용 기능(로그인 비밀번호 등)이 들어 있습니다.');
     console.error('  다시 뽑으면 그 기능이 사라집니다. 정말 덮어쓰려면 --force 를 붙이세요 (CHANGELOG.md 의 2026-09-16 항목 참고).');
     process.exit(2);
 }
