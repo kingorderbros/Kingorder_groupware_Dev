@@ -44477,6 +44477,25 @@ const QUOTE_TEMPLATES = [
             catch (e) { /* 표시를 남기지 못해도 값은 이미 채웠습니다 */ }
         })();
 
+        // 2026-09-17 — 영업본부에 '장비설치의뢰서' 가 생겼습니다.
+        // 신규 가맹점 개설을 쓰던 아이디는 설치 의뢰도 내는 곳이라 함께 열어 줍니다.
+        const PARTNER_INSTALL_MENU_KEY = 'gwPartnerDeptPerm.newMenus.20260917';
+        (function migratePartnerInstallMenu() {
+            try { if (kobStorage.getItem(PARTNER_INSTALL_MENU_KEY)) return; }
+            catch (e) { return; }
+            let changed = false;
+            Object.keys(partnerDeptPerm).forEach(k => {
+                const list = partnerDeptPerm[k];
+                if (!Array.isArray(list)) return;
+                if (list.indexOf('sales') < 0) return;                 // 영업본부가 닫혀 있으면 넣지 않습니다
+                if (list.indexOf('sales:newshop') < 0) return;         // 신규 개설을 쓰던 아이디에만
+                if (list.indexOf('sales:install') < 0) { list.push('sales:install'); changed = true; }
+            });
+            if (changed) savePartnerDeptPerm();
+            try { kobStorage.setItem(PARTNER_INSTALL_MENU_KEY, new Date().toISOString()); }
+            catch (e) { /* 표시를 못 남겨도 값은 이미 채웠습니다 */ }
+        })();
+
         // 인바운드 상담 대행사 아이디는 처음부터 **영업본부 › 인바운드 접수** 만 열어 둡니다.
         // (권한을 지정하지 않은 계정은 '모두 열림' 이 기본이라, 이 계정만 따로 심어 둡니다)
         const PARTNER_PERM_SEED = { vendor1: ['sales', 'sales:inbound'] };
@@ -47255,11 +47274,14 @@ const QUOTE_TEMPLATES = [
         // 발주 장비 기본 품목 — 초안의 표를 그대로 옮겼습니다.
         // 단가는 **거래 유형이 정해진 뒤 관리자가 확정**하는 값이라 여기서는 0 으로 두고,
         // 협의단가(개인 가맹점)일 때만 파트너가 직접 적습니다.
+        // 2026-09-17 — 설치 의뢰서(킹오더_설치발주서_가맹점_설치환경_체크리스트.xlsx)의 품목 순서 그대로입니다.
         const PARTNER_HW_CATALOG = [
             { item: '포스세트',   note: '' },
             { item: '오더포스',   note: '벽걸이 유무' },
             { item: '키오스크',   note: '' },
             { item: '테이블오더', note: '거치대: 고정 / 이동 / 벽걸이' },
+            { item: '주방프린터', note: '' },
+            { item: '카드단말기', note: '' },
             { item: '설치비',     note: '', fixed: true }
         ];
         const PARTNER_HW_METHODS = [
@@ -47434,25 +47456,60 @@ const QUOTE_TEMPLATES = [
         ];
 
         // ---------- 가맹점 설치환경 체크 ----------
-        // 현장에서 검증된 체크리스트라 항목은 초안 그대로입니다.
+        // 2026-09-17 — 설치 의뢰서(xlsx)의 ② 가맹점 설치환경 체크 7항목을 그대로 옮겼습니다.
+        // 대부분 **가맹점주가 직접 매장을 보고** 적으므로, 항목 이름만으로는 판단이 어렵습니다.
+        // 그래서 의뢰서의 '비고' 를 안내 문구로 항목마다 함께 보여 주고, 특이사항도 항목마다 받습니다.
+        //   구분 · 항목 · 안내문 · 확인(체크) · 특이사항(한 줄)
+        // 영업본부 · 운영본부의 최종확인은 접수함과 장비설치 업무에서 따로 받습니다(아래 PARTNER_SITE_CONFIRMERS).
+        const PARTNER_SITE_CHECKS = [
+            { id: 'power',  cat: '전기',       name: '설치 위치 콘센트 확보',
+              hint: '장비 대당 콘센트 2구 이상 필요' },
+            { id: 'lan',    cat: '랜선',       name: '설치 위치까지 랜선 연결',
+              hint: '모든 장비 설치 위치에 UTP선(랜선)이 빠져나올 수 있도록 인테리어 담당자에게 사전 요청 필수' },
+            { id: 'net',    cat: '네트워크',   name: '인터넷 설치 여부 확인',
+              hint: '인터넷 미설치 시 장비 설치 불가' },
+            { id: 'wifi',   cat: 'Wi-Fi',      name: '공유기 설치 여부 확인',
+              hint: '테이블오더 설치 시 필수 확인 항목' },
+            { id: 'space',  cat: '설치공간',   name: '장비 설치 공간 확보',
+              hint: '사전 미체크 시 현장에 조율 가능한 현장담당자 상주 필수' },
+            { id: 'tables', cat: '테이블오더', name: '테이블별 설치 위치 확인',
+              hint: '10대 이상 설치 시 고사양 공유기 및 충분한 회선 환경 권장 · 평수가 넓거나 벽이 많은 매장은 무선 AP 추가 설치 권장' },
+            { id: 'plan',   cat: '도면',       name: '층별 인터넷 환경 및 장비 설치 위치 확인',
+              hint: '도면에 장비 설치 위치 및 인터넷 인입 위치를 표시하여 전달' }
+        ];
+        // 의뢰서 맨 아래 REMARK — 접수 화면에 그대로 보여 줍니다.
+        const PARTNER_SITE_REMARKS = [
+            'POS 및 키오스크 설치 시 CMS 비용이 발생하오니 금액 확인 후 가맹점에 사전 안내 부탁드립니다.',
+            '설치 환경이 미비한 경우 설치가 어려울 수 있으며, 재방문 및 추가 비용이 발생할 수 있으니 접수 전 설치 환경을 반드시 확인해 주세요.',
+            '가맹점 신규 접수는 원활한 설치 준비를 위해 영업일 기준 최소 5일 전까지 접수 부탁드립니다.',
+            '현장에서 타공, 랜선 추가설치는 불가하므로 사전에 확인하여 주시기 바랍니다.',
+            '발주 장비 단가는 전달드린 정책서에서 금액 확인 후 기재 부탁드리며, 100% 선입금 후 출고 진행됩니다.'
+        ];
+        // 값은 숨은 칸 하나에 JSON 으로 담습니다 (발주 장비 표와 같은 방식).
+        //   [{ id, ok, note }]  — ok = 작성자(가맹점주·파트너) 확인, note = 그 항목의 특이사항
+        function partnerSiteRows(raw) {
+            let saved = [];
+            try { const v = JSON.parse(raw || '[]'); if (Array.isArray(v)) saved = v; } catch (e) { /* 예전 글자 값 */ }
+            // 예전에 저장된 'power,lan,net' 같은 글자 값도 그대로 읽어 줍니다
+            const legacy = (!saved.length && raw) ? String(raw).split(',').map(v => v.trim()).filter(Boolean) : [];
+            return PARTNER_SITE_CHECKS.map(c => {
+                const hit = saved.find(x => x && x.id === c.id) || {};
+                return { id: c.id, ok: hit.ok !== undefined ? !!hit.ok : legacy.includes(c.id), note: hit.note || '' };
+            });
+        }
+        function partnerSiteDef(id) { return PARTNER_SITE_CHECKS.find(c => c.id === id) || null; }
+
         const PARTNER_SITE_FIELDS = [
             { key: 'siteOpenDate', label: '오픈 예정일', type: 'date', required: false, noSum: true,
               showIf: { key: 'shopOpen', in: ['new'] } },
             // 유통 건은 설치를 우리가 하지 않으므로 체크리스트를 받지 않습니다
-            { key: 'siteCheck', label: '현장 체크리스트', type: 'checks', required: false, noSum: true,
-              showIf: { key: 'custType', in: ['direct', 'franchise', 'partner', 'partnerShop', 'hq'] },
-              options: [
-                  { id: 'power',  name: '전기 · 콘센트 확보 (포스 3구 이상 / 그 밖 2구 이상)' },
-                  { id: 'lan',    name: '설치 위치까지 랜선(UTP) 인입' },
-                  { id: 'net',    name: '인터넷 설치 완료' },
-                  { id: 'wifi',   name: 'Wi-Fi 공유기 설치' },
-                  { id: 'space',  name: '장비 설치 공간 확보' },
-                  { id: 'tables', name: '테이블별 설치 위치 확인 (테이블오더)' },
-                  { id: 'plan',   name: '층별 인터넷 · 장비 위치를 도면에 표시' }
-              ] },
-            { key: 'siteMemo', label: '설치 메모', type: 'textarea', required: false, rows: 2, noSum: true,
-              showIf: { key: 'custType', in: ['direct', 'franchise', 'partner', 'partnerShop', 'hq'] },
-              placeholder: '현장에서 미리 알아야 할 것을 적어 주세요' }
+            // 하드웨어 유통(dist)만 빼고 늘 보입니다. 거래 유형 칸이 없는 접수 구분
+            // (장비설치의뢰서)에서도 보여야 해서 notIn 을 씁니다. (2026-09-17)
+            { key: 'siteCheck', label: '가맹점 설치환경 체크', type: 'sitechecks', required: false, noSum: true,
+              showIf: { key: 'custType', notIn: ['dist'] } },
+            { key: 'siteMemo', label: '특이사항 · 사전 협의 내용', type: 'textarea', required: false, rows: 3, noSum: true,
+              showIf: { key: 'custType', notIn: ['dist'] },
+              placeholder: '고객 요청사항, 프로그램 기능, 특수 장비 등 설치에 영향을 줄 수 있는 사항이나 사전에 협의된 내용을 적어 주세요' }
         ];
         // ==================== 발주 장비 품목표 (2026-09-15) ====================
         // 값은 **숨은 입력칸 하나에 JSON 으로** 담습니다. 그러면 읽기·검사·저장이
@@ -47495,6 +47552,77 @@ const QUOTE_TEMPLATES = [
                 }
             }
             return { qty, price, supply, vat, total: supply + vat, margin };
+        }
+
+        // ---------- 가맹점 설치환경 체크 그리기 (2026-09-17) ----------
+        // 의뢰서의 표(구분 · 확인 항목 · 확인 · 비고 · 특이사항)를 항목마다 카드 한 장으로 그립니다.
+        // 좁은 화면에서도 안내 문구가 잘리지 않아야 가맹점주가 보고 판단할 수 있습니다.
+        function partnerSiteChecksHtml(f, prefix, ring, value) {
+            const id = prefix + f.key;
+            const rows = partnerSiteRows(value);
+            const inp = 'w-full px-2.5 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 ' + (ring || 'focus:ring-indigo-500');
+            const body = rows.map((r, i) => {
+                const c = partnerSiteDef(r.id) || { cat: '', name: r.id, hint: '' };
+                return `<div data-site-row="${i}" class="rounded-xl border ${r.ok ? 'border-indigo-200 bg-white' : 'border-gray-200 bg-gray-50/60'} p-3">
+                    <div class="flex items-start gap-3">
+                        <label class="inline-flex items-center gap-2 cursor-pointer shrink-0 pt-0.5">
+                            <input type="checkbox" data-site="ok"${r.ok ? ' checked' : ''}
+                                   class="w-5 h-5 rounded accent-indigo-600" onchange="onPartnerSiteInput(this.closest('[data-site-box]'))">
+                            <span class="text-[11px] font-bold px-2 py-0.5 rounded-full ${r.ok ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-200 text-gray-500'}">${escapeHtml(c.cat)}</span>
+                        </label>
+                        <div class="min-w-0 flex-1">
+                            <p class="text-sm font-semibold text-gray-800">${escapeHtml(c.name)}</p>
+                            ${c.hint ? `<p class="text-xs text-gray-500 mt-1 leading-relaxed"><i class="fas fa-circle-info mr-1 text-gray-400"></i>${escapeHtml(c.hint)}</p>` : ''}
+                            <input type="text" data-site="note" value="${escapeHtml(r.note)}" class="${inp} mt-2"
+                                   placeholder="특이사항 (없으면 비워 두세요)" oninput="onPartnerSiteInput(this.closest('[data-site-box]'), true)">
+                        </div>
+                    </div>
+                    <input type="hidden" data-site="id" value="${escapeHtml(r.id)}">
+                </div>`;
+            }).join('');
+            const done = rows.filter(r => r.ok).length;
+            return `<div data-site-box="1" data-site-table="${id}" class="space-y-2">
+                <input type="hidden" id="${id}" value="${escapeHtml(JSON.stringify(rows))}">
+                <div class="flex items-center justify-between gap-2 mb-1">
+                    <p class="text-xs text-gray-500">매장을 직접 보시고 확인되는 항목에 표시해 주세요.</p>
+                    <span data-site-count class="text-xs font-semibold ${done === rows.length ? 'text-green-600' : 'text-gray-500'}">${done} / ${rows.length} 확인</span>
+                </div>
+                ${body}
+                <div class="rounded-xl border border-amber-200 bg-amber-50 p-3 mt-2">
+                    <p class="text-xs font-bold text-amber-800 mb-1.5"><i class="fas fa-triangle-exclamation mr-1"></i>접수 전 꼭 확인해 주세요</p>
+                    <ul class="list-disc pl-4 space-y-1 text-[11px] text-amber-900/90 leading-relaxed">
+                        ${PARTNER_SITE_REMARKS.map(t => `<li>${escapeHtml(t)}</li>`).join('')}
+                    </ul>
+                </div>
+            </div>`;
+        }
+        // 체크·특이사항이 바뀌면 숨은 칸의 JSON 을 새로 씁니다.
+        // light 는 글자를 치는 중이라 다시 그리지 않는다는 뜻입니다 (커서가 날아가지 않게).
+        function onPartnerSiteInput(box, light) {
+            if (!box) return;
+            const hidden = document.getElementById(box.getAttribute('data-site-table'));
+            if (!hidden) return;
+            const rows = Array.from(box.querySelectorAll('[data-site-row]')).map(el => {
+                const get = (k) => el.querySelector(`[data-site="${k}"]`);
+                const okEl = get('ok'), noteEl = get('note'), idEl = get('id');
+                return { id: idEl ? idEl.value : '', ok: okEl ? okEl.checked : false, note: noteEl ? noteEl.value : '' };
+            });
+            hidden.value = JSON.stringify(rows);
+            const cnt = box.querySelector('[data-site-count]');
+            if (cnt) {
+                const done = rows.filter(r => r.ok).length;
+                cnt.textContent = `${done} / ${rows.length} 확인`;
+                cnt.className = `text-xs font-semibold ${done === rows.length ? 'text-green-600' : 'text-gray-500'}`;
+            }
+            if (!light) {
+                // 체크를 켜고 끄면 카드 테두리 색이 따라오도록 그 줄만 다시 칠합니다
+                Array.from(box.querySelectorAll('[data-site-row]')).forEach((el, i) => {
+                    const on = rows[i] && rows[i].ok;
+                    el.className = `rounded-xl border ${on ? 'border-indigo-200 bg-white' : 'border-gray-200 bg-gray-50/60'} p-3`;
+                    const badge = el.querySelector('[data-site="ok"] + span');
+                    if (badge) badge.className = `text-[11px] font-bold px-2 py-0.5 rounded-full ${on ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-200 text-gray-500'}`;
+                });
+            }
         }
 
         // 표를 그립니다. mode 는 partnerHwPriceMode() 가 정한 단가 노출 방식입니다.
@@ -47651,6 +47779,19 @@ const QUOTE_TEMPLATES = [
             onPartnerHwInput(box);
         }
         // 접수 요약 · 접수함에서 보여줄 글 (JSON 을 사람이 읽는 줄로)
+        // 접수함 · 인쇄에서 한 덩어리 글로 보여 줍니다. 확인 안 된 항목과 특이사항이 눈에 띄어야 합니다.
+        function partnerSiteChecksText(raw) {
+            const rows = partnerSiteRows(raw);
+            const done = rows.filter(r => r.ok).length;
+            const head = `확인 ${done} / ${rows.length}`;
+            const miss = rows.filter(r => !r.ok).map(r => (partnerSiteDef(r.id) || {}).name || r.id);
+            const notes = rows.filter(r => r.note).map(r => `${(partnerSiteDef(r.id) || {}).cat || ''} ${r.note}`.trim());
+            const parts = [head];
+            if (miss.length) parts.push('미확인: ' + miss.join(' · '));
+            if (notes.length) parts.push('특이사항: ' + notes.join(' / '));
+            return parts.join('\n');
+        }
+
         function partnerHwTableText(raw) {
             let rows;
             try { rows = JSON.parse(raw || '[]'); } catch (e) { return String(raw || ''); }
@@ -47819,6 +47960,19 @@ const QUOTE_TEMPLATES = [
             // 서류는 영업본부와 결제본부가 함께 확인합니다 (2026-09-16)
             { n: 9, name: '서류 · 최종확인', last: true, note: '제출 서류는 영업본부 · 결제본부가 함께 확인합니다' }
         ];
+        // ---------- 장비설치의뢰서 (2026-09-17) ----------
+        // 설치 의뢰서(킹오더_설치발주서_가맹점_설치환경_체크리스트.xlsx)를 그대로 접수 구분으로 만든 것입니다.
+        // '신규 가맹점 개설' 과 다른 점 — **이미 계약된 곳에 장비를 설치할 때** 씁니다.
+        // 그래서 거래 유형 · 사업자 구분 · 서류 · VAN/PG · CMS 를 다시 받지 않고,
+        // 의뢰서에 있는 것만 받습니다: 가맹점 정보 → 발주 장비 → 설치환경 체크 → 설치 일정.
+        const PARTNER_INSTALL_ORDER_STEPS = [
+            { n: 1, name: '가맹점 정보' },
+            { n: 2, name: '발주 장비' },
+            { n: 3, name: '설치환경 체크' },
+            { n: 9, name: '확인 · 접수', last: true,
+              note: '설치 환경이 미비하면 재방문 · 추가 비용이 생길 수 있습니다. 접수 전에 다시 한 번 확인해 주세요' }
+        ];
+
         // ---------- 무상 장비 지원 (2026-09-15) ----------
         // 파트너사가 병원 · 가맹점에 장비를 **무상으로 넣어 주는** 건입니다.
         // 사는 것이 아니라 **지원하는** 것이라 받을 것이 다릅니다 —
@@ -47914,6 +48068,26 @@ const QUOTE_TEMPLATES = [
                               { id: 'ns-corep-idcard',   name: '공동대표 신분증',          required: true },
                               { id: 'ns-corep-account',  name: '공동대표 결제계좌 사본',   required: true },
                               { id: 'ns-corep-consent',  name: '공동대표 동의서',          required: true }
+                          ]
+                      } },
+                    // ---------- 장비설치의뢰서 (2026-09-17) ----------
+                    // 이미 계약된 가맹점에 장비를 설치할 때 쓰는 의뢰서입니다.
+                    // 신규 개설과 부품(가맹점 정보 · 발주 장비 · 설치환경 체크 · 설치 일정)을 함께 씁니다.
+                    { id: 'install', name: '장비설치의뢰서',
+                      desc: '이미 계약된 가맹점에 장비를 설치합니다. 매장 환경을 확인해 주셔야 설치가 진행됩니다.',
+                      noBaseText: true,
+                      steps: PARTNER_INSTALL_ORDER_STEPS,
+                      fields: withStep(1, PARTNER_SHOP_FIELDS)
+                          .concat(withStep(2, PARTNER_HW_FIELDS))
+                          .concat(withStep(3, PARTNER_SITE_FIELDS))
+                          .concat(withStep(3, PARTNER_INSTALL_FIELDS))
+                          .concat(withStep(9, PARTNER_AGREE_FIELDS)),
+                      // 이미 계약된 곳이라 서류를 새로 받지 않습니다. 도면 · 매장 사진만 있으면 설치 준비가 쉬워집니다.
+                      docsOwn: true,
+                      docsExtra: {
+                          all: [
+                              { id: 'io-plan',      name: '매장 도면 (장비 위치 · 인터넷 인입 표시)', required: false },
+                              { id: 'io-shopphoto', name: '매장 내 · 외부 사진',                      required: false }
                           ]
                       } },
                     // 장비만 사는 건 — 설치·결제 연동이 없어 배송 정보로 대신합니다
@@ -48150,6 +48324,12 @@ const QUOTE_TEMPLATES = [
               name: '장비 구매 · 추가',
               desc: '포스 · 키오스크 · 테이블오더를 구매 또는 임대합니다.',
               kw: '하드웨어 구매 발주 렌탈 임대 포스 키오스크' },
+            // 2026-09-17 — 설치 의뢰서(xlsx)를 그대로 옮긴 접수입니다.
+            // 의뢰서에 '영업일 기준 최소 5일 전 접수' 라고 적혀 있어 기간을 그대로 적습니다.
+            { id: 'sales:install', cat: 'hw', icon: 'fa-clipboard-check', days: '영업일 5일 전',
+              name: '장비설치의뢰서',
+              desc: '이미 계약된 가맹점에 장비를 설치합니다. 매장 환경을 먼저 확인해 주셔야 설치가 진행됩니다.',
+              kw: '설치 설치의뢰 설치발주 설치요청 발주서 설치환경 체크리스트' },
             { id: 'ops:as', cat: 'fix', icon: 'fa-screwdriver-wrench', days: '당일~1일',
               name: '장애 신고 (A/S)',
               desc: '설치 장비의 장애를 접수합니다. 긴급 건은 유선으로 연락해 주세요.',
@@ -48989,6 +49169,8 @@ const QUOTE_TEMPLATES = [
                             ${escapeHtml(nm)}</label>`;
                     }).join('')}
                 </div>`;
+            } else if (f.type === 'sitechecks') {
+                input = partnerSiteChecksHtml(f, prefix, ring, cur);
             } else if (f.type === 'checks') {
                 const on = String(cur).split(',').map(v => v.trim()).filter(Boolean);
                 input = `<div id="${id}" class="flex flex-wrap gap-2" data-field-checks="1"${f.reloadFields ? ' data-reload-fields="1"' : ''}>
@@ -49483,10 +49665,12 @@ const QUOTE_TEMPLATES = [
 
         // 이 항목을 지금 화면에 보여야 하는지 — showIf 가 없으면 늘 보입니다.
         //   showIf: { key: '다른 항목 key', in: ['값1','값2'] }  → 그 항목을 그 값으로 골랐을 때만
+        //   showIf: { key: '다른 항목 key', notIn: ['값'] }        → 그 값만 아니면 (그 항목이 아예 없는 접수 구분에서도 보입니다)
         function partnerFieldVisible(f, values) {
             const c = f && f.showIf;
             if (!c) return true;
             const cur = String((values || {})[c.key] || '');
+            if (Array.isArray(c.notIn)) return !c.notIn.map(String).includes(cur);
             if (Array.isArray(c.in)) return c.in.map(String).includes(cur);
             if (c.eq !== undefined) return cur === String(c.eq);
             return true;
@@ -49495,6 +49679,11 @@ const QUOTE_TEMPLATES = [
         function readPartnerFieldsPresent(fields, prefix) {
             const out = {};
             (fields || []).forEach(f => {
+                if (f.type === 'sitechecks') {
+                    const el = document.getElementById(prefix + f.key);
+                    if (el) out[f.key] = el.value || '';
+                    return;
+                }
                 if (f.type === 'checks') {
                     const v = readPartnerChecks(prefix, f.key);
                     if (v !== null) out[f.key] = v;
@@ -49521,6 +49710,11 @@ const QUOTE_TEMPLATES = [
         function readPartnerFields(fields, prefix) {
             const out = {};
             (fields || []).forEach(f => {
+                if (f.type === 'sitechecks') {
+                    const el = document.getElementById(prefix + f.key);
+                    out[f.key] = el ? (el.value || '') : '';
+                    return;
+                }
                 if (f.type === 'checks') { out[f.key] = readPartnerChecks(prefix, f.key) || ''; return; }
                 if (f.type === 'radio') {
                     const on = document.querySelector(`input[name="${prefix + f.key}"]:checked`);
@@ -49566,6 +49760,7 @@ const QUOTE_TEMPLATES = [
         function partnerFieldValueText(f, raw) {
             if (!raw) return '';
             if (f.type === 'hwtable') return partnerHwTableText(raw);
+            if (f.type === 'sitechecks') return partnerSiteChecksText(raw);
             if (f.type === 'checks') {
                 const nameOf = v => {
                     const o = (f.options || []).find(o => String(o.id !== undefined ? o.id : o) === v);
@@ -52093,6 +52288,8 @@ const QUOTE_TEMPLATES = [
                             <button type="button" onclick="assignPartnerIntakeToMe('${x.id}')" class="px-3 py-2 bg-white border border-teal-300 text-teal-700 rounded text-sm font-semibold">내가 처리</button>
                         </div>
                     </div>
+                    ${partnerSiteConfirmHtml(x)}
+                    ${partnerInstallRequestHtml(x)}
                     ${partnerMethodPickHtml(x)}
                     ${partnerAccountingHtml(x)}
                     ${partnerDeptWorkHtml(x)}
@@ -52282,6 +52479,234 @@ const QUOTE_TEMPLATES = [
                 </div>`;
             }).join('');
         }
+        // ==================== 설치환경 최종확인 · 운영본부 설치 요청 (2026-09-17) ====================
+        // 설치 의뢰서에는 확인 칸이 두 개입니다 — 작성자(가맹점주·파트너) 확인, 그리고 최종확인.
+        // 최종확인은 **영업본부와 운영본부가 각각** 합니다.
+        //   · 영업본부 — 접수를 검토하면서 (이 접수함 화면)
+        //   · 운영본부 — 설치를 나가기 전에 (운영업무센터 장비설치 업무)
+        // 값은 접수 건 안에 남깁니다: x.siteConfirm = { sales: {...}, ops: {...} }
+        //   각 칸 = { items: { 항목id: true }, by, at }
+        const PARTNER_SITE_CONFIRMERS = [
+            { id: 'sales', dept: 'sales', name: '영업본부', icon: 'fa-briefcase', color: 'blue' },
+            { id: 'ops',   dept: 'ops',   name: '운영본부', icon: 'fa-gears',     color: 'emerald' }
+        ];
+        function partnerSiteConfirmOf(x, who) { return ((x || {}).siteConfirm || {})[who] || { items: {} }; }
+        // 이 접수가 설치환경 체크를 받는 건인지 (신규 가맹점 개설 · 장비설치의뢰서)
+        function partnerHasSiteCheck(x) {
+            if (!x) return false;
+            return partnerIntakeFieldsOf(x).some(f => f.type === 'sitechecks');
+        }
+        function partnerSiteRowsOf(x) {
+            const f = partnerIntakeFieldsOf(x).find(ff => ff.type === 'sitechecks');
+            return f ? partnerSiteRows(((x || {}).extra || {})[f.key]) : [];
+        }
+
+        function partnerSiteConfirmHtml(x) {
+            if (!partnerHasSiteCheck(x)) return '';
+            const rows = partnerSiteRowsOf(x);
+            if (!rows.length) return '';
+            const cell = (c) => {
+                const cf = partnerSiteConfirmOf(x, c.id);
+                const mine = canHandlePartnerIntake(c.dept);
+                const done = rows.filter(r => cf.items && cf.items[r.id]).length;
+                const all = done === rows.length;
+                return `<div class="rounded border ${all ? 'border-' + c.color + '-200 bg-' + c.color + '-50/50' : 'border-gray-200 bg-white'} p-2.5">
+                    <div class="flex items-center justify-between gap-2">
+                        <span class="text-xs font-bold text-gray-700"><i class="fas ${c.icon} mr-1"></i>${escapeHtml(c.name)} 최종확인</span>
+                        <span class="text-xs font-semibold ${all ? 'text-' + c.color + '-700' : 'text-gray-400'}">${done} / ${rows.length}</span>
+                    </div>
+                    ${cf.by ? `<p class="text-[11px] text-gray-500 mt-1">${escapeHtml(cf.by)} · ${escapeHtml(cf.at || '')}</p>` : ''}
+                    ${mine ? `<div id="pi-siteconf-${c.id}" class="mt-2 space-y-1">
+                        ${rows.map(r => {
+                            const def = partnerSiteDef(r.id) || { cat: '', name: r.id };
+                            const on = !!(cf.items && cf.items[r.id]);
+                            return `<label class="flex items-start gap-2 text-xs cursor-pointer">
+                                <input type="checkbox" data-siteconf="${escapeHtml(r.id)}"${on ? ' checked' : ''} class="mt-0.5 rounded accent-${c.color}-600">
+                                <span class="min-w-0">
+                                    <span class="font-semibold text-gray-700">[${escapeHtml(def.cat)}]</span>
+                                    <span class="text-gray-600">${escapeHtml(def.name)}</span>
+                                    ${r.ok ? '' : '<span class="ml-1 text-[10px] font-bold text-red-600">작성자 미확인</span>'}
+                                    ${r.note ? `<span class="block text-[11px] text-amber-700">특이사항: ${escapeHtml(r.note)}</span>` : ''}
+                                </span></label>`;
+                        }).join('')}
+                        <div class="flex justify-end pt-1">
+                            <button type="button" onclick="savePartnerSiteConfirm('${x.id}','${c.id}')"
+                                class="px-2.5 py-1.5 bg-${c.color}-600 hover:bg-${c.color}-700 text-white rounded text-xs">확인 저장</button>
+                        </div>
+                    </div>` : `<p class="text-[11px] text-gray-400 mt-1">${escapeHtml(c.name)} 담당자만 체크할 수 있습니다.</p>`}
+                </div>`;
+            };
+            const miss = rows.filter(r => !r.ok).length;
+            return `<div class="rounded border border-indigo-100 bg-indigo-50/40 p-3">
+                <p class="text-indigo-800 font-semibold mb-2"><i class="fas fa-clipboard-check mr-1"></i>설치환경 최종확인
+                    ${miss ? `<span class="ml-1 text-xs font-bold text-red-600">작성자 미확인 ${miss}건</span>`
+                           : '<span class="ml-1 text-xs font-normal text-gray-500">작성자 확인 완료</span>'}</p>
+                <div class="grid sm:grid-cols-2 gap-2">${PARTNER_SITE_CONFIRMERS.map(cell).join('')}</div>
+            </div>`;
+        }
+
+        // ---------- 운영본부에 설치 요청 (2026-09-17) ----------
+        // 지금까지 파트너 접수와 업무센터는 이어져 있지 않아, 영업이 내용을 보고
+        // 운영업무센터에서 **다시 손으로 접수**해야 했습니다. 그 길을 잇습니다.
+        // 한 번 요청하면 접수에 workId 를 남겨 두 번 만들어지지 않게 합니다.
+        function partnerCanRequestInstall(x) {
+            if (!x || !partnerHasSiteCheck(x)) return false;
+            return x.dept === 'sales';                     // 영업본부가 받은 건만 (신규 개설 · 장비설치의뢰서)
+        }
+        function partnerInstallDevicesText(x) {
+            const f = partnerIntakeFieldsOf(x).find(ff => ff.type === 'hwtable');
+            if (!f) return '';
+            const rows = partnerHwRows(((x || {}).extra || {})[f.key]);
+            return rows.filter(r => partnerNum(r.qty) > 0 && r.item !== '설치비')
+                .map(r => `${r.item}${partnerNum(r.qty) > 1 ? ' ' + partnerNum(r.qty) : ''}`).join(' · ');
+        }
+        // 접수에 적힌 가맹점을 **고객사(customers)에 등록**하고, 업무센터에서 쓰는 고객 id 를 돌려줍니다.
+        // 업무센터는 고객을 골라야 그 고객의 업무가 보이는 구조라, 이 연결이 없으면
+        // 업무를 만들어도 **어느 고객으로도 조회되지 않습니다.** (2026-09-17)
+        //   · 사업자번호(없으면 상호)로 이미 있는 고객을 찾아 그것을 씁니다 — 같은 곳이 두 번 생기지 않게
+        //   · 없으면 접수 내용으로 새로 등록합니다 (가맹점관리에서 그대로 보입니다)
+        function linkIntakeCustomer(x) {
+            const ex = x.extra || {};
+            const name = String(ex.shopName || '').trim();
+            const bizNo = String(ex.shopBizNo || '').trim();
+            if (!name && !bizNo) return { id: '', cust: null };
+            const want = custMatchKey(name, bizNo);
+            let cust = customers.find(c => custMatchKey(c.name, c.businessNo) === want);
+            if (!cust) {
+                cust = {
+                    id: 'c' + customerIdCounter++,
+                    name: name, businessNo: bizNo,
+                    ceo: String(ex.shopCeo || '').trim(),
+                    phone: String(ex.shopPhone || '').trim(),
+                    address: String(ex.shopAddr || '').trim(),
+                    type: '거래고객', grade: '일반', size: '중소기업',
+                    industry: String(ex.shopBiz || '').trim(), email: '', useYn: 'YES',
+                    memo: `파트너 접수 ${x.id} 에서 등록 (${x.partnerName || ''})`.trim()
+                };
+                customers.push(cust);
+                saveCustomers();
+            }
+            // 업무센터 고객 id — wcCustomers() 가 만드는 규칙과 같아야 합니다 ('o' + 'x-' + 고객id)
+            return { id: `ox-${cust.id}`, cust };
+        }
+
+        function partnerInstallRequestHtml(x) {
+            if (!partnerCanRequestInstall(x)) return '';
+            const done = !!x.workId;
+            const rows = partnerSiteRowsOf(x);
+            const miss = rows.filter(r => !r.ok).length;
+            const devices = partnerInstallDevicesText(x);
+            return `<div class="rounded border border-emerald-200 bg-emerald-50/60 p-3">
+                <p class="text-emerald-800 font-semibold mb-1"><i class="fas fa-gears mr-1"></i>운영본부 설치 요청</p>
+                ${done
+                    ? `<p class="text-sm text-gray-700">운영업무센터에 <b class="font-mono">${escapeHtml(x.workId)}</b> 로 넘겼습니다.
+                         <span class="text-gray-500">${escapeHtml(x.workAt || '')}</span></p>
+                       <p class="text-[11px] text-gray-400 mt-1">그 뒤 진행은 운영업무센터 <b>장비설치</b> 에서 봅니다.</p>`
+                    : `<p class="text-xs text-gray-600 mb-2">누르면 운영업무센터 <b>장비설치</b> 에 업무가 생깁니다.
+                         발주 장비 · 설치환경 체크 · 희망일이 그대로 넘어가고,
+                         가맹점은 <b>고객사(가맹점관리)에도 함께 등록</b>됩니다.</p>
+                       ${devices ? `<p class="text-xs text-gray-700 mb-1">넘길 장비: <b>${escapeHtml(devices)}</b></p>` : ''}
+                       ${miss ? `<p class="text-xs text-red-600 mb-2"><i class="fas fa-triangle-exclamation mr-1"></i>설치환경 미확인 ${miss}건 — 그래도 넘길 수 있지만 현장에서 설치가 막힐 수 있습니다.</p>` : ''}
+                       <div class="flex justify-end">
+                         <button type="button" onclick="requestInstallFromIntake('${x.id}')"
+                           class="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-sm">
+                           <i class="fas fa-paper-plane mr-1"></i>운영본부에 설치 요청</button>
+                       </div>`}
+            </div>`;
+        }
+        function requestInstallFromIntake(id) {
+            const x = partnerIntakeById(id);
+            if (!x || !partnerCanRequestInstall(x)) return;
+            if (!canHandleIntake(x)) { alert('이 접수를 처리할 권한이 없습니다.'); return; }
+            if (x.workId) { alert(`이미 ${x.workId} 로 넘긴 접수입니다.`); return; }
+            const ex = x.extra || {};
+            const devices = partnerInstallDevicesText(x) || '장비';
+            const rows = partnerSiteRowsOf(x);
+            const miss = rows.filter(r => !r.ok);
+            if (!confirm(`'${x.title}' 을(를) 운영본부 장비설치로 넘깁니다.\n\n장비: ${devices}`
+                + (miss.length ? `\n설치환경 미확인 ${miss.length}건 (${miss.map(r => (partnerSiteDef(r.id) || {}).cat).join(' · ')})` : '')
+                + '\n\n계속할까요?')) return;
+
+            const c = wcDef('ops');
+            const now = new Date();
+            // 가맹점을 고객사에 등록하고 업무센터 고객으로 잇습니다 (이게 없으면 업무가 조회되지 않습니다)
+            const link = linkIntakeCustomer(x);
+            if (!link.id) { alert('접수에 가맹점명 · 사업자등록번호가 없어 운영본부로 넘길 수 없습니다.'); return; }
+            const work = {
+                id: c.seqPrefix + String(c.seq++).padStart(4, '0'),
+                center: 'ops',
+                customerId: link.id, company: (link.cust && link.cust.name) || ex.shopName || x.partnerName || '',
+                contact: ex.shopPhone || x.byPhone || '',
+                type: 'install', category: '', sub: '',
+                title: `${devices} 설치`,
+                status: 'received', priority: 'normal',
+                channel: '파트너 접수',
+                receiver: currentUserName || '담당자',
+                assignee: '',
+                receivedAt: ymd(now), receivedTime: hhmm(now),
+                transferDept: 'ops',
+                memo: ex.siteMemo || '',
+                installAddr: ex.shopAddr || '',
+                contact2: ex.shopPhone || '',
+                installReqDate: ex.installDate || '',
+                installReqTime: ex.installTime || '',
+                installVendor: x.partnerName || '',
+                installDevices: devices,
+                installEngineer: '', installDate: '', installTime: '', installReason: '', installNote: '',
+                installPhotos: [], fieldEdits: [],
+                // 파트너 접수에서 넘어왔다는 표시 — 업무 화면에서 원본 접수를 찾아갈 수 있게 합니다
+                fromIntake: { id: x.id, dept: x.dept, type: x.type },
+                siteCheck: rows.map(r => ({ id: r.id, ok: r.ok, note: r.note })),
+                siteConfirm: JSON.parse(JSON.stringify(x.siteConfirm || {})),
+                extra: {}
+            };
+            touchWork(work);
+            c.works.unshift(work);
+            saveWorks();
+
+            x.workId = work.id;
+            x.workAt = partnerNowStamp();
+            if (x.status === 'received') x.status = 'working';
+            (x.history = x.history || []).push({
+                at: partnerNowStamp(), by: currentUserName || '',
+                text: `운영본부 장비설치로 넘김 — ${work.id}`
+            });
+            savePartnerIntakes();
+            notifyWorkIntake('ops', work, '파트너 접수');
+            // 운영업무센터를 열면 바로 이 가맹점이 조회돼 있도록 맞춰 둡니다
+            if (wcState && wcState.ops) {
+                wcState.ops.customerId = link.id;
+                wcState.ops.activeType = 'install';
+                if (typeof rememberWorkCenterCustomer === 'function') rememberWorkCenterCustomer('ops', link.id);
+            }
+            refreshWorkViews();
+            refreshPartnerCenterViews();
+            openPartnerIntakeModal(id);
+            showAppToast(`운영본부 장비설치 ${work.id} 로 넘겼습니다.`, 'green');
+        }
+
+        function savePartnerSiteConfirm(id, who) {
+            const x = partnerIntakeById(id);
+            const c = PARTNER_SITE_CONFIRMERS.find(v => v.id === who);
+            if (!x || !c) return;
+            if (!canHandlePartnerIntake(c.dept)) { alert(`${c.name} 담당자만 확인할 수 있습니다.`); return; }
+            const box = document.getElementById('pi-siteconf-' + who);
+            const items = {};
+            if (box) Array.from(box.querySelectorAll('[data-siteconf]'))
+                .forEach(el => { if (el.checked) items[el.getAttribute('data-siteconf')] = true; });
+            const rows = partnerSiteRowsOf(x);
+            x.siteConfirm = x.siteConfirm || {};
+            x.siteConfirm[who] = { items, by: currentUserName || '', at: partnerNowStamp() };
+            (x.history = x.history || []).push({
+                at: partnerNowStamp(), by: currentUserName || '',
+                text: `${c.name} 설치환경 최종확인 ${Object.keys(items).length} / ${rows.length}`
+            });
+            if (!savePartnerIntakes()) return;
+            refreshPartnerCenterViews();
+            openPartnerIntakeModal(id);
+            showAppToast(`${c.name} 설치환경 최종확인을 저장했습니다.`, 'green');
+        }
+
         function setPartnerDeptWork(id, dep) {
             const x = partnerIntakeById(id);
             if (!x || !canHandlePartnerIntake(dep)) { alert(`${partnerDeptDef(dep).name} 담당자만 적을 수 있습니다.`); return; }
