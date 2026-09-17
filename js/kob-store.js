@@ -9,7 +9,7 @@
  *       쓰기는 메모리에 바로 반영한 뒤 Supabase 에 upsert 합니다(300ms 모아서).
  *       다른 사람이 바꾼 값은 Realtime 으로 받아 메모리에 넣고, 본체가 이미 듣고 있는
  *       window 'storage' 이벤트를 흉내 내어 던집니다 → 기존 창 간 동기화 코드가 그대로 동작합니다.
- *   · 로컬 모드 — 설정이 비어 있으면 브라우저 localStorage 를 그대로 씁니다 (목업과 같음).
+ *   · 로컬 모드 — 설정이 비어 있으면 브라우저 localStorage 를 그대로 씁니다 (시연본과 같음).
  *
  * 브라우저에만 두는 값(LOCAL_ONLY) — 로그인 아이디 기억 · 화면 색 · 작성 중 임시저장 · 토스트 위치 · 이행 표시 —
  * 은 어느 모드에서도 localStorage 에만 둡니다. 사람마다 다른 값이라 공유하면 안 됩니다.
@@ -21,7 +21,8 @@
     'use strict';
     const cfg = window.KOB_CONFIG || {};
     const LOCAL_ONLY = [/^savedLoginId$/, /^pcSavedLoginId$/, /^gwTheme$/, /^pcTheme$/, /^gwPartnerIntakeDraft\.v1$/,
-                        /^gwToastPos\.v1$/, /^gwPartnerDeptPerm\.newMenus\./];
+                        /^gwToastPos\.v1$/, /^gwPartnerDeptPerm\.newMenus\./,
+                        /^gwWcLastCustomer\.v1$/];   // 업무센터에서 마지막으로 보던 고객 — 사람마다 다름
     const isLocalOnly = (k) => LOCAL_ONLY.some(re => re.test(String(k)));
 
     const cache = new Map();          // key → 문자열(JSON) — Supabase 모드에서만 씁니다
@@ -133,6 +134,11 @@
                 console.error('[kob-store] Supabase 연결 실패 — 로컬 저장소로 갑니다', e);
                 mode = 'local'; client = null; window.kobSupabase = null;
             }
+        }
+        // 업무 자료(표)도 본체가 시작하기 전에 받아 둡니다 — 본체가 맨 위에서부터 동기로 읽기 때문입니다.
+        if (window.kobDb && window.kobDb.__init) {
+            try { await window.kobDb.__init(client, mode); }
+            catch (e) { console.error('[kob-store] 표 자료 준비 실패 — 그 화면은 비어 보입니다', e); }
         }
         runMain();
         setStatus('ok');
