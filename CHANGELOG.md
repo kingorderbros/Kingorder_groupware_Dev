@@ -1,7 +1,7 @@
 # 변경 이력 (개발환경)
 
 ## 2026-09-16 — 초기 구성
-- 목업 `소스/Index_ver1.0.html`(판 2026-09-16.22)에서 샘플 데이터 제거 → `index.html`
+- 시연본 `소스/Index_ver1.0.html`(판 2026-09-16.22)에서 샘플 데이터 제거 → `index.html`
 - 저장소: `kobStorage` → Supabase `app_store` (로컬 폴백) · `js/kob-store.js`
 - 법인차량 API: `server.js` → Cloudflare Pages Functions (`functions/api/[[route]].js`) + Supabase `vehicle_logs` · `vehicle_reservations`
 - 설정 한 곳: `config/app-config.js` (dev) · prod 본보기
@@ -13,7 +13,7 @@
 - 사용자/권한관리 목록에는 그대로 나오므로 거기서 실제 담당자 등록 후 고치거나 지움
 
 ## 2026-09-16 — 로그인 비밀번호 (Supabase Auth)
-- **계정에 비밀번호** — 로그인은 이메일 + 비밀번호. 목업의 데모 접두어 로그인(sales · ops …)과 테스트 계정 안내 제거
+- **계정에 비밀번호** — 로그인은 이메일 + 비밀번호. 시연본의 데모 접두어 로그인(sales · ops …)과 테스트 계정 안내 제거
 - **계정 등록 → 임시 비밀번호** 자동 발급(영문+숫자 10자) → 임시 비밀번호 창(복사 · 한 번만 표시). 사용자 목록에 **[초기화]** 열 추가
 - **첫 로그인 강제 변경** — 임시 비밀번호로 들어오면 새 비밀번호(8자 이상 · 영문+숫자)를 정해야 화면 진입
 - **비밀번호 재설정 메일** — 로그인 화면 [비밀번호를 잊으셨나요?] → Supabase 가 메일 발송 → 링크로 돌아오면 새 비밀번호 창
@@ -25,3 +25,326 @@
 - 검증: 로컬 모드 헤드리스 32항목(처음 설정 · 틀린 비밀번호 · 강제 변경 · 규칙 검사 · 변경 · 등록 → 발급 · 초기화 · 삭제 · 새로고침 유지) 통과.
   functions 는 GoTrue 목으로 17항목(권한 · 생성 · 초기화 · 이메일 변경 · 삭제 · 거부 사유) 확인. 실제 Supabase 는 틀린 비밀번호 거부만 확인(쓰기 없음)
 - **해야 할 것 (Supabase 대시보드)**: Authentication › URL Configuration 에 Redirect URL 등록, Emails › SMTP 설정 (README 2-2 의 4 · 5)
+
+## 2026-09-17 — "목업" 표기 정리
+개발환경에 남아 있던 `목업` 표기를 모두 없앰. 뜻에 따라 두 가지로 나눠 바꿈.
+
+**1) 이 개발환경 자체를 가리키던 곳 → `DEV환경`** (`index.html`)
+
+화면에 보이던 4곳:
+
+| 위치 | 전 | 후 |
+| --- | --- | --- |
+| 업무센터 카드 제목 옆 배지 | `목업` | `DEV환경` |
+| 업무센터 안내문 | 화면 검토용 **목업**입니다. 표시되는 고객·업무 데이터는 … | **DEV환경**입니다. 표시되는 고객·업무 데이터는 … |
+| 미납 내역 창 안내문 | 화면 검토용 **목업**이라 표시되는 납입 내역은 샘플입니다. | **DEV환경**이라 표시되는 납입 내역은 샘플입니다. |
+| 업무 항목 관리 안내문 | **목업**이라 새로고침하면 처음 목록으로 돌아갑니다. | **DEV환경**이라 새로고침하면 처음 목록으로 돌아갑니다. |
+
+화면에 안 나오는 코드 주석 16곳(업무센터 구역 머리말 · 첨부파일 · 조직도 · 보완서류 등)도 같이 `DEV환경` 으로 바꿈.
+
+**2) 옆 폴더 `../소스/Index_ver1.0.html` 을 가리키던 곳 → `시연본`**
+
+거기는 실제로 발표·시연용 샘플 데이터본이라 `DEV환경` 으로 부르면 뜻이 뒤집히므로 `시연본` 으로 함.
+대상: `README.md`(12) · `CHANGELOG.md` 기존 항목(2) · `tools/strip-sample-data.js`(5) · `js/kob-store.js`(1) · `functions/api/[[route]].js`(1) · `.gitignore`(1) · `index.html` 주석(1).
+
+- npm 명령 이름 `rebuild-from-mockup` 은 그대로 둠(명령어라 바꾸면 기존 안내·습관이 깨짐).
+- 검증: 개발환경 폴더 전체(node_modules 제외)에 `목업` 문자열이 남아 있지 않음을 확인(이 변경 이력 문서의 전/후 표기는 제외). `index.html` · `js` · `functions` · `tools` 는 구문 검사 통과.
+
+## 2026-09-17 — DB 2차 설계 (`supabase/schema-v2.sql`)
+업무 자료를 `app_store` 한 장에서 표로 나누는 설계. **아직 실행하지 않았음 — 설계안 단계.**
+
+**왜** — `app_store` 는 "키 하나 = JSON 덩어리 하나" 라서 세 가지가 막힘.
+1. 한 건을 고쳐도 목록 전체를 다시 씀 → 두 사람이 동시에 고치면 나중 저장이 앞 사람 것을 덮음
+2. 첨부가 base64 로 JSON 안에 들어감 (`savePartnerIntakes` 에는 공간이 넘치면 첨부를 떼는 코드까지 있음)
+3. 검색·집계 불가
+
+**어떻게** — 화면 코드를 최대한 그대로 두는 절충.
+- 한 건 = 한 행. 화면 객체는 통째로 `data jsonb` 에 넣어 항목 이름을 안 바꿈
+- 검색·정렬에 쓰는 값만 **생성 열**(`generated always as (data->>'...') stored`)로 뽑음 — 따로 채울 필요 없고 어긋나지 않음
+- `rev` 로 동시 수정 충돌 감지 (읽을 때의 rev 와 다르면 저장 거부)
+- 번호 채번을 서버로 (`next_code()`) — 지금은 브라우저 안 숫자라 동시 생성 시 번호가 겹침
+- 첨부는 Storage 버킷 `files` + `attachments` 표
+
+**표 18개** — schedules · customers · works · contracts · quotes · cases · notices · projects ·
+collab_requests · todos · partner_intakes · install_checks · pay_doc_requests ·
+settlements · pg_fees · supplies · price_book · attachments
+
+`app_store` 에 그대로 두는 것: 조직도·부서·팀, 권한그룹, 내 프로필, A/S 항목, 견적 템플릿, 서류 목록,
+파트너사, 파트너 등급·항목, 법인카드 설정·권한, 벌점 설정, 차량, 인바운드, 자료실 설정 등 **설정성 자료**.
+
+- 4절(app_store 를 authenticated 로 좁히기)은 **주석 처리해 둠** — 파트너센터(사외)가 아직 anon 으로 직접
+  읽고 있어서 지금 켜면 파트너센터가 멈춤. 5단계에서 functions 경유로 바꾼 뒤 켤 것.
+- 5절은 `app_store` 의 파트너 접수 · 설치 체크리스트를 새 표로 옮기는 SQL. 옛 값 삭제는 주석 처리.
+- 검증: pglast 로 45개 구문 문법 검사 통과. **실제 DB 에는 아직 돌리지 않음.**
+
+## 2026-09-17 — DB 2차 dev 프로젝트에 적용 완료
+`supabase/schema-v2.sql` + `supabase/schema-v2-fix.sql` 을 dev(sejoauspxqrnsrhevwkj) SQL Editor 에서 실행.
+
+**겪은 오류 두 가지**
+1. 1차 파일(`schema.sql`)을 대신 실행 — 둘 다 `Success. No rows returned` 라 구분이 안 됨.
+   → `schema-v2.sql` 끝에 표 목록을 돌려주는 확인용 select 를 붙여 성공이 눈에 보이게 함.
+2. `column reference "value" is ambiguous` — `app_store.value` 와 `jsonb_array_elements` 의 기본 칸 이름
+   `value` 가 겹침. `from app_store a cross join lateral jsonb_array_elements(a.value) as x(elem)` 로 수정.
+   (실패한 실행은 통째로 롤백돼 남은 것 없었음)
+
+**보정 (`schema-v2-fix.sql`)** — 검색용 생성 열의 항목 이름을 실제 화면 코드와 대조해 바로잡음:
+| 표 | 틀림 | 맞음 |
+| --- | --- | --- |
+| partner_intakes | `partner` · `date` | `partnerId` · `at` (+ `partnerName`) |
+| customers | `bizNo` | `coalesce(businessNo, bizNo)` — 가맹점관리와 고객관리가 이름이 다름 |
+| works | `date` | `receivedAt` · `doneAt` |
+| pay_doc_requests | `workId` | `bizNo` · `merchant` · `targetName` · `dueDate` |
+| settlements | `period` · `partnerKey` | `ym` · `pathRaw` |
+| supplies | `date` | `partnerId` |
+
+`works.center` 는 업무 건 객체에 아직 없는 값 — 업무 건이 고객 아래에 묶여 있어 위치로만 구분됨.
+4-2 단계에서 저장할 때 화면이 넣도록 고칠 것. 표에 comment 로 적어 둠.
+`pg_fees` · `price_book` · `install_checks` 의 검색용 열은 생성 코드를 못 찾아 **임시** — 4-4/4-5 에서 확정.
+
+**검증 (실제 dev DB 에 직접 호출)**
+- 표 19개 + Storage 버킷 `files`(비공개) 생성 확인
+- `app_store` 의 파트너 접수 1건 → `partner_intakes` 로 이사, 생성 열 채워짐 (`p17` · `테스트파트너사` · `2026-09-16 18:05`)
+- 판 번호: 넣으면 rev=1, 고치면 rev=2 로 자동 증가
+- 충돌 감지: 옛 판(rev=1)으로 수정 시도 → 바뀐 줄 0개 (저장 막힘)
+- 서버 채번: `next_code('__test__','TEST-')` → `TEST-0001`, `TEST-0002`
+- 시험에 쓴 자료는 모두 삭제함
+
+## 2026-09-17 — 2단계: 표 단위 저장 계층 `js/kob-db.js`
+`kobStorage`(키 하나 = JSON 덩어리)로는 업무 자료를 다룰 수 없어, schema-v2 의 표를 한 건 = 한 줄로
+읽고 쓰는 계층을 새로 만듦. **화면 동작은 아직 바뀌지 않음** — 통로만 놓은 단계.
+
+**설계**
+- 읽기는 **동기**. 본체(index.html)가 맨 위에서부터 동기로 자료를 읽으므로,
+  `kob-store.js` 가 본체를 실행하기 **전에** `kobDb.__init()` 으로 표를 미리 받음.
+- 화면이 다루는 것은 업무 객체 그대로. 판 번호(`rev`)는 kob-db 가 속으로만 들고 있어 화면 객체에 안 섞임.
+- 쓰기는 그 줄만. 판 번호를 함께 보내 **남이 먼저 고쳤으면 서버가 거절** → `kob-db-conflict` 로 알림.
+- 저장 실패 시 화면 값은 그대로 두고 1·3·8초 간격으로 재시도, 그래도 안 되면 `kobDb.retry()` 목록에 보관.
+- 로컬 모드(설정 비었을 때)는 표 하나를 배열 한 덩어리로 localStorage 에 — 인터넷 없이도 시험 가능.
+
+**공개 API** — `rows(t)` · `get(t,id)` · `count(t)` · `save(t,row)` · `remove(t,id)` · `load(t)` ·
+`nextCode(kind,prefix,width)` · `reload()` · `retry()` · `ready(t)` · `authed` · `pending` · `mode`
+**이벤트** — `kob-db-change` · `kob-db-conflict` · `kob-db-error`
+
+**미리 받는 표 14개** (schedules customers works contracts quotes cases notices projects
+collab_requests todos partner_intakes install_checks pay_doc_requests price_book)
+**필요할 때 받는 표 4개** (settlements pg_fees supplies attachments) — 엑셀로 수천 줄이 들어오므로
+
+**작업 중 발견해서 같이 고친 것 — 로그인 전에는 표가 비어 온다**
+새 표의 RLS 는 `authenticated` 인데 자료를 미리 받는 시점은 **로그인 화면이 뜨기 전**이라, 그때는
+한 줄도 오지 않는다(오류가 아니라 빈 결과). 그대로 두면 로그인해도 화면이 비어 보인다.
+→ `client.auth.onAuthStateChange` 를 걸어 **로그인 직후 다시 받아 오고**, 로그아웃하면 화면에 남은
+자료를 비운다(다음 사람이 앞사람 자료를 보지 못하게).
+
+**연결** — `index.html` 에 `<script src="js/kob-db.js">` 를 `kob-store.js` **앞에** 추가.
+`kob-store.js` 의 `boot()` 에서 `runMain()` 직전에 `kobDb.__init(client, mode)` 호출.
+
+**검증** — `tools/test-kob-db.js` 신설 (Node 에서 window·localStorage·supabase 를 흉내). `npm run check` 에 연결.
+42항목 통과: 로컬 모드 저장/새로고침 유지 · Supabase 모드 판 번호 1→2→3 · 충돌 시 서버 값 보존 및 화면 동기화 ·
+저장 실패 시 작업 내용 보존 후 재전송 · 변경 알림 · id 없는 자료 거절 · 로그인 전/후 자료 수급.
+
+## 2026-09-17 — 4-1: 일정이 저장됩니다
+지금까지 **일정은 어디에도 저장되지 않아 새로고침하면 사라졌습니다**(`let schedules = []` 뿐, 저장 키 없음).
+Supabase `schedules` 표에 한 건 = 한 줄로 저장하도록 붙였습니다. 3단계(파일 저장소)는 배포 뒤로 미루고 이것부터 함.
+
+**방식** — 화면 코드를 최대한 그대로 두기 위해, 배열은 예전처럼 쓰고 바꾼 뒤 `saveSchedules()` 만 부릅니다.
+무엇이 바뀌었는지는 `saveSchedules()` 가 직전 저장본과 견주어 스스로 찾습니다(부르는 쪽은 항목을 몰라도 됨).
+바뀐 줄만 보내고 사라진 줄은 지웁니다. 안 바뀌었으면 한 건도 보내지 않습니다.
+
+**저장을 붙인 곳 13군데**
+- 일정 모달 등록·수정 / 일정 삭제
+- 마이 대시보드 [일정으로 등록] 켜기·끄기 / 할 일 삭제 시 연결 일정 제거 / 할 일 내용 동기화
+- 업무 → 일정 등록·해제 / 업무센터 접수에서 일정 만들기 / 설치요청일 변경 시 일정 이동
+- 일정 참가 · 참가 취소 · 초대 응답(수락·미정·거부)
+
+**다른 사람과 같이 쓰기**
+- `kob-db-change` 를 듣고 남이 고친 내용을 받아 화면을 다시 그림. 내가 방금 한 것(local)은 무시해
+  편집 중인 내용이 되돌아가지 않게 함. 다른 표의 변경에는 반응하지 않음.
+- 로그인 직후(reason `signin`)에도 받아 옴 — 표가 로그인한 사람에게만 열려 있기 때문.
+- `kob-db-conflict` 를 듣고, 남이 먼저 고쳤으면 **덮어쓰지 않고** 최신 내용으로 맞춘 뒤 토스트로 알림.
+
+일정 번호(`nextScheduleId`)는 이미 시간+난수 방식이라 동시 생성 충돌이 없어 그대로 둠.
+
+**검증** — `tools/test-schedules.js` 신설. **index.html 안의 실제 코드를 꺼내서** 돌립니다
+(복사본을 시험하면 원본이 바뀌어도 통과해 버리므로). `npm run check` 에 연결. 22항목 통과:
+불러오기 · 등록/수정/삭제 · 안 바뀌면 안 보냄 · 참석자 응답 같은 속 내용 변경 · 남의 변경 반영 ·
+내 편집 중 내용 보존 · 다른 표 무시 · 로그인 직후 수급 · 충돌 알림 · kobDb 없어도 안 터짐.
+
+**화면 확인 완료 (2026-09-17)** — 사용자가 실제로 일정을 등록하고 새로고침해도 남아 있는 것을 확인.
+서버 `schedules` 표에서도 1건 확인 (`smu4zm32ksn` · sales-share · 판 1).
+
+**그때 드러난 버그 — '저장한 사람'(`updated_by`)이 비어 있었음**
+`let currentUserEmail` 은 최상위 `let` 이라 **`window.currentUserEmail` 로는 보이지 않습니다**(전역 렉시컬 환경에
+들어가고 window 속성이 되지 않음). kob-db 의 `who()` 가 `window.currentUserEmail` 만 읽어 늘 null 이었음.
+→ 로그인할 때 `window.currentUserEmail = email` 도 함께 심고, 로그아웃 때 비움.
+  kob-db 의 `who()` 도 window 에 없으면 전역에서 한 번 더 찾도록(try 로 감싸서) 고침.
+  같은 함정이 다른 전역 변수(`currentUserName` 등)에도 있으므로 앞으로 window 로 읽을 때 주의.
+
+## 2026-09-17 — 4-2: 고객사 · 업무센터 업무 건이 저장됩니다
+둘 다 지금까지 새로고침하면 사라졌습니다. Supabase `customers` · `works` 표에 각각 저장하도록 붙였습니다.
+
+**고객사** (`customers`)
+- 가맹점관리와 고객관리 **두 화면이 같은 목록을 서로 다른 항목 이름으로** 씁니다
+  (사업자번호가 `businessNo` / `bizNo`). 화면 객체를 그대로 담으므로 둘 다 지금처럼 동작합니다.
+  DB 의 검색용 열은 `coalesce(businessNo, bizNo)` 라 어느 쪽이든 잡힙니다(schema-v2-fix).
+- 저장을 붙인 곳 6군데: 가맹점 엑셀 업로드 · 고객 엑셀 가져오기 · 등록/수정 · 삭제 ·
+  계약 체결 시 '거래고객' 승격 · CMS·렌탈 엑셀 업로드
+- `syncCustomerIdCounter()` 신설 — 고객 번호(`c12`)가 저장된 것 뒤로 이어지게. 없으면 다시 접속할 때마다
+  `c4` 부터 다시 시작해 **기존 고객을 덮어썼을 것**입니다.
+
+**업무 건** (`works`)
+- 업무 건은 `WORK_CENTERS[key].works` 에 본부별 평면 배열로 모여 있습니다(고객 아래가 아님 — `c = wcDef(key)`).
+  저장할 때 `center`(ops/sales)를 함께 넣습니다. 1단계에서 "화면이 채워야 한다" 고 적어 둔 숙제 해결.
+- **파생 업무는 저장하지 않습니다.** `syncCaseWorks` · `syncContractPipelineWorks` · `syncQuoteWorks` 가
+  만드는 건(`caseId`·`contractId`·`quoteId`)은 원본이 바뀔 때마다 지웠다 다시 만들어지므로,
+  저장해 두면 지워진 옛 건이 남아 두 번 보입니다. `isDerivedWork()` 로 걸러냅니다.
+  반면 **O/B 연체 건(`OB-…`)은 저장합니다** — 상담 이력을 사람이 직접 적기 때문.
+- 저장 지점: `refreshWorkViews()` (28곳에서 불리는 공통 통로) + `submitWorkIntake` · `createDeliveryFromAs`
+  (이 둘은 refreshWorkViews 를 거치지 않아 따로 붙임)
+- 접수번호(`seq`)도 저장된 것 뒤로 이어지게 맞춤.
+
+**검증** — `tools/test-customers-works.js` 신설, `npm run check` 에 연결. 30항목 통과:
+불러오기 · 등록/수정/삭제 · 두 화면의 다른 항목 이름 · 번호 이어받기 · 안 바뀌면 안 보냄 ·
+본부별 분리 · 모르는 본부 자료 무시 · 파생 업무 제외(다시 만들어져도 저장소 안 건드림) ·
+O/B 상담이력 저장 · 완료 처리 저장 · 삭제 반영 · 남의 변경 반영 · 충돌 알림.
+
+**아직 안 한 것** — 화면에서 눈으로 확인하지 않았습니다.
+
+## 2026-09-17 — 4-2 마무리: 업무센터가 지난번 고객으로 돌아옵니다
+사용자 확인 중 "운영센터에 접수한 건이 새로고침하면 없어진다" — 확인해 보니 **저장은 정상**이었고
+(`works` 표에 `W-2608-0147` · ops · as · `customerId: ox-c3` 그대로 있었음),
+업무센터가 **고객을 골라야 그 고객의 업무가 보이는 구조**(`wcWorksOf`)라 새로고침 후 선택이 풀려
+목록이 비어 보인 것이었습니다. 원래 있던 동작이지만, 자료가 남기 시작하니 불편이 드러났습니다.
+
+- `WC_LAST_CUSTOMER_KEY`(`gwWcLastCustomer.v1`) — 본부별로 마지막에 보던 고객을 이 브라우저에 기억.
+  사람마다 다른 값이라 `kob-store.js` 의 `LOCAL_ONLY` 에 넣어 서버에 올리지 않습니다.
+- `selectWorkCenterCustomer()` 에서 기억하고, `resetWorkCenterSearch()`(초기화)에서 지웁니다.
+- `renderWorkCenter()` 에서 `restoreWorkCenterCustomer()` — 고른 고객이 없을 때만 되살립니다.
+  그 고객이 지워졌으면 되살리지 않고 기억도 정리합니다.
+- 업무센터 아래 안내 문구를 바로잡음 — "새로고침하면 초기화됩니다" → 저장되며 고객을 조회해야 보인다는 안내로.
+
+**첫 시도가 안 되어 다시 고침 (같은 날)**
+사용자가 새로고침해도 안 보인다고 해서 확인. 두 가지였습니다.
+1. **기억해 둔 것이 아직 없었음** — 고객을 고른 것은 이 기능이 생기기 전이라, 기억이 빈 상태였습니다.
+   기능이 들어간 뒤 **한 번 고객을 골라야** 그다음 새로고침부터 되돌아갑니다. (코드 문제 아님)
+2. **진짜 버그** — 로그인 직후에는 고객 자료가 아직 안 들어온 상태(빈 목록)로 업무센터가 열릴 수 있는데,
+   그때 "그 고객이 없다" 고 판단해 **기억을 지워 버렸습니다.** 그러면 자료가 도착해도 되돌아갈 곳이 없습니다.
+   → 목록이 비어 있으면 판단을 미루도록 고치고, `reloadCustomersFromDb()` 에서 `retryWorkCenterRestore()` 로
+     자료가 도착한 뒤 한 번 더 시도합니다. 이미 연 화면도 그때 다시 그립니다.
+   → 되돌리기는 본부마다 **한 번만**(`wcRestoreTried`). 조회 결과가 여러 건이라 고객을 고르는 중에
+     자료가 새로 들어왔다고 지난번 고객으로 튀어 버리면 안 되기 때문입니다.
+
+**검증** — `tools/test-customers-works.js` 에 13항목 추가(총 46항목 통과): 기억·되살리기 ·
+이미 고른 고객이 있으면 안 건드림 · 본부별 분리 · 지워진 고객 정리 · 초기화 시 기억 삭제 ·
+**고객이 늦게 도착해도 기억을 지우지 않고, 도착한 뒤 되돌리는지**.
+
+## 2026-09-17 — 4-3: 계약 · 견적 · 상담이 저장됩니다
+셋 다 새로고침하면 사라졌습니다. Supabase `contracts` · `quotes` · `cases` 표에 저장하도록 붙였습니다.
+4-1·4-2 와 같은 방식(배열은 그대로 쓰고, 바꾼 뒤 save 함수 호출 → 바뀐 줄만 전송).
+
+**저장 지점** — 이 셋은 고치는 곳이 많아 **공통 통로**에 붙였습니다.
+| 자료 | 붙인 곳 |
+| --- | --- |
+| 계약 | `renderContracts()` (19곳에서 불림) + `ctAfterChange()` (파이프라인 완료·실주·되돌리기) + 삭제 |
+| 견적 | `renderQuotes()` + 삭제 + 복제 |
+| 상담 | `renderCases()` + 삭제 |
+
+`ctAfterChange()` 를 따로 붙인 이유 — 계약 목록 화면이 안 떠 있으면 `renderContracts()` 를 건너뛰기 때문
+(`document.getElementById('contracts-table-body')` 확인 후 호출). 클로징 팝업만 열고 단계를 바꾸면 놓칩니다.
+
+**번호 이어받기** — `CTR-0008` · `QT-0006` · `CASE-0004` 모두 브라우저 안의 숫자로 만들고 있어,
+다시 접속하면 처음 번호부터 다시 시작해 **기존 건을 덮어썼을 것**입니다. 저장된 가장 큰 번호 뒤로 잇도록 고침
+(`syncContractsIdCounter` · `syncQuotesIdCounter` · `syncCasesIdCounter`).
+
+**파생 업무 다시 만들기** — 이 셋은 업무센터 업무이력으로 파생됩니다. 자료를 다시 받아 오면
+`syncContractPipelineWorks` · `syncQuoteWorks` · `syncCaseWorks` 를 함께 돌려 업무이력도 맞춥니다.
+
+**검증** — `tools/test-contracts-quotes-cases.js` 신설, `npm run check` 에 연결. 39항목 통과
+(세 자료 각각 13항목): 불러오기 · 등록/수정/삭제 · 안 바뀌면 안 보냄 · 번호 이어받기 ·
+로그인 직후 수급 · 남의 변경 반영 · 다른 표 무시 · 충돌 알림 · 편집 중 내용 보존 · kobDb 없어도 안 터짐.
+
+**아직 안 한 것** — 화면에서 눈으로 확인하지 않았습니다.
+
+## 2026-09-17 — 4-3 화면 확인 · 견적서 미리보기 서명란 정리
+- **화면 확인 완료** — 사용자가 견적서를 작성하고 새로고침해도 남아 있는 것을 확인.
+- 견적서 미리보기 맨 아래 `상호 · 대표 송기진 (인)` 에서 **대표자 이름과 (인) 을 뺐습니다** (사용자 요청).
+  대표자는 위쪽 공급자 정보란에 이미 나오고, 견적서에 날인란이 필요 없다는 판단.
+  `supplier.ceo` 값 자체는 그대로 두었으므로(공급자 정보란에서 계속 씀) 되돌리기 쉽습니다.
+
+## 2026-09-17 — 4-4: 협업티켓 · 알림 · 자부서업무 · 내 할 일 · 공지 · 프로젝트가 저장됩니다
+여섯 가지 모두 새로고침하면 사라졌습니다. 4-1~4-3 과 같은 방식으로 붙였습니다.
+
+**표 두 개를 새로 만들어야 했습니다 — `supabase/schema-v3.sql`**
+2차 설계에서 빠뜨린 자료가 둘 있었습니다.
+- `notifications` — 우상단 종 모양 알림함. **읽음 표시(`read`)도 여기 남으므로** 저장해야
+  다른 기기에서도 읽은 것으로 보입니다. 사람·부서·팀 앞으로 오는 것이라 그 셋에 색인.
+- `local_tasks` — 협업 요청이 아니라 우리 부서 안에서만 관리하는 업무·이슈(`localTasks`).
+
+**저장 지점 (공통 통로)**
+| 자료 | 표 | 붙인 곳 |
+| --- | --- | --- |
+| 협업티켓 | `collab_requests` | `renderCollabCenter()` + 업무 등록 폼 |
+| 알림 | `notifications` | `refreshNotiBell()` — 쌓기·읽음 표시가 **모두 이 문을 거칩니다** |
+| 자부서 업무 | `local_tasks` | `renderLocalTasks()` |
+| 내 할 일 | `todos` | `renderPersonalTasks()` |
+| 공지사항 | `notices` | 등록/수정 · 삭제 (2곳뿐) |
+| 프로젝트 | `projects` | `renderProjectCenter()` — WBS·이슈는 프로젝트 안에 함께 담김 |
+
+**번호 이어받기** — `collab_12` · `cnoti_1` · `local_10` · `todo_12` · `n3` · `P-2608-003`
+여섯 개 모두 브라우저 안의 숫자라 다시 접속하면 처음부터 시작했습니다. 저장된 가장 큰 번호 뒤로 잇도록 고침.
+
+**검증** — `tools/test-collab-todos.js` 신설, `npm run check` 에 연결. 70항목 통과
+(여섯 자료 각각 10항목 + 알림 읽음 표시 · 프로젝트 WBS/이슈 동반 저장 · kobDb 없어도 안 터짐).
+
+**할 일** — `supabase/schema-v3.sql` 을 dev SQL Editor 에서 실행해야 알림·자부서업무가 실제로 저장됩니다.
+
+## 2026-09-17 — 4-4 확인 중 나온 두 가지
+사용자: "티켓 등록했는데 하나는 등록되고 하나는 등록 안 됨, 알림에 뜨지 않아"
+
+**1) 두 건 다 저장돼 있었습니다 — 한 건이 다른 목록으로 간 것**
+- `collab_requests`: `collab_12` "테스트 티켓" (협업 요청)
+- `local_tasks`: `local_10` "테스트 티켓 1" (**자부서 업무**)
+업무 등록 폼에서 대상 부서를 '없음' 으로 두면 협업티켓이 아니라 **자부서 업무**로 들어갑니다
+(`submitTask` 의 `targetDept === 'none'` 분기). 원래 동작이고 자료는 멀쩡합니다.
+
+**2) 알림은 진짜 빠진 기능이었습니다 — 새로 넣음**
+`pushNotification` 호출처를 전부 훑어보니, **일반 협업 요청에는 알림이 없었습니다.**
+업무지시(directive)·완료 통보·이관·지연문의·일정변경·프로젝트·회의록·이슈에만 있고,
+일반 요청은 받는 쪽이 협업티켓센터를 열어 봐야 알 수 있었습니다.
+- `NOTI_STYLE` 에 `collab-requested` 추가 (종이비행기 아이콘 · 남색 · '협업 요청')
+- `submitTask` 의 일반 요청 분기에서 받는 부서(`targetDept`) + 지정 담당자(`assigneeUser`) 앞으로 알림 발송.
+  `ticketId` 를 실어 알림을 누르면 그 티켓이 열립니다.
+- 업무지시는 원래 `notifyDirectiveGroup` 이 알리므로 건드리지 않았습니다.
+
+**검증** — `tools/test-collab-todos.js` 에 5항목 추가(총 75항목 통과).
+
+## 2026-09-17 — 4-5: 정산 · 공급내역 · 단가표 · 보완서류가 저장됩니다 (4단계 완료)
+이것으로 **"자료가 저장되지 않는다" 는 문제는 전부 해결**됐습니다.
+
+| 자료 | 표 | 저장 지점 |
+| --- | --- | --- |
+| 정산 | `settlements` | `renderPayoutCenter()` + 한 줄 등록/삭제 · 여러 줄 등록 · 엑셀 반영 |
+| 공급내역 | `supplies` | `renderSupplyCenter()` |
+| 단가표 | `price_book` | `renderPriceBook()` |
+| 보완서류 요청 | `pay_doc_requests` | `renderPayDocPanel()` + 요청 발송 |
+
+**정산·공급내역은 미리 받지 않습니다** — 엑셀로 수천 줄이 들어올 수 있어 `kob-db.js` 의 ON_DEMAND 로 두고,
+그 화면을 열 때 `ensurePayoutsLoaded()` · `ensureSuppliesLoaded()` 로 받아 옵니다. 이미 받았으면 다시 받지 않습니다.
+
+**PG수수료(`pgFeeRecords`)는 건너뛰었습니다** — 화면에 **채우는 코드가 아예 없습니다**(읽기만 함).
+시연본에는 샘플이 박혀 있었지만 개발환경에서는 빠졌고, 업로드 경로도 아직 없습니다. 만들어지면 그때 붙입니다.
+
+**`supabase/schema-v4.sql`** — 단가표 검색용 열을 바로잡음. 카테고리는 `category` 가 아니라 **`cat`** 이었습니다
+(2차에서 확인 못 해 임시로 두었던 것). 제품·서비스명(`name`)도 함께 뽑습니다.
+
+**작업 중 찾은 진짜 버그 — 보완서류 화면이 터질 수 있었음**
+`payDocRequests.forEach(r => r.items.forEach(...))` 가 시작할 때 한 번 돕니다.
+지금까지는 목록이 늘 비어 있어(저장이 없어서) 아무 일도 안 했는데, 저장을 붙이자 실제 자료가 들어오면서
+`items` 가 없는 줄에서 **화면 전체가 멈췄을 것**입니다. `markPayDocSamples()` 로 감싸고 빈 목록을 받아 넘기도록 고침.
+자료를 다시 받아 올 때도 같이 돕니다.
+
+**검증** — `tools/test-settle-price.js` 신설, `npm run check` 에 연결. 45항목 통과:
+네 자료의 불러오기/등록/수정/삭제 · 안 바뀌면 안 보냄 · 번호 이어받기 · 로그인 직후 수급 ·
+편집 중 내용 보존 · **대량 자료는 화면 열 때만 받아 오고 두 번 받지 않음** ·
+정산 한 달치 통째 교체 시 옛 자료도 저장소에서 사라짐 · 단가표 칸 이름이 화면과 일치 · kobDb 없어도 안 터짐.
+
+**할 일** — `supabase/schema-v4.sql` 을 dev SQL Editor 에서 실행.
