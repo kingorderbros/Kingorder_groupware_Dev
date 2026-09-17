@@ -3127,7 +3127,7 @@
 
                 <!-- 4. 운영부 섹션 -->
                 <!-- ============================================================= -->
-                <!-- 업무센터 (목업) — 운영본부 / 영업본부 공용                    -->
+                <!-- 업무센터 (DEV환경) — 운영본부 / 영업본부 공용                    -->
                 <!-- 구조: ① sticky 고객검색 → ② 업무유형 탭 → ③ 업무이력(접힘)   -->
                 <!--       → ④ 접수 / 처리 2단 카드                                -->
                 <!-- 두 화면의 구조가 같아 마크업은 buildWorkCenter(key) 가 한 곳   -->
@@ -5253,7 +5253,7 @@
                         <tbody id="wc-arrears-body" class="text-gray-700"></tbody>
                     </table>
                 </div>
-                <p class="mt-3 text-[11px] text-gray-400"><i class="fas fa-circle-info mr-1"></i>화면 검토용 목업이라 표시되는 납입 내역은 샘플입니다. 실제로는 결제본부 시스템과 연동해야 합니다.</p>
+                <p class="mt-3 text-[11px] text-gray-400"><i class="fas fa-circle-info mr-1"></i>DEV환경이라 표시되는 납입 내역은 샘플입니다. 실제로는 결제본부 시스템과 연동해야 합니다.</p>
                 <div class="mt-4 flex justify-end">
                     <button type="button" onclick="closeArrearsModal()" class="px-4 py-2 text-sm bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition-colors">닫기</button>
                 </div>
@@ -5348,7 +5348,7 @@
                     <li>이름을 바꾸면 <b>이미 저장된 업무 건의 값도 함께</b> 바뀝니다.</li>
                     <li>삭제해도 <b>그 항목을 쓰던 기존 건은 그대로</b> 남고, 앞으로 새로 고를 수만 없게 됩니다. (기존 건에는 <b>목록 외</b>로 표시)</li>
                     <li>오른쪽 숫자는 이 항목을 쓰고 있는 업무 건수입니다.</li>
-                    <li>목업이라 <b>새로고침하면 처음 목록으로 돌아갑니다.</b></li>
+                    <li>DEV환경이라 <b>새로고침하면 처음 목록으로 돌아갑니다.</b></li>
                 </ul>
 
                 <div class="mt-4 flex justify-end gap-2">
@@ -9387,6 +9387,7 @@ const QUOTE_TEMPLATES = [
     <!-- 개발환경 — 설정 · 저장소 부트스트랩. 저장소(Supabase 또는 로컬)를 먼저 불러온 뒤 아래 본체를 실행합니다. -->
     <script src="config/app-config.js"></script>
     <script src="js/kob-auth.js"></script>
+    <script src="js/kob-db.js"></script>
     <script src="js/kob-store.js"></script>
     <script type="text/x-kob-main" id="kob-main">
         // ==================== 운행내역 백엔드 API 설정 ====================
@@ -9440,7 +9441,7 @@ const QUOTE_TEMPLATES = [
         };
 
         // 협업 요청(티켓): assigneeUser = 수신 부서의 담당자(개인). ageDays = 발행 후 경과일(데모용 지연 계산).
-        // 시연용 첨부 이미지 — 서버가 없는 목업이라 시드 데이터의 첨부는 그림을 그려서 대신합니다.
+        // 시연용 첨부 이미지 — 서버가 없는 DEV환경이라 시드 데이터의 첨부는 그림을 그려서 대신합니다.
         // (실제로 올린 파일은 브라우저 메모리의 원본이 그대로 표시됩니다)
         function sampleCollabFileUrl(caption, bg) {
             const esc = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -9454,12 +9455,102 @@ const QUOTE_TEMPLATES = [
             return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
         }
 
-        let collabRequests = [];
+        // ---------- 저장 (2026-09-17) ----------
+        // 협업티켓은 Supabase 'collab_requests' 표에 한 건 = 한 줄로 둡니다 (js/kob-db.js).
+        let collabRequests = (window.kobDb ? kobDb.rows('collab_requests') : []);
+        let collabRequestsSaved = new Map(collabRequests.map(x => [x.id, JSON.stringify(x)]));
+
+        function saveCollabRequests() {
+            if (!window.kobDb) return;
+            const alive = new Set();
+            collabRequests.forEach(x => {
+                if (!x || !x.id) return;
+                alive.add(x.id);
+                const now = JSON.stringify(x);
+                if (collabRequestsSaved.get(x.id) === now) return;
+                collabRequestsSaved.set(x.id, now);
+                kobDb.save('collab_requests', x).catch(e => console.error('[협업티켓] 저장 실패', e));
+            });
+            Array.from(collabRequestsSaved.keys()).forEach(id => {
+                if (alive.has(id)) return;
+                collabRequestsSaved.delete(id);
+                kobDb.remove('collab_requests', id).catch(e => console.error('[협업티켓] 삭제 실패', e));
+            });
+        }
+
+        // 저장된 번호 뒤로 이어지게 맞춥니다 — 다시 접속해도 번호가 겹치지 않도록.
+        function syncCollabRequestsIdCounter() {
+            let max = 0;
+            collabRequests.forEach(x => {
+                const m = /collab_(\d+)$/.exec(String(x && x.id || ''));
+                if (m) max = Math.max(max, Number(m[1]));
+            });
+            try { if (collabIdCounter <= max) collabIdCounter = max + 1; } catch (e) { /* 아직 선언 전 */ }
+        }
+        function reloadCollabRequestsFromDb() {
+            if (!window.kobDb) return;
+            collabRequests = kobDb.rows('collab_requests');
+            collabRequestsSaved = new Map(collabRequests.map(x => [x.id, JSON.stringify(x)]));
+            syncCollabRequestsIdCounter();
+            if (typeof renderCollabCenter === 'function') renderCollabCenter();
+        }
+        window.addEventListener('kob-db-change', (e) => {
+            const d = e.detail || {};
+            if (d.table && d.table !== 'collab_requests') return;
+            if (d.reason === 'local' || d.reason === 'local-delete') return;
+            reloadCollabRequestsFromDb();
+        });
         let collabIdCounter = 12;
+        syncCollabRequestsIdCounter();   // 저장된 번호 뒤로 이어지게
         let directiveGroupCounter = 3;
         // 협업 완료 통보 큐: 완료 처리 시 요청자에게 통보할 알림을 적재
-        let collabNotifications = [];
+        // ---------- 저장 (2026-09-17) ----------
+        // 알림은 Supabase 'notifications' 표에 한 건 = 한 줄로 둡니다 (js/kob-db.js).
+        let collabNotifications = (window.kobDb ? kobDb.rows('notifications') : []);
+        let collabNotificationsSaved = new Map(collabNotifications.map(x => [x.id, JSON.stringify(x)]));
+
+        function saveNotifications() {
+            if (!window.kobDb) return;
+            const alive = new Set();
+            collabNotifications.forEach(x => {
+                if (!x || !x.id) return;
+                alive.add(x.id);
+                const now = JSON.stringify(x);
+                if (collabNotificationsSaved.get(x.id) === now) return;
+                collabNotificationsSaved.set(x.id, now);
+                kobDb.save('notifications', x).catch(e => console.error('[알림] 저장 실패', e));
+            });
+            Array.from(collabNotificationsSaved.keys()).forEach(id => {
+                if (alive.has(id)) return;
+                collabNotificationsSaved.delete(id);
+                kobDb.remove('notifications', id).catch(e => console.error('[알림] 삭제 실패', e));
+            });
+        }
+
+        // 저장된 번호 뒤로 이어지게 맞춥니다 — 다시 접속해도 번호가 겹치지 않도록.
+        function syncNotificationsIdCounter() {
+            let max = 0;
+            collabNotifications.forEach(x => {
+                const m = /cnoti_(\d+)$/.exec(String(x && x.id || ''));
+                if (m) max = Math.max(max, Number(m[1]));
+            });
+            try { if (collabNotiIdCounter <= max) collabNotiIdCounter = max + 1; } catch (e) { /* 아직 선언 전 */ }
+        }
+        function reloadNotificationsFromDb() {
+            if (!window.kobDb) return;
+            collabNotifications = kobDb.rows('notifications');
+            collabNotificationsSaved = new Map(collabNotifications.map(x => [x.id, JSON.stringify(x)]));
+            syncNotificationsIdCounter();
+            if (typeof refreshNotiBell === 'function') refreshNotiBell();
+        }
+        window.addEventListener('kob-db-change', (e) => {
+            const d = e.detail || {};
+            if (d.table && d.table !== 'notifications') return;
+            if (d.reason === 'local' || d.reason === 'local-delete') return;
+            reloadNotificationsFromDb();
+        });
         let collabNotiIdCounter = 1;
+        syncNotificationsIdCounter();   // 저장된 번호 뒤로 이어지게
 
         // ---------- 화면 알림(토스트) ----------
         // '됐다'는 사실만 알리면 되는 일에 씁니다 (예: AS 접수). 5초 뒤 저절로 사라지고, 누르면 바로 닫힙니다.
@@ -9793,14 +9884,104 @@ const QUOTE_TEMPLATES = [
         }
 
         // 자부서 업무 데이터 중앙 관리화
-        let localTasks = [];
+        // ---------- 저장 (2026-09-17) ----------
+        // 자부서 업무은 Supabase 'local_tasks' 표에 한 건 = 한 줄로 둡니다 (js/kob-db.js).
+        let localTasks = (window.kobDb ? kobDb.rows('local_tasks') : []);
+        let localTasksSaved = new Map(localTasks.map(x => [x.id, JSON.stringify(x)]));
+
+        function saveLocalTasks() {
+            if (!window.kobDb) return;
+            const alive = new Set();
+            localTasks.forEach(x => {
+                if (!x || !x.id) return;
+                alive.add(x.id);
+                const now = JSON.stringify(x);
+                if (localTasksSaved.get(x.id) === now) return;
+                localTasksSaved.set(x.id, now);
+                kobDb.save('local_tasks', x).catch(e => console.error('[자부서 업무] 저장 실패', e));
+            });
+            Array.from(localTasksSaved.keys()).forEach(id => {
+                if (alive.has(id)) return;
+                localTasksSaved.delete(id);
+                kobDb.remove('local_tasks', id).catch(e => console.error('[자부서 업무] 삭제 실패', e));
+            });
+        }
+
+        // 저장된 번호 뒤로 이어지게 맞춥니다 — 다시 접속해도 번호가 겹치지 않도록.
+        function syncLocalTasksIdCounter() {
+            let max = 0;
+            localTasks.forEach(x => {
+                const m = /local_(\d+)$/.exec(String(x && x.id || ''));
+                if (m) max = Math.max(max, Number(m[1]));
+            });
+            try { if (localTaskIdCounter <= max) localTaskIdCounter = max + 1; } catch (e) { /* 아직 선언 전 */ }
+        }
+        function reloadLocalTasksFromDb() {
+            if (!window.kobDb) return;
+            localTasks = kobDb.rows('local_tasks');
+            localTasksSaved = new Map(localTasks.map(x => [x.id, JSON.stringify(x)]));
+            syncLocalTasksIdCounter();
+            if (typeof renderLocalTasks === 'function') renderLocalTasks();
+        }
+        window.addEventListener('kob-db-change', (e) => {
+            const d = e.detail || {};
+            if (d.table && d.table !== 'local_tasks') return;
+            if (d.reason === 'local' || d.reason === 'local-delete') return;
+            reloadLocalTasksFromDb();
+        });
         let localTaskIdCounter = 10;
+        syncLocalTasksIdCounter();   // 저장된 번호 뒤로 이어지게
 
         // ==================== 마이 대시보드 개인 할 일 (일정/D-day) ====================
         // 오늘 기준 n일 후 날짜 문자열 (시드 데이터용)
         function dueIn(days) { const d = new Date(); d.setDate(d.getDate() + days); return ymd(d); }
-        let myTodos = [];
+        // ---------- 저장 (2026-09-17) ----------
+        // 내 할 일은 Supabase 'todos' 표에 한 건 = 한 줄로 둡니다 (js/kob-db.js).
+        let myTodos = (window.kobDb ? kobDb.rows('todos') : []);
+        let myTodosSaved = new Map(myTodos.map(x => [x.id, JSON.stringify(x)]));
+
+        function saveMyTodos() {
+            if (!window.kobDb) return;
+            const alive = new Set();
+            myTodos.forEach(x => {
+                if (!x || !x.id) return;
+                alive.add(x.id);
+                const now = JSON.stringify(x);
+                if (myTodosSaved.get(x.id) === now) return;
+                myTodosSaved.set(x.id, now);
+                kobDb.save('todos', x).catch(e => console.error('[내 할 일] 저장 실패', e));
+            });
+            Array.from(myTodosSaved.keys()).forEach(id => {
+                if (alive.has(id)) return;
+                myTodosSaved.delete(id);
+                kobDb.remove('todos', id).catch(e => console.error('[내 할 일] 삭제 실패', e));
+            });
+        }
+
+        // 저장된 번호 뒤로 이어지게 맞춥니다 — 다시 접속해도 번호가 겹치지 않도록.
+        function syncMyTodosIdCounter() {
+            let max = 0;
+            myTodos.forEach(x => {
+                const m = /todo_(\d+)$/.exec(String(x && x.id || ''));
+                if (m) max = Math.max(max, Number(m[1]));
+            });
+            try { if (myTodoIdCounter <= max) myTodoIdCounter = max + 1; } catch (e) { /* 아직 선언 전 */ }
+        }
+        function reloadMyTodosFromDb() {
+            if (!window.kobDb) return;
+            myTodos = kobDb.rows('todos');
+            myTodosSaved = new Map(myTodos.map(x => [x.id, JSON.stringify(x)]));
+            syncMyTodosIdCounter();
+            if (typeof renderPersonalTasks === 'function') renderPersonalTasks(currentUserName);
+        }
+        window.addEventListener('kob-db-change', (e) => {
+            const d = e.detail || {};
+            if (d.table && d.table !== 'todos') return;
+            if (d.reason === 'local' || d.reason === 'local-delete') return;
+            reloadMyTodosFromDb();
+        });
         let myTodoIdCounter = 12;
+        syncMyTodosIdCounter();   // 저장된 번호 뒤로 이어지게
 
         // 날짜 → 'YYYY-MM-DD' (getFormattedDate 정의 이전에도 안전하게 사용)
         function ymd(dateObj) {
@@ -10326,7 +10507,7 @@ const QUOTE_TEMPLATES = [
         // ---------- 로그인 (개발환경 · 2026-09-16 비밀번호 적용) ----------
         // 1) 입력한 아이디로 조직도 계정(localUsers)을 찾고 → 2) 그 이메일 · 비밀번호로 kobAuth 에 확인 →
         // 3) 임시 비밀번호(첫 로그인)면 새 비밀번호를 받은 뒤 → 4) enterApp() 으로 들어갑니다.
-        // 목업의 데모 접두어 로그인(sales · ops …)은 없앴습니다 — 등록된 계정 + 비밀번호만 됩니다.
+        // 시연본의 데모 접두어 로그인(sales · ops …)은 없앴습니다 — 등록된 계정 + 비밀번호만 됩니다.
         function showLoginMsg(text) {
             const el = document.getElementById('login-msg');
             if (!el) return;
@@ -10426,6 +10607,9 @@ const QUOTE_TEMPLATES = [
             currentUserName = userName;
             currentUserRole = role;
             currentUserEmail = email;
+            // let 로 선언한 변수는 window 에서 보이지 않습니다. 저장 계층(js/kob-db.js)이 '저장한 사람' 을
+            // 남기려면 window 에도 실어 주어야 합니다.
+            window.currentUserEmail = email;
             currentUserDept = deptId;
             currentUserLevel = level;
             applyMenuPermissions();
@@ -10594,6 +10778,7 @@ const QUOTE_TEMPLATES = [
         // ---------- 알림 표시 규칙 ----------
         // 마이 대시보드 '알림' 목록과 우상단 알림함이 함께 씁니다. (2026-09-05 바깥으로 뺐습니다)
         const NOTI_STYLE = {
+            'collab-requested':   { icon: 'fa-paper-plane',       color: 'indigo', label: '협업 요청' },
             'collab-completed':   { icon: 'fa-flag-checkered',    color: 'blue',   label: '완료' },
             'delay-inquiry':      { icon: 'fa-hourglass-half',    color: 'red',    label: '지연사유 확인요청' },
             'delay-answer':       { icon: 'fa-reply',             color: 'amber',  label: '지연사유 회신' },
@@ -10678,6 +10863,7 @@ const QUOTE_TEMPLATES = [
 
         // 종 아이콘의 숫자를 지금 상태에 맞춥니다 (알림을 쌓을 때마다 pushNotification 이 부릅니다)
         function refreshNotiBell() {
+            saveNotifications();    // 알림은 모두 이 문을 거칩니다 — 쌓기·읽음 표시 모두
             const badge = document.getElementById('noti-bell-badge');
             if (!badge) return;
             const n = unreadNotiCount();
@@ -10751,7 +10937,7 @@ const QUOTE_TEMPLATES = [
         // 지금 로그인한 사람의 정보를 보여 주고, 본인 사진과 연락처를 여기서 바꿉니다. (2026-09-05)
         // 사진은 조직도 관리(구성원 등록/수정)에서 빼고 각자 여기서 올립니다.
         //
-        // 조직도 자료(localUsers)는 새로고침하면 처음 값으로 돌아가는 목업이라,
+        // 조직도 자료(localUsers)는 새로고침하면 처음 값으로 돌아가는 DEV환경이라,
         // 본인이 고친 사진·연락처만 따로 이 브라우저에 남겨 두었다가 다시 얹습니다.
         const MY_PROFILE_KEY = 'gwMyProfile.v1';
         let myProfileStore = loadJsonStore(MY_PROFILE_KEY, {});   // { 이메일(소문자): { photo, phone, mobile, duty } }
@@ -11110,6 +11296,7 @@ const QUOTE_TEMPLATES = [
 
         // 마이 대시보드 - 해야 할 일 (개인 할 일 + 할당 업무)
         function renderPersonalTasks(userName) {
+            saveMyTodos();          // 내 할 일이 바뀌었으면 저장합니다
             const tasksEl = document.getElementById('personal-tasks-list');
             if (!tasksEl) return;
 
@@ -11380,6 +11567,7 @@ const QUOTE_TEMPLATES = [
                 // 연결된 일정도 함께 제거
                 if (t && t.scheduleId) {
                     schedules = schedules.filter(s => s.id !== t.scheduleId);
+                    saveSchedules();
                     renderCalendar();
                 }
                 myTodos = myTodos.filter(t => t.id !== todoId);
@@ -11394,6 +11582,7 @@ const QUOTE_TEMPLATES = [
                 sch.title = todo.title;
                 sch.date = todo.dueDate;
                 sch.description = todo.memo || '';
+                saveSchedules();
             }
         }
 
@@ -11425,12 +11614,15 @@ const QUOTE_TEMPLATES = [
                 if (t.scheduleId) schedules = schedules.filter(s => s.id !== t.scheduleId);
                 t.scheduleId = null;
             }
+            saveSchedules();
             renderCalendar();
             renderPersonalTasks(currentUserName);
         }
 
         function handleLogout() {
             kobAuth.signOut();   // Supabase 세션(로컬 모드는 메모리)도 함께 끝냅니다
+            currentUserEmail = '';
+            window.currentUserEmail = '';
             document.getElementById('app-view').classList.add('hidden');
             document.getElementById('login-view').classList.remove('hidden');
             showLoginMsg('');
@@ -12651,6 +12843,7 @@ const QUOTE_TEMPLATES = [
                     followUps: []
                 });
                 renderLocalTasks();
+                saveCollabRequests();   // 같은 폼에서 협업 요청으로 등록될 수도 있습니다
             } else if (type === 'directive') {
                 // ---------- 업무지시 발행 ----------
                 // 완료기한은 지시자가 정하고, 선택한 대상 수만큼 티켓을 만들어 같은 묶음(directiveGroupId)으로 연결합니다.
@@ -12731,6 +12924,19 @@ const QUOTE_TEMPLATES = [
                     ageDays: 0,
                     requestFiles: takeCollabRequestFiles(1)[0]
                 });
+                // 받는 쪽에 알립니다 (2026-09-17). 지금까지는 업무지시(directive)만 알림을 보내고
+                // 일반 협업 요청은 상대가 협업티켓센터를 열어 봐야 알 수 있었습니다.
+                const newReq = collabRequests[collabRequests.length - 1];
+                pushNotification({
+                    id: 'cnoti_' + collabNotiIdCounter++,
+                    type: 'collab-requested',
+                    ticketId: newReq.id,
+                    title: newReq.title,
+                    toUser: newReq.assigneeUser || '',
+                    toDept: newReq.targetDept,
+                    detail: `${deptName(dept)} ${assignee || ''} 님이 보낸 협업 요청입니다.`.replace(/\s+/g, ' ').trim(),
+                    date: ymd(new Date())
+                });
                 renderCollabs();
             }
             closeTaskModal();
@@ -12739,6 +12945,7 @@ const QUOTE_TEMPLATES = [
         // 자체 진행 업무/이슈(localTasks)는 통합 협업티켓센터의 '전체 현황' 칸반에 함께 표시됨.
         // 등록/변경 시 협업센터를 다시 렌더링한다.
         function renderLocalTasks() {
+            saveLocalTasks();
             renderCollabCenter();
         }
 
@@ -13167,6 +13374,7 @@ const QUOTE_TEMPLATES = [
         }
 
         function renderCollabCenter() {
+            saveCollabRequests();   // 바뀐 협업티켓을 저장합니다 (안 바뀌었으면 아무것도 안 보냄)
             if (!document.getElementById('collab-received-list')) return;
             const name = currentUserName, dept = currentUserDept;
             const visible = getVisibleTickets();
@@ -13374,7 +13582,7 @@ const QUOTE_TEMPLATES = [
         // ==================== 완료 첨부자료 ====================
         // 처리한 사람이 완료 처리 시 근거 자료(이미지·문서)를 올리면, 요청한 사람이 티켓 상세에서
         // 내려받지 않고 그대로 열어 확인합니다. 요청자가 열람하면 처리자 화면에 '확인함' 으로 표시됩니다.
-        // 서버가 없는 목업이라 파일은 브라우저 메모리(objectURL)에만 보관합니다.
+        // 서버가 없는 DEV환경이라 파일은 브라우저 메모리(objectURL)에만 보관합니다.
         const COLLAB_FILE_MAX_SIZE  = 20 * 1024 * 1024;   // 파일당 20MB
         const COLLAB_FILE_MAX_COUNT = 10;                 // 티켓당 10개
         let collabCompleteFiles = [];      // 완료 모달에서 고른 파일 (제출 전 임시 보관)
@@ -15394,7 +15602,58 @@ const QUOTE_TEMPLATES = [
         }
 
         // 일정은 dept(부서) 태그로 통합 관리 — 영업 캘린더는 dept:'sales'만, 팀 통합현황은 부서별로 조회
-        let schedules = [];
+        //
+        // ---------- 저장 (2026-09-17) ----------
+        // 일정은 Supabase 의 'schedules' 표에 **한 건 = 한 줄**로 둡니다 (js/kob-db.js).
+        // 화면 코드는 지금까지처럼 schedules 배열을 그대로 다루고, 바꾼 뒤에 saveSchedules() 만 부릅니다.
+        // 무엇이 바뀌었는지는 saveSchedules() 가 스스로 견주어 찾으므로, 부르는 쪽은 항목을 신경 쓰지 않아도 됩니다.
+        // (설정이 비어 있으면 kob-db 가 브라우저 저장소로 같은 일을 합니다 — 인터넷 없이도 그대로 동작)
+        let schedules = (window.kobDb ? kobDb.rows('schedules') : []);
+        let scheduleSaved = new Map(schedules.map(s => [s.id, JSON.stringify(s)]));
+
+        // 배열을 바꾼 뒤에 부릅니다. 바뀐 줄만 보내고, 사라진 줄은 지웁니다.
+        function saveSchedules() {
+            if (!window.kobDb) return;
+            const alive = new Set();
+            schedules.forEach(s => {
+                if (!s || !s.id) return;
+                alive.add(s.id);
+                const now = JSON.stringify(s);
+                if (scheduleSaved.get(s.id) === now) return;          // 안 바뀐 것은 보내지 않습니다
+                scheduleSaved.set(s.id, now);
+                kobDb.save('schedules', s).catch(e => console.error('[일정] 저장 실패', e));
+            });
+            Array.from(scheduleSaved.keys()).forEach(id => {
+                if (alive.has(id)) return;
+                scheduleSaved.delete(id);
+                kobDb.remove('schedules', id).catch(e => console.error('[일정] 삭제 실패', e));
+            });
+        }
+
+        // 로그인이 끝나 자료를 다시 받았거나, 다른 사람이 고쳤을 때 화면을 맞춥니다.
+        function reloadSchedulesFromDb() {
+            if (!window.kobDb) return;
+            schedules = kobDb.rows('schedules');
+            scheduleSaved = new Map(schedules.map(s => [s.id, JSON.stringify(s)]));
+            if (typeof renderCalendar === 'function') renderCalendar();
+            if (typeof renderTodaySchedule === 'function') renderTodaySchedule(currentUserName);
+        }
+        window.addEventListener('kob-db-change', (e) => {
+            const d = e.detail || {};
+            if (d.table && d.table !== 'schedules') return;
+            if (d.reason === 'local' || d.reason === 'local-delete') return;   // 내가 방금 한 것은 그냥 둡니다
+            reloadSchedulesFromDb();
+        });
+        // 내가 고치는 사이에 다른 사람이 먼저 고쳤을 때 — 남의 것을 덮어쓰지 않고 알려 줍니다.
+        window.addEventListener('kob-db-conflict', (e) => {
+            const d = e.detail || {};
+            if (d.table !== 'schedules') return;
+            reloadSchedulesFromDb();
+            const name = (d.theirs && d.theirs.title) || (d.mine && d.mine.title) || '일정';
+            if (typeof showAppToast === 'function') {
+                showAppToast(`'${name}' 은(는) 다른 사람이 먼저 고쳤습니다. 최신 내용으로 바꿔 두었으니 확인 후 다시 고쳐 주세요.`, 'orange');
+            }
+        });
 
         function setCalendarView(view) {
             currentCalendarView = view;
@@ -15900,6 +16159,7 @@ const QUOTE_TEMPLATES = [
             } else {
                 const newId = nextScheduleId();
                 schedules.push({ id: newId, salesperson: src.owner || currentUserName, ...data });
+                saveSchedules();
                 src.obj.scheduleId = newId;
                 alert(`일정캘린더의 [${getCalendar(calId).name}] 캘린더에 등록되었습니다.`);
             }
@@ -15914,6 +16174,7 @@ const QUOTE_TEMPLATES = [
             if (!src || !src.obj.scheduleId) return;
             if (!confirm('이 업무와 연결된 일정을 캘린더에서 삭제할까요? 업무 자체는 남아 있습니다.')) return;
             schedules = schedules.filter(s => s.id !== src.obj.scheduleId);
+            saveSchedules();
             src.obj.scheduleId = null;
             closeWorkScheduleModal();
             refreshAfterWorkSchedule(kind, key, id);
@@ -16407,6 +16668,7 @@ const QUOTE_TEMPLATES = [
             } else {
                 schedules.push({ id: nextScheduleId(), salesperson: currentUserName || document.getElementById('user-name').innerText, ...data });
             }
+            saveSchedules();
             closeScheduleModal();
             renderCalendar();
             if (typeof renderTodaySchedule === 'function') renderTodaySchedule(currentUserName);
@@ -16515,6 +16777,7 @@ const QUOTE_TEMPLATES = [
             if (!confirm(`'${s.title}' 일정에 참가하시겠습니까?`)) return;
             if (!Array.isArray(s.attendees)) s.attendees = [];
             s.attendees.push({ name: currentUserName, status: 'accepted', self: true, respondedAt: ymd(new Date()) });
+            saveSchedules();
             renderScheduleAttendeeDetail(s);
             renderCalendar();
             if (typeof renderTodaySchedule === 'function') renderTodaySchedule(currentUserName);
@@ -16529,6 +16792,7 @@ const QUOTE_TEMPLATES = [
             if (!me || !me.self) { alert('초대받은 일정은 참가 취소 대신 거부로 응답해 주세요.'); return; }
             if (!confirm(`'${s.title}' 일정 참가를 취소하시겠습니까?`)) return;
             s.attendees = scheduleAttendees(s).filter(a => a.name !== currentUserName);
+            saveSchedules();
             renderScheduleAttendeeDetail(s);
             renderCalendar();
             if (typeof renderTodaySchedule === 'function') renderTodaySchedule(currentUserName);
@@ -16545,6 +16809,7 @@ const QUOTE_TEMPLATES = [
             if (me.self) return;
             me.status = status;
             me.respondedAt = ymd(new Date());
+            saveSchedules();
             renderScheduleAttendeeDetail(s);
             renderCalendar();
             if (typeof renderTodaySchedule === 'function') renderTodaySchedule(currentUserName);
@@ -16581,6 +16846,7 @@ const QUOTE_TEMPLATES = [
                 // 업무센터에서 올린 일정이면 업무 쪽 연결도 함께 끊는다
                 unlinkWorkFromSchedule(schedule);
                 schedules = schedules.filter(s => s.id !== id);
+                saveSchedules();
                 renderCalendar();
                 if (typeof renderTodaySchedule === 'function') renderTodaySchedule(currentUserName);
                 closeScheduleDetailModal();
@@ -16764,12 +17030,12 @@ const QUOTE_TEMPLATES = [
             renderScheduleTypeList();
         }
 
-        // ==================== 업무센터 (목업) — 운영본부 / 영업본부 공용 ====================
+        // ==================== 업무센터 (DEV환경) — 운영본부 / 영업본부 공용 ====================
         // 두 본부가 같은 3단 구조(① 고객검색 → ② 업무유형 탭 → ③ 이력 / ④ 접수·처리)를 쓰므로
         // 화면 마크업과 렌더 로직은 한 벌만 두고, 본부별 정의(WORK_CENTERS)만 바꿔 끼웁니다.
         //   key : 'ops' | 'sales'
         //   DOM : 모든 id 를 `wc-<key>-...` 로 네임스페이스 분리 (두 화면이 동시에 존재하므로)
-        // 화면 검토용 목업이라 데이터는 메모리에만 있고 새로고침하면 초기화됩니다.
+        // DEV환경이라 데이터는 메모리에만 있고 새로고침하면 초기화됩니다.
 
         // 업무 진행 상태 (라벨은 본부별로 다르게, 흐름은 동일)
         const WC_STATUS_FLOW = ['received', 'assigned', 'working', 'hold', 'done'];
@@ -17085,8 +17351,53 @@ const QUOTE_TEMPLATES = [
             </li>`;
         }
 
-        let projects = [];
+        // ---------- 저장 (2026-09-17) ----------
+        // 프로젝트은 Supabase 'projects' 표에 한 건 = 한 줄로 둡니다 (js/kob-db.js).
+        let projects = (window.kobDb ? kobDb.rows('projects') : []);
+        let projectsSaved = new Map(projects.map(x => [x.id, JSON.stringify(x)]));
+
+        function saveProjects() {
+            if (!window.kobDb) return;
+            const alive = new Set();
+            projects.forEach(x => {
+                if (!x || !x.id) return;
+                alive.add(x.id);
+                const now = JSON.stringify(x);
+                if (projectsSaved.get(x.id) === now) return;
+                projectsSaved.set(x.id, now);
+                kobDb.save('projects', x).catch(e => console.error('[프로젝트] 저장 실패', e));
+            });
+            Array.from(projectsSaved.keys()).forEach(id => {
+                if (alive.has(id)) return;
+                projectsSaved.delete(id);
+                kobDb.remove('projects', id).catch(e => console.error('[프로젝트] 삭제 실패', e));
+            });
+        }
+
+        // 저장된 번호 뒤로 이어지게 맞춥니다 — 다시 접속해도 번호가 겹치지 않도록.
+        function syncProjectsIdCounter() {
+            let max = 0;
+            projects.forEach(x => {
+                const m = /-(\d+)$/.exec(String(x && x.id || ''));
+                if (m) max = Math.max(max, Number(m[1]));
+            });
+            try { if (projectSeq <= max) projectSeq = max + 1; } catch (e) { /* 아직 선언 전 */ }
+        }
+        function reloadProjectsFromDb() {
+            if (!window.kobDb) return;
+            projects = kobDb.rows('projects');
+            projectsSaved = new Map(projects.map(x => [x.id, JSON.stringify(x)]));
+            syncProjectsIdCounter();
+            if (typeof renderProjectCenter === 'function') renderProjectCenter();
+        }
+        window.addEventListener('kob-db-change', (e) => {
+            const d = e.detail || {};
+            if (d.table && d.table !== 'projects') return;
+            if (d.reason === 'local' || d.reason === 'local-delete') return;
+            reloadProjectsFromDb();
+        });
         let projectSeq = 3, wbsSeq = 30, prjIssueSeq = 2;
+        syncProjectsIdCounter();   // 저장된 번호 뒤로 이어지게
         let currentProjectId = null;
         let currentProjectTab = 'overview';
 
@@ -17426,6 +17737,7 @@ const QUOTE_TEMPLATES = [
 
         // ---------- 렌더 ----------
         function renderProjectCenter() {
+            saveProjects();
             if (!document.getElementById('project-select')) return;
             recalcAllWbsRollups();   // 요약 작업 값을 하위에서 끌어올린 뒤에 지연·집계를 계산합니다
             checkProjectDelays();
@@ -19514,7 +19826,7 @@ const QUOTE_TEMPLATES = [
         function wcStatusName(key, status) { return (wcDef(key).statusNames || {})[status] || status; }
         // ---------- 업무센터 고객 = 업무센터 시드 + 공통관리 고객사(customers) ----------
         // 가맹점관리에서 등록했거나 엑셀로 올린 고객이 영업·운영 두 업무센터 조회에 그대로 나옵니다.
-        // 시드 고객(업무 이력·미납 데이터가 붙어 있는 목업)은 그대로 두고, 같은 곳은 시드를 씁니다.
+        // 시드 고객(업무 이력·미납 데이터가 붙어 있는 DEV환경)은 그대로 두고, 같은 곳은 시드를 씁니다.
         //   · 변환한 객체는 캐시에 담아 같은 것을 계속 씁니다 — 다시 그려도 선택이 풀리지 않게.
         //   · wcDef(key).customers 는 아래 defineProperty 로 이 함수를 부르는 읽기 전용 목록이 됩니다.
         function custMatchKey(name, bizNo) {
@@ -19629,6 +19941,84 @@ const QUOTE_TEMPLATES = [
                 get() { return wcCustomers(k); },
                 enumerable: true
             });
+        });
+
+        // ---------- 업무 건 저장 (2026-09-17) ----------
+        // 업무 건은 센터마다 WORK_CENTERS[key].works 에 모여 있습니다. 이것을 Supabase 'works' 표에
+        // 한 건 = 한 줄로 둡니다. 어느 본부 것인지 구분하려고 저장할 때 center(ops/sales) 를 넣습니다.
+        //
+        // **파생 업무는 저장하지 않습니다.** 상담·계약·견적에서 자동으로 만들어지는 건(caseId·contractId·quoteId)은
+        // 원본이 바뀔 때마다 지웠다 다시 만들어지므로, 저장해 두면 지워진 옛 건이 남아 두 번 보입니다.
+        // 반면 O/B 연체 건(OB-…)은 상담 이력을 사람이 직접 적으므로 저장합니다.
+        function isDerivedWork(w) { return !!(w && (w.caseId || w.contractId || w.quoteId)); }
+
+        let workSaved = new Map();
+
+        function saveWorks() {
+            if (!window.kobDb) return;
+            const alive = new Set();
+            Object.keys(WORK_CENTERS).forEach(key => {
+                (WORK_CENTERS[key].works || []).forEach(w => {
+                    if (!w || !w.id || isDerivedWork(w)) return;
+                    if (w.center !== key) w.center = key;      // 어느 본부 것인지 함께 남깁니다
+                    alive.add(w.id);
+                    const now = JSON.stringify(w);
+                    if (workSaved.get(w.id) === now) return;
+                    workSaved.set(w.id, now);
+                    kobDb.save('works', w).catch(e => console.error('[업무] 저장 실패', e));
+                });
+            });
+            Array.from(workSaved.keys()).forEach(id => {
+                if (alive.has(id)) return;
+                workSaved.delete(id);
+                kobDb.remove('works', id).catch(e => console.error('[업무] 삭제 실패', e));
+            });
+        }
+
+        function loadWorksFromDb() {
+            if (!window.kobDb) return;
+            const byCenter = {};
+            Object.keys(WORK_CENTERS).forEach(k => { byCenter[k] = []; });
+            kobDb.rows('works').forEach(w => {
+                const key = w && w.center;
+                if (!key || !byCenter[key]) return;            // 모르는 본부의 자료는 건드리지 않습니다
+                byCenter[key].push(w);
+            });
+            Object.keys(byCenter).forEach(k => { WORK_CENTERS[k].works = byCenter[k]; });
+            workSaved = new Map();
+            Object.keys(WORK_CENTERS).forEach(k => {
+                (WORK_CENTERS[k].works || []).forEach(w => { if (!isDerivedWork(w)) workSaved.set(w.id, JSON.stringify(w)); });
+            });
+            // 접수번호(seq)가 저장된 것 뒤로 이어지게 맞춥니다 — 다시 접속해도 번호가 겹치지 않도록.
+            Object.keys(WORK_CENTERS).forEach(k => {
+                let max = 0;
+                (WORK_CENTERS[k].works || []).forEach(w => {
+                    const m = /(\d+)\s*$/.exec(String(w && w.id || ''));
+                    if (m) max = Math.max(max, Number(m[1]));
+                });
+                if (WORK_CENTERS[k].seq <= max) WORK_CENTERS[k].seq = max + 1;
+            });
+        }
+        loadWorksFromDb();
+
+        function reloadWorksFromDb() {
+            loadWorksFromDb();
+            if (typeof refreshWorkViews === 'function') refreshWorkViews();
+        }
+        window.addEventListener('kob-db-change', (e) => {
+            const d = e.detail || {};
+            if (d.table && d.table !== 'works') return;
+            if (d.reason === 'local' || d.reason === 'local-delete') return;
+            reloadWorksFromDb();
+        });
+        window.addEventListener('kob-db-conflict', (e) => {
+            const d = e.detail || {};
+            if (d.table !== 'works') return;
+            reloadWorksFromDb();
+            const name = (d.theirs && d.theirs.title) || (d.mine && d.mine.title) || '업무';
+            if (typeof showAppToast === 'function') {
+                showAppToast(`'${name}' 은(는) 다른 사람이 먼저 고쳤습니다. 최신 내용으로 바꿔 두었으니 확인 후 다시 고쳐 주세요.`, 'orange');
+            }
         });
 
         function wcCustomer(key, id) { return wcDef(key).customers.find(c => c.id === id) || null; }
@@ -20378,7 +20768,7 @@ const QUOTE_TEMPLATES = [
                     <div class="flex items-center justify-between gap-2 mb-2">
                         <div class="flex items-center gap-2 min-w-0">
                             <h3 id="wc-title-${key}" class="text-base md:text-lg font-bold text-gray-800 truncate">${escapeHtml(c.title)}</h3>
-                            <span class="hidden sm:inline px-2 py-0.5 text-xs font-semibold rounded-full bg-amber-100 text-amber-800 whitespace-nowrap">목업</span>
+                            <span class="hidden sm:inline px-2 py-0.5 text-xs font-semibold rounded-full bg-amber-100 text-amber-800 whitespace-nowrap">DEV환경</span>
                         </div>
                         <div class="flex items-center gap-2 shrink-0">
                             <p class="hidden xl:block text-xs text-gray-500">${c.lead}</p>
@@ -20539,7 +20929,7 @@ const QUOTE_TEMPLATES = [
                 </div>
 
                 <p class="mt-4 text-xs text-gray-400">
-                    <i class="fas fa-circle-info mr-1"></i>화면 검토용 목업입니다. 표시되는 고객·업무 데이터는 샘플이며 새로고침하면 초기화됩니다.
+                    <i class="fas fa-circle-info mr-1"></i>DEV환경입니다. 접수한 업무와 고객 자료는 저장되며, 업무는 <b>고객을 조회해야</b> 그 고객의 건만 보입니다.
                 </p>`;
         }
 
@@ -20552,6 +20942,7 @@ const QUOTE_TEMPLATES = [
             initWorkTabSeen(key);                            // 첫 진입 때 모든 탭의 기준선을 깝니다
             markWorkTabSeen(key, wcState[key].activeType);   // 지금 보고 있는 탭은 '봤음' 으로 둡니다
             if (host.dataset.built !== '1') { host.innerHTML = buildWorkCenter(key); host.dataset.built = '1'; }
+            restoreWorkCenterCustomer(key);                  // 지난번에 보던 고객으로 되돌립니다 (새로고침 뒤 빈 화면 방지)
             // 권한이 없는 업무유형이 열려 있으면 볼 수 있는 첫 탭으로 옮깁니다
             const okTypes = wcVisibleTypes(key);
             if (okTypes.length && !okTypes.some(t => t.id === wcState[key].activeType)) wcState[key].activeType = okTypes[0].id;
@@ -20611,6 +21002,7 @@ const QUOTE_TEMPLATES = [
             ['search-name', 'search-bizno', 'search-ceo'].forEach(n => { const el = wcEl(key, n); if (el) el.value = ''; });
             const st = wcState[key];
             st.customerId = null;          // 조회 결과를 비웁니다 (고객 요약이 안내 문구로 돌아갑니다)
+            rememberWorkCenterCustomer(key, null);   // 지난번 고객 기억도 함께 지웁니다 (일부러 비운 것이므로 되돌리지 않습니다)
             st.custDetailOpen = false;
             st.searchOpen = true;          // 바로 다시 조회할 수 있게 검색 바는 펼쳐 둡니다
             st.processQuery = '';          // 업무처리 키워드 검색도 함께 비웁니다
@@ -20626,8 +21018,59 @@ const QUOTE_TEMPLATES = [
             if (first) first.focus();
         }
 
+        // ---------- 마지막으로 보던 고객 기억하기 (2026-09-17) ----------
+        // 업무센터는 고객을 골라야 그 고객의 업무가 보이는 구조라, 새로고침하면 목록이 비어
+        // '자료가 사라진 것처럼' 보였습니다. 마지막으로 보던 고객을 이 브라우저에 적어 두었다가 되살립니다.
+        //   · 사람마다 다른 값이라 서버에 올리지 않습니다 (kob-store.js 의 LOCAL_ONLY 에 넣어 둠).
+        //   · 그 고객이 지워졌거나 조회 권한이 없으면 그냥 넘어갑니다.
+        const WC_LAST_CUSTOMER_KEY = 'gwWcLastCustomer.v1';
+        function wcLastCustomers() {
+            try { return JSON.parse(kobStorage.getItem(WC_LAST_CUSTOMER_KEY) || '{}') || {}; }
+            catch (e) { return {}; }
+        }
+        function rememberWorkCenterCustomer(key, id) {
+            const all = wcLastCustomers();
+            if (id) all[key] = id; else delete all[key];
+            try { kobStorage.setItem(WC_LAST_CUSTOMER_KEY, JSON.stringify(all)); } catch (e) { /* 저장 공간 — 기억만 못 할 뿐 */ }
+        }
+        // 업무센터를 열 때, 고른 고객이 없으면 지난번 고객으로 되돌립니다.
+        // 한 번 시도한 본부는 다시 하지 않습니다 — 조회 결과가 여러 건이라 고객을 고르는 중인데
+        // 자료가 새로 들어왔다고 해서 지난번 고객으로 되돌아가 버리면 안 되기 때문입니다.
+        const wcRestoreTried = {};
+        function restoreWorkCenterCustomer(key) {
+            const st = wcState[key];
+            if (!st || st.customerId || wcRestoreTried[key]) return false;
+            const id = wcLastCustomers()[key];
+            if (!id) { wcRestoreTried[key] = true; return false; }
+            const list = wcDef(key).customers;
+            // 고객 목록이 아직 안 들어왔으면(로그인 직후 받아 오는 중) 판단을 미룹니다.
+            // 여기서 기억을 지워 버리면 자료가 도착해도 되돌아갈 곳이 없어집니다.
+            if (!list.length) return false;
+            wcRestoreTried[key] = true;
+            if (!list.some(c => c.id === id)) { rememberWorkCenterCustomer(key, null); return false; }
+            st.customerId = id;
+            return true;
+        }
+        // 고객 자료가 늦게 도착했을 때 한 번 더 시도합니다 (이미 화면을 열어 둔 경우).
+        function retryWorkCenterRestore() {
+            Object.keys(WORK_CENTERS).forEach(key => {
+                const host = document.getElementById(wcDef(key).section);
+                if (!host || host.dataset.built !== '1') return;      // 아직 안 연 화면은 열 때 처리됩니다
+                if (!restoreWorkCenterCustomer(key)) return;
+                renderWorkCustomerSummary(key);
+                renderWorkTypeTabs(key);
+                renderWorkTypeHeader(key);
+                renderWorkCategoryBar(key);
+                renderWorkTypePanel(key);
+                renderWorkHistory(key);
+                renderWorkProcess(key);
+                renderWorkIntakeReceipt(key);
+            });
+        }
+
         function selectWorkCenterCustomer(key, id) {
             wcState[key].customerId = id;
+            rememberWorkCenterCustomer(key, id);
             // 좁은 화면에서는 고객을 고르고 나면 검색 바를 접어 본문이 바로 보이게 합니다.
             if (typeof window !== 'undefined' && window.innerWidth && window.innerWidth < 768) wcState[key].searchOpen = false;
             renderWorkCustomerSummary(key);
@@ -20641,7 +21084,7 @@ const QUOTE_TEMPLATES = [
         }
 
         // ---------- ①-2 조회 결과가 없을 때: 고객 신규 등록 / 가맹점관리에서 불러오기 ----------
-        // 업무센터 고객 목록은 화면 검토용 목업이지만, 여기서 등록한 고객은 실제 고객사 데이터(customers)에
+        // 업무센터 고객 목록은 DEV환경이지만, 여기서 등록한 고객은 실제 고객사 데이터(customers)에
         // 함께 저장되어 [공통관리 > 가맹점관리] 에서 그대로 확인·수정할 수 있습니다.
         function wcSearchTerms(key) {
             const v = (n) => (wcEl(key, n) ? wcEl(key, n).value : '').trim();
@@ -22860,7 +23303,7 @@ const QUOTE_TEMPLATES = [
         }
 
         // ---------- ②-1 업무유형 전용 패널 ----------
-        // 일부 단계는 목업 입력만으로 부족해 기존 실기능을 그대로 붙입니다.
+        // 일부 단계는 DEV환경 입력만으로 부족해 기존 실기능을 그대로 붙입니다.
         // 지금은 '견적' 단계에만 있으며, 기존 견적서 작성 모달·템플릿·미리보기를 그대로 씁니다.
         function renderWorkTypePanel(key) {
             const el = wcEl(key, 'type-panel');
@@ -23487,6 +23930,7 @@ const QUOTE_TEMPLATES = [
         }
         // 계약을 고친 뒤 두 화면(업무센터·계약관리)을 함께 맞춥니다
         function ctAfterChange() {
+            saveContracts();
             syncContractPipelineWorks();
             renderWorkCenter('sales');
             if (typeof renderContracts === 'function' && document.getElementById('contracts-table-body')) renderContracts();
@@ -24906,6 +25350,7 @@ const QUOTE_TEMPLATES = [
                 description: [cust ? `고객: ${cust.name}` : '', work.memo || ''].filter(Boolean).join('\n'),
                 fromWork: { kind: 'wc', key: key, id: work.id }
             });
+            saveSchedules();
             work.scheduleId = newId;
             return newId;
         }
@@ -25130,6 +25575,7 @@ const QUOTE_TEMPLATES = [
             renderWorkHistory(key);
             renderWorkProcess(key);
             renderWorkCustomerSummary(key);
+            saveWorks();
         }
 
         // ---------- ④-2 처리 ----------
@@ -25681,6 +26127,7 @@ const QUOTE_TEMPLATES = [
             w.shipMovedBy = currentUserName || '담당자';
             w.shipMovedHow = how || '';
             touchWork(w);
+            saveWorks();
 
             notifyWorkIntake(key, dlv, how || 'AS 이관');
             return dlv;
@@ -26106,6 +26553,7 @@ const QUOTE_TEMPLATES = [
                         sch.startTime = w.installReqTime;
                     }
                     sch.title = w.title;
+                    saveSchedules();
                     if (typeof renderCalendar === 'function') renderCalendar();
                 }
             }
@@ -26924,7 +27372,7 @@ const QUOTE_TEMPLATES = [
         }
 
         // ---------- 설치사진 ----------
-        // 브라우저에서 고른 이미지 파일을 그대로(dataURL) 업무 건에 담습니다. 목업이라 서버 업로드는 하지 않습니다.
+        // 브라우저에서 고른 이미지 파일을 그대로(dataURL) 업무 건에 담습니다. DEV환경이라 서버 업로드는 하지 않습니다.
         // ctx — 'action'(설치 처리 팝업) / 'history'(업무이력 상세). 어느 화면을 다시 그릴지 구분합니다.
         function installPhotoBoxHtml(key, w, ctx) {
             const list = w.installPhotos || [];
@@ -29160,6 +29608,7 @@ const QUOTE_TEMPLATES = [
         // 업무센터 화면과 마이 대시보드를 함께 다시 그린다 (한쪽에서 바꾸면 다른 쪽도 바뀌므로)
         function refreshWorkViews() {
             syncObWorks();   // CMS · 렌탈/할부 미납에서 O/B 연체 대상을 다시 뽑습니다
+            saveWorks();     // 바뀐 업무 건을 저장합니다 (안 바뀌었으면 아무것도 보내지 않습니다)
             // 내가 방금 처리한 건이 '지금 보고 있는 탭'에 새 정보로 뜨지는 않게 합니다.
             // (다른 탭·다른 사람이 올린 것은 그대로 숫자로 쌓입니다)
             Object.keys(WORK_CENTERS).forEach(k => {
@@ -29388,8 +29837,73 @@ const QUOTE_TEMPLATES = [
         }
 
         // ==================== 고객 관리 로직 ====================
-        let customers = [];
+        //
+        // ---------- 저장 (2026-09-17) ----------
+        // 고객사(가맹점)는 Supabase 'customers' 표에 한 곳 = 한 줄로 둡니다 (js/kob-db.js).
+        // 가맹점관리와 고객관리 두 화면이 같은 목록을 쓰는데 항목 이름이 조금 다릅니다
+        // (사업자번호가 businessNo / bizNo). 화면 객체를 그대로 담으므로 둘 다 지금처럼 쓰면 됩니다.
+        // 바꾼 뒤에는 saveCustomers() 만 부르면, 바뀐 곳만 골라 보냅니다.
+        let customers = (window.kobDb ? kobDb.rows('customers') : []);
+        let customerSaved = new Map(customers.map(c => [c.id, JSON.stringify(c)]));
+
+        function saveCustomers() {
+            if (!window.kobDb) return;
+            const alive = new Set();
+            customers.forEach(c => {
+                if (!c || !c.id) return;
+                alive.add(c.id);
+                const now = JSON.stringify(c);
+                if (customerSaved.get(c.id) === now) return;
+                customerSaved.set(c.id, now);
+                kobDb.save('customers', c).catch(e => console.error('[고객사] 저장 실패', e));
+            });
+            Array.from(customerSaved.keys()).forEach(id => {
+                if (alive.has(id)) return;
+                customerSaved.delete(id);
+                kobDb.remove('customers', id).catch(e => console.error('[고객사] 삭제 실패', e));
+            });
+        }
+
+        // 저장된 고객 번호(c12 …) 뒤로 이어지게 맞춥니다 — 다시 접속해도 번호가 겹치지 않도록.
+        function syncCustomerIdCounter() {
+            let max = 0;
+            customers.forEach(c => {
+                const m = /^c(\d+)$/.exec(String(c && c.id || ''));
+                if (m) max = Math.max(max, Number(m[1]));
+            });
+            try { if (customerIdCounter <= max) customerIdCounter = max + 1; }
+            catch (e) { /* 아직 선언 전 — 선언 직후 한 번 더 부릅니다 */ }
+        }
+
+        function reloadCustomersFromDb() {
+            if (!window.kobDb) return;
+            customers = kobDb.rows('customers');
+            customerSaved = new Map(customers.map(c => [c.id, JSON.stringify(c)]));
+            syncCustomerIdCounter();
+            if (typeof renderCustomers === 'function') renderCustomers();
+            if (typeof renderCommonCustomers === 'function') renderCommonCustomers();
+            // 업무센터 고객 목록은 이 목록에서 만들어지므로 함께 다시 그립니다.
+            if (typeof refreshWorkViews === 'function') refreshWorkViews();
+            // 로그인 직후처럼 고객이 늦게 도착한 경우, 지난번 고객으로 되돌리는 것을 한 번 더 시도합니다.
+            if (typeof retryWorkCenterRestore === 'function') retryWorkCenterRestore();
+        }
+        window.addEventListener('kob-db-change', (e) => {
+            const d = e.detail || {};
+            if (d.table && d.table !== 'customers') return;
+            if (d.reason === 'local' || d.reason === 'local-delete') return;
+            reloadCustomersFromDb();
+        });
+        window.addEventListener('kob-db-conflict', (e) => {
+            const d = e.detail || {};
+            if (d.table !== 'customers') return;
+            reloadCustomersFromDb();
+            const name = (d.theirs && d.theirs.name) || (d.mine && d.mine.name) || '고객사';
+            if (typeof showAppToast === 'function') {
+                showAppToast(`'${name}' 은(는) 다른 사람이 먼저 고쳤습니다. 최신 내용으로 바꿔 두었으니 확인 후 다시 고쳐 주세요.`, 'orange');
+            }
+        });
         let customerIdCounter = 3;
+        syncCustomerIdCounter();   // 저장된 고객이 있으면 그 뒤 번호부터 (다시 접속해도 안 겹치게)
 
         let customerFilterType = 'all';
 
@@ -29844,6 +30358,7 @@ const QUOTE_TEMPLATES = [
                 if (preview.length < 5) preview.push(Object.assign({ name }, data));
             });
 
+            saveCustomers();
             renderCommonCustomers();
             if (typeof renderCustomers === 'function') renderCustomers();
 
@@ -29978,6 +30493,7 @@ const QUOTE_TEMPLATES = [
                 if (preview.length < 5) preview.push(data);
             });
 
+            saveCustomers();
             renderCustomers();
             if (typeof renderCommonCustomers === 'function') renderCommonCustomers();
 
@@ -30512,6 +31028,7 @@ const QUOTE_TEMPLATES = [
             let savedCustomer;
             if (id) { const index = customers.findIndex(c => c.id === id); if (index > -1) { customers[index] = { ...customers[index], ...customerData }; savedCustomer = customers[index]; } alert('고객 정보가 수정되었습니다.'); }
             else { savedCustomer = { id: 'c' + customerIdCounter++, ...customerData }; customers.push(savedCustomer); alert('신규 고객이 등록되었습니다.'); }
+            saveCustomers();
             renderCustomers();
             // 가맹점관리(공통관리) 화면이 있으면 함께 갱신
             if (typeof renderCommonCustomers === 'function') renderCommonCustomers();
@@ -30523,11 +31040,69 @@ const QUOTE_TEMPLATES = [
             if (cb && savedCustomer) cb(savedCustomer);
         }
 
-        function deleteCustomer(customerId) { if (confirm('정말 이 고객 정보를 삭제하시겠습니까?')) { customers = customers.filter(c => c.id !== customerId); renderCustomers(); } }
+        function deleteCustomer(customerId) { if (confirm('정말 이 고객 정보를 삭제하시겠습니까?')) { customers = customers.filter(c => c.id !== customerId); saveCustomers(); renderCustomers(); } }
 
         // ==================== 상담관리 로직 (Salesforce Case Management 참고) ====================
-        let cases = [];
+        // ---------- 저장 (2026-09-17) ----------
+        // 상담은 Supabase 'cases' 표에 한 건 = 한 줄로 둡니다 (js/kob-db.js).
+        // 화면 코드는 지금까지처럼 cases 배열을 다루고, 바꾼 뒤에 save 함수만 부릅니다.
+        let cases = (window.kobDb ? kobDb.rows('cases') : []);
+        let casesSaved = new Map(cases.map(x => [x.id, JSON.stringify(x)]));
+
+        function saveCases() {
+            if (!window.kobDb) return;
+            const alive = new Set();
+            cases.forEach(x => {
+                if (!x || !x.id) return;
+                alive.add(x.id);
+                const now = JSON.stringify(x);
+                if (casesSaved.get(x.id) === now) return;
+                casesSaved.set(x.id, now);
+                kobDb.save('cases', x).catch(e => console.error('[상담] 저장 실패', e));
+            });
+            Array.from(casesSaved.keys()).forEach(id => {
+                if (alive.has(id)) return;
+                casesSaved.delete(id);
+                kobDb.remove('cases', id).catch(e => console.error('[상담] 삭제 실패', e));
+            });
+        }
+
+        // 저장된 번호 뒤로 이어지게 맞춥니다 — 다시 접속해도 번호가 겹치지 않도록.
+        function syncCasesIdCounter() {
+            let max = 0;
+            cases.forEach(x => {
+                const m = /^CASE-(\d+)$/.exec(String(x && x.id || ''));
+                if (m) max = Math.max(max, Number(m[1]));
+            });
+            try { if (caseIdCounter <= max) caseIdCounter = max + 1; } catch (e) { /* 아직 선언 전 */ }
+        }
+
+        function reloadCasesFromDb() {
+            if (!window.kobDb) return;
+            cases = kobDb.rows('cases');
+            casesSaved = new Map(cases.map(x => [x.id, JSON.stringify(x)]));
+            syncCasesIdCounter();
+            if (typeof syncCaseWorks === 'function') syncCaseWorks();
+            if (typeof renderCases === 'function' && document.getElementById('cases-table-body')) renderCases();
+            if (typeof refreshWorkViews === 'function') refreshWorkViews();
+        }
+        window.addEventListener('kob-db-change', (e) => {
+            const d = e.detail || {};
+            if (d.table && d.table !== 'cases') return;
+            if (d.reason === 'local' || d.reason === 'local-delete') return;
+            reloadCasesFromDb();
+        });
+        window.addEventListener('kob-db-conflict', (e) => {
+            const d = e.detail || {};
+            if (d.table !== 'cases') return;
+            reloadCasesFromDb();
+            const name = (d.theirs && d.theirs.name) || (d.theirs && d.theirs.description) || '상담';
+            if (typeof showAppToast === 'function') {
+                showAppToast(`'${name}' 은(는) 다른 사람이 먼저 고쳤습니다. 최신 내용으로 바꿔 두었으니 확인 후 다시 고쳐 주세요.`, 'orange');
+            }
+        });
         let caseIdCounter = 4;
+        syncCasesIdCounter();   // 저장된 번호 뒤로 이어지게
         let caseFilterStatus = 'all';   // all | completed | pending
 
         function renderCaseStats() {
@@ -30553,6 +31128,7 @@ const QUOTE_TEMPLATES = [
         }
 
         function renderCases() {
+            saveCases();
             // 상담 내역이 바뀔 때마다 영업업무센터 '상담관리' 탭의 이력·진행업무를 다시 맞춥니다
             syncCaseWorks();
             const wcHost = document.getElementById('sec-sales-work-center');
@@ -30695,6 +31271,7 @@ const QUOTE_TEMPLATES = [
         function deleteCase(caseId) {
             if (confirm('정말 이 상담 내역을 삭제하시겠습니까?')) {
                 cases = cases.filter(c => c.id !== caseId);
+                saveCases();
                 renderCases();
             }
         }
@@ -30780,8 +31357,53 @@ const QUOTE_TEMPLATES = [
         // 마이 대시보드 상단 '공지사항' 카드의 원본 데이터.
         // 작성 가능자 = appSettings.noticeWriters (기본: 관리본부 소속) + 시스템 관리자(항상 허용).
         // 작성 가능자는 [설정 > 공지사항 작성 권한] 에서 관리자가 추가·삭제합니다.
-        let notices = [];
+        // ---------- 저장 (2026-09-17) ----------
+        // 공지사항은 Supabase 'notices' 표에 한 건 = 한 줄로 둡니다 (js/kob-db.js).
+        let notices = (window.kobDb ? kobDb.rows('notices') : []);
+        let noticesSaved = new Map(notices.map(x => [x.id, JSON.stringify(x)]));
+
+        function saveNotices() {
+            if (!window.kobDb) return;
+            const alive = new Set();
+            notices.forEach(x => {
+                if (!x || !x.id) return;
+                alive.add(x.id);
+                const now = JSON.stringify(x);
+                if (noticesSaved.get(x.id) === now) return;
+                noticesSaved.set(x.id, now);
+                kobDb.save('notices', x).catch(e => console.error('[공지사항] 저장 실패', e));
+            });
+            Array.from(noticesSaved.keys()).forEach(id => {
+                if (alive.has(id)) return;
+                noticesSaved.delete(id);
+                kobDb.remove('notices', id).catch(e => console.error('[공지사항] 삭제 실패', e));
+            });
+        }
+
+        // 저장된 번호 뒤로 이어지게 맞춥니다 — 다시 접속해도 번호가 겹치지 않도록.
+        function syncNoticesIdCounter() {
+            let max = 0;
+            notices.forEach(x => {
+                const m = /n(\d+)$/.exec(String(x && x.id || ''));
+                if (m) max = Math.max(max, Number(m[1]));
+            });
+            try { if (noticeIdCounter <= max) noticeIdCounter = max + 1; } catch (e) { /* 아직 선언 전 */ }
+        }
+        function reloadNoticesFromDb() {
+            if (!window.kobDb) return;
+            notices = kobDb.rows('notices');
+            noticesSaved = new Map(notices.map(x => [x.id, JSON.stringify(x)]));
+            syncNoticesIdCounter();
+            if (typeof renderPersonalDashboard === 'function' && currentUserName) renderPersonalDashboard(currentUserName, currentUserRole);
+        }
+        window.addEventListener('kob-db-change', (e) => {
+            const d = e.detail || {};
+            if (d.table && d.table !== 'notices') return;
+            if (d.reason === 'local' || d.reason === 'local-delete') return;
+            reloadNoticesFromDb();
+        });
         let noticeIdCounter = 3;
+        syncNoticesIdCounter();   // 저장된 번호 뒤로 이어지게
 
         // 작성 가능자 — 기본값은 관리본부(management) 소속 전원
         appSettings.noticeWriters = (typeof localUsers !== 'undefined' ? localUsers : [])
@@ -30950,6 +31572,7 @@ const QUOTE_TEMPLATES = [
                 notices.unshift({ id: 'n' + noticeIdCounter++, author: currentUserName || '', ...data });
                 alert('공지사항이 등록되었습니다.');
             }
+            saveNotices();
             closeNoticeModal();
             if (currentUserName) renderPersonalDashboard(currentUserName, currentUserRole);
         }
@@ -30960,6 +31583,7 @@ const QUOTE_TEMPLATES = [
             if (!n) return;
             if (!confirm(`'${n.title}' 공지를 삭제할까요?`)) return;
             notices = notices.filter(x => x.id !== noticeId);
+            saveNotices();
             if (currentUserName) renderPersonalDashboard(currentUserName, currentUserRole);
         }
 
@@ -31243,8 +31867,67 @@ const QUOTE_TEMPLATES = [
         // 계약 결재선 (작성자 제출 → 순차 승인). Salesforce Approval Process 참고
         const contractApprovalLine = ['팀장', '본부장'];
 
-        let contracts = [];
+        // ---------- 저장 (2026-09-17) ----------
+        // 계약은 Supabase 'contracts' 표에 한 건 = 한 줄로 둡니다 (js/kob-db.js).
+        // 화면 코드는 지금까지처럼 contracts 배열을 다루고, 바꾼 뒤에 save 함수만 부릅니다.
+        let contracts = (window.kobDb ? kobDb.rows('contracts') : []);
+        let contractsSaved = new Map(contracts.map(x => [x.id, JSON.stringify(x)]));
+
+        function saveContracts() {
+            if (!window.kobDb) return;
+            const alive = new Set();
+            contracts.forEach(x => {
+                if (!x || !x.id) return;
+                alive.add(x.id);
+                const now = JSON.stringify(x);
+                if (contractsSaved.get(x.id) === now) return;
+                contractsSaved.set(x.id, now);
+                kobDb.save('contracts', x).catch(e => console.error('[계약] 저장 실패', e));
+            });
+            Array.from(contractsSaved.keys()).forEach(id => {
+                if (alive.has(id)) return;
+                contractsSaved.delete(id);
+                kobDb.remove('contracts', id).catch(e => console.error('[계약] 삭제 실패', e));
+            });
+        }
+
+        // 저장된 번호 뒤로 이어지게 맞춥니다 — 다시 접속해도 번호가 겹치지 않도록.
+        function syncContractsIdCounter() {
+            let max = 0;
+            contracts.forEach(x => {
+                const m = /^CTR-(\d+)$/.exec(String(x && x.id || ''));
+                if (m) max = Math.max(max, Number(m[1]));
+            });
+            try { if (contractIdCounter <= max) contractIdCounter = max + 1; } catch (e) { /* 아직 선언 전 */ }
+        }
+
+        function reloadContractsFromDb() {
+            if (!window.kobDb) return;
+            contracts = kobDb.rows('contracts');
+            contractsSaved = new Map(contracts.map(x => [x.id, JSON.stringify(x)]));
+            syncContractsIdCounter();
+            // 계약에서 파생되는 업무이력·파이프라인도 다시 만듭니다.
+            if (typeof syncContractPipelineWorks === 'function') syncContractPipelineWorks();
+            if (typeof renderContracts === 'function' && document.getElementById('contracts-table-body')) renderContracts();
+            if (typeof refreshWorkViews === 'function') refreshWorkViews();
+        }
+        window.addEventListener('kob-db-change', (e) => {
+            const d = e.detail || {};
+            if (d.table && d.table !== 'contracts') return;
+            if (d.reason === 'local' || d.reason === 'local-delete') return;
+            reloadContractsFromDb();
+        });
+        window.addEventListener('kob-db-conflict', (e) => {
+            const d = e.detail || {};
+            if (d.table !== 'contracts') return;
+            reloadContractsFromDb();
+            const name = (d.theirs && d.theirs.name) || (d.theirs && d.theirs.description) || '계약';
+            if (typeof showAppToast === 'function') {
+                showAppToast(`'${name}' 은(는) 다른 사람이 먼저 고쳤습니다. 최신 내용으로 바꿔 두었으니 확인 후 다시 고쳐 주세요.`, 'orange');
+            }
+        });
         let contractIdCounter = 8;
+        syncContractsIdCounter();   // 저장된 번호 뒤로 이어지게
         let contractFilterStatus = 'all';
         const CONTRACT_RENEWAL_DAYS = 60;
 
@@ -31356,6 +32039,7 @@ const QUOTE_TEMPLATES = [
         }
 
         function renderContracts() {
+            saveContracts();   // 바뀐 계약을 저장합니다 (안 바뀌었으면 아무것도 보내지 않습니다)
             renderContractStats();
             const tbody = document.getElementById('contracts-table-body');
             if (!tbody) return;
@@ -31959,6 +32643,7 @@ const QUOTE_TEMPLATES = [
             const cu = customers.find(x => x.id === customerId);
             if (cu && cu.type !== '거래고객') {
                 cu.type = '거래고객';
+                saveCustomers();
                 if (typeof renderCustomers === 'function') renderCustomers();
             }
         }
@@ -31985,6 +32670,7 @@ const QUOTE_TEMPLATES = [
         function deleteContract(contractId) {
             if (confirm('정말 이 계약을 삭제하시겠습니까?')) {
                 contracts = contracts.filter(c => c.id !== contractId);
+                saveContracts();
                 renderContracts();
             }
         }
@@ -32085,8 +32771,58 @@ const QUOTE_TEMPLATES = [
         function supplyFields(ch) { return supplyDef(ch).fields; }
         function supplyTableFields(ch) { return supplyFields(ch).filter(f => f.table); }
 
-        let supplyRecords = [];
+        // ---------- 저장 (2026-09-17) ----------
+        // 공급내역은 Supabase 'supplies' 표에 한 건 = 한 줄로 둡니다 (js/kob-db.js).
+        let supplyRecords = (window.kobDb ? kobDb.rows('supplies') : []);
+        let supplyRecordsSaved = new Map(supplyRecords.map(x => [x.id, JSON.stringify(x)]));
+
+        function saveSupplies() {
+            if (!window.kobDb) return;
+            const alive = new Set();
+            supplyRecords.forEach(x => {
+                if (!x || !x.id) return;
+                alive.add(x.id);
+                const now = JSON.stringify(x);
+                if (supplyRecordsSaved.get(x.id) === now) return;
+                supplyRecordsSaved.set(x.id, now);
+                kobDb.save('supplies', x).catch(e => console.error('[공급내역] 저장 실패', e));
+            });
+            Array.from(supplyRecordsSaved.keys()).forEach(id => {
+                if (alive.has(id)) return;
+                supplyRecordsSaved.delete(id);
+                kobDb.remove('supplies', id).catch(e => console.error('[공급내역] 삭제 실패', e));
+            });
+        }
+
+        function syncSuppliesIdCounter() {
+            let max = 0;
+            supplyRecords.forEach(x => {
+                const m = /SP-(\d+)$/.exec(String(x && x.id || ''));
+                if (m) max = Math.max(max, Number(m[1]));
+            });
+            try { if (supplySeq <= max) supplySeq = max + 1; } catch (e) { /* 아직 선언 전 */ }
+        }
+        // 이 표는 엑셀로 수천 줄이 들어올 수 있어 **화면을 열 때** 받아 옵니다 (js/kob-db.js 의 ON_DEMAND).
+        function ensureSuppliesLoaded() {
+            if (!window.kobDb || kobDb.ready('supplies')) return;
+            kobDb.load('supplies').catch(e => console.error('[공급내역] 불러오기 실패', e));
+            // 다 받으면 kob-db-change(reason 'load') 가 와서 아래 reload 가 돌고 화면이 다시 그려집니다.
+        }
+        function reloadSuppliesFromDb() {
+            if (!window.kobDb) return;
+            supplyRecords = kobDb.rows('supplies');
+            supplyRecordsSaved = new Map(supplyRecords.map(x => [x.id, JSON.stringify(x)]));
+            syncSuppliesIdCounter();
+            if (typeof renderSupplyCenter === 'function') renderSupplyCenter();
+        }
+        window.addEventListener('kob-db-change', (e) => {
+            const d = e.detail || {};
+            if (d.table && d.table !== 'supplies') return;
+            if (d.reason === 'local' || d.reason === 'local-delete') return;
+            reloadSuppliesFromDb();
+        });
         let supplySeq = 60;
+        syncSuppliesIdCounter();   // 저장된 번호 뒤로 이어지게
         let supplyChannel = 'partner';
         let supplyFilter = { q: '', owner: '', v1: '', v2: '' };   // v1·v2 는 채널별 대표 선택지 두 개
 
@@ -32132,6 +32868,8 @@ const QUOTE_TEMPLATES = [
         }
 
         function renderSupplyCenter() {
+            ensureSuppliesLoaded();
+            saveSupplies();
             if (typeof savePartners === 'function') savePartners();   // 거래처 관리(거래 조건 · 수수료 · 상태)도 partners 를 고칩니다 (2026-09-16)
             const host = document.getElementById('sec-sales-supply');
             if (!host) return;
@@ -32328,8 +33066,52 @@ const QUOTE_TEMPLATES = [
         // 영업본부 시트 '파트너사별 특이사항' 은 이름과 달리 단말기 원가표입니다.
         // 카테고리 · 제품 · 매입가 · 킹오더 공급가 · 비고 구조이고,
         // 인터넷 개통·세무 기장은 '월 사용료 / 중계비' 로 뜻이 달라 kind 로 구분합니다.
-        let priceBook = [];
+        // ---------- 저장 (2026-09-17) ----------
+        // 단가표은 Supabase 'price_book' 표에 한 건 = 한 줄로 둡니다 (js/kob-db.js).
+        let priceBook = (window.kobDb ? kobDb.rows('price_book') : []);
+        let priceBookSaved = new Map(priceBook.map(x => [x.id, JSON.stringify(x)]));
+
+        function savePriceBook() {
+            if (!window.kobDb) return;
+            const alive = new Set();
+            priceBook.forEach(x => {
+                if (!x || !x.id) return;
+                alive.add(x.id);
+                const now = JSON.stringify(x);
+                if (priceBookSaved.get(x.id) === now) return;
+                priceBookSaved.set(x.id, now);
+                kobDb.save('price_book', x).catch(e => console.error('[단가표] 저장 실패', e));
+            });
+            Array.from(priceBookSaved.keys()).forEach(id => {
+                if (alive.has(id)) return;
+                priceBookSaved.delete(id);
+                kobDb.remove('price_book', id).catch(e => console.error('[단가표] 삭제 실패', e));
+            });
+        }
+
+        function syncPriceBookIdCounter() {
+            let max = 0;
+            priceBook.forEach(x => {
+                const m = /PR-(\d+)$/.exec(String(x && x.id || ''));
+                if (m) max = Math.max(max, Number(m[1]));
+            });
+            try { if (priceSeq <= max) priceSeq = max + 1; } catch (e) { /* 아직 선언 전 */ }
+        }
+        function reloadPriceBookFromDb() {
+            if (!window.kobDb) return;
+            priceBook = kobDb.rows('price_book');
+            priceBookSaved = new Map(priceBook.map(x => [x.id, JSON.stringify(x)]));
+            syncPriceBookIdCounter();
+            if (typeof renderPriceBook === 'function') renderPriceBook();
+        }
+        window.addEventListener('kob-db-change', (e) => {
+            const d = e.detail || {};
+            if (d.table && d.table !== 'price_book') return;
+            if (d.reason === 'local' || d.reason === 'local-delete') return;
+            reloadPriceBookFromDb();
+        });
         let priceSeq = 40;
+        syncPriceBookIdCounter();   // 저장된 번호 뒤로 이어지게
         let priceFilter = { q: '', cat: '', kind: '' };
 
         function priceNum(v) { return (typeof v === 'number') ? v : ''; }
@@ -32571,6 +33353,7 @@ const QUOTE_TEMPLATES = [
         }
 
         function renderPriceBook() {
+            savePriceBook();
             const host = document.getElementById('sec-common-price');
             if (!host) return;
             const list = priceFiltered();
@@ -34436,8 +35219,58 @@ const QUOTE_TEMPLATES = [
         }
 
         // ---------- 자료 ----------
-        let payoutRecords = [];            // 업로드로 채워집니다
+        // ---------- 저장 (2026-09-17) ----------
+        // 정산은 Supabase 'settlements' 표에 한 건 = 한 줄로 둡니다 (js/kob-db.js).
+        let payoutRecords = (window.kobDb ? kobDb.rows('settlements') : []);
+        let payoutRecordsSaved = new Map(payoutRecords.map(x => [x.id, JSON.stringify(x)]));
+
+        function savePayouts() {
+            if (!window.kobDb) return;
+            const alive = new Set();
+            payoutRecords.forEach(x => {
+                if (!x || !x.id) return;
+                alive.add(x.id);
+                const now = JSON.stringify(x);
+                if (payoutRecordsSaved.get(x.id) === now) return;
+                payoutRecordsSaved.set(x.id, now);
+                kobDb.save('settlements', x).catch(e => console.error('[정산] 저장 실패', e));
+            });
+            Array.from(payoutRecordsSaved.keys()).forEach(id => {
+                if (alive.has(id)) return;
+                payoutRecordsSaved.delete(id);
+                kobDb.remove('settlements', id).catch(e => console.error('[정산] 삭제 실패', e));
+            });
+        }
+
+        function syncPayoutsIdCounter() {
+            let max = 0;
+            payoutRecords.forEach(x => {
+                const m = /py(\d+)$/.exec(String(x && x.id || ''));
+                if (m) max = Math.max(max, Number(m[1]));
+            });
+            try { if (payoutIdCounter <= max) payoutIdCounter = max + 1; } catch (e) { /* 아직 선언 전 */ }
+        }
+        // 이 표는 엑셀로 수천 줄이 들어올 수 있어 **화면을 열 때** 받아 옵니다 (js/kob-db.js 의 ON_DEMAND).
+        function ensurePayoutsLoaded() {
+            if (!window.kobDb || kobDb.ready('settlements')) return;
+            kobDb.load('settlements').catch(e => console.error('[정산] 불러오기 실패', e));
+            // 다 받으면 kob-db-change(reason 'load') 가 와서 아래 reload 가 돌고 화면이 다시 그려집니다.
+        }
+        function reloadPayoutsFromDb() {
+            if (!window.kobDb) return;
+            payoutRecords = kobDb.rows('settlements');
+            payoutRecordsSaved = new Map(payoutRecords.map(x => [x.id, JSON.stringify(x)]));
+            syncPayoutsIdCounter();
+            if (typeof renderPayoutCenter === 'function') renderPayoutCenter();
+        }
+        window.addEventListener('kob-db-change', (e) => {
+            const d = e.detail || {};
+            if (d.table && d.table !== 'settlements') return;
+            if (d.reason === 'local' || d.reason === 'local-delete') return;
+            reloadPayoutsFromDb();
+        });
         let payoutIdCounter = 1;
+        syncPayoutsIdCounter();   // 저장된 번호 뒤로 이어지게
         let payoutMonth = '';              // 지금 보는 지급월 (YYYY-MM)
         let payoutFilter = { q: '', level: '', cycle: '', feeMethod: '', root: '' };
         let payoutView = 'tree';           // tree = 계층 들여쓰기 · flat = 목록
@@ -34520,6 +35353,8 @@ const QUOTE_TEMPLATES = [
         ];
 
         function renderPayoutCenter(host) {
+            ensurePayoutsLoaded();   // 이 화면을 열 때 받아 옵니다 (엑셀로 대량이 들어오는 자료라 미리 받지 않습니다)
+            savePayouts();
             const ym = payoutCurrentMonth();
             const all = payoutOfMonth(ym);
             const list = payoutFiltered();
@@ -34955,6 +35790,7 @@ const QUOTE_TEMPLATES = [
                 payoutRecords.push(rec);
             }
             payoutMonth = rec.ym;
+            savePayouts();
             closePayoutRowModal();
             closePayoutDetail();
             renderSupplyCenter();
@@ -34967,6 +35803,7 @@ const QUOTE_TEMPLATES = [
             const kids = payoutRecords.filter(x => x.ym === r.ym && x.id !== r.id && x.pathRaw.indexOf(r.pathRaw + ' >') === 0);
             if (!confirm(`'${r.name}' 줄을 지웁니다.${kids.length ? `\n이 업체 아래 ${kids.length}건은 그대로 남습니다.` : ''}\n\n계속할까요?`)) return;
             payoutRecords = payoutRecords.filter(x => x.id !== r.id);
+            savePayouts();
             closePayoutRowModal();
             closePayoutDetail();
             renderSupplyCenter();
@@ -35145,6 +35982,7 @@ const QUOTE_TEMPLATES = [
             if (dups.length && !confirm(`${ym.replace('-', '년 ')}월에 이미 있는 영업업체명이 ${dups.length}건 있습니다.\n(예: ${dups[0].pathRaw})\n\n그래도 모두 넣을까요?`)) return;
 
             made.forEach(m => payoutRecords.push(m));
+            savePayouts();
             const tot = made.reduce((n, m) => n + m.payAmount, 0);
             payoutMonth = ym;
             closePayoutBulkModal();
@@ -35375,6 +36213,7 @@ const QUOTE_TEMPLATES = [
                 payoutRecords.push(Object.assign({}, r, { id: 'py' + payoutIdCounter++, ym }));
             });
             payoutMonth = ym;
+            savePayouts();
             payoutImportDraft = null;
             closePayoutImport();
             renderSupplyCenter();
@@ -37185,6 +38024,7 @@ const QUOTE_TEMPLATES = [
                 if (preview.length < 5) preview.push(Object.assign({ name: name, bizNo: bizNo }, data));
             });
 
+            saveCustomers();
             renderCmsStatus();
             if (typeof renderCommonCustomers === 'function') renderCommonCustomers();
             if (typeof renderCustomers === 'function') renderCustomers();
@@ -37802,8 +38642,66 @@ const QUOTE_TEMPLATES = [
 
         // ==================== 견적관리 로직 (Salesforce Quote 참고) ====================
         const QUOTE_VAT_RATE = 0.1;
-        let quotes = [];
+        // ---------- 저장 (2026-09-17) ----------
+        // 견적은 Supabase 'quotes' 표에 한 건 = 한 줄로 둡니다 (js/kob-db.js).
+        // 화면 코드는 지금까지처럼 quotes 배열을 다루고, 바꾼 뒤에 save 함수만 부릅니다.
+        let quotes = (window.kobDb ? kobDb.rows('quotes') : []);
+        let quotesSaved = new Map(quotes.map(x => [x.id, JSON.stringify(x)]));
+
+        function saveQuotes() {
+            if (!window.kobDb) return;
+            const alive = new Set();
+            quotes.forEach(x => {
+                if (!x || !x.id) return;
+                alive.add(x.id);
+                const now = JSON.stringify(x);
+                if (quotesSaved.get(x.id) === now) return;
+                quotesSaved.set(x.id, now);
+                kobDb.save('quotes', x).catch(e => console.error('[견적] 저장 실패', e));
+            });
+            Array.from(quotesSaved.keys()).forEach(id => {
+                if (alive.has(id)) return;
+                quotesSaved.delete(id);
+                kobDb.remove('quotes', id).catch(e => console.error('[견적] 삭제 실패', e));
+            });
+        }
+
+        // 저장된 번호 뒤로 이어지게 맞춥니다 — 다시 접속해도 번호가 겹치지 않도록.
+        function syncQuotesIdCounter() {
+            let max = 0;
+            quotes.forEach(x => {
+                const m = /^QT-(\d+)$/.exec(String(x && x.id || ''));
+                if (m) max = Math.max(max, Number(m[1]));
+            });
+            try { if (quoteIdCounter <= max) quoteIdCounter = max + 1; } catch (e) { /* 아직 선언 전 */ }
+        }
+
+        function reloadQuotesFromDb() {
+            if (!window.kobDb) return;
+            quotes = kobDb.rows('quotes');
+            quotesSaved = new Map(quotes.map(x => [x.id, JSON.stringify(x)]));
+            syncQuotesIdCounter();
+            if (typeof syncQuoteWorks === 'function') syncQuoteWorks();
+            if (typeof renderQuotes === 'function' && document.getElementById('quotes-table-body')) renderQuotes();
+            if (typeof refreshWorkViews === 'function') refreshWorkViews();
+        }
+        window.addEventListener('kob-db-change', (e) => {
+            const d = e.detail || {};
+            if (d.table && d.table !== 'quotes') return;
+            if (d.reason === 'local' || d.reason === 'local-delete') return;
+            reloadQuotesFromDb();
+        });
+        window.addEventListener('kob-db-conflict', (e) => {
+            const d = e.detail || {};
+            if (d.table !== 'quotes') return;
+            reloadQuotesFromDb();
+            const name = (d.theirs && d.theirs.name) || (d.theirs && d.theirs.description) || '견적';
+            if (typeof showAppToast === 'function') {
+                showAppToast(`'${name}' 은(는) 다른 사람이 먼저 고쳤습니다. 최신 내용으로 바꿔 두었으니 확인 후 다시 고쳐 주세요.`, 'orange');
+            }
+        });
         let quoteIdCounter = 6;
+        syncQuotesIdCounter();   // 저장된 번호 뒤로 이어지게
         let quoteFilterStatus = 'all';
         let quoteDraftLines = []; // 모달 편집 중인 라인 임시 상태
         let quoteDraftTemplateId = ''; // 모달 편집 중 선택된 장비 템플릿 id
@@ -38917,6 +39815,7 @@ const QUOTE_TEMPLATES = [
         }
 
         function renderQuotes() {
+            saveQuotes();
             renderQuoteStats();
             // 영업업무센터 '견적' 탭도 같은 데이터를 보므로 함께 갱신 (작성/수정/삭제/재견적 모두 이 경로를 탐)
             if (typeof syncQuoteWorks === 'function') {
@@ -39347,6 +40246,7 @@ const QUOTE_TEMPLATES = [
         function deleteQuote(quoteId) {
             if (confirm('정말 이 견적을 삭제하시겠습니까?')) {
                 quotes = quotes.filter(q => q.id !== quoteId);
+                saveQuotes();
                 renderQuotes();
             }
         }
@@ -39374,6 +40274,7 @@ const QUOTE_TEMPLATES = [
                 customerManual: src.customerManual ? { ...src.customerManual } : null
             };
             quotes.unshift(clone);
+            saveQuotes();
             renderQuotes();
             // 복제된 새 견적을 바로 편집할 수 있도록 모달 오픈
             openQuoteModal(newId);
@@ -39563,7 +40464,9 @@ const QUOTE_TEMPLATES = [
                 ${buildQuoteTermsHtml(q)}
 
                 <p class="text-center text-sm text-gray-600 mt-8">상기와 같이 견적합니다.</p>
-                <p class="text-center text-base font-bold mt-2">${escapeHtml(supplier.sender)}${supplier.ceo ? ` &nbsp; 대표 ${escapeHtml(supplier.ceo)} (인)` : ''}</p>
+                <!-- 상호만 씁니다. 대표자 이름과 (인) 은 뺐습니다 (2026-09-17) —
+                     대표자는 위쪽 공급자 정보에 이미 나오고, 견적서에는 날인란이 필요 없다는 판단. -->
+                <p class="text-center text-base font-bold mt-2">${escapeHtml(supplier.sender)}</p>
             `;
         }
 
@@ -39664,7 +40567,7 @@ const QUOTE_TEMPLATES = [
         //   ② 영업본부 : 요청을 확인하고 고객사에서 받은 보완서류를 항목별로 업로드 → 제출
         //   ③ 결제본부 : 항목별로 확인/반려. 반려가 있으면 재요청(반려 항목만 다시 업로드),
         //                모든 항목이 확인되면 '취합 확인 완료' 로 종결
-        // 화면 검토용 목업이라 파일은 실제로 저장하지 않고 파일명만 메모리에 보관합니다.
+        // DEV환경이라 파일은 실제로 저장하지 않고 파일명만 메모리에 보관합니다.
 
         const PAY_WC_TABS = [
             {
@@ -39774,7 +40677,7 @@ const QUOTE_TEMPLATES = [
         // 요청 수신 대상으로 고를 수 있는 영업본부 담당자
         function payDocSalesStaff() { return localUsers.filter(u => u.dept === 'sales').map(u => u.name); }
 
-        // ---------- 보완서류 요청 데이터 (목업) ----------
+        // ---------- 보완서류 요청 데이터 (DEV환경) ----------
         // 항목의 파일 관련 필드
         //   fileName/fileType/fileSize : 업로드된 첨부 정보
         //   fileUrl                    : 브라우저 메모리의 미리보기 주소(URL.createObjectURL). 시드 데이터는 실물이 없어 빈 값
@@ -39789,11 +40692,50 @@ const QUOTE_TEMPLATES = [
             viewed: false, viewedBy: '', viewedAt: ''
         }, over || {});
 
-        let payDocRequests = [];
+        // ---------- 저장 (2026-09-17) ----------
+        // 보완서류 요청은 Supabase 'pay_doc_requests' 표에 한 건 = 한 줄로 둡니다 (js/kob-db.js).
+        let payDocRequests = (window.kobDb ? kobDb.rows('pay_doc_requests') : []);
+        let payDocRequestsSaved = new Map(payDocRequests.map(x => [x.id, JSON.stringify(x)]));
 
-        // 시드 데이터에는 실제 업로드 파일이 없으므로 '샘플 문서'로 표시합니다.
-        // (열람 모달에서 문서 형태의 시연용 지면을 그려 주어 열람→확인 흐름을 그대로 볼 수 있습니다)
-        payDocRequests.forEach(r => r.items.forEach(it => { if (it.fileName && !it.fileUrl) it.sample = true; }));
+        function savePayDocs() {
+            if (!window.kobDb) return;
+            const alive = new Set();
+            payDocRequests.forEach(x => {
+                if (!x || !x.id) return;
+                alive.add(x.id);
+                const now = JSON.stringify(x);
+                if (payDocRequestsSaved.get(x.id) === now) return;
+                payDocRequestsSaved.set(x.id, now);
+                kobDb.save('pay_doc_requests', x).catch(e => console.error('[보완서류 요청] 저장 실패', e));
+            });
+            Array.from(payDocRequestsSaved.keys()).forEach(id => {
+                if (alive.has(id)) return;
+                payDocRequestsSaved.delete(id);
+                kobDb.remove('pay_doc_requests', id).catch(e => console.error('[보완서류 요청] 삭제 실패', e));
+            });
+        }
+
+        function reloadPayDocsFromDb() {
+            if (!window.kobDb) return;
+            payDocRequests = kobDb.rows('pay_doc_requests');
+            payDocRequestsSaved = new Map(payDocRequests.map(x => [x.id, JSON.stringify(x)]));
+            if (typeof markPayDocSamples === 'function') markPayDocSamples();
+            if (typeof renderPayDocPanel === 'function') renderPayDocPanel();
+        }
+        window.addEventListener('kob-db-change', (e) => {
+            const d = e.detail || {};
+            if (d.table && d.table !== 'pay_doc_requests') return;
+            if (d.reason === 'local' || d.reason === 'local-delete') return;
+            reloadPayDocsFromDb();
+        });
+
+        // 파일이 실제로 올라가 있지 않은 항목은 '샘플 문서'로 표시합니다.
+        // (열람 모달에서 문서 형태의 지면을 그려 주어 열람→확인 흐름을 그대로 볼 수 있습니다)
+        // items 가 없는 자료도 있을 수 있어(저장소에서 불러온 옛 자료 등) 빈 목록으로 받아 넘깁니다. (2026-09-17)
+        function markPayDocSamples() {
+            payDocRequests.forEach(r => (r && r.items || []).forEach(it => { if (it.fileName && !it.fileUrl) it.sample = true; }));
+        }
+        markPayDocSamples();
 
         // ---------- 역할 판정 ----------
         // 결제본부(+관리자): 요청 등록 · 항목 확인/반려 · 취합 확인 완료
@@ -39872,6 +40814,7 @@ const QUOTE_TEMPLATES = [
         }
 
         function renderPayDocPanel() {
+            savePayDocs();
             const host = document.getElementById('paywc-panel-docs');
             if (!host) return;
 
@@ -40138,6 +41081,7 @@ const QUOTE_TEMPLATES = [
                 history: [{ at: today, who: currentUserName || '결제본부', text: `보완요청 발송 (수신: ${targetName}, ${picked.length}건)` }]
             });
 
+            savePayDocs();
             closePayDocRequestModal();
             renderPaymentWorkCenter();
             alert(`보완요청 ${id} 이(가) ${targetName}에게 발송되었습니다.`);
@@ -40633,7 +41577,7 @@ const QUOTE_TEMPLATES = [
             const it = r && r.items.find(i => i.docId === payDocUploadTarget.docId);
             if (!r || !it) return;
 
-            // 서버가 없는 목업이라 파일은 브라우저 메모리에만 두고(objectURL) 결제본부가 열람할 수 있게 합니다.
+            // 서버가 없는 DEV환경이라 파일은 브라우저 메모리에만 두고(objectURL) 결제본부가 열람할 수 있게 합니다.
             if (it.fileUrl) URL.revokeObjectURL(it.fileUrl);
             it.fileName = file.name;
             it.fileType = file.type || '';
@@ -40732,7 +41676,7 @@ const QUOTE_TEMPLATES = [
         // 화면에서 못 여는 형식은 설치된 프로그램을 띄워 확인합니다.
         // Office 는 표준 URI 스킴(ms-word:ofe|u|<주소>)을 지원해, 파일이 서버 주소(http/https)로
         // 서비스되면 클릭 한 번에 Word/Excel/PowerPoint 가 바로 실행됩니다.
-        // 지금은 목업이라 파일이 브라우저 메모리(blob:)에만 있어 스킴에 넘길 수 없으므로,
+        // 지금은 DEV환경이라 파일이 브라우저 메모리(blob:)에만 있어 스킴에 넘길 수 없으므로,
         // 그런 경우에는 파일을 내려받아 연결 프로그램으로 열도록 안내합니다.
         const PAY_DOC_APPS = [
             { id: 'excel', name: 'Excel',      icon: 'fa-file-excel',      color: 'text-green-600',  scheme: 'ms-excel:ofe|u|',      ext: /\.(xlsx|xls|xlsm|xlsb)$/i, mime: /spreadsheet|ms-excel/i },
@@ -40767,7 +41711,7 @@ const QUOTE_TEMPLATES = [
             if (!it.fileUrl) { alert('샘플 문서라 실제 파일이 없습니다. 영업본부가 업로드한 파일에서 동작합니다.'); return; }
 
             const app = payDocAppOf(it);
-            // blob:/data: 는 브라우저 메모리에만 있는 목업 파일이라 Office 가 읽을 수 없습니다.
+            // blob:/data: 는 브라우저 메모리에만 있는 DEV환경 파일이라 Office 가 읽을 수 없습니다.
             // 서버에서 서비스되는 주소(절대/상대 경로 모두)면 스킴으로 바로 실행할 수 있습니다.
             const servedByServer = !/^(blob:|data:)/i.test(it.fileUrl);
 
@@ -40784,7 +41728,7 @@ const QUOTE_TEMPLATES = [
                 return;
             }
 
-            // 목업(brower memory) 또는 전용 스킴이 없는 형식(한글 등) → 내려받아 연결 프로그램으로 열기
+            // DEV환경(brower memory) 또는 전용 스킴이 없는 형식(한글 등) → 내려받아 연결 프로그램으로 열기
             if (!payDocDownloadFile(it)) return;
             payDocLog(r, `'${it.name}' 내려받기 — ${app ? app.name : '연결 프로그램'}(으)로 확인`);
             renderPayDocPreview();
