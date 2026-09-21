@@ -50551,8 +50551,9 @@ const QUOTE_TEMPLATES = [
             renderPartnerTaskList();
         }
 
+        // 카드에 '○○본부 담당' 표기는 없앴습니다 — 파트너사는 어느 본부 일인지 알 필요가 없고,
+        // 담당 부서는 접수 후 자동 배정됩니다 (2026-09-22).
         function partnerTaskCardHtml(t) {
-            const d = partnerDeptDef(partnerTaskDept(t.id));
             return `
             <button type="button" onclick="choosePartnerTask('${t.id}')"
                 class="pcf-task text-left bg-white border-2 border-gray-200 hover:border-indigo-400 rounded-lg p-5 transition">
@@ -50564,7 +50565,6 @@ const QUOTE_TEMPLATES = [
                 <p class="text-xs text-gray-500 mt-1 leading-relaxed">${escapeHtml(t.desc)}</p>
                 <p class="text-[11px] text-gray-400 mt-2 pt-2 border-t border-dashed border-gray-100">
                     <i class="fas fa-clock mr-1"></i>처리 기간 ${escapeHtml(t.days)}
-                    <span class="ml-2 text-gray-300" title="접수 후 처리 부서">${escapeHtml(d.name)} 담당</span>
                 </p>
             </button>`;
         }
