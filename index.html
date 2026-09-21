@@ -7573,7 +7573,7 @@
                             <div>
                                 <label class="block text-xs font-medium text-gray-600 mb-1">직급 <span id="org-edit-rank-req" class="text-red-500">*</span></label>
                                 <select id="org-edit-rank" onchange="onOrgEditRankChange()" class="w-full p-2 text-sm border border-gray-300 rounded bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"></select>
-                                <p class="text-[11px] text-gray-400 mt-1">직급을 고르면 아래 <b>직책(권한 레벨)</b>이 직급에 맞게 저절로 정해집니다. 목록은 <b>조직도 관리 › 직급 관리</b>에서 고칩니다.</p>
+                                <p class="text-[11px] text-gray-400 mt-1">직급을 고르면 아래 <b>직책(권한 레벨)</b>이 같은 직급으로 정해집니다. 목록과 권한 등급은 <b>조직도 관리 › 직급 관리</b>에서 고칩니다.</p>
                             </div>
                             <div>
                                 <label class="block text-xs font-medium text-gray-600 mb-1">부서 <span id="org-edit-dept-req" class="text-red-500">*</span></label>
@@ -9852,29 +9852,64 @@ const QUOTE_TEMPLATES = [
         // 매니저: 본인 업무/일정만 조회 · 등록
         // 팀장  : 같은 부서(팀) 팀원의 업무/일정을 통합 조회
         // 본부장: 본부(부서) 전체 팀원의 업무/일정을 통합 조회
-        // 직책 레벨 (권한 설정 화면의 행 순서이기도 함)
-        //  manager 실무 → leader 팀 → head 본부(타 부서 크로스체크) → exec 대표(전사) → admin 시스템관리자
-        const levelNames = { manager: '매니저', leader: '팀장', head: '본부장', exec: '대표', admin: '관리자' };
-        const PERM_LEVELS = ['manager', 'leader', 'head', 'exec', 'admin'];
-        const levelDescNames = {
+        // 직책 레벨 = **직급** (2026-09-21). 직급 하나가 권한 레벨 하나입니다 — 부장과 본부장이 같은 레벨에 묶이지 않습니다.
+        //   · user.level 에는 직급 id(rk_…) 가 들어갑니다. 관리자는 'admin'.
+        //   · 직급마다 **권한 등급**(cls: manager 실무 → leader 팀 → head 본부 · 크로스체크 → exec 전사)이 있고,
+        //     기능 판정(팀 통합현황 · 업무지시 · 기본 조회 범위 …)은 levelClass() 로 등급을 봅니다.
+        //   · 협업 · 일정 · 법인카드 조회 범위 설정은 직급마다 따로 정할 수 있고, 정하지 않은 직급은 등급의 값을 씁니다.
+        //   · 예전 자료의 level('manager' · 'leader' · 'head' · 'exec')도 그대로 읽힙니다(등급 = 그 값).
+        const LEVEL_CLASSES = ['manager', 'leader', 'head', 'exec'];
+        const levelClassNames = { manager: '매니저급', leader: '팀장급', head: '본부장급', exec: '대표급', admin: '관리자' };
+        const levelClassDesc = {
             manager: '실무 담당자',
             leader: '팀 단위 관리',
             head: '본부 단위 관리 · 타 부서 크로스체크',
-            exec: '대표이사 — 전사 모든 현황 조회',
+            exec: '전사 모든 현황 조회',
             admin: '시스템 관리자'
         };
+        // 아래 셋은 rebuildLevels() 가 직급 목록으로 내용을 갈아 끼웁니다 (참조하는 곳이 많아 같은 객체를 유지)
+        const levelNames = { manager: '매니저', leader: '팀장', head: '본부장', exec: '대표', admin: '관리자' };
+        const PERM_LEVELS = ['manager', 'leader', 'head', 'exec', 'admin'];          // 낮은 직급 → 높은 직급 → 관리자
+        const levelDescNames = Object.assign({}, levelClassDesc);
+        function levelClass(level) {
+            if (!level) return 'manager';
+            if (level === 'admin' || LEVEL_CLASSES.indexOf(level) > -1) return level;
+            const r = (typeof orgRankById === 'function') ? orgRankById(level) : null;
+            return r ? r.cls : 'manager';
+        }
+        // 서열 — 클수록 높음. 등급이 먼저, 같은 등급 안에서는 직급 목록의 순서(위가 높음)
+        function levelSeniority(level) {
+            const cls = levelClass(level);
+            const base = { manager: 100, leader: 200, head: 300, exec: 400, admin: 900 }[cls] || 100;
+            if (typeof orgRanks === 'undefined') return base;
+            const i = orgRanks.findIndex(r => r.id === level);
+            return i < 0 ? base : base + (orgRanks.length - i);
+        }
+        function rebuildLevels() {
+            if (typeof orgRanks === 'undefined') return;
+            Object.keys(levelNames).forEach(k => { if (k !== 'admin' && LEVEL_CLASSES.indexOf(k) < 0) delete levelNames[k]; });
+            Object.keys(levelDescNames).forEach(k => { if (k !== 'admin' && LEVEL_CLASSES.indexOf(k) < 0) delete levelDescNames[k]; });
+            orgRanks.forEach(r => { levelNames[r.id] = r.name; levelDescNames[r.id] = `${levelClassNames[r.cls] || ''} · ${levelClassDesc[r.cls] || ''}`; });
+            PERM_LEVELS.splice(0, PERM_LEVELS.length, ...orgRanks.slice().reverse().map(r => r.id), 'admin');
+        }
+        // 직급별 값이 없으면 등급의 값을 — 협업 · 일정 · 법인카드 조회 범위 설정이 씁니다
+        function scopeOfLevel(map, level, fallback) {
+            if (map && map[level] !== undefined) return map[level];
+            const c = levelClass(level);
+            return (map && map[c] !== undefined) ? map[c] : fallback;
+        }
         function levelBadgeClass(lv) {
             return {
                 head: 'bg-rose-100 text-rose-700',
                 exec: 'bg-amber-100 text-amber-700',
                 leader: 'bg-emerald-100 text-emerald-700',
                 admin: 'bg-indigo-100 text-indigo-700'
-            }[lv] || 'bg-gray-100 text-gray-600';
+            }[levelClass(lv)] || 'bg-gray-100 text-gray-600';
         }
 
         // 통합 조회 권한 여부 (팀장/본부장만 팀 통합현황 접근 가능)
         function canViewTeam(level) {
-            return level === 'leader' || level === 'head' || level === 'exec';
+            return levelClass(level) === 'leader' || levelClass(level) === 'head' || levelClass(level) === 'exec';
         }
 
         // 타 부서 레코드를 '수정'할 수 있는지.
@@ -9888,8 +9923,8 @@ const QUOTE_TEMPLATES = [
         // 운행내역 조회 권한: 관리본부(management) 소속의 팀장/본부장, 또는 관리자(admin)만 허용
         // - 운전자(일반 사용자)의 운행일지 입력은 모바일(?mode=mobile)에서 별도 진행
         function canViewVehicleLog(dept, level) {
-            if (dept === 'admin' || level === 'admin' || (dept === currentUserDept && isSystemAdmin())) return true;
-            return isMgmtDept(dept) && (level === 'leader' || level === 'head');
+            if (dept === 'admin' || levelClass(level) === 'admin' || (dept === currentUserDept && isSystemAdmin())) return true;
+            return isMgmtDept(dept) && (levelClass(level) === 'leader' || levelClass(level) === 'head');
         }
 
         // 로그인한 사용자가 통합 조회할 수 있는 팀원 목록 반환
@@ -9898,10 +9933,10 @@ const QUOTE_TEMPLATES = [
         function getVisibleMembers(name, dept, level) {
             const self = localUsers.find(u => u.name === name);
             // 대표·관리자: 전사 (권한 그룹이 관리자인 겸직 계정 포함 · 2026-09-21)
-            if (dept === 'admin' || dept === '' || level === 'admin' || level === 'exec' || isAdminAccount(self)) {
+            if (dept === 'admin' || dept === '' || levelClass(level) === 'admin' || levelClass(level) === 'exec' || isAdminAccount(self)) {
                 return localUsers.slice();
             }
-            if (level === 'manager') {
+            if (levelClass(level) === 'manager') {
                 return self ? [self] : [{ name, dept, rank: '', level }];
             }
             // 팀장/본부장: 일정 조회 범위 설정을 그대로 따름
@@ -11436,7 +11471,7 @@ const QUOTE_TEMPLATES = [
                 : (deptsInView.length > 1 ? '전사' : (deptNames[currentUserDept] || '소속'));
 
             if (sub) {
-                const crossNote = (deptsInView.length > 1 && currentUserLevel === 'head')
+                const crossNote = (deptsInView.length > 1 && levelClass(currentUserLevel) === 'head')
                     ? ' 타 부서는 크로스체크(조회 전용)입니다.' : '';
                 sub.innerText = `${scopeLabel} · ${levelNames[currentUserLevel] || ''} 통합 조회 — 팀원 ${members.length}명의 업무·일정을 한눈에 확인합니다.${crossNote}`;
             }
@@ -11505,7 +11540,7 @@ const QUOTE_TEMPLATES = [
                       `</div>`
                     : '';
 
-                const levelBadge = m.level && m.level !== 'manager'
+                const levelBadge = m.level && levelClass(m.level) !== 'manager'
                     ? `<span class="ml-1 px-1.5 py-0.5 text-xs rounded-full ${levelBadgeClass(m.level)}">${levelNames[m.level] || ''}</span>`
                     : '';
                 const initial = (m.name || '?').charAt(0).toUpperCase();
@@ -12591,25 +12626,51 @@ const QUOTE_TEMPLATES = [
         // 저장 키 gwOrgRanks.v1. 이름을 고치면 그 직급인 구성원의 직급도 함께 바뀝니다.
         // 직급마다 **권한 레벨**(manager 매니저 · leader 팀장 · head 본부장 · exec 대표)이 붙습니다 (2026-09-21).
         // 구성원 등록에서 직급을 고르면 권한 레벨이 그 값으로 저절로 맞춰집니다(필요하면 바꿀 수 있음).
+        // 직급 = 권한 레벨. id 는 고정(rk_…)이라 이름을 바꿔도 구성원의 level 과 조회 범위 설정이 그대로 따라옵니다.
         const ORG_RANK_DEFAULT = [
-            { name: '대표이사', level: 'exec' }, { name: '전무', level: 'exec' }, { name: '상무', level: 'exec' }, { name: '이사', level: 'exec' },
-            { name: '부장', level: 'head' },     { name: '본부장', level: 'head' },
-            { name: '팀장', level: 'leader' },   { name: '매니저', level: 'manager' }, { name: '파트장', level: 'leader' }
+            { id: 'rk_ceo',     name: '대표이사', cls: 'exec' },
+            { id: 'rk_evp',     name: '전무',     cls: 'exec' },
+            { id: 'rk_svp',     name: '상무',     cls: 'exec' },
+            { id: 'rk_dir',     name: '이사',     cls: 'exec' },
+            { id: 'rk_gm',      name: '부장',     cls: 'head' },
+            { id: 'rk_head',    name: '본부장',   cls: 'head' },
+            { id: 'rk_leader',  name: '팀장',     cls: 'leader' },
+            { id: 'rk_manager', name: '매니저',   cls: 'manager' },
+            { id: 'rk_part',    name: '파트장',   cls: 'leader' }
         ];
-        const ORG_RANK_LEVELS = ['manager', 'leader', 'head', 'exec'];    // 직급에 붙일 수 있는 레벨 (관리자는 직책 칸에서 따로)
         const ORG_RANK_KEY = 'gwOrgRanks.v1';
         let orgRanks = loadJsonStore(ORG_RANK_KEY, null);
         if (!Array.isArray(orgRanks) || !orgRanks.length) orgRanks = ORG_RANK_DEFAULT.map(r => Object.assign({}, r));
-        // 예전 저장본(이름만 있는 문자열 배열)도 받아 줍니다 — 레벨은 기본 목록에서 찾고, 없으면 매니저
-        orgRanks = orgRanks.map(r => {
-            const name = String((r && r.name !== undefined) ? r.name : r || '').trim();
-            const def = ORG_RANK_DEFAULT.find(d => d.name === name);
-            const level = (r && ORG_RANK_LEVELS.indexOf(r.level) > -1) ? r.level : (def ? def.level : 'manager');
-            return name ? { name, level } : null;
-        }).filter(Boolean);
-        function saveOrgRanks() { saveJsonStore(ORG_RANK_KEY, orgRanks); }
+        // 예전 저장본(문자열 배열 · {name, level})도 받아 줍니다 — id 는 기본 목록에서 찾고, 없으면 새로 붙입니다
+        (function normalizeRanks() {
+            const used = new Set();
+            orgRanks = orgRanks.map(r => {
+                const name = String((r && r.name !== undefined) ? r.name : r || '').trim();
+                if (!name) return null;
+                const def = ORG_RANK_DEFAULT.find(d => d.name === name);
+                const cls = (r && LEVEL_CLASSES.indexOf(r.cls || r.level) > -1) ? (r.cls || r.level) : (def ? def.cls : 'manager');
+                let id = (r && r.id) ? String(r.id) : (def ? def.id : '');
+                if (!id || used.has(id)) { let n = 1; while (used.has('rk' + n) || orgRanks.some(x => x && x.id === 'rk' + n)) n++; id = 'rk' + n; }
+                used.add(id);
+                return { id, name, cls };
+            }).filter(Boolean);
+        })();
+        function saveOrgRanks() { saveJsonStore(ORG_RANK_KEY, orgRanks); rebuildLevels(); }
+        rebuildLevels();
         const orgRankNames = () => orgRanks.map(r => r.name);
-        function orgRankLevel(rank) { const r = orgRanks.find(x => x.name === String(rank || '').trim()); return r ? r.level : ''; }
+        function orgRankById(id) { return orgRanks.find(x => x.id === id) || null; }
+        function orgRankLevelId(rank) { const r = orgRanks.find(x => x.name === String(rank || '').trim()); return r ? r.id : ''; }
+        // 예전 자료 — level 이 등급 이름(head 등)이고 직급이 목록에 있으면 그 직급 id 로 옮깁니다 (한 번만, 바뀐 것이 있을 때만 저장)
+        (function migrateUserLevels() {
+            if (typeof localUsers === 'undefined' || !Array.isArray(localUsers)) return;
+            let n = 0;
+            localUsers.forEach(u => {
+                if (!u || levelClass(u.level) === 'admin' || orgRankById(u.level)) return;
+                const id = orgRankLevelId(u.rank);
+                if (id) { u.level = id; n++; }
+            });
+            if (n && typeof saveLocalUsers === 'function') saveLocalUsers();
+        })();
         function orgRankWeight(rank) {
             const i = orgRankNames().indexOf(String(rank || '').trim());
             return i < 0 ? orgRanks.length : i;
@@ -12618,7 +12679,8 @@ const QUOTE_TEMPLATES = [
         // 그 본부의 본부장 — 직급이 '본부장' 이거나 권한 레벨이 본부장(head)인 사람.
         // 조직도에서는 팀·묶음에 넣지 않고 **본부 상자·카드에 따로** 표시합니다.
         function orgDeptHeads(members) {
-            return (members || []).filter(u => String(u.rank || '').indexOf('본부장') > -1 || u.level === 'head');
+            // 직급이 '본부장' 인 사람만 — 등급이 본부장급인 부장 등은 본부장으로 그리지 않습니다 (2026-09-21)
+            return (members || []).filter(u => String(u.rank || '').indexOf('본부장') > -1);
         }
 
         // 사용자 관리 표 — 계정 항목 + 조직도 항목(팀 · 담당업무)을 함께 보여 줍니다.
@@ -13105,8 +13167,8 @@ const QUOTE_TEMPLATES = [
             if (user && collabUserOverrides[user.id] && collabUserOverrides[user.id].enabled) {
                 return collabUserOverrides[user.id].scope;
             }
-            if (dept === 'admin' || level === 'admin' || level === 'exec' || isAdminAccount(user)) return 'all';
-            return collabLevelScope[level] || 'self';
+            if (dept === 'admin' || levelClass(level) === 'admin' || levelClass(level) === 'exec' || isAdminAccount(user)) return 'all';
+            return scopeOfLevel(collabLevelScope, level, 'self');
         }
 
         // 현재 사용자가 조회 가능한 티켓 목록 (권한 스코프 적용)
@@ -14145,8 +14207,8 @@ const QUOTE_TEMPLATES = [
         // 지시 권한: 본부장·팀장(자기 부서) / 대표·관리자(전 부서). 매니저는 지시 불가.
         function canIssueDirective(level, sourceDept, targetDept) {
             const lv = level || currentUserLevel;
-            if (lv === 'admin' || lv === 'exec' || (sourceDept || currentUserDept) === 'admin' || (!level && !sourceDept && isSystemAdmin())) return true;
-            if (lv !== 'head' && lv !== 'leader') return false;
+            if (levelClass(lv) === 'admin' || levelClass(lv) === 'exec' || (sourceDept || currentUserDept) === 'admin' || (!level && !sourceDept && isSystemAdmin())) return true;
+            if (levelClass(lv) !== 'head' && levelClass(lv) !== 'leader') return false;
             // 본부장·팀장은 자기 부서 안에서만 지시
             return !targetDept || targetDept === (sourceDept || currentUserDept);
         }
@@ -14155,11 +14217,10 @@ const QUOTE_TEMPLATES = [
         //  - 본부장 → 팀장·매니저 / 팀장 → 매니저 / 대표·관리자 → 본부장 포함 전원
         function directiveTargetCandidates(dept, issuerName, issuerLevel) {
             const lv = issuerLevel || currentUserLevel;
-            const rank = { manager: 1, leader: 2, head: 3, exec: 4, admin: 5 };
-            const myRank = rank[lv] || 1;
+            const myRank = levelSeniority(lv);      // 직급 서열 (2026-09-21) — 같은 등급이라도 목록에서 위인 직급이 높습니다
             return localUsers.filter(u => u.dept === dept
                 && u.name !== issuerName
-                && (rank[u.level] || 1) < myRank);
+                && levelSeniority(u.level) < myRank);
         }
 
         // ---------- 완료기한의 '시각' ----------
@@ -14246,7 +14307,7 @@ const QUOTE_TEMPLATES = [
         function canManageDirectiveGroup(groupId) {
             const items = directiveGroupItems(groupId);
             if (!items.length) return false;
-            if (isSystemAdmin() || currentUserLevel === 'exec') return true;
+            if (isSystemAdmin() || levelClass(currentUserLevel) === 'exec') return true;
             return items[0].assignee === currentUserName;
         }
         // 지시받은 사람들에게 묶음 변경 사항을 통보
@@ -15102,7 +15163,7 @@ const QUOTE_TEMPLATES = [
                 <tr>
                     <td class="p-3"><span class="text-xs font-bold rounded px-2 py-0.5 ${levelBadgeClass(lv)}">${levelNames[lv] || lv}</span></td>
                     <td class="p-3 text-gray-500">${levelDescNames[lv] || ''}</td>
-                    <td class="p-3"><select data-collab-level="${lv}" class="text-sm p-1.5 border border-gray-300 rounded bg-gray-50">${scopeOptions(collabLevelScope[lv])}</select></td>
+                    <td class="p-3"><select data-collab-level="${lv}" class="text-sm p-1.5 border border-gray-300 rounded bg-gray-50">${scopeOptions(scopeOfLevel(collabLevelScope, lv, 'self'))}</select></td>
                 </tr>`).join('');
 
             // 개별 예외 사용자 목록
@@ -15171,14 +15232,14 @@ const QUOTE_TEMPLATES = [
             const scopeOptions = (sel) => Object.entries(calendarScopeNames)
                 .map(([v, label]) => `<option value="${v}" ${sel === v ? 'selected' : ''}>${label}</option>`).join('');
             levelBody.innerHTML = PERM_LEVELS.map(lv => {
-                const isCustom = calendarLevelScope[lv] === 'custom';
+                const isCustom = scopeOfLevel(calendarLevelScope, lv, 'self') === 'custom';
                 const deptChecks = isCustom ? calendarDeptChecks('data-calendar-level-dept', lv, calendarLevelDepts[lv], null) : '';
                 return `
                 <tr>
                     <td class="p-3 align-top"><span class="text-xs font-bold rounded px-2 py-0.5 ${levelBadgeClass(lv)}">${levelNames[lv] || lv}</span></td>
                     <td class="p-3 text-gray-500 align-top">${levelDescNames[lv] || ''}</td>
                     <td class="p-3">
-                        <select data-calendar-level="${lv}" onchange="syncCalendarDeptChecksToModel();calendarLevelScope['${lv}']=this.value;renderCalendarPermissions();" class="text-sm p-1.5 border border-gray-300 rounded bg-gray-50">${scopeOptions(calendarLevelScope[lv])}</select>
+                        <select data-calendar-level="${lv}" onchange="syncCalendarDeptChecksToModel();calendarLevelScope['${lv}']=this.value;renderCalendarPermissions();" class="text-sm p-1.5 border border-gray-300 rounded bg-gray-50">${scopeOptions(scopeOfLevel(calendarLevelScope, lv, 'self'))}</select>
                         ${deptChecks}
                     </td>
                 </tr>`;
@@ -15539,8 +15600,8 @@ const QUOTE_TEMPLATES = [
         function canManageScheduleTypes(dept) {
             if (isSystemAdmin()) return true;
             // 전사 구분은 특정 부서 소유가 아니므로 대표·본부장까지만 편집 가능
-            if (dept === COMPANY_DEPT) return currentUserLevel === 'exec' || currentUserLevel === 'head';
-            return dept === currentUserDept && (currentUserLevel === 'leader' || currentUserLevel === 'head');
+            if (dept === COMPANY_DEPT) return levelClass(currentUserLevel) === 'exec' || levelClass(currentUserLevel) === 'head';
+            return dept === currentUserDept && (levelClass(currentUserLevel) === 'leader' || levelClass(currentUserLevel) === 'head');
         }
 
         // 구분을 편집할 수 있는 부서 목록
@@ -15761,8 +15822,8 @@ const QUOTE_TEMPLATES = [
                 const ov = calendarUserOverrides[user.id];
                 return { scope: ov.scope, depts: ov.depts || [] };
             }
-            if (dept === 'admin' || level === 'admin' || level === 'exec' || isAdminAccount(user)) return { scope: 'all', depts: [] };
-            const scope = calendarLevelScope[level] || 'self';
+            if (dept === 'admin' || levelClass(level) === 'admin' || levelClass(level) === 'exec' || isAdminAccount(user)) return { scope: 'all', depts: [] };
+            const scope = scopeOfLevel(calendarLevelScope, level, 'self');
             return { scope, depts: calendarLevelDepts[level] || [] };
         }
 
@@ -15802,7 +15863,7 @@ const QUOTE_TEMPLATES = [
             // 전사일정은 소속 부서가 없으므로 등록자 본인 · 대표 · 관리자만 수정할 수 있다
             if ((s.dept || '') === COMPANY_DEPT) {
                 return (s.salesperson || '') === currentUserName
-                    || currentUserLevel === 'exec' || isSystemAdmin();
+                    || levelClass(currentUserLevel) === 'exec' || isSystemAdmin();
             }
             return canEditDeptRecord(s.dept);
         }
@@ -17747,14 +17808,14 @@ const QUOTE_TEMPLATES = [
         // 프로젝트를 편집할 수 있는 사람: PM · 주관 부서 본부장/팀장 · 대표/관리자
         function canEditProject(p) {
             if (!p) return false;
-            if (isSystemAdmin() || currentUserLevel === 'exec') return true;
+            if (isSystemAdmin() || levelClass(currentUserLevel) === 'exec') return true;
             if (p.owner === currentUserName) return true;
-            return p.dept === currentUserDept && (currentUserLevel === 'head' || currentUserLevel === 'leader');
+            return p.dept === currentUserDept && (levelClass(currentUserLevel) === 'head' || levelClass(currentUserLevel) === 'leader');
         }
         // WBS 를 다룰 수 있는 사람: 담당자 본인 · PM · 대표/관리자
         function isWbsHandler(p, w) {
             if (!p || !w) return false;
-            if (isSystemAdmin() || currentUserLevel === 'exec') return true;
+            if (isSystemAdmin() || levelClass(currentUserLevel) === 'exec') return true;
             return w.assignee === currentUserName || p.owner === currentUserName;
         }
         // 완료 버튼 — 아래 두 가지가 걸려 있으면 완료할 수 없습니다.
@@ -21609,7 +21670,7 @@ const QUOTE_TEMPLATES = [
         function isExecLevel(level, dept) {
             const lv = level || currentUserLevel;
             const dp = dept || currentUserDept;
-            return lv === 'exec' || lv === 'admin' || dp === 'admin';
+            return levelClass(lv) === 'exec' || levelClass(lv) === 'admin' || dp === 'admin';
         }
 
         // 문제·지연을 판정할 때 쓰는 오늘
@@ -26829,7 +26890,7 @@ const QUOTE_TEMPLATES = [
         }
         // 검수는 관리자 또는 운영본부 팀장 이상
         function canReviewInstallCheck() {
-            if (isSystemAdmin() || currentUserLevel === 'exec') return true;
+            if (isSystemAdmin() || levelClass(currentUserLevel) === 'exec') return true;
             return currentUserDept === 'ops' && ['leader', 'head'].indexOf(currentUserLevel) > -1;
         }
         // 작성은 운영본부 · 관리자
@@ -31401,7 +31462,7 @@ const QUOTE_TEMPLATES = [
                 manageMembers: true,
                 memberHint: '기본 구성원은 <b>영업본부 전원과 대표이사</b>입니다. 필요하면 아래에서 구성원을 추가·삭제하세요.',
                 // 초기 구성원 판정 — 영업본부 소속 또는 대표(exec)
-                defaultMember: (u) => u.dept === 'sales' || u.level === 'exec'
+                defaultMember: (u) => u.dept === 'sales' || levelClass(u.level) === 'exec'
             }
         ];
 
@@ -34873,8 +34934,8 @@ const QUOTE_TEMPLATES = [
                 <div class="flex items-center gap-2 px-3 py-2 border-b border-gray-50 last:border-0">
                     <span class="w-6 text-xs text-gray-400 text-right">${i + 1}</span>
                     <span class="flex-1 text-sm font-medium text-gray-800">${escapeHtml(r)} <span class="text-xs font-normal text-gray-400 ml-1">${count(r)}명</span></span>
-                    <select onchange="setOrgRankLevel(${i}, this.value)" class="p-1 text-xs border border-gray-300 rounded bg-white" title="이 직급의 권한 레벨">
-                        ${ORG_RANK_LEVELS.map(lv => `<option value="${lv}"${rk.level === lv ? ' selected' : ''}>${escapeHtml(levelNames[lv])}</option>`).join('')}
+                    <select onchange="setOrgRankClass(${i}, this.value)" class="p-1 text-xs border border-gray-300 rounded bg-white" title="이 직급의 권한 등급">
+                        ${LEVEL_CLASSES.map(c => `<option value="${c}"${rk.cls === c ? ' selected' : ''}>${escapeHtml(levelClassNames[c])}</option>`).join('')}
                     </select>
                     <button onclick="moveOrgRank(${i}, -1)" class="text-gray-400 hover:text-gray-700 px-1 ${i === 0 ? 'invisible' : ''}" title="위로"><i class="fas fa-chevron-up"></i></button>
                     <button onclick="moveOrgRank(${i}, 1)" class="text-gray-400 hover:text-gray-700 px-1 ${i === orgRanks.length - 1 ? 'invisible' : ''}" title="아래로"><i class="fas fa-chevron-down"></i></button>
@@ -34887,7 +34948,7 @@ const QUOTE_TEMPLATES = [
                         <div>
                             <h4 class="text-sm font-bold text-gray-700"><i class="fas fa-ranking-star text-indigo-500 mr-1"></i>직급 관리</h4>
                             <p class="text-xs text-gray-500 mt-0.5">구성원 등록 창의 <b>직급</b> 목록입니다. <b>위가 높은 직급</b>이며 조직도 카드 안에서 이 순서로 정렬됩니다. 이름을 고치면 그 직급인 구성원도 함께 바뀝니다.</p>
-                            <p class="text-xs text-gray-500 mt-0.5">직급마다 <b>권한 레벨</b>(매니저 · 팀장 · 본부장 · 대표)을 정해 두면, 구성원 등록에서 직급을 고를 때 직책(권한 레벨)이 그 값으로 저절로 맞춰집니다.</p>
+                            <p class="text-xs text-gray-500 mt-0.5"><b>직급 하나가 권한 레벨 하나</b>입니다. 협업 · 일정 · 법인카드 조회 범위는 설정 화면에서 직급마다 따로 정합니다. 오른쪽 <b>권한 등급</b>(매니저급 · 팀장급 · 본부장급 · 대표급)은 그 직급이 어떤 기능을 쓸 수 있는지(팀 통합현황 · 업무지시 · 기본 조회 범위)의 바탕입니다.</p>
                         </div>
                         <button onclick="addOrgRank()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded text-sm transition-colors whitespace-nowrap"><i class="fas fa-plus mr-1"></i>직급 추가</button>
                     </div>
@@ -34898,7 +34959,8 @@ const QUOTE_TEMPLATES = [
             const name = (prompt('추가할 직급 이름을 입력하세요.', '') || '').trim();
             if (!name) return;
             if (orgRankNames().indexOf(name) > -1) { alert('같은 이름의 직급이 이미 있습니다.'); return; }
-            orgRanks.push({ name, level: 'manager' });     // 레벨은 표에서 바로 고릅니다
+            let n = 1; while (orgRanks.some(r => r.id === 'rk' + n)) n++;
+            orgRanks.push({ id: 'rk' + n, name, cls: 'manager' });     // 등급은 표에서 바로 고릅니다
             saveOrgRanks(); syncOrgAll();
         }
         function renameOrgRank(i) {
@@ -34907,7 +34969,7 @@ const QUOTE_TEMPLATES = [
             const name = (prompt('직급 이름을 고칩니다.', before) || '').trim();
             if (!name || name === before) return;
             if (orgRankNames().indexOf(name) > -1) { alert('같은 이름의 직급이 이미 있습니다.'); return; }
-            orgRanks[i].name = name;
+            orgRanks[i].name = name;     // id 는 그대로라 직책(권한 레벨) · 조회 범위 설정은 따라옵니다
             // 이 직급인 구성원의 직급도 함께 고칩니다
             let n = 0;
             localUsers.forEach(u => { if (String(u.rank || '').trim() === before) { u.rank = name; n++; } });
@@ -34915,24 +34977,22 @@ const QUOTE_TEMPLATES = [
             saveOrgRanks(); syncOrgAll();
         }
         function deleteOrgRank(i) {
-            const r = orgRanks[i] && orgRanks[i].name;
-            if (r === undefined) return;
-            const n = orgAccounts().filter(u => String(u.rank || '').trim() === r).length;
-            if (!confirm(`'${r}' 직급을 지울까요?` + (n ? `\n이 직급인 구성원 ${n}명의 직급은 그대로 남습니다(목록에만 없어짐). 구성원 수정에서 다른 직급으로 바꿔 주세요.` : ''))) return;
+            const rk = orgRanks[i];
+            if (!rk) return;
+            const r = rk.name;
+            const n = orgAccounts().filter(u => String(u.rank || '').trim() === r || u.level === rk.id).length;
+            if (!confirm(`'${r}' 직급을 지울까요?` + (n ? `\n이 직급인 구성원 ${n}명은 직급 이름은 남고, 권한은 '${levelClassNames[rk.cls]}' 으로 취급됩니다. 구성원 수정에서 다른 직급으로 바꿔 주세요.` : ''))) return;
+            // 이 직급을 직책으로 쓰던 구성원은 등급 이름으로 남겨 권한이 그대로 가게 합니다
+            let changed = 0;
+            localUsers.forEach(u => { if (u.level === rk.id) { u.level = rk.cls; changed++; } });
+            if (changed) saveLocalUsers();
             orgRanks.splice(i, 1);
             saveOrgRanks(); syncOrgAll();
         }
-        function setOrgRankLevel(i, level) {
-            if (!orgRanks[i] || ORG_RANK_LEVELS.indexOf(level) < 0) return;
-            orgRanks[i].level = level;
-            saveOrgRanks();
-            // 이 직급인 구성원의 직책(권한 레벨)도 같이 맞출지 — 관리자(admin) 직책인 사람은 건드리지 않습니다
-            const hit = localUsers.filter(u => String(u.rank || '').trim() === orgRanks[i].name && u.level !== 'admin' && u.level !== level);
-            if (hit.length && confirm(`'${orgRanks[i].name}' 직급인 구성원 ${hit.length}명의 직책(권한 레벨)도 '${levelNames[level]}' 로 바꿀까요?`)) {
-                hit.forEach(u => { u.level = level; });
-                saveLocalUsers();
-            }
-            syncOrgAll();
+        function setOrgRankClass(i, cls) {
+            if (!orgRanks[i] || LEVEL_CLASSES.indexOf(cls) < 0) return;
+            orgRanks[i].cls = cls;      // 직책은 직급 id 그대로라 구성원 자료는 손댈 것이 없습니다
+            saveOrgRanks(); syncOrgAll();
         }
         function moveOrgRank(i, dir) {
             const j = i + dir;
@@ -35281,7 +35341,7 @@ const QUOTE_TEMPLATES = [
         }
         // 직급을 고르면 직책(권한 레벨)을 그 직급의 레벨로 맞춥니다 (2026-09-21). 관리자로 두었던 직책은 건드리지 않습니다.
         function onOrgEditRankChange() {
-            const lv = orgRankLevel((document.getElementById('org-edit-rank') || {}).value);
+            const lv = orgRankLevelId((document.getElementById('org-edit-rank') || {}).value);
             const sel = document.getElementById('org-edit-level');
             if (!lv || !sel || sel.value === 'admin') return;
             sel.value = lv;
@@ -35334,10 +35394,13 @@ const QUOTE_TEMPLATES = [
             // 직급 — 저장된 목록에서 고릅니다. 이 사람의 직급이 목록에 없으면(옛 값) 맨 아래에 그대로 두어 잃지 않게 합니다 (2026-09-21)
             const curRank = u ? String(u.rank || '').trim() : '';
             document.getElementById('org-edit-rank').innerHTML = '<option value="">(직급 없음)</option>'
-                + orgRanks.map(r => `<option value="${escapeHtml(r.name)}"${r.name === curRank ? ' selected' : ''}>${escapeHtml(r.name)} — ${escapeHtml(levelNames[r.level] || '')}</option>`).join('')
+                + orgRanks.map(r => `<option value="${escapeHtml(r.name)}"${r.name === curRank ? ' selected' : ''}>${escapeHtml(r.name)} — ${escapeHtml(levelClassNames[r.cls] || '')}</option>`).join('')
                 + (curRank && orgRankNames().indexOf(curRank) < 0 ? `<option value="${escapeHtml(curRank)}" selected>${escapeHtml(curRank)} (목록에 없음)</option>` : '');
-            document.getElementById('org-edit-level').innerHTML = Object.keys(levelNames)
-                .map(k => `<option value="${escapeHtml(k)}" ${u && (u.level || 'manager') === k ? 'selected' : ''}>${escapeHtml(levelNames[k])}</option>`).join('');
+            // 직책(권한 레벨) = 직급 목록 + 관리자 (2026-09-21). 옛 값(등급 이름)은 그대로 보여 주고 저장해도 잃지 않습니다.
+            const curLv = u ? (u.level || '') : '';
+            document.getElementById('org-edit-level').innerHTML = PERM_LEVELS
+                .map(k => `<option value="${escapeHtml(k)}" ${curLv === k ? 'selected' : ''}>${escapeHtml(levelNames[k] || k)}${k === 'admin' ? '' : ' (' + escapeHtml(levelClassNames[levelClass(k)] || '') + ')'}</option>`).join('')
+                + (curLv && PERM_LEVELS.indexOf(curLv) < 0 ? `<option value="${escapeHtml(curLv)}" selected>${escapeHtml(levelNames[curLv] || curLv)} (옛 직책)</option>` : '');
             document.getElementById('org-edit-group').innerHTML = permissionGroups
                 .map(g => `<option value="${escapeHtml(g.id)}" ${u && u.groupId === g.id ? 'selected' : ''}>${escapeHtml(g.name)}</option>`).join('');
 
@@ -45052,8 +45115,8 @@ const QUOTE_TEMPLATES = [
         function isCardAdmin(dept, level) {
             const d = dept === undefined ? currentUserDept : dept;
             const lv = level === undefined ? currentUserLevel : level;
-            if (d === 'admin' || lv === 'admin' || (dept === undefined && isSystemAdmin())) return true;
-            return isMgmtDept(d) && (lv === 'leader' || lv === 'head' || lv === 'exec');
+            if (d === 'admin' || levelClass(lv) === 'admin' || (dept === undefined && isSystemAdmin())) return true;
+            return isMgmtDept(d) && (levelClass(lv) === 'leader' || levelClass(lv) === 'head' || levelClass(lv) === 'exec');
         }
         // 조회 범위: self(본인 카드만) / dept(자기 부서) / all(전사)
         let cardLevelScope = { manager: 'self', leader: 'self', head: 'dept', exec: 'all', admin: 'all' };
@@ -45071,7 +45134,7 @@ const QUOTE_TEMPLATES = [
                 return cardUserOverrides[user.id].scope || 'self';
             }
             if (isCardAdmin(dept, level)) return 'all';     // 카드 관리자는 업로드 주체라 전사
-            return cardLevelScope[level] || 'self';
+            return scopeOfLevel(cardLevelScope, level, 'self');
         }
         function myCardScope() { return getCardScopeFor(currentUserName, currentUserDept, currentUserLevel); }
 
@@ -45913,7 +45976,7 @@ const QUOTE_TEMPLATES = [
                     <td class="p-3 align-top"><span class="text-xs font-bold rounded px-2 py-0.5 ${levelBadgeClass(lv)}">${levelNames[lv] || lv}</span></td>
                     <td class="p-3 text-gray-500 align-top">${levelDescNames[lv] || ''}</td>
                     <td class="p-3">
-                        <select data-card-level="${lv}" onchange="cardLevelScope['${lv}']=this.value;renderCardPermissions();" class="text-sm p-1.5 border border-gray-300 rounded bg-gray-50">${scopeOptions(cardLevelScope[lv])}</select>
+                        <select data-card-level="${lv}" onchange="cardLevelScope['${lv}']=this.value;renderCardPermissions();" class="text-sm p-1.5 border border-gray-300 rounded bg-gray-50">${scopeOptions(scopeOfLevel(cardLevelScope, lv, 'self'))}</select>
                     </td>
                 </tr>`).join('');
 

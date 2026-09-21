@@ -618,3 +618,22 @@ Pages 로 다시 만들라고 세 번 안내했지만 매번 `Workers-specific c
 - `orgRankNames()` · `orgRankLevel()` 헬퍼. 조직도 정렬(`orgRankWeight`)은 이름 순서 그대로.
 `npm run check` 통과(71항목).
 
+## 2026-09-21 — 권한 레벨을 직급 단위로 전부 분리
+
+사용자: "본부장과 부장이 같은 권한이면 조직도에 본부장이 2이상 될 수 있어. 직급체계로 권한레벨을 모두 나누어줘야 해"
+
+**구조** — 직책(권한 레벨) = 직급. `user.level` 에 직급 id(`rk_ceo` · `rk_gm` …)가 들어가고 관리자만 `admin`.
+직급마다 **권한 등급**(`cls`: manager 매니저급 · leader 팀장급 · head 본부장급 · exec 대표급)이 있어, 기능 판정(팀 통합현황 · 업무지시 ·
+일정 구분 관리 · 프로젝트 편집 · 법인차량/카드 …)은 `levelClass(level)` 로 등급을 봅니다. 같은 등급이라도 직급은 서로 다른 레벨이라
+조회 범위(협업 · 일정 · 법인카드)를 **직급마다 따로** 정할 수 있고, 정하지 않은 직급은 등급의 값을 씁니다(`scopeOfLevel`).
+- `LEVEL_CLASSES` · `levelClassNames` · `levelClassDesc` · `levelClass()` · `levelSeniority()`(등급 → 직급 순서) · `rebuildLevels()` · `scopeOfLevel()` **신규**.
+  `levelNames` · `PERM_LEVELS` · `levelDescNames` 는 같은 객체를 유지한 채 `rebuildLevels()` 가 직급으로 채웁니다(설정 화면 표의 행 = 직급 + 관리자).
+- 직급 마스터 `{ id, name, cls }` — 기본 id `rk_ceo` `rk_evp` `rk_svp` `rk_dir` `rk_gm` `rk_head` `rk_leader` `rk_manager` `rk_part`. 예전 저장본(문자열 · `{name, level}`)도 읽어 변환.
+  이름을 바꿔도 id 가 그대로라 구성원의 직책과 조회 범위 설정이 따라옵니다. 직급을 지우면 그 직급이던 구성원의 level 은 등급 이름으로 남겨 권한을 유지.
+- 등급 이름 비교 42곳을 `levelClass(...)` 로 바꿈(정규식 치환 뒤 관리자 판정 3곳은 원래대로). 업무지시 대상 후보는 `levelSeniority` 로(같은 등급이면 목록에서 위인 직급이 높음).
+- 구성원 등록 · 수정: 직책 목록 = 직급(등급 표시) + 관리자. 직급을 고르면 직책이 같은 직급으로. 옛 값(head 등)은 "(옛 직책)" 으로 남김.
+  켤 때 `migrateUserLevels()` 가 옛 등급 level 을 직급 id 로 한 번 옮깁니다(직급이 목록에 있을 때만).
+- **조직도 본부장 판정은 직급 이름 '본부장' 만** — 부장이 본부장급이어도 본부장으로 그리지 않습니다.
+- 직급 관리 카드의 선택칸은 '권한 등급' 으로(`setOrgRankClass`).
+검증 — `npm run check` 통과(71항목). 실제 코드로 harness: 옛 head → rk_gm/rk_head 로 이관, 서열 부장 305 > 본부장 304 > 팀장 203, 직급별 조회 범위 우선.
+
