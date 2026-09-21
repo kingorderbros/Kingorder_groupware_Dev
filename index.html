@@ -9674,7 +9674,11 @@ const QUOTE_TEMPLATES = [
             { id: 'sales',      name: '영업본부', order: 2, style: 'blue',   system: true },
             { id: 'ops',        name: '운영본부', order: 3, style: 'green',  system: true },
             { id: 'payment',    name: '결제본부', order: 4, style: 'amber',  system: true },
-            { id: 'it',         name: 'IT본부',   order: 5, style: 'cyan',   system: true },
+            // 관리본부 (2026-09-21) — 그동안 'management'(경영진) 하나가 경영진과 관리본부 노릇을 같이 해서
+            // 구성원 등록의 부서 목록에 관리본부가 없었습니다. 별도 본부로 둡니다. 법인차량 · 법인카드 · 공지 작성 등
+            // 관리본부 소관 기능은 isMgmtDept() 로 이 본부와 경영진을 함께 봅니다.
+            { id: 'mgmt',       name: '관리본부', order: 5, style: 'rose',   system: true },
+            { id: 'it',         name: 'IT본부',   order: 6, style: 'cyan',   system: true },
             { id: 'vendor',     name: '외주업체', order: 90, style: 'gray',  system: true, external: true }
         ];
         // 팀 마스터 — { id, deptId, name, order }. 구성원(user.team)에는 팀 '이름'이 들어갑니다.
@@ -9739,6 +9743,8 @@ const QUOTE_TEMPLATES = [
         }
         rebuildDeptNames();
         function deptName(id) { return deptNames[id] || id || '미지정'; }
+        // 관리본부 소관 기능(법인차량 · 법인카드 · 공지 작성)의 기본 담당 — 관리본부와 경영진 (2026-09-21)
+        function isMgmtDept(dept) { return dept === 'mgmt' || dept === 'management'; }
 
         // 팀을 지정하지 않은 구성원 묶음의 이름.
         // 기본은 '팀 미지정' 이고, 조직도 관리에서 회사 표현에 맞게 고칠 수 있습니다 (예: 본부 직속).
@@ -9862,7 +9868,7 @@ const QUOTE_TEMPLATES = [
         // - 운전자(일반 사용자)의 운행일지 입력은 모바일(?mode=mobile)에서 별도 진행
         function canViewVehicleLog(dept, level) {
             if (dept === 'admin' || level === 'admin') return true;
-            return dept === 'management' && (level === 'leader' || level === 'head');
+            return isMgmtDept(dept) && (level === 'leader' || level === 'head');
         }
 
         // 로그인한 사용자가 통합 조회할 수 있는 팀원 목록 반환
@@ -31331,14 +31337,14 @@ const QUOTE_TEMPLATES = [
                 desc: '법인차량 예약 신청에 대한 승인권자',
                 manageMembers: true,
                 memberHint: '법인차량은 <b>관리본부</b> 소관이라 기본 구성원은 <b>관리본부 소속</b>입니다. 필요하면 아래에서 구성원을 추가·삭제하세요.',
-                defaultMember: (u) => u.dept === 'management'
+                defaultMember: (u) => isMgmtDept(u.dept)
             },
             {
                 id: 'vehicleReturnApproval', name: '차량 반납 승인', icon: 'fa-rotate-left', color: 'orange',
                 desc: '법인차량 반납 요청에 대한 승인권자',
                 manageMembers: true,
                 memberHint: '법인차량은 <b>관리본부</b> 소관이라 기본 구성원은 <b>관리본부 소속</b>입니다. 필요하면 아래에서 구성원을 추가·삭제하세요.',
-                defaultMember: (u) => u.dept === 'management'
+                defaultMember: (u) => isMgmtDept(u.dept)
             },
             {
                 id: 'contractApprovalLine', name: '계약서 승인', icon: 'fa-file-signature', color: 'emerald',
@@ -31423,7 +31429,7 @@ const QUOTE_TEMPLATES = [
 
         // 작성 가능자 — 기본값은 관리본부(management) 소속 전원
         appSettings.noticeWriters = (typeof localUsers !== 'undefined' ? localUsers : [])
-            .filter(u => u.dept === 'management').map(u => u.name);
+            .filter(u => isMgmtDept(u.dept)).map(u => u.name);
 
         function noticeWriters() { return (appSettings.noticeWriters || []).slice(); }
         // 시스템 관리자는 목록과 무관하게 항상 작성할 수 있습니다.
@@ -44781,7 +44787,7 @@ const QUOTE_TEMPLATES = [
             const d = dept === undefined ? currentUserDept : dept;
             const lv = level === undefined ? currentUserLevel : level;
             if (d === 'admin' || lv === 'admin') return true;
-            return d === 'management' && (lv === 'leader' || lv === 'head' || lv === 'exec');
+            return isMgmtDept(d) && (lv === 'leader' || lv === 'head' || lv === 'exec');
         }
         // 조회 범위: self(본인 카드만) / dept(자기 부서) / all(전사)
         let cardLevelScope = { manager: 'self', leader: 'self', head: 'dept', exec: 'all', admin: 'all' };
