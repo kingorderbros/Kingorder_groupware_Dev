@@ -48431,6 +48431,9 @@ const QUOTE_TEMPLATES = [
                       // 2026-09-16 — 마지막 단계의 '제목 · 내용' 을 받지 않습니다. 가맹점 정보가 곧 내용이라
                       // 또 적을 것이 없습니다. 제목은 '신규 가맹점 개설 — 가맹점명' 으로 저절로 붙습니다.
                       noBaseText: true,
+                      // 2026-09-22 — 서류 · 최종확인 단계의 '희망 처리일' 도 받지 않습니다. 설치 일정 단계에서
+                      // 설치 희망일을 이미 받으므로 날짜 칸이 둘이면 헷갈립니다.
+                      noWantDate: true,
                       // 2026-09-15 — 랜딩 초안의 순서 그대로입니다.
                       //   거래 유형(단가·서류가 여기서 갈립니다) → 사업자 구분 → 가맹점 정보
                       //   → VAN/PG · CMS 신청서 → 발주 장비 품목표 → 설치환경 체크 → 설치 일정
@@ -51082,6 +51085,7 @@ const QUOTE_TEMPLATES = [
                   const f = baseField(f0);
                   if (f.key === 'note') return;   // 비고는 아래에서 따로 그려 자리를 옮깁니다
                   if (tDef.noBaseText && (f.key === 'title' || f.key === 'content')) { if (f.key === 'content') done = true; return; }   // 2026-09-16
+                  if (tDef.noWantDate && f.key === 'wantDate') return;   // 2026-09-22
                   (done ? baseRest : baseTop).push(f); if (f.key === 'content') done = true; }); }
             const noteField = baseField(PARTNER_INTAKE_BASE_FIELDS.find(f => f.key === 'note'));
 
@@ -51773,9 +51777,9 @@ const QUOTE_TEMPLATES = [
             // VAN사에 따라 감춰진 항목은 검사·저장에서 뺍니다
             const liveExtra = extraFields.filter(f => partnerFieldVisible(f, values));
             // 제목 · 내용을 받지 않는 접수(신규 가맹점 개설)는 제목을 저절로 붙입니다 (2026-09-16)
-            const liveBase = (t && t.noBaseText)
-                ? PARTNER_INTAKE_BASE_FIELDS.filter(f => f.key !== 'title' && f.key !== 'content')
-                : PARTNER_INTAKE_BASE_FIELDS;
+            const liveBase = PARTNER_INTAKE_BASE_FIELDS.filter(f =>
+                !(t && t.noBaseText && (f.key === 'title' || f.key === 'content'))
+                && !(t && t.noWantDate && f.key === 'wantDate'));   // 2026-09-22
             if (t && t.noBaseText) {
                 values.title = `${t.name}${values.shopName ? ' — ' + values.shopName : ''}`;
                 values.content = values.content || '';
@@ -52130,7 +52134,8 @@ const QUOTE_TEMPLATES = [
                 if (needDocs) rows += item('공동대표', x.coRep
                     ? '<b>예</b> <span class="text-gray-400">— 공동대표 추가 서류를 함께 받았습니다</span>'
                     : '<span class="text-gray-400">아니오</span>');
-                rows += item(((partnerTypeDef(x.dept, x.type) || {}).baseLabels || {}).wantDate || '희망 처리일', x.wantDate ? `<b>${escapeHtml(x.wantDate)}</b>` : blank);
+                if (!(partnerTypeDef(x.dept, x.type) || {}).noWantDate)   // 신규 가맹점 개설은 희망 처리일을 받지 않습니다 (2026-09-22)
+                    rows += item(((partnerTypeDef(x.dept, x.type) || {}).baseLabels || {}).wantDate || '희망 처리일', x.wantDate ? `<b>${escapeHtml(x.wantDate)}</b>` : blank);
 
                 html += `<div class="bg-white border border-gray-200 rounded p-3">
                     <p class="text-gray-700 font-semibold mb-1"><i class="fas fa-list-check mr-1 text-gray-500"></i>접수 내용
