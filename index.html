@@ -7572,8 +7572,8 @@
                             </div>
                             <div>
                                 <label class="block text-xs font-medium text-gray-600 mb-1">직급 <span id="org-edit-rank-req" class="text-red-500">*</span></label>
-                                <input type="text" id="org-edit-rank" list="org-rank-list" class="w-full p-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="예: 팀장" />
-                                <datalist id="org-rank-list"></datalist>
+                                <select id="org-edit-rank" class="w-full p-2 text-sm border border-gray-300 rounded bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"></select>
+                                <p class="text-[11px] text-gray-400 mt-1">직급 목록은 <b>조직도 관리 › 직급 관리</b>에서 고칩니다.</p>
                             </div>
                             <div>
                                 <label class="block text-xs font-medium text-gray-600 mb-1">부서 <span id="org-edit-dept-req" class="text-red-500">*</span></label>
@@ -12587,10 +12587,17 @@ const QUOTE_TEMPLATES = [
         // 부서 이름은 조직 마스터 한 곳에서만 옵니다 — 조직도 · 메뉴 · 티켓 · 일정이 같은 이름을 씁니다
         function orgDeptName(id) { return deptName(id); }
         // 직급 순서 — 카드 안에서 윗사람이 먼저 오도록
-        const ORG_RANK_ORDER = ['대표이사', 'CEO', '대표', '본부장', '팀장', '차장', '과장', '대리', '주임', '사원', '외부'];
+        // 직급 목록 (2026-09-21) — 위가 높은 직급. 조직도 관리 › 직급 관리에서 추가 · 수정 · 삭제 · 순서를 바꿉니다.
+        // 저장 키 gwOrgRanks.v1. 이름을 고치면 그 직급인 구성원의 직급도 함께 바뀝니다.
+        const ORG_RANK_DEFAULT = ['대표이사', '전무', '상무', '이사', '부장', '본부장', '팀장', '매니저', '파트장'];
+        const ORG_RANK_KEY = 'gwOrgRanks.v1';
+        let orgRanks = loadJsonStore(ORG_RANK_KEY, null);
+        if (!Array.isArray(orgRanks) || !orgRanks.length) orgRanks = ORG_RANK_DEFAULT.slice();
+        orgRanks = orgRanks.map(r => String(r || '').trim()).filter(Boolean);
+        function saveOrgRanks() { saveJsonStore(ORG_RANK_KEY, orgRanks); }
         function orgRankWeight(rank) {
-            const i = ORG_RANK_ORDER.indexOf(String(rank || '').trim());
-            return i < 0 ? ORG_RANK_ORDER.length : i;
+            const i = orgRanks.indexOf(String(rank || '').trim());
+            return i < 0 ? orgRanks.length : i;
         }
         function orgTeamName(u) { return (u && String(u.team || '').trim()) || orgNoTeamLabel; }
         // 그 본부의 본부장 — 직급이 '본부장' 이거나 권한 레벨이 본부장(head)인 사람.
@@ -34844,6 +34851,65 @@ const QUOTE_TEMPLATES = [
                 </div>`;
         }
 
+        // ---------- 직급 관리 (2026-09-21) ----------
+        function orgRankManageHtml() {
+            const count = r => orgAccounts().filter(u => String(u.rank || '').trim() === r).length;
+            const rows = orgRanks.map((r, i) => `
+                <div class="flex items-center gap-2 px-3 py-2 border-b border-gray-50 last:border-0">
+                    <span class="w-6 text-xs text-gray-400 text-right">${i + 1}</span>
+                    <span class="flex-1 text-sm font-medium text-gray-800">${escapeHtml(r)} <span class="text-xs font-normal text-gray-400 ml-1">${count(r)}명</span></span>
+                    <button onclick="moveOrgRank(${i}, -1)" class="text-gray-400 hover:text-gray-700 px-1 ${i === 0 ? 'invisible' : ''}" title="위로"><i class="fas fa-chevron-up"></i></button>
+                    <button onclick="moveOrgRank(${i}, 1)" class="text-gray-400 hover:text-gray-700 px-1 ${i === orgRanks.length - 1 ? 'invisible' : ''}" title="아래로"><i class="fas fa-chevron-down"></i></button>
+                    <button onclick="renameOrgRank(${i})" class="text-blue-500 hover:text-blue-700 px-1" title="이름 수정"><i class="fas fa-pen"></i></button>
+                    <button onclick="deleteOrgRank(${i})" class="text-red-500 hover:text-red-700 px-1" title="삭제"><i class="fas fa-trash"></i></button>
+                </div>`).join('');
+            return `
+                <div class="bg-white rounded-lg shadow-sm border border-gray-200 mb-4">
+                    <div class="px-4 py-3 border-b border-gray-100 flex flex-wrap justify-between items-center gap-2">
+                        <div>
+                            <h4 class="text-sm font-bold text-gray-700"><i class="fas fa-ranking-star text-indigo-500 mr-1"></i>직급 관리</h4>
+                            <p class="text-xs text-gray-500 mt-0.5">구성원 등록 창의 <b>직급</b> 목록입니다. <b>위가 높은 직급</b>이며 조직도 카드 안에서 이 순서로 정렬됩니다. 이름을 고치면 그 직급인 구성원도 함께 바뀝니다.</p>
+                        </div>
+                        <button onclick="addOrgRank()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded text-sm transition-colors whitespace-nowrap"><i class="fas fa-plus mr-1"></i>직급 추가</button>
+                    </div>
+                    <div class="max-w-xl">${rows || '<p class="px-4 py-3 text-sm text-gray-400">직급이 없습니다.</p>'}</div>
+                </div>`;
+        }
+        function addOrgRank() {
+            const name = (prompt('추가할 직급 이름을 입력하세요.', '') || '').trim();
+            if (!name) return;
+            if (orgRanks.indexOf(name) > -1) { alert('같은 이름의 직급이 이미 있습니다.'); return; }
+            orgRanks.push(name);
+            saveOrgRanks(); syncOrgAll();
+        }
+        function renameOrgRank(i) {
+            const before = orgRanks[i];
+            if (before === undefined) return;
+            const name = (prompt('직급 이름을 고칩니다.', before) || '').trim();
+            if (!name || name === before) return;
+            if (orgRanks.indexOf(name) > -1) { alert('같은 이름의 직급이 이미 있습니다.'); return; }
+            orgRanks[i] = name;
+            // 이 직급인 구성원의 직급도 함께 고칩니다
+            let n = 0;
+            localUsers.forEach(u => { if (String(u.rank || '').trim() === before) { u.rank = name; n++; } });
+            if (n) saveLocalUsers();
+            saveOrgRanks(); syncOrgAll();
+        }
+        function deleteOrgRank(i) {
+            const r = orgRanks[i];
+            if (r === undefined) return;
+            const n = orgAccounts().filter(u => String(u.rank || '').trim() === r).length;
+            if (!confirm(`'${r}' 직급을 지울까요?` + (n ? `\n이 직급인 구성원 ${n}명의 직급은 그대로 남습니다(목록에만 없어짐). 구성원 수정에서 다른 직급으로 바꿔 주세요.` : ''))) return;
+            orgRanks.splice(i, 1);
+            saveOrgRanks(); syncOrgAll();
+        }
+        function moveOrgRank(i, dir) {
+            const j = i + dir;
+            if (j < 0 || j >= orgRanks.length) return;
+            [orgRanks[i], orgRanks[j]] = [orgRanks[j], orgRanks[i]];
+            saveOrgRanks(); syncOrgAll();
+        }
+
         // ---------- 본부 ----------
         let orgUnitEdit = { type: '', id: '', deptId: '' };
         function openOrgDeptModal(id) {
@@ -35099,6 +35165,7 @@ const QUOTE_TEMPLATES = [
                 </div>
 
                 ${orgUnitManageHtml()}
+                ${orgRankManageHtml()}
 
                 <div class="bg-white rounded-lg shadow-sm border border-gray-200 mb-4">
                     <div class="px-4 py-3 flex flex-wrap items-end gap-2">
@@ -35225,7 +35292,11 @@ const QUOTE_TEMPLATES = [
             document.getElementById('org-edit-dept').innerHTML = Array.from(new Set(allDepts)).filter(d => d !== 'admin')
                 .map(d => `<option value="${escapeHtml(d)}" ${u && u.dept === d ? 'selected' : ''}>${escapeHtml(orgDeptName(d))}</option>`).join('')
                 + `<option value="admin" data-admin-only="1" ${u && u.dept === 'admin' ? 'selected' : ''}>소속 없음 (관리자)</option>`;
-            document.getElementById('org-rank-list').innerHTML = ORG_RANK_ORDER.map(r => `<option value="${escapeHtml(r)}"></option>`).join('');
+            // 직급 — 저장된 목록에서 고릅니다. 이 사람의 직급이 목록에 없으면(옛 값) 맨 아래에 그대로 두어 잃지 않게 합니다 (2026-09-21)
+            const curRank = u ? String(u.rank || '').trim() : '';
+            document.getElementById('org-edit-rank').innerHTML = '<option value="">(직급 없음)</option>'
+                + orgRanks.map(r => `<option value="${escapeHtml(r)}"${r === curRank ? ' selected' : ''}>${escapeHtml(r)}</option>`).join('')
+                + (curRank && orgRanks.indexOf(curRank) < 0 ? `<option value="${escapeHtml(curRank)}" selected>${escapeHtml(curRank)} (목록에 없음)</option>` : '');
             document.getElementById('org-edit-level').innerHTML = Object.keys(levelNames)
                 .map(k => `<option value="${escapeHtml(k)}" ${u && (u.level || 'manager') === k ? 'selected' : ''}>${escapeHtml(levelNames[k])}</option>`).join('');
             document.getElementById('org-edit-group').innerHTML = permissionGroups
