@@ -48020,9 +48020,45 @@ const QUOTE_TEMPLATES = [
             { n: 9, name: '서류 · 최종확인', last: true }
         ];
 
+        // ---------- 설치 희망일은 신청일 기준 3영업일 뒤부터 (2026-09-21) ----------
+        // 장비 발주 · 기사 배정에 시간이 필요하므로 파트너가 너무 가까운 날을 고르지 못하게 합니다.
+        // 영업일 = 토·일과 아래 공휴일 목록을 뺀 날. 예) 월요일 신청 → 목요일부터 / 목요일 신청 → 다음 화요일부터.
+        const INSTALL_LEAD_BIZ_DAYS = 3;
+        // 공휴일 — 해마다 확인해서 이어 적습니다 (대체공휴일 포함). 여기 없는 날은 평일로 셉니다.
+        const INSTALL_HOLIDAYS = [
+            '2026-09-24', '2026-09-25', '2026-09-26', '2026-09-28',   // 추석 · 대체공휴일
+            '2026-10-03', '2026-10-05',                               // 개천절 · 대체공휴일
+            '2026-10-09', '2026-12-25',
+            '2027-01-01', '2027-02-06', '2027-02-07', '2027-02-08', '2027-02-09',   // 설날 · 대체공휴일
+            '2027-03-01', '2027-05-05', '2027-05-13', '2027-06-06', '2027-06-07',
+            '2027-08-15', '2027-08-16', '2027-09-14', '2027-09-15', '2027-09-16',
+            '2027-10-03', '2027-10-04', '2027-10-09', '2027-10-11', '2027-12-25', '2027-12-27'
+        ];
+        function isBizDay(d) {
+            const w = d.getDay();
+            return w !== 0 && w !== 6 && !INSTALL_HOLIDAYS.includes(ymd(d));
+        }
+        // from(Date) 에서 영업일 n 개를 더한 날짜 — 'YYYY-MM-DD'
+        function addBizDays(from, n) {
+            const d = new Date(from.getFullYear(), from.getMonth(), from.getDate());
+            let left = n;
+            while (left > 0) { d.setDate(d.getDate() + 1); if (isBizDay(d)) left--; }
+            return ymd(d);
+        }
+        // 오늘 신청하면 고를 수 있는 가장 빠른 설치 희망일
+        function installDateMin() { return addBizDays(new Date(), INSTALL_LEAD_BIZ_DAYS); }
+        function installDateHint() { return `신청일 기준 ${INSTALL_LEAD_BIZ_DAYS}영업일 이후부터 선택할 수 있습니다 (가장 빠른 날: ${installDateMin()}).`; }
+        // 날짜칸 값이 최소일보다 이르면 안내 문구, 아니면 '' — 접수 · 단계 이동 때 검사합니다
+        function installDateProblem(v) {
+            if (!v) return '';
+            const min = installDateMin();
+            return v < min ? `설치 희망일은 신청일 기준 ${INSTALL_LEAD_BIZ_DAYS}영업일 이후부터 선택할 수 있습니다.\n가장 빠른 날 : ${min}\n입력한 날   : ${v}` : '';
+        }
+
         // 설치 일정 — 설치기사 일정을 잡는 데 필요한 최소 항목입니다
         const PARTNER_INSTALL_FIELDS = [
-            { key: 'installDate', label: '설치 희망일', type: 'date', required: true, noSum: true },
+            { key: 'installDate', label: '설치 희망일', type: 'date', required: true, noSum: true,
+              minBizDays: INSTALL_LEAD_BIZ_DAYS, get hint() { return installDateHint(); } },
             { key: 'installTime', label: '설치 희망 시간', type: 'text', required: true, noSum: true,
               placeholder: '예: 오전 / 14시 이후' }
         ];
@@ -49210,7 +49246,9 @@ const QUOTE_TEMPLATES = [
                     }).join('')
                     + '</select>';
             } else {
-                const mn = f.min !== undefined ? ` min="${f.min}"` : '';
+                // minBizDays: 오늘부터 영업일 n 개 뒤가 가장 빠른 날 (설치 희망일 · 2026-09-21)
+                const minVal = f.minBizDays ? addBizDays(new Date(), f.minBizDays) : f.min;
+                const mn = minVal !== undefined ? ` min="${minVal}"` : '';
                 input = `<input type="${f.type || 'text'}" id="${id}"${req}${mn} value="${escapeHtml(cur)}" class="${base}" placeholder="${escapeHtml(f.placeholder || '')}" />`;
             }
             return `<div class="mb-4">
@@ -49362,7 +49400,7 @@ const QUOTE_TEMPLATES = [
                                class="px-2.5 py-2 text-xs font-semibold rounded border border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 whitespace-nowrap">
                                <i class="fas fa-magnifying-glass mr-1"></i>주소 검색</button>
                            </div>`
-                        : `<input type="${it.input === 'date' ? 'date' : 'text'}" id="${inputId}" value="${escapeHtml(c.to || '')}"
+                        : `<input type="${it.input === 'date' ? 'date' : 'text'}" id="${inputId}" value="${escapeHtml(c.to || '')}"${it.input === 'date' ? ` min="${installDateMin()}" title="${escapeHtml(installDateHint())}"` : ''}
                              oninput="onPartnerChangeInput('${escapeHtml(pre)}')" placeholder="${escapeHtml(it.placeholder || '')}"
                              class="w-full p-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500" />`;
                     return `<div class="rounded-lg border border-gray-200 p-3 mb-2">
@@ -49792,6 +49830,13 @@ const QUOTE_TEMPLATES = [
         }
         function firstEmptyRequired(fields, values) {
             return (fields || []).find(f => f.required && !values[f.key]) || null;
+        }
+        // 영업일 제한이 있는 날짜칸(minBizDays)이 너무 이른 날이면 그 칸을 돌려줍니다 (2026-09-21)
+        function firstBadDate(fields, values) {
+            const f = (fields || []).find(f => f.minBizDays && values[f.key] && values[f.key] < addBizDays(new Date(), f.minBizDays));
+            if (!f) return null;
+            const min = addBizDays(new Date(), f.minBizDays);
+            return Object.assign({}, f, { problem: `${f.label}은(는) 신청일 기준 ${f.minBizDays}영업일 이후부터 선택할 수 있습니다.\n가장 빠른 날 : ${min}\n입력한 날   : ${values[f.key]}` });
         }
 
         // ==================== 파트너 전용 페이지 (?mode=partner) ====================
@@ -50968,9 +51013,9 @@ const QUOTE_TEMPLATES = [
             const vals = readPartnerFieldsPresent(t.fields || [], 'pcf-');
             const here = (t.fields || []).filter(f =>
                 (f.step || 1) === partnerWizardStep && partnerFieldVisible(f, vals));
-            const miss = firstEmptyRequired(here, vals);
+            const miss = firstEmptyRequired(here, vals) || firstBadDate(here, vals);
             if (!miss) return true;
-            alert(`'${miss.label}' 을(를) 입력해 주세요.`);
+            alert(miss.problem || `'${miss.label}' 을(를) 입력해 주세요.`);
             const el = document.getElementById('pcf-' + miss.key + '__road')     // 주소칸은 숨은 칸 대신 주소 입력칸으로 (2026-09-16)
                     || document.getElementById('pcf-' + miss.key)
                     || document.querySelector(`[name="pcf-${miss.key}"]`);
@@ -51384,12 +51429,24 @@ const QUOTE_TEMPLATES = [
                 values.title = `${t.name}${values.shopName ? ' — ' + values.shopName : ''}`;
                 values.content = values.content || '';
             }
-            const miss = firstEmptyRequired(liveBase.concat(liveExtra), values);
+            const miss = firstEmptyRequired(liveBase.concat(liveExtra), values) || firstBadDate(liveExtra, values);
             if (miss) {
-                alert(`'${miss.label}' ${miss.type === 'radio' ? '을(를) 선택해 주세요.' : '을(를) 입력해 주세요.'}`);
+                alert(miss.problem || `'${miss.label}' ${miss.type === 'radio' ? '을(를) 선택해 주세요.' : '을(를) 입력해 주세요.'}`);
                 const el = document.getElementById('pcf-' + miss.key + '__road') || document.getElementById('pcf-' + miss.key);
                 if (el) (el.querySelector('input') || el).focus();
                 return;
+            }
+            // 설치 일정 변경 요청의 '설치 · 방문 일자' 도 같은 영업일 제한을 받습니다 (2026-09-21)
+            if (values.chChanges) {
+                let chg = [];
+                try { chg = JSON.parse(values.chChanges) || []; } catch (e) { chg = []; }
+                const bad = chg.find(c => c.id === 'date' && installDateProblem(c.to));
+                if (bad) {
+                    alert(installDateProblem(bad.to).replace('설치 희망일은', '설치 · 방문 일자는'));
+                    const el = document.getElementById('pcf-chg-date');
+                    if (el) el.focus();
+                    return;
+                }
             }
 
             // PG 채번 요청 — TID 개수와 적어 주신 TID 번호 수가 같아야 그대로 전달할 수 있습니다
