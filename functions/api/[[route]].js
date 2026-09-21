@@ -167,7 +167,9 @@ export async function onRequest(context) {
                 if (!me) return json(401, { ok: false, error: '로그인이 필요합니다.' });
                 const users = (await store.storeValue('gwUsers.v1')) || [];
                 const meRec = (Array.isArray(users) ? users : []).find(u => str(u.email).toLowerCase() === str(me.email).toLowerCase());
-                if (!meRec || meRec.groupId !== 'admin') return json(403, { ok: false, error: '관리자 그룹만 계정을 관리할 수 있습니다.' });
+                // 관리자 그룹, 소속 없는 관리자 계정(dept 'admin'), 직책 관리자, 겸직 관리자(isAdmin) 모두 됩니다 (2026-09-21)
+                const meAdmin = meRec && (meRec.groupId === 'admin' || meRec.dept === 'admin' || meRec.level === 'admin' || meRec.isAdmin === true);
+                if (!meAdmin) return json(403, { ok: false, error: '관리자만 계정을 관리할 수 있습니다.' });
 
                 const input = await body();
                 const email = str(input.email).toLowerCase();

@@ -7631,6 +7631,12 @@
                                 <label class="block text-xs font-medium text-gray-600 mb-1">직책 (권한 레벨)</label>
                                 <select id="org-edit-level" onchange="onOrgEditAdminChange()" class="w-full p-2 text-sm border border-gray-300 rounded bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"></select>
                             </div>
+                            <div class="sm:col-span-2">
+                                <label class="inline-flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                                    <input type="checkbox" id="org-edit-admin" onchange="onOrgEditAdminChange()" class="w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500">
+                                    <b>그룹웨어 관리자 권한</b> <span class="text-xs text-gray-400">— 소속 · 직급 · 권한 그룹은 그대로 두고 관리자 권한을 겸직으로 붙입니다 (모든 화면 · 모든 자료 수정 · 계정 관리)</span>
+                                </label>
+                            </div>
                             <div>
                                 <label class="block text-xs font-medium text-gray-600 mb-1">권한 그룹</label>
                                 <select id="org-edit-group" onchange="onOrgEditAdminChange()" class="w-full p-2 text-sm border border-gray-300 rounded bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"></select>
@@ -10411,6 +10417,7 @@ const QUOTE_TEMPLATES = [
 
         // 지금 로그인한 사용자의 권한 그룹 (권한을 고쳤을 때 내 메뉴를 다시 칠하는 데 씁니다)
         let currentUserGroupId = '';
+        let currentUserIsAdmin = false;   // 계정에 겸직으로 붙인 그룹웨어 관리자 권한 (user.isAdmin · 2026-09-21)
 
         // ==================== 타 본부 메뉴 ====================
         // 다른 부서 사람이 그 본부의 화면 하나만 쓰는 경우가 있습니다
@@ -10677,11 +10684,14 @@ const QUOTE_TEMPLATES = [
                 level = user.level || 'manager';
                 groupId = user.groupId;
                 allowedPages = group ? group.permissions : [];
+                // 겸직 관리자 — 소속 · 직급 · 권한 그룹은 그대로 두고 화면은 관리자처럼 전부 (2026-09-21)
+                if (user.isAdmin === true) allowedPages = permissionGroups.find(g => g.id === 'admin').permissions;
                 userName = user.name;
                 userDept = deptNames[user.dept] || user.dept;
             }
 
             allowedPageIds = allowedPages.slice();   // 화면 안의 탭 노출 판단에 재사용
+            currentUserIsAdmin = user.isAdmin === true;
             currentUserGroupId = groupId;
             currentUserName = userName;
             currentUserRole = role;
@@ -11702,6 +11712,7 @@ const QUOTE_TEMPLATES = [
             kobAuth.signOut();   // Supabase 세션(로컬 모드는 메모리)도 함께 끝냅니다
             currentUserEmail = '';
             window.currentUserEmail = '';
+            currentUserIsAdmin = false;   // 겸직 관리자 표시는 다음 로그인 때 다시 정합니다
             document.getElementById('app-view').classList.add('hidden');
             document.getElementById('login-view').classList.remove('hidden');
             showLoginMsg('');
@@ -12704,7 +12715,7 @@ const QUOTE_TEMPLATES = [
                         <td class="p-4">${escapeHtml(user.rank || '')}</td>
                         <td class="p-4 bg-rose-50/30 max-w-[220px]"><span class="block truncate ${duty ? 'text-gray-700' : 'text-gray-300'}" title="${escapeHtml(duty)}">${duty ? escapeHtml(duty) : '미지정'}</span></td>
                         <td class="p-4"><span class="px-2 py-1 ${levelBadgeClass(lvl)} rounded-full text-xs">${escapeHtml(levelNames[lvl] || '매니저')}</span></td>
-                        <td class="p-4"><span class="px-2 py-1 bg-purple-100 text-purple-700 rounded-full text-xs">${escapeHtml(groupName(user.groupId))}</span></td>
+                        <td class="p-4"><span class="px-2 py-1 bg-purple-100 text-purple-700 rounded-full text-xs">${escapeHtml(groupName(user.groupId))}</span>${user.isAdmin === true ? ' <span class="px-2 py-1 bg-indigo-100 text-indigo-700 rounded-full text-xs" title="그룹웨어 관리자 권한 겸직"><i class="fas fa-user-shield mr-0.5"></i>관리자</span>' : ''}</td>
                         <td class="p-4">${escapeHtml(user.email)}</td>
                         <td class="p-4 text-center whitespace-nowrap" onclick="event.stopPropagation()">
                             <button onclick="resetUserPassword('${escapeHtml(user.id)}')" title="임시 비밀번호를 새로 만들어 전달합니다" class="px-2 py-1 text-xs rounded border border-amber-300 text-amber-700 bg-amber-50 hover:bg-amber-100"><i class="fas fa-key mr-1"></i>초기화</button>
@@ -31552,11 +31563,12 @@ const QUOTE_TEMPLATES = [
         // 관리자는 등록되는 모든 자료를 추가 · 수정 · 삭제할 수 있습니다 — 아래 권한 판정 함수들이 이 함수를 먼저 봅니다.
         // (겸직 관리자는 본부 소속이라 예전의 isSystemAdmin() 검사로는 걸러지지 않았습니다)
         function isSystemAdmin() {
-            return currentUserDept === 'admin' || currentUserLevel === 'admin'
+            return currentUserIsAdmin || currentUserDept === 'admin' || currentUserLevel === 'admin'
                 || currentUserGroupId === 'admin' || currentUserRole === 'admin';
         }
         // 계정 객체 기준 (조회 범위처럼 이름 · 부서 · 직책을 인자로 받는 함수에서 씁니다)
-        function isAdminAccount(u) { return !!u && (u.dept === 'admin' || u.level === 'admin' || u.groupId === 'admin'); }
+        // isAdmin — 본부 소속 · 직급 · 권한 그룹은 그대로 두고 관리자 권한만 겸직으로 얹은 계정 (2026-09-21)
+        function isAdminAccount(u) { return !!u && (u.isAdmin === true || u.dept === 'admin' || u.level === 'admin' || u.groupId === 'admin'); }
         function canWriteNotice() { return isSystemAdmin() || noticeWriters().includes(currentUserName); }
 
         // ---------- 승인권자 구성원 ----------
@@ -35337,7 +35349,8 @@ const QUOTE_TEMPLATES = [
         // 그 밖의 사람은 예전처럼 부서 · 직급이 필수이고 '소속 없음' 은 고를 수 없습니다.
         function orgEditIsAdmin() {
             const v = k => ((document.getElementById('org-edit-' + k) || {}).value || '');
-            return v('group') === 'admin' || v('level') === 'admin';
+            const chk = document.getElementById('org-edit-admin');
+            return v('group') === 'admin' || v('level') === 'admin' || !!(chk && chk.checked);
         }
         // 직급을 고르면 직책(권한 레벨)을 그 직급의 레벨로 맞춥니다 (2026-09-21). 관리자로 두었던 직책은 건드리지 않습니다.
         function onOrgEditRankChange() {
@@ -35417,6 +35430,8 @@ const QUOTE_TEMPLATES = [
             const hint = document.getElementById('org-edit-noteam-hint');
             if (hint) hint.innerText = orgNoTeamLabel;
             onOrgEditDeptChange(teamValue);
+            const adminChk = document.getElementById('org-edit-admin');
+            if (adminChk) adminChk.checked = !!(u && u.isAdmin === true);
             onOrgEditAdminChange();          // 관리자면 부서 · 직급 · 팀을 선택 사항으로 (2026-09-21)
             document.getElementById('org-edit-modal').classList.remove('hidden');
         }
@@ -35446,7 +35461,8 @@ const QUOTE_TEMPLATES = [
                 // photo 는 담지 않습니다 — 본인이 [내 정보] 에서 올린 사진을 덮어쓰지 않기 위해서입니다
                 note: v('note'),
                 level: v('level') || 'manager',
-                groupId: v('group') || 'sales'
+                groupId: v('group') || 'sales',
+                isAdmin: !!((document.getElementById('org-edit-admin') || {}).checked)   // 겸직 관리자 (2026-09-21)
             };
             let created = null, oldEmail = '';
             if (orgEditId) {
