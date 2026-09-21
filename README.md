@@ -46,21 +46,22 @@
 ## 2. 처음 한 번 — 환경 만들기
 
 ### 2-1. GitHub
-1. GitHub 에 빈 저장소를 만듭니다 (예: `kingorder-groupware`).
-2. 이 폴더에서:
+**2026-09-21 연결 완료** — 저장소 `https://github.com/kingorderbros/Kingorder_groupware_Dev` (Private), 원격 이름 `origin`, `develop` 브랜치 push 됨.
+당분간 **dev 만** 배포합니다. prod 는 이 개발환경에서 UAT 를 마친 최종본을 나중에 올립니다 (아래 "prod 를 켤 때").
+
+처음 만들 때 한 것(기록용):
    ```bash
    cd 그룹웨어/개발환경
    git init -b main
    git add . && git commit -m "그룹웨어 개발환경 초기 소스"
-   git remote add origin git@github.com:<조직>/kingorder-groupware.git
-   git push -u origin main
+   git remote add origin https://github.com/kingorderbros/Kingorder_groupware_Dev.git
    git checkout -b develop && git push -u origin develop
    ```
-   `develop` = dev 배포, `main` = prod 배포입니다.
+   `develop` = dev 배포. (`main` = prod 배포는 지금 꺼 두었습니다 — `.github/workflows/deploy-pages.yml` 의 `branches`)
 
-### 2-2. Supabase (dev · prod 프로젝트 2개)
-1. https://supabase.com 에서 프로젝트를 **둘** 만듭니다 — `kingorder-groupware-dev`, `kingorder-groupware` (리전 Northeast Asia · Seoul).
-2. 각 프로젝트 SQL Editor 에 `supabase/schema.sql` 을 붙여 넣고 Run.
+### 2-2. Supabase (dev · prod 프로젝트 2개 — **지금은 dev 만**)
+1. https://supabase.com 에서 프로젝트를 만듭니다 — `kingorder-groupware-dev` (리전 Northeast Asia · Seoul). **dev 는 2026-09-16 에 만들어 연결돼 있습니다.** prod(`kingorder-groupware`)는 UAT 뒤에 만듭니다.
+2. SQL Editor 에 `supabase/schema.sql` → `schema-v2.sql` → `schema-v2-fix.sql` → `schema-v3.sql` → `schema-v4.sql` 을 **이 순서로** 붙여 넣고 Run. (dev 는 2026-09-17 까지 전부 실행됨. prod 를 만들 때 같은 순서로.)
 3. Settings › API 에서 **Project URL** · **anon public** 키 · **service_role** 키를 적어 둡니다.
    - anon → 브라우저 설정 (`config/app-config.js` / GitHub Secrets `SUPABASE_ANON_KEY_*`)
    - service_role → **Cloudflare Pages 환경변수에만** (`SUPABASE_SERVICE_ROLE_KEY`). 코드·GitHub 에 넣지 않습니다.
@@ -70,9 +71,9 @@
 5. **Authentication › Emails** — 기본 발송(Supabase 내장)은 **시간당 몇 통**으로 제한돼 시험용입니다.
    실제로 쓰려면 **SMTP Settings** 에 회사 메일(또는 Resend · SendGrid 등)을 넣습니다. 템플릿 **Reset Password** 의 문구는 여기서 한글로 고칠 수 있습니다.
 
-### 2-3. Cloudflare Pages (프로젝트 2개)
-1. Cloudflare 대시보드 › Workers & Pages › Create › Pages › **Direct Upload** 로 빈 프로젝트를 둘 만듭니다 —
-   `kingorder-groupware-dev`, `kingorder-groupware`. (GitHub Actions 가 올리므로 Git 연동은 켜지 않습니다)
+### 2-3. Cloudflare Pages (프로젝트 2개 — **지금은 dev 만**)
+1. Cloudflare 대시보드 › Workers & Pages › Create › Pages › **Direct Upload** 로 빈 프로젝트를 만듭니다 —
+   `kingorder-groupware-dev` (prod 용 `kingorder-groupware` 는 UAT 뒤에). (GitHub Actions 가 올리므로 Git 연동은 켜지 않습니다)
 2. 각 프로젝트 Settings › Environment variables (Production) 에:
    | 이름 | 값 |
    |---|---|
@@ -84,9 +85,17 @@
 4. My Profile › API Tokens 에서 **Cloudflare Pages: Edit** 권한 토큰을 만들고, Account ID 와 함께 GitHub Secrets 에 넣습니다.
 
 ### 2-4. GitHub Secrets (저장소 › Settings › Secrets and variables › Actions)
-`CLOUDFLARE_API_TOKEN` · `CLOUDFLARE_ACCOUNT_ID` · `SUPABASE_URL_DEV` · `SUPABASE_ANON_KEY_DEV` · `SUPABASE_URL_PROD` · `SUPABASE_ANON_KEY_PROD`
+지금(dev 만) 필요한 4개: `CLOUDFLARE_API_TOKEN` · `CLOUDFLARE_ACCOUNT_ID` · `SUPABASE_URL_DEV` · `SUPABASE_ANON_KEY_DEV`
+prod 를 켤 때 추가: `SUPABASE_URL_PROD` · `SUPABASE_ANON_KEY_PROD`
 
-이제 `develop` 에 push 하면 dev 로, `main` 에 push 하면 prod 로 배포됩니다 (`.github/workflows/deploy-pages.yml`).
+이제 `develop` 에 push 하면 dev 로 배포됩니다 (`.github/workflows/deploy-pages.yml`).
+
+### prod 를 켤 때 (UAT 뒤)
+1. 2-2 대로 Supabase `kingorder-groupware` 프로젝트 + SQL 5개 순서대로
+2. 2-3 대로 Cloudflare Pages `kingorder-groupware` + 환경변수(`KOB_ENV`=`prod`)
+3. GitHub Secrets 에 `SUPABASE_URL_PROD` · `SUPABASE_ANON_KEY_PROD`
+4. `.github/workflows/deploy-pages.yml` 의 `branches: [develop]` → `[develop, main]`
+5. `develop` 을 `main` 에 합쳐 push → prod 배포
 
 ## 3. 로컬에서 돌리기
 

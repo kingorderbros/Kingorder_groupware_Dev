@@ -424,3 +424,15 @@ O/B 상담이력 저장 · 완료 처리 저장 · 삭제 반영 · 남의 변�
   화면을 열면 **바로 보이게** 했습니다(새로고침해도 유지).
 
 **검증** — `tools/test-site-check.js` 71항목 통과.
+
+## 2026-09-21 — GitHub 연결 · 당분간 dev 만 배포
+
+사용자: "우선 dev만 먼저 할 예정이야. prod는 개발환경에서 uat 적용이후 최종본만 나중에 할 예정이야."
+
+- GitHub 저장소 `kingorderbros/Kingorder_groupware_Dev` (Private) 에 `origin` 으로 연결, `develop` push.
+  이 Mac 키체인에 있던 GitHub 로그인 정보로 올라갔습니다 (토큰 새로 만들지 않음).
+- `.github/workflows/deploy-pages.yml` — 트리거를 `branches: [develop]` 으로. main→prod 분기 코드는 그대로 두고
+  주석에 켜는 법을 적어 두었습니다. 지금 필요한 Secrets 는 4개(`CLOUDFLARE_*` 2개 + `SUPABASE_*_DEV` 2개).
+- README 2-1 ~ 2-4 를 "지금은 dev 만" 기준으로 고치고, "prod 를 켤 때" 절을 추가했습니다.
+- `main` 브랜치는 초기 커밋 상태 그대로 로컬에만 있습니다 (push 안 함 — prod 를 켤 때 develop 을 합쳐 올립니다).
+
