@@ -141,6 +141,7 @@
             catch (e) { console.error('[kob-store] 표 자료 준비 실패 — 그 화면은 비어 보입니다', e); }
         }
         runMain();
+        document.documentElement.setAttribute('data-kob-ready', '1');   // 로그인 버튼을 살립니다 (index.html 머리의 <style>)
         setStatus('ok');
         window.addEventListener('beforeunload', () => { if (pending.size) flush(); });
     }

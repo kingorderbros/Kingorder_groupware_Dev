@@ -29,6 +29,10 @@
             var app;
             try {
                 var m = new URLSearchParams(location.search).get('mode');
+                // 첫 그림부터 맞는 화면이 나오게 <html data-mode> 를 지금 답니다 (2026-09-21).
+                // 본체는 자료를 다 받은 뒤에야 도는데, 그동안 파트너센터·운행일지 주소로 들어와도
+                // 그룹웨어 로그인 화면이 먼저 보였다가 바뀌었습니다. 아래 <style> 이 이 속성을 봅니다.
+                document.documentElement.setAttribute('data-mode', m === 'partner' ? 'partner' : m === 'mobile' ? 'mobile' : 'groupware');
                 app = m === 'partner'
                     ? { f: 'partner.webmanifest',   t: '킹오더브라더스 파트너센터',   s: '파트너센터',   c: '#4338ca' }
                     : m === 'mobile'
@@ -55,6 +59,15 @@
             } catch (e) { /* 머리말을 손대지 못하는 환경이면 그대로 둡니다 */ }
         })();
     </script>
+    <!-- 주소(?mode=)에 맞는 화면만 처음부터 보이게 — 본체가 뜨기 전 그룹웨어 로그인이 잠깐 보이지 않게 (2026-09-21) -->
+    <style>
+        html[data-mode="partner"] #login-view, html[data-mode="mobile"] #login-view { display: none; }
+        html[data-mode="partner"] #partner-view { display: block; }
+        html[data-mode="mobile"] #mobile-view { display: block; }
+        /* 본체가 아직 안 떴을 때는 로그인 버튼을 누르지 못하게 — 눌리면 처리 함수가 없어 주소창에 아이디가 실려 새로고침됩니다 */
+        html:not([data-kob-ready]) #login-view button[type="submit"],
+        html:not([data-kob-ready]) #partner-login button[type="submit"] { opacity: .55; pointer-events: none; }
+    </style>
     <!-- 저장된 테마를 첫 페인트 전에 적용 (색상 깜빡임 방지) -->
     <script>
         (function () {

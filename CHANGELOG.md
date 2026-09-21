@@ -465,3 +465,19 @@ Pages 로 다시 만들라고 세 번 안내했지만 매번 `Workers-specific c
 `https://kingorder-groupware-dev.kingorderbros.workers.dev` 에 올라감. `/api/health` · 화면 · 숨김 파일 모두 확인.
 `/api/auth/status` 가 환경변수 없음 → `wrangler deploy` 가 대시보드 일반 변수를 지우는 동작이 원인. `wrangler.toml` 에 `keep_vars = true`.
 
+## 2026-09-21 — 파트너센터·운행일지 주소로 들어오면 처음부터 그 화면
+
+사용자: "파트너 사이트 들어갈때 그룹웨어 로그인 페이지가 보이고 조금있다 파트너사이트 로그인 페이지가 나와"
+
+**원인** — `#login-view`(그룹웨어 로그인)는 처음부터 보이고 `#partner-view` 는 `hidden` 인데, 이를 바꾸는
+`bootPartnerView()` 는 본체 안에 있어 `kob-store.js` 가 Supabase 자료를 다 받은 **뒤**에야 돕니다. 그 사이(0.5~2초)
+그룹웨어 로그인이 보였습니다. 시연본(localStorage)에서는 자료 받는 시간이 없어 티가 안 났던 것.
+
+**고친 것**
+- `index.html` 머리의 첫 스크립트(manifest 고르는 곳)에서 `<html data-mode="partner|mobile|groupware">` 를 바로 답니다.
+- 그 아래 `<style>` — `data-mode` 가 partner/mobile 이면 `#login-view` 를 숨기고 `#partner-view`/`#mobile-view` 를 보입니다
+  (Tailwind CDN 보다 앞이지만 선택자 명시도가 `.hidden` 보다 높아 이깁니다). 본체가 뜨면 예전 코드가 class 를 바꾸므로 그대로 이어집니다.
+- 본체가 뜨기 전에는 로그인 버튼(`#login-view` · `#partner-login` 의 submit)을 누르지 못하게 흐리게 — 눌리면 `handleLogin`/`handlePartnerLogin`
+  이 아직 없어 폼이 그대로 제출돼 주소창에 아이디가 실려 새로고침됩니다. `kob-store.js` 가 본체 실행 직후 `<html data-kob-ready>` 를 달아 살립니다.
+- 검증: `npm run check` 통과(71항목).
+
