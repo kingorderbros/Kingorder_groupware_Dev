@@ -436,3 +436,12 @@ O/B 상담이력 저장 · 완료 처리 저장 · 삭제 반영 · 남의 변�
 - README 2-1 ~ 2-4 를 "지금은 dev 만" 기준으로 고치고, "prod 를 켤 때" 절을 추가했습니다.
 - `main` 브랜치는 초기 커밋 상태 그대로 로컬에만 있습니다 (push 안 함 — prod 를 켤 때 develop 을 합쳐 올립니다).
 
+## 2026-09-21 — Cloudflare Pages 는 Git 연동으로
+
+사용자가 Cloudflare 에서 저장소를 가져와 만들었더니 `It looks like you've run a Workers-specific command in a Pages project` 로 실패.
+원인: **Workers** 쪽 "Import a repository" 로 만들어져 `wrangler deploy`(Worker 명령)가 돌았음. 이 저장소는 `wrangler.toml` 에
+`pages_build_output_dir` 가 있는 Pages 프로젝트.
+- 결정: Git 연동 자체는 더 간단하니(토큰·Secrets 불필요) **Pages 탭에서 Connect to Git** 으로 다시 만들기. README 2-3 을 그 절차로 다시 씀.
+- `.github/workflows/deploy-pages.yml` 은 `workflow_dispatch`(손으로 실행)만 남김 — Cloudflare 가 알아서 올리므로 자동 실행하면 두 번 올라감.
+- README 2-4(Secrets)는 "지금은 필요 없음", "prod 를 켤 때" 도 Git 연동 기준(Build command 로 config 치환)으로 고침.
+

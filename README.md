@@ -71,31 +71,40 @@
 5. **Authentication › Emails** — 기본 발송(Supabase 내장)은 **시간당 몇 통**으로 제한돼 시험용입니다.
    실제로 쓰려면 **SMTP Settings** 에 회사 메일(또는 Resend · SendGrid 등)을 넣습니다. 템플릿 **Reset Password** 의 문구는 여기서 한글로 고칠 수 있습니다.
 
-### 2-3. Cloudflare Pages (프로젝트 2개 — **지금은 dev 만**)
-1. Cloudflare 대시보드 › Workers & Pages › Create › Pages › **Direct Upload** 로 빈 프로젝트를 만듭니다 —
-   `kingorder-groupware-dev` (prod 용 `kingorder-groupware` 는 UAT 뒤에). (GitHub Actions 가 올리므로 Git 연동은 켜지 않습니다)
-2. 각 프로젝트 Settings › Environment variables (Production) 에:
+### 2-3. Cloudflare Pages — Git 연동 (2026-09-21 이 방식으로 확정)
+Cloudflare 가 GitHub 저장소를 직접 가져와 올립니다. `develop` 에 push 하면 자동 배포. 토큰·GitHub Secrets 가 필요 없습니다.
+1. dash.cloudflare.com › **Workers & Pages** › **Create** › **Pages** 탭 › **Connect to Git** (또는 Import an existing Git repository)
+   ※ **Workers** 탭의 "Import a repository" 로 만들면 Worker 가 되어 `wrangler deploy` 오류가 납니다. 반드시 **Pages** 탭.
+2. GitHub 계정 연결 › 저장소 `kingorderbros/Kingorder_groupware_Dev` 선택 › **Begin setup**
+3. 설정
+   | 항목 | 값 |
+   |---|---|
+   | Project name | `kingorder-groupware-dev` |
+   | Production branch | `develop` |
+   | Framework preset | `None` |
+   | Build command | (비움) |
+   | Build output directory | `/` (저장소 루트 그대로) |
+4. 같은 화면 **Environment variables (advanced)** 에 3개 (나중에 Settings › Variables and Secrets 에서도 됨):
    | 이름 | 값 |
    |---|---|
    | `SUPABASE_URL` | 그 환경의 Supabase URL |
-   | `SUPABASE_SERVICE_ROLE_KEY` | 그 환경의 service_role 키 (Encrypt) |
-   | `KOB_ENV` | `dev` 또는 `prod` |
-3. **사내만 접근** — Zero Trust › Access › Applications 에서 두 Pages 도메인을 등록하고 사내 이메일 도메인만 허용합니다.
+   | `SUPABASE_SERVICE_ROLE_KEY` | 그 환경의 service_role 키 (**Encrypt** 체크) |
+   | `KOB_ENV` | `dev` |
+5. **Save and Deploy** → 1~2분 뒤 `https://kingorder-groupware-dev.pages.dev`. `functions/api/[[route]].js` 는 Pages Functions 로 자동 인식됩니다.
+6. Settings › **Builds & deployments** › Preview deployments 를 **None** 으로 (main 등 다른 브랜치를 올리지 않게).
+7. **사내만 접근** — Zero Trust › Access › Applications 에서 Pages 도메인을 등록하고 사내 이메일 도메인만 허용합니다.
    1차 RLS 가 anon 에게 열려 있으므로 이 문이 실제 보호막입니다. 파트너센터(`/?mode=partner`)를 사외에 열려면 그 경로는 Access 예외로 두고 2차(Supabase Auth)에서 RLS 를 좁힙니다.
-4. My Profile › API Tokens 에서 **Cloudflare Pages: Edit** 권한 토큰을 만들고, Account ID 와 함께 GitHub Secrets 에 넣습니다.
 
-### 2-4. GitHub Secrets (저장소 › Settings › Secrets and variables › Actions)
-지금(dev 만) 필요한 4개: `CLOUDFLARE_API_TOKEN` · `CLOUDFLARE_ACCOUNT_ID` · `SUPABASE_URL_DEV` · `SUPABASE_ANON_KEY_DEV`
-prod 를 켤 때 추가: `SUPABASE_URL_PROD` · `SUPABASE_ANON_KEY_PROD`
-
-이제 `develop` 에 push 하면 dev 로 배포됩니다 (`.github/workflows/deploy-pages.yml`).
+### 2-4. GitHub Secrets — 지금은 필요 없음
+Git 연동으로 바꿔 `.github/workflows/deploy-pages.yml` 은 **손으로 실행할 때만** 돕니다(Actions › Run workflow).
+그때 필요한 것: `CLOUDFLARE_API_TOKEN` · `CLOUDFLARE_ACCOUNT_ID` · `SUPABASE_URL_DEV` · `SUPABASE_ANON_KEY_DEV` (prod 는 `*_PROD`).
 
 ### prod 를 켤 때 (UAT 뒤)
 1. 2-2 대로 Supabase `kingorder-groupware` 프로젝트 + SQL 5개 순서대로
-2. 2-3 대로 Cloudflare Pages `kingorder-groupware` + 환경변수(`KOB_ENV`=`prod`)
-3. GitHub Secrets 에 `SUPABASE_URL_PROD` · `SUPABASE_ANON_KEY_PROD`
-4. `.github/workflows/deploy-pages.yml` 의 `branches: [develop]` → `[develop, main]`
-5. `develop` 을 `main` 에 합쳐 push → prod 배포
+2. 2-3 대로 Pages 프로젝트 `kingorder-groupware` 를 하나 더 — Production branch `main`, 환경변수 `KOB_ENV`=`prod`.
+   **Build command** 에 dev 설정을 prod 값으로 바꾸는 한 줄을 넣습니다 (Cloudflare 환경변수 `SUPABASE_URL`·`SUPABASE_ANON_KEY_PUBLIC` 을 씀):
+   `printf "window.KOB_CONFIG = { env: 'prod', supabaseUrl: '%s', supabaseAnonKey: '%s', apiBase: '' };\n" "$SUPABASE_URL" "$SUPABASE_ANON_KEY_PUBLIC" > config/app-config.js`
+3. `develop` 을 `main` 에 합쳐 push → prod 배포
 
 ## 3. 로컬에서 돌리기
 
