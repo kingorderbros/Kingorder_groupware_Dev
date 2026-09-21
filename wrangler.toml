@@ -6,6 +6,9 @@
 name = "kingorder-groupware-dev"
 main = "worker.js"
 compatibility_date = "2026-09-01"
+# 대시보드(Settings › Variables and Secrets)에서 넣은 변수를 배포 때 지우지 않습니다.
+# 이게 없으면 wrangler deploy 가 SUPABASE_URL · KOB_ENV 같은 일반 변수를 매번 없애 버립니다 (Secret 은 남음).
+keep_vars = true
 
 [assets]
 directory = "."

@@ -460,3 +460,8 @@ Pages 로 다시 만들라고 세 번 안내했지만 매번 `Workers-specific c
   `/js/kob-db.js` 200, `/worker.js` · `/functions/...` · `/supabase/schema.sql` 404.
 - 로컬 wrangler 는 3.114(경고: 4.x 권장). Cloudflare 빌드는 `npx wrangler deploy` 라 package.json 의 버전을 씀 — 문제 생기면 올릴 것.
 
+## 2026-09-21 — 첫 배포 성공 · `keep_vars`
+
+`https://kingorder-groupware-dev.kingorderbros.workers.dev` 에 올라감. `/api/health` · 화면 · 숨김 파일 모두 확인.
+`/api/auth/status` 가 환경변수 없음 → `wrangler deploy` 가 대시보드 일반 변수를 지우는 동작이 원인. `wrangler.toml` 에 `keep_vars = true`.
+

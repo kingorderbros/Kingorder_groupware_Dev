@@ -69,7 +69,7 @@
    - service_role → **Cloudflare Pages 환경변수에만** (`SUPABASE_SERVICE_ROLE_KEY`). 코드·GitHub 에 넣지 않습니다.
 4. **Authentication › URL Configuration** — 비밀번호 재설정 메일의 링크가 돌아올 주소입니다.
    - **Site URL**: 그 환경의 주소 (dev 는 Worker 의 workers.dev 주소 — 2-3 의 4)
-   - **Redirect URLs** 에 추가: 배포 주소(`https://kingorder-groupware-dev.<계정별 주소>.workers.dev`)`/**` · 로컬 시험용 `http://localhost:8788/**`
+   - **Redirect URLs** 에 추가: 배포 주소(`https://kingorder-groupware-dev.kingorderbros.workers.dev`)`/**` · 로컬 시험용 `http://localhost:8788/**`
 5. **Authentication › Emails** — 기본 발송(Supabase 내장)은 **시간당 몇 통**으로 제한돼 시험용입니다.
    실제로 쓰려면 **SMTP Settings** 에 회사 메일(또는 Resend · SendGrid 등)을 넣습니다. 템플릿 **Reset Password** 의 문구는 여기서 한글로 고칠 수 있습니다.
 
@@ -93,7 +93,8 @@ Cloudflare 대시보드의 **Import a repository** 는 Pages 가 아니라 **Wor
    | `SUPABASE_URL` | 그 환경의 Supabase URL |
    | `SUPABASE_SERVICE_ROLE_KEY` | 그 환경의 service_role 키 (Type **Secret**) |
    | `KOB_ENV` | `dev` |
-4. **Deploy** → 1~2분 뒤 주소는 `https://kingorder-groupware-dev.<계정별 주소>.workers.dev` (Worker 화면 오른쪽 **Visit** 에 있음).
+4. **Deploy** → 1~2분 뒤 주소는 `https://kingorder-groupware-dev.kingorderbros.workers.dev` (Worker 화면 오른쪽 **Visit** 에 있음).
+   환경변수는 **배포가 한 번 성공한 뒤** 넣어도 됩니다 — 저장하면 바로 적용되고, `wrangler.toml` 의 `keep_vars = true` 덕분에 다음 배포 때 지워지지 않습니다.
    실패하면 그 Worker › **Deployments** (또는 Builds) 탭 › 실패한 줄 › **Retry build**.
 5. Settings › **Build** › Branch control — 비-production 브랜치 빌드를 끕니다 (main 등을 올리지 않게).
 6. **사내만 접근** — Zero Trust › Access › Applications 에서 그 workers.dev 도메인을 등록하고 사내 이메일 도메인만 허용합니다.
