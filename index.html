@@ -9708,6 +9708,11 @@ const QUOTE_TEMPLATES = [
         // 코드에 기본 본부가 새로 생겼는데(예: IT본부) 이 브라우저에 예전 조직이 저장돼 있으면
         // 그 본부가 영영 나타나지 않습니다. 저장본에 없는 기본 본부(system)는 여기서 채워 넣습니다.
         // 사용자가 이름을 고쳤거나 지운 본부는 건드리지 않습니다(같은 id 가 있으면 그대로 둡니다).
+        // 관리자가 일부러 지운 기본 본부 id — 다음 켤 때 다시 채워 넣지 않도록 기억합니다 (2026-09-21)
+        const ORG_DEPT_REMOVED_KEY = 'gwOrgDeptsRemoved.v1';
+        let orgRemovedSeedIds = loadJsonStore(ORG_DEPT_REMOVED_KEY, []);
+        if (!Array.isArray(orgRemovedSeedIds)) orgRemovedSeedIds = [];
+        function saveOrgRemovedSeedIds() { saveJsonStore(ORG_DEPT_REMOVED_KEY, orgRemovedSeedIds); }
         (function mergeSeedDepts() {
             // 저장값이 깨져 있으면(배열이 아니면) 기본값으로 되돌립니다 — 여기서 막지 않으면 뒤 코드가 전부 멈춥니다
             if (!Array.isArray(orgDepts)) orgDepts = ORG_DEPT_SEED.map(d => Object.assign({}, d));
@@ -9715,6 +9720,7 @@ const QUOTE_TEMPLATES = [
             let added = false;
             ORG_DEPT_SEED.forEach(seed => {
                 if (!seed.system || orgDepts.some(d => d.id === seed.id)) return;
+                if (orgRemovedSeedIds.indexOf(seed.id) > -1) return;      // 관리자가 지운 기본 본부는 되살리지 않습니다
                 orgDepts.push(Object.assign({}, seed));
                 added = true;
             });
@@ -34826,6 +34832,15 @@ const QUOTE_TEMPLATES = [
                         <button onclick="openOrgDeptModal()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded text-sm transition-colors whitespace-nowrap"><i class="fas fa-plus mr-1"></i>본부 추가</button>
                     </div>
                     <div class="p-3 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">${cards}</div>
+                    ${(() => {
+                        // 관리자가 지운 기본 본부 — 필요하면 여기서 되살립니다 (2026-09-21)
+                        const gone = ORG_DEPT_SEED.filter(sd => orgRemovedSeedIds.indexOf(sd.id) > -1 && !orgDepts.some(d => d.id === sd.id));
+                        if (!gone.length || !isSystemAdmin()) return '';
+                        return `<div class="px-4 py-2.5 border-t border-gray-100 text-xs text-gray-500 flex flex-wrap items-center gap-2">
+                            <span><i class="fas fa-rotate-left mr-1"></i>지운 기본 본부:</span>
+                            ${gone.map(sd => `<button onclick="restoreOrgDept('${sd.id}')" class="inline-flex items-center gap-1 rounded-full px-2.5 py-1 border border-gray-300 text-gray-600 hover:bg-gray-50">${escapeHtml(sd.name)} <span class="text-indigo-600">되살리기</span></button>`).join('')}
+                        </div>`;
+                    })()}
                 </div>`;
         }
 
@@ -34928,20 +34943,36 @@ const QUOTE_TEMPLATES = [
         function deleteOrgDept(id) {
             const d = orgFindDept(id);
             if (!d) return;
-            if (d.system) { alert(`'${d.name}' 은(는) 기본 본부라 지울 수 없습니다.\n이름은 [수정]으로 바꿀 수 있습니다.`); return; }
+            // 기본 본부는 관리자만 지울 수 있습니다 (2026-09-21). 지운 기본 본부는 아래 [되살리기] 로 되돌립니다.
+            if (d.system && !isSystemAdmin()) { alert(`'${d.name}' 은(는) 기본 본부라 관리자만 지울 수 있습니다.\n이름은 [수정]으로 바꿀 수 있습니다.`); return; }
             const people = orgMembers().filter(u => u.dept === id);
             if (people.length) {
                 alert(`'${d.name}' 에 구성원이 ${people.length}명 있습니다.\n구성원을 다른 본부로 옮긴 뒤에 지워 주세요.`);
                 return;
             }
             const teams = orgTeamsOf(id);
-            if (!confirm(`'${d.name}' 본부를 지울까요?${teams.length ? `\n딸린 팀 ${teams.length}개도 함께 지워집니다.` : ''}`)) return;
+            // 코드가 특별히 쓰는 본부 — 지우면 그 기능이 기대는 자리가 사라집니다. 막지는 않고 알려만 줍니다.
+            const special = { management: '경영진(조직도 맨 위 · 경영진 그룹)', vendor: '외주업체(파트너 · 외주 계정의 소속)', mgmt: '관리본부(법인차량 · 법인카드 담당)' }[id];
+            if (!confirm(`'${d.name}' 본부를 지울까요?${teams.length ? `\n딸린 팀 ${teams.length}개도 함께 지워집니다.` : ''}`
+                + (d.system ? `\n\n기본 본부입니다. 지운 뒤에도 본부 · 팀 관리에서 [되살리기] 할 수 있습니다.` : '')
+                + (special ? `\n⚠ 이 본부는 ${special} 로 쓰입니다. 지우면 그 기능에서 본부 이름이 비어 보일 수 있습니다.` : ''))) return;
             orgDepts = orgDepts.filter(x => x.id !== id);
             orgTeams = orgTeams.filter(t => t.deptId !== id);
+            if (d.system && orgRemovedSeedIds.indexOf(id) < 0) { orgRemovedSeedIds.push(id); saveOrgRemovedSeedIds(); }
             saveOrgDepts(); saveOrgTeams();
             syncOrgAll();
         }
 
+        // 지운 기본 본부 되살리기 — 코드의 기본값 그대로 다시 넣습니다 (2026-09-21)
+        function restoreOrgDept(id) {
+            if (!isSystemAdmin()) { alert('기본 본부 되살리기는 관리자만 할 수 있습니다.'); return; }
+            const seed = ORG_DEPT_SEED.find(d => d.id === id);
+            if (!seed || orgDepts.some(d => d.id === id)) return;
+            orgDepts.push(Object.assign({}, seed));
+            orgRemovedSeedIds = orgRemovedSeedIds.filter(x => x !== id);
+            saveOrgRemovedSeedIds(); saveOrgDepts();
+            syncOrgAll();
+        }
         function deleteOrgTeam(id) {
             const t = orgFindTeam(id);
             if (!t) return;
@@ -43632,7 +43663,7 @@ const QUOTE_TEMPLATES = [
         function openDevForm(id) {
             if (!canHandleDevReq()) { alert('개발의뢰서는 IT본부 담당자와 관리자만 쓸 수 있습니다.'); return; }
             const src = findDevReq(id);
-            if (src && src.status === 'done') { alert('검수완료된 건은 고칠 수 없습니다.'); return; }
+            if (src && src.status === 'done' && !isSystemAdmin()) { alert('검수완료된 건은 고칠 수 없습니다.'); return; }
             devDraft = src ? JSON.parse(JSON.stringify(src)) : {
                 id: '', title: '', partnerId: '', partnerName: '', requester: currentUserName || '',
                 reqType: DEV_TYPES[0], priority: 'normal', system: '', dueDate: '',
@@ -52507,9 +52538,26 @@ const QUOTE_TEMPLATES = [
                     </div>
                 </div>`;
             }
+            // 관리자만 — 잘못 들어온 접수를 지웁니다 (2026-09-21). 파트너 화면의 '내 접수' 에서도 사라집니다.
+            if (isSystemAdmin()) {
+                html += `<div class="flex justify-end mt-3">
+                    <button type="button" onclick="deletePartnerIntake('${x.id}')" class="px-3 py-1.5 text-xs bg-red-50 text-red-600 border border-red-200 rounded hover:bg-red-100">
+                        <i class="fas fa-trash mr-1"></i>접수 삭제 (관리자)</button>
+                </div>`;
+            }
 
             document.getElementById('pi-detail-body').innerHTML = html;
             document.getElementById('pi-detail-modal').classList.remove('hidden');
+        }
+        function deletePartnerIntake(id) {
+            if (!isSystemAdmin()) { alert('접수 삭제는 관리자만 할 수 있습니다.'); return; }
+            const x = partnerIntakeById(id);
+            if (!x) return;
+            if (!confirm(`접수 ${x.id} (${x.title || partnerIntakeTypeName(x)}) 을(를) 지울까요?\n파트너 화면에서도 사라지며 되돌릴 수 없습니다.`)) return;
+            partnerIntakes = partnerIntakes.filter(y => y.id !== id);
+            savePartnerIntakes();
+            closePartnerIntakeDetail();
+            refreshPartnerCenterViews();
         }
         // ---------- 처리방법 고르기 (A/S · 2026-09-14) ----------
         // 처리방법(현장방문 · 원격 · 택배 …)은 **접수받은 운영본부가 정합니다.**
