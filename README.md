@@ -17,7 +17,9 @@
 ├─ tools/
 │   ├─ strip-sample-data.js   시연본 → 개발환경 index.html 변환 (샘플 제거 · 저장소 치환)
 │   └─ check-index.js         문법 · 샘플 흔적 검사 (npm run check)
-├─ .github/workflows/deploy-pages.yml   develop → dev · main → prod 자동 배포
+├─ worker.js                  Cloudflare Worker 입구 — 정적 파일은 [assets], /api/* 는 functions 로 (2026-09-21)
+├─ .assetsignore              브라우저에 내주지 않을 파일 목록
+├─ .github/workflows/deploy-pages.yml   (안 씀 — Cloudflare Git 연동이 직접 배포)
 ├─ wrangler.toml · package.json · .dev.vars.example · .gitignore
 ```
 
@@ -66,43 +68,47 @@
    - anon → 브라우저 설정 (`config/app-config.js` / GitHub Secrets `SUPABASE_ANON_KEY_*`)
    - service_role → **Cloudflare Pages 환경변수에만** (`SUPABASE_SERVICE_ROLE_KEY`). 코드·GitHub 에 넣지 않습니다.
 4. **Authentication › URL Configuration** — 비밀번호 재설정 메일의 링크가 돌아올 주소입니다.
-   - **Site URL**: 그 환경의 주소 (dev 는 `https://kingorder-groupware-dev.pages.dev`)
-   - **Redirect URLs** 에 추가: `https://kingorder-groupware-dev.pages.dev/**` · 로컬 시험용 `http://localhost:8788/**`
+   - **Site URL**: 그 환경의 주소 (dev 는 Worker 의 workers.dev 주소 — 2-3 의 4)
+   - **Redirect URLs** 에 추가: 배포 주소(`https://kingorder-groupware-dev.<계정별 주소>.workers.dev`)`/**` · 로컬 시험용 `http://localhost:8788/**`
 5. **Authentication › Emails** — 기본 발송(Supabase 내장)은 **시간당 몇 통**으로 제한돼 시험용입니다.
    실제로 쓰려면 **SMTP Settings** 에 회사 메일(또는 Resend · SendGrid 등)을 넣습니다. 템플릿 **Reset Password** 의 문구는 여기서 한글로 고칠 수 있습니다.
 
-### 2-3. Cloudflare Pages — Git 연동 (2026-09-21 이 방식으로 확정)
-Cloudflare 가 GitHub 저장소를 직접 가져와 올립니다. `develop` 에 push 하면 자동 배포. 토큰·GitHub Secrets 가 필요 없습니다.
-1. dash.cloudflare.com › **Workers & Pages** › **Create** › **Pages** 탭 › **Connect to Git** (또는 Import an existing Git repository)
-   ※ **Workers** 탭의 "Import a repository" 로 만들면 Worker 가 되어 `wrangler deploy` 오류가 납니다. 반드시 **Pages** 탭.
-2. GitHub 계정 연결 › 저장소 `kingorderbros/Kingorder_groupware_Dev` 선택 › **Begin setup**
-3. 설정
+### 2-3. Cloudflare — Worker + Git 연동 (2026-09-21 이 방식으로 확정)
+Cloudflare 대시보드의 **Import a repository** 는 Pages 가 아니라 **Worker** 를 만듭니다. 세 번 시도해도 그리로 가길래
+저장소를 Worker 로 돌아가게 바꿨습니다 (`worker.js` + `wrangler.toml` 의 `[assets]`). 정적 파일은 Workers Static Assets 가,
+`/api/*` 는 `worker.js` 가 받아 `functions/api/[[route]].js` 로 넘깁니다 — API 코드는 그대로입니다.
+`develop` 에 push 하면 Cloudflare 가 저장소를 가져와 `npx wrangler deploy` 로 올립니다. 토큰·GitHub Secrets 가 필요 없습니다.
+
+1. dash.cloudflare.com › **Workers & Pages** › **Create** › **Import a repository** › GitHub › `kingorderbros/Kingorder_groupware_Dev`
+2. 설정
    | 항목 | 값 |
    |---|---|
-   | Project name | `kingorder-groupware-dev` |
+   | Project name (Worker 이름) | `kingorder-groupware-dev` — **`wrangler.toml` 의 `name` 과 같아야** 합니다 |
    | Production branch | `develop` |
-   | Framework preset | `None` |
    | Build command | (비움) |
-   | Build output directory | `/` (저장소 루트 그대로) |
-4. 같은 화면 **Environment variables (advanced)** 에 3개 (나중에 Settings › Variables and Secrets 에서도 됨):
+   | Deploy command | `npx wrangler deploy` (기본값 그대로) |
+3. **Variables and Secrets** (만들 때 또는 Settings 에서) 3개
    | 이름 | 값 |
    |---|---|
    | `SUPABASE_URL` | 그 환경의 Supabase URL |
-   | `SUPABASE_SERVICE_ROLE_KEY` | 그 환경의 service_role 키 (**Encrypt** 체크) |
+   | `SUPABASE_SERVICE_ROLE_KEY` | 그 환경의 service_role 키 (Type **Secret**) |
    | `KOB_ENV` | `dev` |
-5. **Save and Deploy** → 1~2분 뒤 `https://kingorder-groupware-dev.pages.dev`. `functions/api/[[route]].js` 는 Pages Functions 로 자동 인식됩니다.
-6. Settings › **Builds & deployments** › Preview deployments 를 **None** 으로 (main 등 다른 브랜치를 올리지 않게).
-7. **사내만 접근** — Zero Trust › Access › Applications 에서 Pages 도메인을 등록하고 사내 이메일 도메인만 허용합니다.
+4. **Deploy** → 1~2분 뒤 주소는 `https://kingorder-groupware-dev.<계정별 주소>.workers.dev` (Worker 화면 오른쪽 **Visit** 에 있음).
+   실패하면 그 Worker › **Deployments** (또는 Builds) 탭 › 실패한 줄 › **Retry build**.
+5. Settings › **Build** › Branch control — 비-production 브랜치 빌드를 끕니다 (main 등을 올리지 않게).
+6. **사내만 접근** — Zero Trust › Access › Applications 에서 그 workers.dev 도메인을 등록하고 사내 이메일 도메인만 허용합니다.
    1차 RLS 가 anon 에게 열려 있으므로 이 문이 실제 보호막입니다. 파트너센터(`/?mode=partner`)를 사외에 열려면 그 경로는 Access 예외로 두고 2차(Supabase Auth)에서 RLS 를 좁힙니다.
 
-### 2-4. GitHub Secrets — 지금은 필요 없음
-Git 연동으로 바꿔 `.github/workflows/deploy-pages.yml` 은 **손으로 실행할 때만** 돕니다(Actions › Run workflow).
-그때 필요한 것: `CLOUDFLARE_API_TOKEN` · `CLOUDFLARE_ACCOUNT_ID` · `SUPABASE_URL_DEV` · `SUPABASE_ANON_KEY_DEV` (prod 는 `*_PROD`).
+`.assetsignore` 에 적힌 것(`functions/` · `supabase/` · `tools/` · `worker.js` · `*.md` · `node_modules` …)은 브라우저에 내주지 않습니다.
+
+### 2-4. GitHub Secrets — 필요 없음
+Git 연동으로 Cloudflare 가 직접 가져가므로 `.github/workflows/deploy-pages.yml` 은 쓰지 않습니다(손으로 실행할 때만 돌고, Pages 용이라 지금 구성과도 맞지 않음). 나중에 지워도 됩니다.
 
 ### prod 를 켤 때 (UAT 뒤)
 1. 2-2 대로 Supabase `kingorder-groupware` 프로젝트 + SQL 5개 순서대로
-2. 2-3 대로 Pages 프로젝트 `kingorder-groupware` 를 하나 더 — Production branch `main`, 환경변수 `KOB_ENV`=`prod`.
-   **Build command** 에 dev 설정을 prod 값으로 바꾸는 한 줄을 넣습니다 (Cloudflare 환경변수 `SUPABASE_URL`·`SUPABASE_ANON_KEY_PUBLIC` 을 씀):
+2. 2-3 대로 Worker 를 하나 더 — 이름 `kingorder-groupware`, Production branch `main`, 환경변수 `KOB_ENV`=`prod`.
+   Deploy command 를 `npx wrangler deploy --name kingorder-groupware` 로, **Build command** 에 dev 설정을 prod 값으로 바꾸는 한 줄
+   (Cloudflare 환경변수 `SUPABASE_URL`·`SUPABASE_ANON_KEY_PUBLIC` 사용):
    `printf "window.KOB_CONFIG = { env: 'prod', supabaseUrl: '%s', supabaseAnonKey: '%s', apiBase: '' };\n" "$SUPABASE_URL" "$SUPABASE_ANON_KEY_PUBLIC" > config/app-config.js`
 3. `develop` 을 `main` 에 합쳐 push → prod 배포
 
@@ -112,7 +118,7 @@ Git 연동으로 바꿔 `.github/workflows/deploy-pages.yml` 은 **손으로 실
 npm install                       # wrangler
 cp .dev.vars.example .dev.vars    # SUPABASE_URL · SUPABASE_SERVICE_ROLE_KEY 채우기 (dev 프로젝트 값)
 # config/app-config.js 에 dev 의 supabaseUrl · supabaseAnonKey 를 넣습니다 (비우면 로컬 저장소 모드)
-npm run dev                       # http://localhost:8788  (/api/* 도 함께 동작)
+npm run dev                       # http://localhost:8788  (wrangler dev — /api/* 도 함께 동작)
 ```
 - 그룹웨어 `http://localhost:8788/` · 파트너센터 `/?mode=partner` · 운행일지 `/?mode=mobile`
 - 첫 로그인: 로그인 화면의 **[처음 설정 — 관리자 임시 비밀번호 만들기]** (4절). 로그인 뒤 **사용자/권한관리** 에서 실제 담당자를 등록합니다.

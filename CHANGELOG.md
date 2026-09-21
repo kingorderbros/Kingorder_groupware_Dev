@@ -445,3 +445,18 @@ O/B 상담이력 저장 · 완료 처리 저장 · 삭제 반영 · 남의 변�
 - `.github/workflows/deploy-pages.yml` 은 `workflow_dispatch`(손으로 실행)만 남김 — Cloudflare 가 알아서 올리므로 자동 실행하면 두 번 올라감.
 - README 2-4(Secrets)는 "지금은 필요 없음", "prod 를 켤 때" 도 Git 연동 기준(Build command 로 config 치환)으로 고침.
 
+## 2026-09-21 — Cloudflare 배포를 Pages 에서 **Worker + Static Assets** 로
+
+Pages 로 다시 만들라고 세 번 안내했지만 매번 `Workers-specific command in a Pages project` 로 실패 — Cloudflare 대시보드의
+"Import a repository" 가 Worker 를 만들기 때문. 화면을 더 설명하는 대신 **저장소를 Worker 로 돌아가게** 바꿈.
+- `worker.js` **신규** — `/api/*` 는 `functions/api/[[route]].js` 의 `onRequest` 로 넘기고(그 함수는 `request`·`env` 만 씀),
+  나머지는 `env.ASSETS.fetch` 로 정적 파일. API 코드 변경 없음.
+- `wrangler.toml` — `pages_build_output_dir` → `main = "worker.js"` + `[assets] directory="." binding="ASSETS"`.
+  `name` 은 대시보드 Worker 이름과 같아야 함(`kingorder-groupware-dev`).
+- `.assetsignore` **신규** — `node_modules` · `functions` · `supabase` · `tools` · `worker.js` · `*.md` 등은 올리지 않음.
+- `package.json` — `dev`: `wrangler dev --port 8788`, `deploy:*`: `wrangler deploy`, `check` 에 `worker.js` 문법 검사.
+- README 2-3·2-4·3절, 2-2 의 주소(`pages.dev` → `workers.dev`) 고침.
+- 검증: `npm run check` 통과(71항목 포함). `wrangler dev` 로 `/api/health` → `{"ok":true,"env":"dev"}`, `/` 200(10.5MB),
+  `/js/kob-db.js` 200, `/worker.js` · `/functions/...` · `/supabase/schema.sql` 404.
+- 로컬 wrangler 는 3.114(경고: 4.x 권장). Cloudflare 빌드는 `npx wrangler deploy` 라 package.json 의 버전을 씀 — 문제 생기면 올릴 것.
+

@@ -1,0 +1,22 @@
+# Workers Static Assets 로 올리지 않을 것 (브라우저가 받을 필요 없는 파일)
+node_modules
+.git
+.github
+.wrangler
+functions
+supabase
+tools
+worker.js
+wrangler.toml
+package.json
+package-lock.json
+.dev.vars
+.dev.vars.example
+.env.example
+.gitignore
+.assetsignore
+*.md
+백업
+_to_delete
+*.bak
+.DS_Store

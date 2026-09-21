@@ -1,9 +1,16 @@
-# Cloudflare Pages 설정 (개발환경 · 2026-09-16)
-# 정적 파일은 이 폴더 전체, /api/* 는 functions/ 의 Pages Functions 가 받습니다.
+# Cloudflare Worker 설정 (개발환경 · 2026-09-21 Pages → Worker + Static Assets 로 바꿈)
+# Cloudflare 대시보드 › Workers & Pages › Import a repository 가 만드는 프로젝트가 Worker 라서 이에 맞췄습니다.
+#   · 정적 파일: 이 폴더 전체 ([assets], 뺄 것은 .assetsignore)
+#   · /api/*  : worker.js → functions/api/[[route]].js (Pages Functions 코드 그대로)
+# name 은 대시보드에서 만든 Worker 이름과 **같아야** 합니다 (다르면 그 이름으로 Worker 가 하나 더 생깁니다).
 name = "kingorder-groupware-dev"
-pages_build_output_dir = "."
+main = "worker.js"
 compatibility_date = "2026-09-01"
+
+[assets]
+directory = "."
+binding = "ASSETS"
 
 # 환경변수(SUPABASE_URL · SUPABASE_SERVICE_ROLE_KEY · KOB_ENV)는 여기 적지 않습니다 —
 #   · 로컬:  .dev.vars 파일 (git 에 올리지 않음)
-#   · 배포:  Cloudflare 대시보드 › Pages 프로젝트 › Settings › Environment variables (Production / Preview 각각)
+#   · 배포:  Cloudflare 대시보드 › 그 Worker › Settings › Variables and Secrets

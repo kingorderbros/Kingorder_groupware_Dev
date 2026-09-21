@@ -4,11 +4,11 @@
   "private": true,
   "description": "킹오더브라더스 그룹웨어 — 개발환경 (Cloudflare Pages + Pages Functions + Supabase)",
   "scripts": {
-    "dev": "wrangler pages dev . --port 8788",
-    "deploy:dev": "wrangler pages deploy . --project-name kingorder-groupware-dev",
-    "deploy:prod": "wrangler pages deploy . --project-name kingorder-groupware",
+    "dev": "wrangler dev --port 8788",
+    "deploy:dev": "wrangler deploy",
+    "deploy:prod": "wrangler deploy --name kingorder-groupware",
     "rebuild-from-mockup": "node tools/strip-sample-data.js ../소스/Index_ver1.0.html index.html",
-    "check": "node --check \"functions/api/[[route]].js\" && node --check js/kob-store.js && node --check js/kob-auth.js && node --check js/kob-db.js && node tools/check-index.js && node tools/test-kob-db.js && node tools/test-schedules.js && node tools/test-customers-works.js && node tools/test-contracts-quotes-cases.js && node tools/test-collab-todos.js && node tools/test-settle-price.js && node tools/test-site-check.js"
+    "check": "node --check worker.js && node --check \"functions/api/[[route]].js\" && node --check js/kob-store.js && node --check js/kob-auth.js && node --check js/kob-db.js && node tools/check-index.js && node tools/test-kob-db.js && node tools/test-schedules.js && node tools/test-customers-works.js && node tools/test-contracts-quotes-cases.js && node tools/test-collab-todos.js && node tools/test-settle-price.js && node tools/test-site-check.js"
   },
   "devDependencies": {
     "wrangler": "^3.90.0"
