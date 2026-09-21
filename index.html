@@ -7559,12 +7559,12 @@
                                 <input type="text" id="org-edit-name" class="w-full p-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="예: 김철수" />
                             </div>
                             <div>
-                                <label class="block text-xs font-medium text-gray-600 mb-1">직급 <span class="text-red-500">*</span></label>
+                                <label class="block text-xs font-medium text-gray-600 mb-1">직급 <span id="org-edit-rank-req" class="text-red-500">*</span></label>
                                 <input type="text" id="org-edit-rank" list="org-rank-list" class="w-full p-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="예: 팀장" />
                                 <datalist id="org-rank-list"></datalist>
                             </div>
                             <div>
-                                <label class="block text-xs font-medium text-gray-600 mb-1">부서 <span class="text-red-500">*</span></label>
+                                <label class="block text-xs font-medium text-gray-600 mb-1">부서 <span id="org-edit-dept-req" class="text-red-500">*</span></label>
                                 <select id="org-edit-dept" onchange="onOrgEditDeptChange()" class="w-full p-2 text-sm border border-gray-300 rounded bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"></select>
                             </div>
                             <div>
@@ -7617,14 +7617,15 @@
                         <div class="p-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
                             <div>
                                 <label class="block text-xs font-medium text-gray-600 mb-1">직책 (권한 레벨)</label>
-                                <select id="org-edit-level" class="w-full p-2 text-sm border border-gray-300 rounded bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"></select>
+                                <select id="org-edit-level" onchange="onOrgEditAdminChange()" class="w-full p-2 text-sm border border-gray-300 rounded bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"></select>
                             </div>
                             <div>
                                 <label class="block text-xs font-medium text-gray-600 mb-1">권한 그룹</label>
-                                <select id="org-edit-group" class="w-full p-2 text-sm border border-gray-300 rounded bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"></select>
+                                <select id="org-edit-group" onchange="onOrgEditAdminChange()" class="w-full p-2 text-sm border border-gray-300 rounded bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"></select>
                             </div>
                         </div>
                         <p class="text-[11px] text-gray-400 px-3 pb-2">여기서 넣고 고친 사람은 <b>사용자/권한관리</b> 목록에도 함께 반영됩니다. 같은 자료를 씁니다.</p>
+                        <p id="org-edit-admin-note" class="hidden text-[11px] text-indigo-700 bg-indigo-50 border-t border-indigo-100 px-3 py-2"><i class="fas fa-circle-info mr-1"></i><b>관리자</b>는 부서 · 직급 · 팀을 정하지 않아도 됩니다. 부서를 <b>소속 없음</b>으로 두면 조직도에는 나오지 않고 전사 자료를 봅니다. 특정 본부 소속이기도 하면 부서를 골라 주세요.</p>
                     </div>
                 </div>
                 <div class="flex justify-between items-center px-5 py-4 border-t border-gray-200 bg-gray-50 rounded-b-lg">
@@ -9740,6 +9741,7 @@ const QUOTE_TEMPLATES = [
             Object.keys(deptNames).forEach(k => { delete deptNames[k]; });
             orgDepts.forEach(d => { deptNames[d.id] = d.name; });
             deptNames.company = '전사';
+            deptNames.admin = '소속 없음 (관리자)';     // 시스템 관리자 계정의 부서값 (2026-09-21)
         }
         rebuildDeptNames();
         function deptName(id) { return deptNames[id] || id || '미지정'; }
@@ -35051,6 +35053,27 @@ const QUOTE_TEMPLATES = [
         }
 
         // ---------- 등록 · 수정 ----------
+        // 관리자(권한 그룹 '관리자 그룹' 또는 직책 '관리자')는 부서 · 직급 · 팀이 선택 사항입니다 (2026-09-21).
+        // 그 밖의 사람은 예전처럼 부서 · 직급이 필수이고 '소속 없음' 은 고를 수 없습니다.
+        function orgEditIsAdmin() {
+            const v = k => ((document.getElementById('org-edit-' + k) || {}).value || '');
+            return v('group') === 'admin' || v('level') === 'admin';
+        }
+        function onOrgEditAdminChange() {
+            const admin = orgEditIsAdmin();
+            const dept = document.getElementById('org-edit-dept');
+            const opt = dept && dept.querySelector('option[data-admin-only]');
+            if (opt) {
+                opt.hidden = !admin; opt.disabled = !admin;
+                if (!admin && dept.value === 'admin') { dept.value = dept.options[0] ? dept.options[0].value : ''; onOrgEditDeptChange(); }
+            }
+            ['rank', 'dept'].forEach(k => {
+                const star = document.getElementById('org-edit-' + k + '-req');
+                if (star) { star.textContent = admin ? '(선택)' : '*'; star.className = admin ? 'font-normal text-gray-400' : 'text-red-500'; }
+            });
+            const note = document.getElementById('org-edit-admin-note');
+            if (note) note.classList.toggle('hidden', !admin);
+        }
         function onOrgEditDeptChange(keepTeam) {
             // 부서를 바꾸면 그 본부에 등록된 팀만 고를 수 있게 목록을 다시 채웁니다
             const d = (document.getElementById('org-edit-dept') || {}).value || '';
@@ -35076,8 +35099,10 @@ const QUOTE_TEMPLATES = [
 
             // 부서 목록은 조직도에서 뺀 부서까지 모두 담습니다 (외주업체 계정을 고쳐도 부서가 바뀌지 않게)
             const allDepts = orgDeptOrder().concat(Array.from(new Set(orgAccounts().map(x => x.dept))).filter(d => orgDeptOrder().indexOf(d) < 0));
-            document.getElementById('org-edit-dept').innerHTML = Array.from(new Set(allDepts))
-                .map(d => `<option value="${escapeHtml(d)}" ${u && u.dept === d ? 'selected' : ''}>${escapeHtml(orgDeptName(d))}</option>`).join('');
+            // 'admin' = 소속 없는 시스템 관리자 (조직도에 안 나오고 전사 자료를 봄) — 관리자 그룹 · 직책일 때만 고를 수 있게 합니다 (2026-09-21)
+            document.getElementById('org-edit-dept').innerHTML = Array.from(new Set(allDepts)).filter(d => d !== 'admin')
+                .map(d => `<option value="${escapeHtml(d)}" ${u && u.dept === d ? 'selected' : ''}>${escapeHtml(orgDeptName(d))}</option>`).join('')
+                + `<option value="admin" data-admin-only="1" ${u && u.dept === 'admin' ? 'selected' : ''}>소속 없음 (관리자)</option>`;
             document.getElementById('org-rank-list').innerHTML = ORG_RANK_ORDER.map(r => `<option value="${escapeHtml(r)}"></option>`).join('');
             document.getElementById('org-edit-level').innerHTML = Object.keys(levelNames)
                 .map(k => `<option value="${escapeHtml(k)}" ${u && (u.level || 'manager') === k ? 'selected' : ''}>${escapeHtml(levelNames[k])}</option>`).join('');
@@ -35097,6 +35122,7 @@ const QUOTE_TEMPLATES = [
             const hint = document.getElementById('org-edit-noteam-hint');
             if (hint) hint.innerText = orgNoTeamLabel;
             onOrgEditDeptChange(teamValue);
+            onOrgEditAdminChange();          // 관리자면 부서 · 직급 · 팀을 선택 사항으로 (2026-09-21)
             document.getElementById('org-edit-modal').classList.remove('hidden');
         }
         function closeOrgEdit() { document.getElementById('org-edit-modal').classList.add('hidden'); }
@@ -35105,16 +35131,18 @@ const QUOTE_TEMPLATES = [
             event.preventDefault();
             const v = k => ((document.getElementById('org-edit-' + k) || {}).value || '').trim();
             const name = v('name'), rank = v('rank'), email = v('email');
+            const admin = orgEditIsAdmin();      // 관리자는 부서 · 직급 · 팀 없이 등록할 수 있습니다 (2026-09-21)
             if (!name) { alert('이름을 입력해 주세요.'); return; }
-            if (!rank) { alert('직급을 입력해 주세요.'); return; }
+            if (!rank && !admin) { alert('직급을 입력해 주세요.'); return; }
+            if (v('dept') === 'admin' && !admin) { alert("'소속 없음' 은 관리자(권한 그룹 관리자 · 직책 관리자)만 고를 수 있습니다. 부서를 골라 주세요."); return; }
             if (!email) { alert('이메일을 입력해 주세요. 로그인 계정으로도 쓰입니다.'); return; }
             const dup = orgAccounts().find(u => u.id !== orgEditId && String(u.email || '').toLowerCase() === email.toLowerCase());
             if (dup) { alert(`이미 쓰고 있는 이메일입니다 — ${dup.name} (${orgDeptName(dup.dept)})`); return; }
 
             const data = {
                 name, rank, email,
-                dept: v('dept') || 'sales',
-                team: v('team'),
+                dept: v('dept') || (admin ? 'admin' : 'sales'),
+                team: v('dept') === 'admin' ? '' : v('team'),
                 duty: v('duty'),
                 phone: v('phone'),
                 mobile: v('mobile'),
