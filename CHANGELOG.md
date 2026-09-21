@@ -480,4 +480,5 @@ Pages 로 다시 만들라고 세 번 안내했지만 매번 `Workers-specific c
 - 본체가 뜨기 전에는 로그인 버튼(`#login-view` · `#partner-login` 의 submit)을 누르지 못하게 흐리게 — 눌리면 `handleLogin`/`handlePartnerLogin`
   이 아직 없어 폼이 그대로 제출돼 주소창에 아이디가 실려 새로고침됩니다. `kob-store.js` 가 본체 실행 직후 `<html data-kob-ready>` 를 달아 살립니다.
 - 검증: `npm run check` 통과(71항목).
+- (추가) `#partner` · `#mobile` 해시 주소도 첫 화면 판정에 포함 — 본체의 `isPartnerMode()`/`isMobileMode()` 와 같은 규칙.
 

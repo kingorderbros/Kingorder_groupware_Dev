@@ -29,6 +29,9 @@
             var app;
             try {
                 var m = new URLSearchParams(location.search).get('mode');
+                // 옛 주소 형태(#partner · #mobile)도 본체의 isPartnerMode()/isMobileMode() 와 같이 받아 줍니다
+                if (!m && location.hash === '#partner') m = 'partner';
+                if (!m && location.hash === '#mobile') m = 'mobile';
                 // 첫 그림부터 맞는 화면이 나오게 <html data-mode> 를 지금 답니다 (2026-09-21).
                 // 본체는 자료를 다 받은 뒤에야 도는데, 그동안 파트너센터·운행일지 주소로 들어와도
                 // 그룹웨어 로그인 화면이 먼저 보였다가 바뀌었습니다. 아래 <style> 이 이 속성을 봅니다.
