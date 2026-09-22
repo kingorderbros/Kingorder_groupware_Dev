@@ -51093,12 +51093,8 @@ const QUOTE_TEMPLATES = [
                 <form onsubmit="submitPartnerIntake(event)" class="bg-white rounded-lg border border-gray-200 p-4 mt-3">
                     <div class="mb-6 pb-4 border-b border-gray-100">
                         <div class="flex items-center gap-2 flex-wrap">
-                            <!-- 두 본부가 함께 처리하는 접수(신규 가맹점 개설 = 영업본부 + 결제본부)는 본부 칩을 모두 보여 줍니다 (2026-09-16) -->
-                            ${(PARTNER_SHARED_TYPES[`${d.id}:${startType}`] || [d.id]).map((dep, i, arr) => {
-                                const dd = partnerDeptDef(dep) || d;
-                                return `<span class="text-[11px] font-bold rounded-full px-2.5 py-1 border ${dd.tone.chip}" title="${i === 0 ? '접수하는 본부' : '서류를 함께 확인하는 본부'}"><i class="fas ${dd.icon} mr-1"></i>${escapeHtml(dd.name)}</span>`
-                                     + (i < arr.length - 1 ? '<span class="text-gray-300 text-xs">+</span>' : '');
-                            }).join('')}
+                            <!-- 본부 칩(영업본부 · 결제본부 · 운영본부 …)은 없앴습니다 — 파트너사에게 처리 본부는 보이지 않습니다 (2026-09-22).
+                                 어느 본부가 받는지는 PARTNER_SHARED_TYPES · d.id 로 접수 뒤에만 씁니다. -->
                             ${src && !src.__draft ? `<span class="text-[11px] font-bold rounded-full px-2.5 py-1 border text-rose-700 bg-rose-50 border-rose-200"><i class="fas fa-rotate-left mr-1"></i>재요청 ${(src.reRequestSeq || 0) + 1}차</span>` : ''}
                             ${(partnerTaskDef(`${d.id}:${startType}`) || {}).days
                                 ? `<span class="text-[11px] font-semibold rounded-full px-2.5 py-1 border border-gray-200 bg-gray-50 text-gray-500"><i class="fas fa-clock mr-1"></i>처리 기간 ${escapeHtml(partnerTaskDef(`${d.id}:${startType}`).days)}</span>` : ''}
