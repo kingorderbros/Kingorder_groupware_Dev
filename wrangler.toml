@@ -17,3 +17,8 @@ binding = "ASSETS"
 # 환경변수(SUPABASE_URL · SUPABASE_SERVICE_ROLE_KEY · KOB_ENV)는 여기 적지 않습니다 —
 #   · 로컬:  .dev.vars 파일 (git 에 올리지 않음)
 #   · 배포:  Cloudflare 대시보드 › 그 Worker › Settings › Variables and Secrets
+
+# 구글 캘린더 주고받기 — 1분이 Cloudflare 가 허용하는 가장 짧은 간격입니다 (2026-09-23)
+# 회사 도메인을 붙이면 구글이 알려 주는 방식(웹훅)으로 바꿔 10초 수준으로 줄일 수 있습니다.
+[triggers]
+crons = ["* * * * *"]

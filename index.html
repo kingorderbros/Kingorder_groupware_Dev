@@ -15779,6 +15779,18 @@ const QUOTE_TEMPLATES = [
                 scheduleSaved.delete(id);
                 kobDb.remove('schedules', id).catch(e => console.error('[일정] 삭제 실패', e));
             });
+            gcalPushSoon();                                       // 구글 캘린더로 바로 보냅니다 (2026-09-23)
+        }
+
+        // 저장한 일정을 구글로 보내라고 서버에 알립니다. 잇달아 고칠 때를 대비해 2초 모아서 한 번만 부릅니다.
+        // 서버가 "지난번 이후 바뀐 것" 을 스스로 찾으므로 무엇을 보낼지는 알려 주지 않아도 됩니다.
+        let gcalPushTimer = null;
+        function gcalPushSoon() {
+            if (!window.kobAuth || kobAuth.mode !== 'supabase') return;   // 로컬 모드에는 서버가 없습니다
+            clearTimeout(gcalPushTimer);
+            gcalPushTimer = setTimeout(() => {
+                kobAuth.call('/api/calendar/push', {}).catch(e => console.warn('[구글캘린더] 보내기 실패', e && e.message));
+            }, 2000);
         }
 
         // 로그인이 끝나 자료를 다시 받았거나, 다른 사람이 고쳤을 때 화면을 맞춥니다.
@@ -38755,6 +38767,9 @@ const QUOTE_TEMPLATES = [
                     <button onclick="gcalSetup()" ${(!st.connected || gcalBusy) ? 'disabled' : ''} class="px-4 py-2 text-sm bg-indigo-600 hover:bg-indigo-700 text-white rounded disabled:opacity-50">
                         ${gcalBusy === 'setup' ? '<i class="fas fa-spinner fa-spin mr-1"></i>만드는 중…' : '<i class="fas fa-calendar-plus mr-1"></i>구글 캘린더 준비'}
                     </button>
+                    <button onclick="gcalSyncNow()" ${(!st.connected || gcalBusy) ? 'disabled' : ''} class="px-4 py-2 text-sm bg-white border border-indigo-300 text-indigo-700 rounded hover:bg-indigo-50 disabled:opacity-50">
+                        ${gcalBusy === 'sync' ? '<i class="fas fa-spinner fa-spin mr-1"></i>맞추는 중…' : '<i class="fas fa-right-left mr-1"></i>지금 맞추기'}
+                    </button>
                 </div>
                 <div class="w-full bg-gray-100 rounded-full h-2 mt-3"><div class="bg-indigo-500 h-2 rounded-full transition-all" style="width:${pct}%"></div></div>
                 <p class="text-xs text-gray-500 mt-2">구글이 한 번에 받아 주는 양이 있어 나눠서 만듭니다. <b>남은 것이 있으면 버튼을 한 번 더</b> 눌러 주세요. 이미 만든 것과 이미 공유한 사람은 건너뜁니다.</p>
@@ -38807,6 +38822,24 @@ const QUOTE_TEMPLATES = [
             try { await kobAuth.call('/api/calendar/disconnect', {}); }
             catch (e) { alert('연결을 끊지 못했습니다.\n' + String((e && e.message) || e)); }
             gcalBusy = ''; await loadGcalStatus();
+        }
+
+        // 지금 한 번 맞추기 — 평소에는 1분마다 저절로 돕니다. 확인할 때 쓰는 버튼입니다.
+        async function gcalSyncNow() {
+            if (gcalBusy) return;
+            gcalBusy = 'sync'; drawGcalAdmin();
+            let r = null, err = '';
+            try { r = await kobAuth.call('/api/calendar/sync', {}); }
+            catch (e) { err = String((e && e.message) || e); }
+            gcalBusy = '';
+            await loadGcalStatus();
+            const out = document.getElementById('gcal-setup-result');
+            if (!out) return;
+            if (err) { out.innerHTML = `<p class="text-sm text-red-600"><i class="fas fa-triangle-exclamation mr-1"></i>${escapeHtml(err)}</p>`; return; }
+            const p = r.push || {}, q = r.pull || {};
+            const errs = (p.errors || []).concat(q.errors || []);
+            out.innerHTML = `<p class="text-sm text-gray-700">구글로 보냄 <b>${(p.created || 0) + (p.sent || 0)}</b>건 · 지움 <b>${p.deleted || 0}</b>건 &nbsp;|&nbsp; 구글에서 받음 새로 <b>${q.added || 0}</b>건 · 고침 <b>${q.updated || 0}</b>건 · 지움 <b>${q.deleted || 0}</b>건</p>`
+                + (errs.length ? `<p class="text-sm text-red-600 mt-1">문제 ${errs.length}건 — ${escapeHtml(errs[0].error)}</p>` : '');
         }
 
         // 캘린더 만들기 · 공유하기 — 남은 것이 있으면 다시 누르면 이어서 합니다

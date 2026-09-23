@@ -304,13 +304,31 @@ export async function onRequest(context) {
                 return page('구글 캘린더에 연결되었습니다', `${escapeForHtml(who || '구글 계정')} 으로 연결했습니다. 이 창을 닫고 그룹웨어로 돌아가 주세요.`, true);
             }
 
+            // 보내기 — 관리자만이 아니라 **로그인한 사람이면** 됩니다. 일정을 저장한 직후 화면이 부릅니다.
+            // 누가 부르든 하는 일은 같습니다(지난번 이후 바뀐 일정을 전부 훑어 보냅니다).
+            if (path === '/api/calendar/push' && method === 'POST') {
+                const me = await authAdmin(env).whoami(request);
+                if (!me) return json(401, { ok: false, error: '로그인이 필요합니다.' });
+                try {
+                    const ctx = await gcal.buildContext(env, g);
+                    return json(200, { ok: true, push: await gcal.syncPush(env, g, ctx) });
+                } catch (e) {
+                    if (e.code === 'not-connected') return json(200, { ok: true, skipped: '구글 계정이 연결되지 않았습니다.' });
+                    return json(500, { ok: false, error: e.message });
+                }
+            }
+
             // 여기부터는 관리자만
             const who = await requireAdmin(env, store, request);
             if (who.error) return who.error;
 
             // 지금 상태 — 연결 여부 · 캘린더 몇 개 준비됐는지 · 구글 주소가 없는 직원
             if (path === '/api/calendar/status' && method === 'GET') {
-                const acc = await g.account();
+                let acc = await g.account();
+                if (acc && acc.refresh_token && !str(acc.google_email)) {
+                    try { const em = await gcal.connectedEmail(env, g); if (em) { await g.saveAccount({ google_email: em }); acc.google_email = em; } }
+                    catch (e) { /* 못 읽어도 연결 자체는 쓸 수 있습니다 */ }
+                }
                 const cals = (await g.calendars()) || [];
                 const plan = calendarPlan(who.users, (await store.storeValue('gwOrgDepts.v1')) || []);
                 const madeKeys = new Set(cals.filter(c => c.google_calendar_id).map(c => c.key));
@@ -389,6 +407,18 @@ export async function onRequest(context) {
                     }
                 }
                 return json(200, { ok: true, made, shared, failed, remaining, missingGoogle: plan.missingGoogle, done: remaining === 0 && !failed.length });
+            }
+
+            // 받아오기 · 한꺼번에 — 관리자가 손으로 확인할 때 씁니다 (평소에는 1분마다 저절로 돕니다)
+            if ((path === '/api/calendar/pull' || path === '/api/calendar/sync') && method === 'POST') {
+                try {
+                    if (path === '/api/calendar/sync') return json(200, Object.assign({ ok: true }, await gcal.syncBoth(env)));
+                    const ctx = await gcal.buildContext(env, g);
+                    return json(200, { ok: true, pull: await gcal.syncPull(env, g, ctx) });
+                } catch (e) {
+                    if (e.code === 'not-connected') return json(409, { ok: false, error: '먼저 [구글 캘린더 연결] 을 눌러 주세요.' });
+                    return json(500, { ok: false, error: e.message });
+                }
             }
 
             return json(404, { ok: false, error: '없는 주소입니다: ' + path });
