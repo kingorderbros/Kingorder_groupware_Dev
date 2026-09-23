@@ -15793,6 +15793,17 @@ const QUOTE_TEMPLATES = [
             }, 2000);
         }
 
+        // 일정캘린더 화면을 보고 있는 동안 1분마다 구글과 맞춥니다.
+        // 서버에도 1분짜리 예약 실행이 있지만, 그것이 안 돌더라도 화면이 열려 있으면 맞춰집니다.
+        // 여러 사람이 동시에 봐도 서버가 20초 안에 또 부르는 것은 건너뛰므로 구글을 들볶지 않습니다.
+        if (typeof setInterval === 'function' && typeof document !== 'undefined') setInterval(() => {
+            if (!window.kobAuth || kobAuth.mode !== 'supabase') return;
+            if (document.visibilityState !== 'visible') return;                  // 다른 탭을 보고 있으면 쉬어 갑니다
+            const sec = document.getElementById('sec-calendar-center');
+            if (!sec || sec.classList.contains('hidden')) return;                // 일정 화면일 때만
+            kobAuth.call('/api/calendar/sync', {}).catch(() => { });
+        }, 60000);
+
         // 로그인이 끝나 자료를 다시 받았거나, 다른 사람이 고쳤을 때 화면을 맞춥니다.
         function reloadSchedulesFromDb() {
             if (!window.kobDb) return;
@@ -38829,13 +38840,15 @@ const QUOTE_TEMPLATES = [
             if (gcalBusy) return;
             gcalBusy = 'sync'; drawGcalAdmin();
             let r = null, err = '';
-            try { r = await kobAuth.call('/api/calendar/sync', {}); }
+            try { r = await kobAuth.call('/api/calendar/sync', { force: true }); }
             catch (e) { err = String((e && e.message) || e); }
             gcalBusy = '';
             await loadGcalStatus();
             const out = document.getElementById('gcal-setup-result');
             if (!out) return;
             if (err) { out.innerHTML = `<p class="text-sm text-red-600"><i class="fas fa-triangle-exclamation mr-1"></i>${escapeHtml(err)}</p>`; return; }
+            if (r.skipped) { out.innerHTML = `<p class="text-sm text-gray-600">${escapeHtml(r.skipped)}</p>`; return; }
+            if (r.ok === false) { out.innerHTML = `<p class="text-sm text-amber-700">${escapeHtml(r.error || '맞추지 못했습니다.')}</p>`; return; }
             const p = r.push || {}, q = r.pull || {};
             const errs = (p.errors || []).concat(q.errors || []);
             out.innerHTML = `<p class="text-sm text-gray-700">구글로 보냄 <b>${(p.created || 0) + (p.sent || 0)}</b>건 · 지움 <b>${p.deleted || 0}</b>건 &nbsp;|&nbsp; 구글에서 받음 새로 <b>${q.added || 0}</b>건 · 고침 <b>${q.updated || 0}</b>건 · 지움 <b>${q.deleted || 0}</b>건</p>`

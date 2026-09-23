@@ -454,11 +454,21 @@ export async function syncPull(env, store, ctx) {
     return out;
 }
 
-// 둘 다 — 보내고 나서 받아옵니다 (1분마다 도는 예약 실행이 이것을 부릅니다)
-export async function syncBoth(env) {
+// 둘 다 — 보내고 나서 받아옵니다.
+// 부르는 곳이 셋입니다: 1분마다 도는 예약 실행 · 일정 화면을 보고 있는 브라우저 · 관리자의 [지금 맞추기].
+// 여럿이 동시에 불러도 구글을 들볶지 않도록, 방금 돌았으면 건너뜁니다(minGapMs).
+export async function syncBoth(env, opts) {
     const store = gcalStore(env);
     const acc = await store.account();
     if (!acc || !acc.refresh_token) return { ok: false, error: '구글 계정이 연결되지 않았습니다.' };
+
+    const gap = (opts && opts.minGapMs) || 0;
+    if (gap) {
+        const mark = await store.syncState('__push');
+        if (mark && mark.last_sync_at && Date.now() - new Date(mark.last_sync_at).getTime() < gap) {
+            return { ok: true, skipped: '방금 맞췄습니다.' };
+        }
+    }
     const ctx = await buildContext(env, store);
     const push = await syncPush(env, store, ctx);
     const pull = await syncPull(env, store, ctx);

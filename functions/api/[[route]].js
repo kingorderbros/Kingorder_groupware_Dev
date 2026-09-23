@@ -306,6 +306,20 @@ export async function onRequest(context) {
 
             // 보내기 — 관리자만이 아니라 **로그인한 사람이면** 됩니다. 일정을 저장한 직후 화면이 부릅니다.
             // 누가 부르든 하는 일은 같습니다(지난번 이후 바뀐 일정을 전부 훑어 보냅니다).
+            // 한꺼번에 맞추기 — 일정 화면을 보고 있는 브라우저도 1분마다 부릅니다.
+            // 서버의 예약 실행이 꺼져 있어도 누군가 그룹웨어를 보고 있으면 맞춰집니다.
+            // 관리자의 [지금 맞추기] 는 기다리지 않도록 force 로 부릅니다.
+            if (path === '/api/calendar/sync' && method === 'POST') {
+                const me = await authAdmin(env).whoami(request);
+                if (!me) return json(401, { ok: false, error: '로그인이 필요합니다.' });
+                const input = await body();
+                try { return json(200, Object.assign({ ok: true }, await gcal.syncBoth(env, { minGapMs: input.force ? 0 : 20000 }))); }
+                catch (e) {
+                    if (e.code === 'not-connected') return json(409, { ok: false, error: '먼저 [구글 캘린더 연결] 을 눌러 주세요.' });
+                    return json(500, { ok: false, error: e.message });
+                }
+            }
+
             if (path === '/api/calendar/push' && method === 'POST') {
                 const me = await authAdmin(env).whoami(request);
                 if (!me) return json(401, { ok: false, error: '로그인이 필요합니다.' });
@@ -409,10 +423,9 @@ export async function onRequest(context) {
                 return json(200, { ok: true, made, shared, failed, remaining, missingGoogle: plan.missingGoogle, done: remaining === 0 && !failed.length });
             }
 
-            // 받아오기 · 한꺼번에 — 관리자가 손으로 확인할 때 씁니다 (평소에는 1분마다 저절로 돕니다)
-            if ((path === '/api/calendar/pull' || path === '/api/calendar/sync') && method === 'POST') {
+            // 받아오기 — 관리자가 손으로 확인할 때 씁니다
+            if (path === '/api/calendar/pull' && method === 'POST') {
                 try {
-                    if (path === '/api/calendar/sync') return json(200, Object.assign({ ok: true }, await gcal.syncBoth(env)));
                     const ctx = await gcal.buildContext(env, g);
                     return json(200, { ok: true, pull: await gcal.syncPull(env, g, ctx) });
                 } catch (e) {
