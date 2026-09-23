@@ -2153,6 +2153,8 @@
                          레벨 기본값이나 개별 예외로 범위를 넓혀 줍니다. -->
                     <!-- 사용자/권한관리 - 파트너 ID 관리 (renderPartnerIdAdmin 이 그립니다 · 2026-09-16) -->
                     <section id="sec-partner-ids" class="admin-tab-panel hidden"></section>
+                    <!-- 구글 캘린더 연동 (2026-09-23) — renderGcalAdmin() 이 그립니다 -->
+                    <section id="sec-gcal" class="admin-tab-panel hidden"></section>
                     <section id="sec-card-perm" class="admin-tab-panel hidden">
                         <div class="mb-4 flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-3 sm:space-y-0">
                             <div>
@@ -7616,6 +7618,11 @@
                             <div>
                                 <label class="block text-xs font-medium text-gray-600 mb-1">이메일 <span class="text-red-500">*</span> <span class="font-normal text-gray-400">— 로그인 계정으로도 쓰입니다</span></label>
                                 <input type="email" id="org-edit-email" class="w-full p-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="예: name@company.com" />
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-gray-600 mb-1">구글 계정 주소 <span class="font-normal text-gray-400">— 폰 캘린더 연동용 (선택)</span></label>
+                                <input type="email" id="org-edit-google" class="w-full p-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="예: name@gmail.com" />
+                                <p class="text-[11px] text-gray-400 mt-1">이 주소로 <b>'킹오더 일정'</b> 캘린더를 공유합니다. 폰에 로그인된 구글 계정과 같아야 폰 캘린더에 나옵니다. 비워 두면 그 사람은 폰 연동에서 빠집니다.</p>
                             </div>
                             <div>
                                 <label class="block text-xs font-medium text-gray-600 mb-1">비고</label>
@@ -35426,6 +35433,7 @@ const QUOTE_TEMPLATES = [
             set('org-edit-joined', u ? (u.joinedAt || '') : '');
             set('org-edit-birthday', u ? (u.birthday || '') : '');
             set('org-edit-email', u ? (u.email || '') : '');
+            set('org-edit-google', u ? (u.googleEmail || '') : '');
             set('org-edit-note', u ? (u.note || '') : '');
             const hint = document.getElementById('org-edit-noteam-hint');
             if (hint) hint.innerText = orgNoTeamLabel;
@@ -35451,6 +35459,7 @@ const QUOTE_TEMPLATES = [
 
             const data = {
                 name, rank, email,
+                googleEmail: v('google').toLowerCase(),   // 폰 캘린더 연동용 (2026-09-23)
                 dept: v('dept') || (admin ? 'admin' : 'sales'),
                 team: v('dept') === 'admin' ? '' : v('team'),
                 duty: v('duty'),
@@ -38666,6 +38675,161 @@ const QUOTE_TEMPLATES = [
         // ==================== 사용자/권한관리 — 탭 2종 ====================
         // 예전엔 사이드바 메뉴 2개였습니다. 한 메뉴로 합치고 탭으로 전환합니다.
         // perm: 이 탭을 볼 수 있는 기존 페이지 권한 id — 권한이 없으면 탭 자체를 감춥니다.
+        // ==================== 구글 캘린더 연동 (관리자 · 2026-09-23) ====================
+        // 회사 구글 계정 하나가 캘린더를 전부 가지고, 직원 구글 주소에 '변경 권한'으로 공유합니다.
+        // 서버 쪽은 functions/api/_gcal.js · /api/calendar/* 입니다.
+        let gcalStatus = null;         // 마지막으로 받아 온 상태
+        let gcalBusy = '';             // 지금 하고 있는 일 (버튼을 잠급니다)
+        let gcalWatch = null;          // 연결 창을 열어 둔 동안 상태를 다시 확인하는 타이머
+
+        // 테스트 상태의 구글 연결은 7일이 지나면 풀립니다 (프로덕션으로 게시하면 없어집니다)
+        const GCAL_TEST_DAYS = 7;
+        function gcalDaysLeft(at) {
+            if (!at) return null;
+            const gone = (Date.now() - new Date(at).getTime()) / 86400000;
+            return Math.max(0, Math.ceil(GCAL_TEST_DAYS - gone));
+        }
+
+        function renderGcalAdmin() {
+            const box = document.getElementById('sec-gcal');
+            if (!box) return;
+            if (!gcalStatus) box.innerHTML = '<div class="bg-white rounded-lg shadow-sm p-6 text-sm text-gray-500"><i class="fas fa-spinner fa-spin mr-2"></i>상태를 확인하고 있습니다…</div>';
+            else drawGcalAdmin();
+            loadGcalStatus();
+        }
+        async function loadGcalStatus() {
+            try { gcalStatus = await kobAuth.call('/api/calendar/status', undefined, 'GET'); }
+            catch (e) { gcalStatus = { ok: false, error: String((e && e.message) || e) }; }
+            drawGcalAdmin();
+        }
+        function drawGcalAdmin() {
+            const box = document.getElementById('sec-gcal');
+            if (!box || !gcalStatus) return;
+            const st = gcalStatus;
+            const card = (inner) => `<div class="bg-white rounded-lg shadow-sm p-5 mb-4">${inner}</div>`;
+
+            if (st.ok === false) {
+                box.innerHTML = card(`<p class="text-sm text-red-600"><i class="fas fa-triangle-exclamation mr-1"></i>${escapeHtml(st.error || '상태를 확인하지 못했습니다.')}</p>
+                    <button onclick="loadGcalStatus()" class="mt-3 px-3 py-2 text-sm bg-white border border-gray-300 rounded hover:bg-gray-50">다시 확인</button>`);
+                return;
+            }
+
+            // ---------- 1. 연결 ----------
+            let conn;
+            if (!st.configured) {
+                conn = `<p class="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded p-3">
+                    <i class="fas fa-circle-info mr-1"></i>아직 구글 쪽 설정이 서버에 없습니다.
+                    Cloudflare › Settings › <b>Variables and Secrets</b> 의 <b>Runtime</b> 에
+                    <b>GOOGLE_CLIENT_ID</b> · <b>GOOGLE_CLIENT_SECRET</b> 을 넣고 <b>Deploy</b> 를 누른 뒤 다시 확인해 주세요.</p>`;
+            } else if (st.connected) {
+                const left = gcalDaysLeft(st.connectedAt);
+                const warn = left !== null && left <= 2;
+                conn = `<div class="flex flex-wrap items-center gap-3">
+                        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-sm font-medium bg-emerald-100 text-emerald-800"><i class="fas fa-circle-check"></i>연결됨</span>
+                        <span class="text-sm text-gray-700 font-medium">${escapeHtml(st.googleEmail || '구글 계정')}</span>
+                        ${left === null ? '' : `<span class="text-xs ${warn ? 'text-red-600 font-semibold' : 'text-gray-500'}">남은 기간 약 ${left}일</span>`}
+                    </div>
+                    <p class="text-xs text-gray-500 mt-2">구글 쪽 앱이 아직 <b>테스트</b> 상태라 연결이 ${GCAL_TEST_DAYS}일마다 풀립니다. 풀리면 아래 [다시 연결]을 한 번 누르시면 됩니다. 그동안 밀린 변경은 다시 연결한 뒤 한꺼번에 맞춰집니다.</p>
+                    ${st.lastError ? `<p class="text-xs text-red-600 mt-2"><i class="fas fa-triangle-exclamation mr-1"></i>${escapeHtml(st.lastError)}</p>` : ''}
+                    <div class="flex flex-wrap gap-2 mt-3">
+                        <button onclick="gcalConnect()" ${gcalBusy ? 'disabled' : ''} class="px-3 py-2 text-sm bg-white border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50"><i class="fas fa-rotate mr-1"></i>다시 연결</button>
+                        <button onclick="gcalDisconnect()" ${gcalBusy ? 'disabled' : ''} class="px-3 py-2 text-sm bg-red-50 text-red-600 border border-red-200 rounded hover:bg-red-100 disabled:opacity-50">연결 끊기</button>
+                    </div>`;
+            } else {
+                conn = `<div class="flex flex-wrap items-center gap-3">
+                        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-sm font-medium bg-gray-100 text-gray-700"><i class="fas fa-circle-minus"></i>연결 안 됨</span>
+                    </div>
+                    <p class="text-sm text-gray-600 mt-2">아래 버튼을 누르면 구글 허용 화면이 새 창으로 열립니다. <b>회사 구글 계정</b>으로 로그인해 주세요.</p>
+                    <p class="text-xs text-gray-500 mt-1">"Google에서 확인하지 않은 앱입니다" 화면이 나오면 <b>고급</b> → <b>(안전하지 않음) 이동</b> 을 누르시면 됩니다. 사내에서만 쓰는 앱이라 정상입니다.</p>
+                    <button onclick="gcalConnect()" ${gcalBusy ? 'disabled' : ''} class="mt-3 px-4 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded disabled:opacity-50"><i class="fab fa-google mr-1"></i>구글 캘린더 연결</button>`;
+            }
+
+            // ---------- 2. 캘린더 준비 ----------
+            const ready = st.ready || 0, planned = st.planned || 0;
+            const pct = planned ? Math.round(ready / planned * 100) : 0;
+            const setup = `<div class="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                        <p class="text-sm text-gray-700"><b>${ready}</b> / ${planned} 개 준비됨</p>
+                        <p class="text-xs text-gray-500 mt-0.5">공유 3개 + 본부마다 1개 + 구글 주소를 넣은 직원마다 1개</p>
+                    </div>
+                    <button onclick="gcalSetup()" ${(!st.connected || gcalBusy) ? 'disabled' : ''} class="px-4 py-2 text-sm bg-indigo-600 hover:bg-indigo-700 text-white rounded disabled:opacity-50">
+                        ${gcalBusy === 'setup' ? '<i class="fas fa-spinner fa-spin mr-1"></i>만드는 중…' : '<i class="fas fa-calendar-plus mr-1"></i>구글 캘린더 준비'}
+                    </button>
+                </div>
+                <div class="w-full bg-gray-100 rounded-full h-2 mt-3"><div class="bg-indigo-500 h-2 rounded-full transition-all" style="width:${pct}%"></div></div>
+                <p class="text-xs text-gray-500 mt-2">구글이 한 번에 받아 주는 양이 있어 나눠서 만듭니다. <b>남은 것이 있으면 버튼을 한 번 더</b> 눌러 주세요. 이미 만든 것과 이미 공유한 사람은 건너뜁니다.</p>
+                <div id="gcal-setup-result" class="mt-3"></div>`;
+
+            // ---------- 3. 구글 주소가 없는 직원 ----------
+            const miss = st.missingGoogle || [];
+            const missBox = miss.length ? `<p class="text-sm text-gray-700 mb-2"><b class="text-amber-700">${miss.length}명</b>은 구글 계정 주소가 없어 폰 연동에서 빠집니다.</p>
+                    <div class="flex flex-wrap gap-1.5">${miss.map(m => `<span class="px-2 py-1 rounded bg-amber-50 border border-amber-200 text-xs text-amber-800">${escapeHtml(m.name)}</span>`).join('')}</div>
+                    <p class="text-xs text-gray-500 mt-2"><b>사용자 관리</b> 탭에서 그 사람을 열고 <b>구글 계정 주소</b> 칸을 채운 뒤, 위 [구글 캘린더 준비]를 다시 눌러 주세요.</p>`
+                : `<p class="text-sm text-emerald-700"><i class="fas fa-circle-check mr-1"></i>모든 직원의 구글 계정 주소가 들어 있습니다.</p>`;
+
+            box.innerHTML =
+                card(`<h3 class="font-semibold text-gray-800 mb-3"><i class="fas fa-link mr-1.5 text-gray-400"></i>1. 회사 구글 계정 연결</h3>${conn}`) +
+                card(`<h3 class="font-semibold text-gray-800 mb-3"><i class="fas fa-calendar-days mr-1.5 text-gray-400"></i>2. 구글 캘린더 만들기 · 직원에게 공유</h3>${setup}`) +
+                card(`<h3 class="font-semibold text-gray-800 mb-3"><i class="fas fa-address-card mr-1.5 text-gray-400"></i>3. 직원 구글 계정 주소</h3>${missBox}`) +
+                `<div class="bg-sky-50 border border-sky-200 rounded-lg p-4 text-xs text-sky-900 leading-relaxed">
+                    <p class="font-semibold mb-1"><i class="fas fa-mobile-screen mr-1"></i>직원이 폰에서 해야 하는 일</p>
+                    <p>① 구글에서 온 <b>캘린더 공유 메일</b>의 링크를 한 번 누릅니다.</p>
+                    <p>② <b>안드로이드</b>: 구글 캘린더 앱 › 왼쪽 메뉴에서 '킹오더' 캘린더에 체크합니다.</p>
+                    <p>③ <b>아이폰</b>: 설정 › 앱 › 캘린더 › 계정 추가 › Google 로 계정을 넣습니다. 캘린더가 안 보이면 폰 브라우저에서 <b>calendar.google.com/calendar/syncselect</b> 에 들어가 체크합니다.</p>
+                    <p class="mt-1 text-sky-700">아이폰 기본 캘린더 앱은 구글에서 <b>15분마다</b> 가져옵니다. 더 빨리 보려면 구글 캘린더 앱을 쓰시면 됩니다.</p>
+                </div>`;
+        }
+
+        // 연결 시작 — 허용 화면을 새 창으로 열고, 끝날 때까지 상태를 다시 확인합니다
+        async function gcalConnect() {
+            if (gcalBusy) return;
+            gcalBusy = 'connect'; drawGcalAdmin();
+            try {
+                const r = await kobAuth.call('/api/calendar/connect', {});
+                const win = window.open(r.url, 'kob-gcal', 'width=520,height=680');
+                if (!win) { alert('팝업이 막혀 있습니다. 브라우저 주소창 오른쪽의 팝업 차단을 풀고 다시 눌러 주세요.'); return; }
+                if (gcalWatch) clearInterval(gcalWatch);
+                let tries = 0;
+                gcalWatch = setInterval(async () => {
+                    tries++;
+                    await loadGcalStatus();
+                    if ((gcalStatus && gcalStatus.connected) || tries > 60) { clearInterval(gcalWatch); gcalWatch = null; }
+                }, 3000);
+            } catch (e) {
+                alert('연결을 시작하지 못했습니다.\n' + String((e && e.message) || e));
+            } finally { gcalBusy = ''; drawGcalAdmin(); }
+        }
+
+        async function gcalDisconnect() {
+            if (gcalBusy) return;
+            if (!confirm('구글 연결을 끊습니다.\n구글에 만든 캘린더와 일정은 그대로 남고, 맞춰 주는 것만 멈춥니다.\n\n계속할까요?')) return;
+            gcalBusy = 'disconnect'; drawGcalAdmin();
+            try { await kobAuth.call('/api/calendar/disconnect', {}); }
+            catch (e) { alert('연결을 끊지 못했습니다.\n' + String((e && e.message) || e)); }
+            gcalBusy = ''; await loadGcalStatus();
+        }
+
+        // 캘린더 만들기 · 공유하기 — 남은 것이 있으면 다시 누르면 이어서 합니다
+        async function gcalSetup() {
+            if (gcalBusy) return;
+            gcalBusy = 'setup'; drawGcalAdmin();
+            let r = null, err = '';
+            try { r = await kobAuth.call('/api/calendar/setup', { limit: 25 }); }
+            catch (e) { err = String((e && e.message) || e); }
+            gcalBusy = '';
+            await loadGcalStatus();
+            const out = document.getElementById('gcal-setup-result');
+            if (!out) return;
+            if (err) { out.innerHTML = `<p class="text-sm text-red-600"><i class="fas fa-triangle-exclamation mr-1"></i>${escapeHtml(err)}</p>`; return; }
+            const line = (t, n, cls) => n ? `<p class="text-sm ${cls}">${t} <b>${n}</b>건</p>` : '';
+            out.innerHTML =
+                line('새로 만든 캘린더', (r.made || []).length, 'text-emerald-700') +
+                line('새로 공유한 사람', (r.shared || []).length, 'text-emerald-700') +
+                ((r.failed || []).length ? `<p class="text-sm text-red-600 mt-1">실패 ${r.failed.length}건 — ${escapeHtml(r.failed[0].error)}</p>` : '') +
+                (r.remaining ? `<p class="text-sm text-amber-700 mt-1"><i class="fas fa-circle-info mr-1"></i>아직 <b>${r.remaining}</b>개 남았습니다. 버튼을 한 번 더 눌러 주세요.</p>`
+                             : `<p class="text-sm text-emerald-700 mt-1"><i class="fas fa-circle-check mr-1"></i>준비가 끝났습니다. 직원들에게 구글 공유 메일이 갔습니다.</p>`);
+        }
+
         const ADMIN_TABS = [
             {
                 id: 'users', name: '사용자 관리', icon: 'fa-users', panel: 'sec-users', perm: 'users',
@@ -38687,6 +38851,12 @@ const QUOTE_TEMPLATES = [
                 id: 'partner-ids', name: '파트너 ID 관리', icon: 'fa-id-card', panel: 'sec-partner-ids', perm: 'partner-ids',
                 desc: '파트너센터 로그인 아이디를 만들고 사용/중지하며, 아이디마다 메뉴별 접근 권한을 정합니다. 아이디는 등록된 파트너사(개인 가맹점 · 프랜차이즈 본사/가맹점 포함)에 붙습니다.',
                 render: () => renderPartnerIdAdmin()
+            },
+            {
+                // 2026-09-23 — 폰 캘린더 연동. 사람(구글 주소)을 다루므로 사용자 관리 권한을 따릅니다.
+                id: 'gcal', name: '구글 캘린더 연동', icon: 'fa-calendar-check', panel: 'sec-gcal', perm: 'users',
+                desc: '그룹웨어 일정캘린더를 직원 폰 캘린더와 양쪽으로 맞춥니다. 회사 구글 계정 하나를 연결하고, 직원의 구글 주소로 캘린더를 공유합니다.',
+                render: () => renderGcalAdmin()
             },
             {
                 id: 'card-perm', name: '법인카드 조회 권한', icon: 'fa-credit-card', panel: 'sec-card-perm', perm: 'card-perm',

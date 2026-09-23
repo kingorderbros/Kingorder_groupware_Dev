@@ -97,7 +97,9 @@
         },
         async remove(email) { const o = readLocal(); delete o[norm(email)]; writeLocal(o); },
         async signOut() { localSession = null; },
-        async recovery() { return false; }
+        async recovery() { return false; },
+        // 서버(/api)가 있어야 하는 기능 — 로컬 모드에서는 쓸 수 없습니다
+        async call() { throw new Error('이 기능은 Supabase 설정(config/app-config.js)이 있어야 씁니다.'); }
     };
 
     // ---------- Supabase 모드 ----------
@@ -122,6 +124,8 @@
         },
         bootstrap: (email) => api('/api/auth/bootstrap', { email }),
         setTemp: (email, name) => api('/api/auth/users', { email, name }),
+        // 관리자 토큰을 붙여 서버를 부르는 통로 — 구글 캘린더 연동(/api/calendar/*)이 씁니다
+        call: (path, body, method) => api(path, body, method),
         async signIn(email, pw) {
             const { data, error } = await client().auth.signInWithPassword({ email: norm(email), password: String(pw) });
             if (error) {
@@ -190,6 +194,7 @@
         rename: (oldEmail, newEmail, name) => pick().rename(oldEmail, newEmail, name),
         remove: (email) => pick().remove(email),
         signOut: () => pick().signOut(),
-        recovery: () => pick().recovery()
+        recovery: () => pick().recovery(),
+        call: (path, body, method) => pick().call(path, body, method)
     };
 })();

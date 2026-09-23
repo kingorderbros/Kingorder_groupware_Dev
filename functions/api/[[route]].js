@@ -24,7 +24,18 @@
  *   DELETE /api/auth/users       { email }             계정 삭제
  *   bootstrap · status 를 뺀 나머지는 **관리자 그룹 로그인 토큰**(Authorization: Bearer) 이 있어야 합니다.
  *   임시 비밀번호로 만든 계정은 user_metadata.must_change_password = true 라 첫 로그인 때 바꾸게 됩니다.
+ *
+ * 구글 캘린더 연동 (2026-09-23 · 자세한 것은 _gcal.js)
+ *   GET  /api/calendar/callback    구글이 허용을 마치고 되돌아오는 곳 (로그인 토큰 없음 — state 로 확인)
+ *   GET  /api/calendar/status      연결 상태 · 캘린더 준비 정도 · 구글 주소가 없는 직원
+ *   POST /api/calendar/connect     허용 화면 주소 만들기 → 화면이 새 창으로 엽니다
+ *   POST /api/calendar/disconnect  연결 끊기 (구글의 캘린더·일정은 그대로 둡니다)
+ *   POST /api/calendar/setup       캘린더 만들기 · 직원에게 공유 — { limit } 만큼씩 나눠서
+ *   callback 을 뺀 나머지는 관리자만 (requireAdmin).
+ *   환경변수 GOOGLE_CLIENT_ID · GOOGLE_CLIENT_SECRET 이 더 필요합니다.
  */
+
+import * as gcal from './_gcal.js';
 
 const ACTIVE_RESERVE_STATUSES = ['신청완료', '승인대기중', '승인완료', '반납요청'];
 const num = (v) => (v === '' || v === null || v === undefined ? 0 : Number(v) || 0);
@@ -97,7 +108,51 @@ function tempPassword() {
     if (!/[A-Za-z]/.test(pw)) pw = 'k' + pw.slice(1);
     return pw;
 }
+// 관리자 그룹 · 소속없는 관리자 · 직책 관리자 · 겸직 관리자 — /api/auth/users 와 같은 기준 (2026-09-21)
+async function requireAdmin(env, store, request) {
+    const me = await authAdmin(env).whoami(request);
+    if (!me) return { error: json(401, { ok: false, error: '로그인이 필요합니다.' }) };
+    const users = (await store.storeValue('gwUsers.v1')) || [];
+    const rec = (Array.isArray(users) ? users : []).find(u => str(u.email).toLowerCase() === str(me.email).toLowerCase());
+    const ok = rec && (rec.groupId === 'admin' || rec.dept === 'admin' || rec.level === 'admin' || rec.isAdmin === true);
+    if (!ok) return { error: json(403, { ok: false, error: '관리자만 할 수 있습니다.' }) };
+    return { me, rec, users: Array.isArray(users) ? users : [] };
+}
+
 const validEmail = (e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(str(e));
+
+const escapeForHtml = (v) => str(v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+// 구글에 있어야 할 캘린더 목록을 셉니다 — 화면의 CALENDARS 구성과 같은 축입니다.
+//   공유 3종(전사 · 영업진행 · 설치A/S) + 부서마다 1개 + 구글 주소가 있는 직원마다 1개
+const GCAL_HIDDEN_DEPTS = ['vendor', 'admin', 'company'];
+const googleAddrOf = (u) => str(u && u.googleEmail).toLowerCase();
+function calendarPlan(users, depts) {
+    const people = (users || []).filter(u => str(u.dept) !== 'vendor');
+    const everyone = people.map(googleAddrOf).filter(Boolean);
+    const missingGoogle = people.filter(u => !googleAddrOf(u)).map(u => ({ name: str(u.name), email: str(u.email) }));
+    const wanted = [
+        { key: 'cal:company', kind: 'company', label: '킹오더 전사일정', shareTo: everyone },
+        { key: 'cal:sales-share', kind: 'sales-share', label: '킹오더 영업일정·진행상황', shareTo: everyone },
+        { key: 'cal:install-as', kind: 'install-as', label: '킹오더 설치·A/S 일정', shareTo: everyone }
+    ];
+    (depts || []).filter(d => !GCAL_HIDDEN_DEPTS.includes(str(d.id))).forEach(d => {
+        wanted.push({
+            key: 'cal:team:' + str(d.id), kind: 'team', dept: str(d.id),
+            label: '킹오더 ' + str(d.name) + ' 일정',
+            shareTo: people.filter(u => str(u.dept) === str(d.id)).map(googleAddrOf).filter(Boolean)
+        });
+    });
+    people.forEach(u => {
+        const addr = googleAddrOf(u);
+        if (!addr) return;
+        wanted.push({
+            key: 'cal:personal:' + str(u.email).toLowerCase(), kind: 'personal', member: str(u.email).toLowerCase(),
+            label: '킹오더 일정 – ' + str(u.name), shareTo: [addr]
+        });
+    });
+    return { wanted, missingGoogle };
+}
 
 const nextId = (rows, prefix, width) => {
     const max = rows.reduce((m, r) => Math.max(m, parseInt(String(r.id).replace(/\D/g, ''), 10) || 0), 0);
@@ -202,6 +257,140 @@ export async function onRequest(context) {
                     return json(200, { ok: true, existed: !!existing });
                 }
             }
+            return json(404, { ok: false, error: '없는 주소입니다: ' + path });
+        }
+
+        // ---------- 구글 캘린더 연동 (2026-09-23) ----------
+        if (path.startsWith('/api/calendar/')) {
+            const g = gcal.gcalStore(env);
+
+            // 구글이 허용을 마치고 되돌아오는 곳 — 로그인 토큰이 없으므로 state 로 확인합니다
+            if (path === '/api/calendar/callback' && method === 'GET') {
+                const page = (title, msg, ok) => new Response(
+                    `<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>${title}</title>` +
+                    `<meta name="viewport" content="width=device-width,initial-scale=1">` +
+                    `<style>body{font-family:-apple-system,'Apple SD Gothic Neo','Malgun Gothic',sans-serif;padding:40px;text-align:center;color:#1f2937}` +
+                    `h1{font-size:20px;margin:0 0 12px}p{color:#6b7280;line-height:1.7}` +
+                    `.m{font-size:48px}b{color:${ok ? '#059669' : '#dc2626'}}</style></head>` +
+                    `<body><div class="m">${ok ? '&#9989;' : '&#9888;&#65039;'}</div><h1><b>${title}</b></h1><p>${msg}</p>` +
+                    `<p><button onclick="window.close()" style="padding:10px 20px;font-size:15px;border:1px solid #d1d5db;border-radius:8px;background:#fff;cursor:pointer">창 닫기</button></p>` +
+                    `</body></html>`,
+                    { status: ok ? 200 : 400, headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' } });
+
+                const err = url.searchParams.get('error');
+                if (err) return page('연결하지 못했습니다', `구글에서 허용하지 않았습니다 (${escapeForHtml(err)}). 그룹웨어에서 다시 눌러 주세요.`, false);
+                const code = str(url.searchParams.get('code'));
+                const state = str(url.searchParams.get('state'));
+                if (!code || !state) return page('연결하지 못했습니다', '필요한 값이 오지 않았습니다. 그룹웨어에서 다시 눌러 주세요.', false);
+
+                const saved = await g.takeState();
+                if (!saved || saved.refresh_token !== state) return page('연결하지 못했습니다', '연결 요청을 확인하지 못했습니다. 그룹웨어에서 다시 눌러 주세요.', false);
+                if (Date.now() - new Date(saved.connected_at).getTime() > 10 * 60 * 1000) return page('시간이 지났습니다', '연결 요청은 10분 안에 끝내야 합니다. 그룹웨어에서 다시 눌러 주세요.', false);
+
+                let tok;
+                try { tok = await gcal.exchangeCode(env, gcal.redirectUriOf(request), code); }
+                catch (e) { return page('연결하지 못했습니다', escapeForHtml(e.message), false); }
+                if (!tok.refresh_token) return page('연결하지 못했습니다', '구글이 다시 들어갈 증서를 주지 않았습니다. 구글 계정 › 보안 › 서드파티 앱에서 이 앱의 권한을 지운 뒤 다시 시도해 주세요.', false);
+
+                // 어느 계정으로 허용했는지 확인합니다
+                let who = '';
+                try {
+                    const r = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', { headers: { Authorization: `Bearer ${tok.access_token}` } });
+                    if (r.ok) who = str((await r.json()).email);
+                } catch (e) { /* 주소를 못 읽어도 연결 자체는 됩니다 */ }
+
+                await g.saveAccount({ google_email: who, refresh_token: tok.refresh_token, scope: str(tok.scope), connected_by: str(saved.connected_by), connected_at: new Date().toISOString(), last_error: null });
+                gcal.forgetToken();
+                return page('구글 캘린더에 연결되었습니다', `${escapeForHtml(who || '구글 계정')} 으로 연결했습니다. 이 창을 닫고 그룹웨어로 돌아가 주세요.`, true);
+            }
+
+            // 여기부터는 관리자만
+            const who = await requireAdmin(env, store, request);
+            if (who.error) return who.error;
+
+            // 지금 상태 — 연결 여부 · 캘린더 몇 개 준비됐는지 · 구글 주소가 없는 직원
+            if (path === '/api/calendar/status' && method === 'GET') {
+                const acc = await g.account();
+                const cals = (await g.calendars()) || [];
+                const plan = calendarPlan(who.users, (await store.storeValue('gwOrgDepts.v1')) || []);
+                const madeKeys = new Set(cals.filter(c => c.google_calendar_id).map(c => c.key));
+                return json(200, {
+                    ok: true,
+                    configured: !!str(env.GOOGLE_CLIENT_ID),
+                    connected: !!(acc && acc.refresh_token),
+                    googleEmail: acc ? str(acc.google_email) : '',
+                    connectedAt: acc ? acc.connected_at : null,
+                    lastError: acc ? acc.last_error : null,
+                    calendars: cals.map(c => ({ key: c.key, kind: c.kind, label: c.label, ready: !!c.google_calendar_id, shareState: c.share_state, error: c.last_error })),
+                    planned: plan.wanted.length,
+                    ready: plan.wanted.filter(w => madeKeys.has(w.key)).length,
+                    missingGoogle: plan.missingGoogle
+                });
+            }
+
+            // 연결 시작 — 허용 화면 주소를 만들어 돌려줍니다 (화면이 새 창으로 엽니다)
+            if (path === '/api/calendar/connect' && method === 'POST') {
+                if (!str(env.GOOGLE_CLIENT_ID) || !str(env.GOOGLE_CLIENT_SECRET)) {
+                    return json(500, { ok: false, error: 'GOOGLE_CLIENT_ID · GOOGLE_CLIENT_SECRET 환경변수가 아직 없습니다. Cloudflare 설정에 넣어 주세요.' });
+                }
+                const state = crypto.randomUUID();
+                await g.saveState(state, str(who.me.email));
+                return json(200, { ok: true, url: gcal.oauthUrl(env, gcal.redirectUriOf(request), state), redirectUri: gcal.redirectUriOf(request) });
+            }
+
+            // 연결 끊기 — 증서만 지웁니다. 구글에 만든 캘린더와 일정은 그대로 둡니다.
+            if (path === '/api/calendar/disconnect' && method === 'POST') {
+                await g.clearAccount();
+                gcal.forgetToken();
+                return json(200, { ok: true });
+            }
+
+            // 캘린더 만들기 · 직원에게 공유하기 — 한 번에 다 하지 않고 나눠서 합니다
+            if (path === '/api/calendar/setup' && method === 'POST') {
+                const input = await body();
+                const budget = Math.min(Math.max(parseInt(input.limit, 10) || 25, 1), 60);
+                const depts = (await store.storeValue('gwOrgDepts.v1')) || [];
+                const plan = calendarPlan(who.users, depts);
+                const existing = new Map(((await g.calendars()) || []).map(c => [c.key, c]));
+
+                const made = [], shared = [], failed = [];
+                let used = 0, remaining = 0;
+
+                for (const want of plan.wanted) {
+                    if (used >= budget) { remaining++; continue; }
+                    let row = existing.get(want.key);
+                    try {
+                        if (!row || !row.google_calendar_id) {
+                            const cal = await gcal.createCalendar(env, g, want.label, '킹오더브라더스 그룹웨어가 관리하는 캘린더입니다. 그룹웨어 일정캘린더와 양쪽으로 맞춰집니다.');
+                            used++;
+                            row = { key: want.key, kind: want.kind, label: want.label, dept: want.dept || null, member_email: want.member || null, google_calendar_id: cal.id, share_state: 'none', last_error: null };
+                            await g.saveCalendar(row);
+                            existing.set(want.key, row);
+                            made.push({ key: want.key, label: want.label });
+                        }
+                        // 공유 — 이미 공유된 사람은 건너뜁니다
+                        if (used < budget && want.shareTo.length) {
+                            const acl = await gcal.listAcl(env, g, row.google_calendar_id);
+                            used++;
+                            const have = new Set(((acl && acl.items) || []).map(i => str(i.scope && i.scope.value).toLowerCase()));
+                            for (const em of want.shareTo) {
+                                if (used >= budget) { remaining++; break; }
+                                if (have.has(em.toLowerCase())) continue;
+                                await gcal.shareCalendar(env, g, row.google_calendar_id, em, 'writer');
+                                used++;
+                                shared.push({ key: want.key, email: em });
+                            }
+                            await g.saveCalendar({ key: want.key, share_state: 'ok', last_error: null });
+                        }
+                    } catch (e) {
+                        if (e.code === 'not-connected') return json(409, { ok: false, error: '먼저 [구글 캘린더 연결] 을 눌러 주세요.' });
+                        failed.push({ key: want.key, error: e.message });
+                        try { await g.saveCalendar({ key: want.key, kind: want.kind, label: want.label, last_error: e.message }); } catch (e2) { /* 기록 실패는 넘어갑니다 */ }
+                    }
+                }
+                return json(200, { ok: true, made, shared, failed, remaining, missingGoogle: plan.missingGoogle, done: remaining === 0 && !failed.length });
+            }
+
             return json(404, { ok: false, error: '없는 주소입니다: ' + path });
         }
 
