@@ -65,6 +65,10 @@ export function gcalStore(env) {
         calendars: () => call('GET', 'gcal_calendars?select=*&order=key.asc'),
         calendar: (k) => one(`gcal_calendars?select=*&key=eq.${encodeURIComponent(k)}`),
         saveCalendar: (row) => put('gcal_calendars', Object.assign({ updated_at: new Date().toISOString() }, row)),
+        // 이미 있는 줄의 몇 칸만 고칩니다.
+        // 넣기(upsert)로 하면 안 적은 칸이 null 로 들어가 kind 같은 필수 칸에서 막힙니다(2026-09-23 겪음).
+        patchCalendar: (k, row) => call('PATCH', `gcal_calendars?key=eq.${encodeURIComponent(k)}`,
+            Object.assign({ updated_at: new Date().toISOString() }, row), { Prefer: 'return=minimal' }),
         dropCalendar: (k) => call('DELETE', `gcal_calendars?key=eq.${encodeURIComponent(k)}`, undefined, { Prefer: 'return=minimal' }),
 
         // ---- 일정 짝 ----

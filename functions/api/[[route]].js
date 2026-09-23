@@ -412,7 +412,7 @@ export async function onRequest(context) {
                                 used++;
                                 shared.push({ key: want.key, email: em });
                             }
-                            await g.saveCalendar({ key: want.key, share_state: 'ok', last_error: null });
+                            await g.patchCalendar(want.key, { share_state: 'ok', last_error: null });
                         }
                     } catch (e) {
                         if (e.code === 'not-connected') return json(409, { ok: false, error: '먼저 [구글 캘린더 연결] 을 눌러 주세요.' });

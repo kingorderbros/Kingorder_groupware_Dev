@@ -841,3 +841,17 @@ Workspace 요금 없이 갑니다. 무료 구글 계정 `kingorderbrothers@gmail
 - [지금 맞추기] 결과에 '방금 맞췄습니다' · '연결되지 않았습니다' 도 그대로 보여 줍니다.
 
 - 검증: `npm run check` 전체 통과. 화면 코드를 시험하는 vm 에는 `setInterval` 이 없어, 있을 때만 걸도록 했습니다.
+
+## 2026-09-23 — 구글 캘린더 연동 (5) 캘린더 준비에서 나던 오류 고침
+
+**증상** — [구글 캘린더 준비] 에서 `실패 5건` · `23502 null value in column "kind" ... violates not-null constraint`
+
+**원인** — 공유를 마친 뒤 `share_state` 만 고치려고 `saveCalendar({ key, share_state })` 를 불렀는데,
+이 함수는 **넣기(upsert)** 입니다. PostgreSQL 은 넣으려는 줄을 먼저 만들어 보므로 안 적은 칸이 `null` 이 되고,
+`kind` 가 not-null 이라 거기서 막힙니다. 이미 있는 줄의 몇 칸만 고칠 때는 넣기를 쓰면 안 됩니다.
+
+**고침** — `patchCalendar(key, 고칠칸)` 을 새로 두고 그쪽을 쓰게 했습니다. 다른 표(`gcal_account` ·
+`gcal_state` · `gcal_links`)는 필수 칸을 늘 함께 보내거나 기본값이 있어 같은 문제가 없습니다.
+
+**공유 자체는 나갔습니다** — 오류는 공유를 끝낸 뒤 기록을 남기는 단계에서 났습니다.
+다시 [구글 캘린더 준비] 를 누르면 이미 공유된 사람은 건너뛰고 상태만 `ok` 로 바뀝니다.
