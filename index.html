@@ -5777,6 +5777,43 @@
                     </div>
                 </div>
 
+                <!-- 구글 캘린더 앱 쓰는 법 -->
+                <div class="mt-5">
+                    <h4 class="font-semibold text-gray-800 mb-2"><span class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-gray-800 text-white text-xs mr-1.5">3</span>구글 캘린더 앱 쓰는 법</h4>
+                    <p class="text-xs text-gray-500 mb-2">안드로이드에는 이미 깔려 있습니다. <b>아이폰은 App Store 에서 'Google 캘린더' 를 받으시면</b> 기본 캘린더 앱보다 훨씬 빨리(1분 안에) 일정이 보입니다.</p>
+                    <div class="border border-gray-200 rounded p-4 space-y-3 text-sm text-gray-700">
+                        <div>
+                            <p class="font-medium text-gray-800">볼 캘린더 고르기</p>
+                            <p class="text-gray-600">왼쪽 위 <b>줄 세 개(☰)</b> → 아래로 내려 <b>'킹오더' 로 시작하는 캘린더</b>에 체크합니다. 체크를 풀면 그 캘린더 일정이 화면에서 잠시 숨겨집니다(지워지는 것이 아닙니다).</p>
+                        </div>
+                        <div>
+                            <p class="font-medium text-gray-800">일정 만들기</p>
+                            <p class="text-gray-600">오른쪽 아래 <b>+</b> → <b>일정</b> → 제목 · 날짜 · 시간을 적습니다.
+                                <b class="text-emerald-800">저장하기 전에 가운데쯤 있는 캘린더 이름을 눌러 '킹오더 …' 로 바꿔 주세요.</b>
+                                여기가 본인 계정 이름으로 되어 있으면 개인 일정이 되어 그룹웨어로 오지 않습니다.</p>
+                        </div>
+                        <div>
+                            <p class="font-medium text-gray-800">고치기 · 지우기</p>
+                            <p class="text-gray-600">일정을 눌러 연 다음 위쪽 <b>연필</b> 모양으로 고치고, <b>점 세 개(⋮)</b> → <b>삭제</b> 로 지웁니다. 고치거나 지운 것은 1분 안에 그룹웨어에도 그대로 반영됩니다.</p>
+                        </div>
+                        <div>
+                            <p class="font-medium text-gray-800">참석 여부 답하기</p>
+                            <p class="text-gray-600">초대받은 일정을 열면 아래쪽에 <b>참석 · 불참 · 미정</b> 이 있습니다. 누르면 그룹웨어 일정 상세의 참석자 목록에도 바로 표시됩니다.</p>
+                        </div>
+                        <div>
+                            <p class="font-medium text-gray-800">알림 받기</p>
+                            <p class="text-gray-600">일정을 만들 때 <b>알림</b> 을 눌러 시간을 정합니다(예: 10분 전). 폰에서 울리는 알림이라 그룹웨어를 켜 두지 않아도 됩니다.</p>
+                        </div>
+                        <div>
+                            <p class="font-medium text-gray-800">캘린더마다 색 바꾸기</p>
+                            <p class="text-gray-600"><b>☰ → 설정</b> 에서 캘린더를 골라 색을 정할 수 있습니다. 전사 · 본부 · 개인을 색으로 나눠 두면 한눈에 구분됩니다.</p>
+                        </div>
+                        <div class="text-xs text-gray-500 bg-gray-50 border border-gray-200 rounded p-3">
+                            <b>웹에서도 같습니다.</b> PC 브라우저로 <span class="font-mono select-all">calendar.google.com</span> 에 같은 계정으로 들어가면 폰과 똑같이 보이고, 거기서 고친 것도 그룹웨어에 반영됩니다.
+                        </div>
+                    </div>
+                </div>
+
                 <!-- 자주 묻는 것 -->
                 <div class="mt-5 pt-4 border-t border-gray-200">
                     <h4 class="font-semibold text-gray-800 mb-2">자주 겪는 일</h4>
@@ -7719,6 +7756,14 @@
                             <div>
                                 <label class="block text-xs font-medium text-gray-600 mb-1">비고</label>
                                 <textarea id="org-edit-note" rows="2" class="w-full p-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="조직도에 함께 보여 줄 참고사항"></textarea>
+                            </div>
+                            <div>
+                                <label class="inline-flex items-start gap-2 text-sm text-gray-700 cursor-pointer">
+                                    <input type="checkbox" id="org-edit-hide-org" class="w-4 h-4 mt-0.5 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500">
+                                    <span><b>조직도에 표시하지 않음</b>
+                                        <span class="block text-xs text-gray-400 mt-0.5">계정만 만들고 조직도에는 내보내지 않습니다. 사용자 목록 · 담당자 고르기 · 참석자 고르기에는 그대로 나오고, 로그인도 됩니다.</span>
+                                    </span>
+                                </label>
                             </div>
                         </div>
                     </div>
@@ -12807,7 +12852,7 @@ const QUOTE_TEMPLATES = [
                 return `
                     <tr class="border-b border-gray-100 hover:bg-gray-50 cursor-pointer" onclick="openOrgEdit('${escapeHtml(user.id)}')">
                         <td class="p-4 font-medium">
-                            <div class="flex items-center gap-2">${orgAvatarHtml(user)}<span>${escapeHtml(user.name)}</span></div>
+                            <div class="flex items-center gap-2">${orgAvatarHtml(user)}<span>${escapeHtml(user.name)}</span>${user.hideInOrg === true ? '<span class="px-1.5 py-0.5 bg-gray-200 text-gray-600 rounded text-[11px] whitespace-nowrap" title="이 사람은 조직도에 나오지 않습니다"><i class="fas fa-eye-slash mr-0.5"></i>조직도 제외</span>' : ''}</div>
                         </td>
                         <td class="p-4"><span class="px-2 py-1 ${st.chip} rounded-full text-xs">${escapeHtml(orgDeptName(user.dept))}</span></td>
                         <td class="p-4 bg-rose-50/30 ${team ? '' : 'text-gray-300'}">${team ? escapeHtml(team) : '미지정'}</td>
@@ -34598,7 +34643,11 @@ const QUOTE_TEMPLATES = [
         // 관리자는 실제 직책과 겸직인 계정이라, 조직도에는 실제 직책의 계정만 나옵니다.
         // 사람 고르기(담당자 · 참석자 · 카드 소유자)와 사용자/권한관리 목록에는 그대로 나옵니다.
         function isOrgAdminAccount(u) { return !!u && (u.groupId === 'admin' || u.level === 'admin'); }
-        function orgChartMembers() { return orgMembers().filter(u => !isOrgAdminAccount(u)); }
+        // 구성원 창에서 [조직도에 표시하지 않음] 을 켠 사람도 뺍니다 (2026-09-23).
+        // 계정은 그대로 살아 있어 로그인 · 사용자 목록 · 사람 고르기(담당자 · 참석자 · 카드 소유자)에는 나옵니다.
+        // 본부를 지울 수 있는지 볼 때는 orgMembers() 를 그대로 쓰므로, 숨긴 사람이 있으면 그 본부는 지워지지 않습니다.
+        function isOrgHidden(u) { return !!u && u.hideInOrg === true; }
+        function orgChartMembers() { return orgMembers().filter(u => !isOrgAdminAccount(u) && !isOrgHidden(u)); }
         function orgFindAccount(id) { return orgAccounts().find(u => u.id === id) || null; }
         function orgFiltered() {
             const norm = v => String(v || '').replace(/\s+/g, '').toLowerCase();
@@ -35590,6 +35639,8 @@ const QUOTE_TEMPLATES = [
             onOrgEditDeptChange(teamValue);
             const adminChk = document.getElementById('org-edit-admin');
             if (adminChk) adminChk.checked = !!(u && u.isAdmin === true);
+            const hideChk = document.getElementById('org-edit-hide-org');
+            if (hideChk) hideChk.checked = !!(u && u.hideInOrg === true);
             onOrgEditAdminChange();          // 관리자면 부서 · 직급 · 팀을 선택 사항으로 (2026-09-21)
             document.getElementById('org-edit-modal').classList.remove('hidden');
         }
@@ -35621,7 +35672,8 @@ const QUOTE_TEMPLATES = [
                 note: v('note'),
                 level: v('level') || 'manager',
                 groupId: v('group') || 'sales',
-                isAdmin: !!((document.getElementById('org-edit-admin') || {}).checked)   // 겸직 관리자 (2026-09-21)
+                isAdmin: !!((document.getElementById('org-edit-admin') || {}).checked),   // 겸직 관리자 (2026-09-21)
+                hideInOrg: !!((document.getElementById('org-edit-hide-org') || {}).checked)   // 조직도에 안 내보내기 (2026-09-23)
             };
             let created = null, oldEmail = '';
             if (orgEditId) {
