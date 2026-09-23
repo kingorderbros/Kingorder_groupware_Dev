@@ -3099,6 +3099,9 @@
                             <p class="text-gray-500 text-sm">개인 · 팀별 · 공유 캘린더를 한 곳에서 봅니다. <span id="calendar-scope-label" class="text-sky-600 font-medium"></span></p>
                         </div>
                         <div class="flex items-center flex-wrap gap-2">
+                            <button onclick="openPhoneSyncHelp()" class="bg-white border border-emerald-300 text-emerald-700 hover:bg-emerald-50 px-3 py-1.5 rounded text-sm transition-colors whitespace-nowrap">
+                                <i class="fas fa-mobile-screen-button mr-1"></i>휴대폰 연동 방법
+                            </button>
                             <select id="calendar-filter-cal" onchange="renderCalendar()" class="py-1.5 px-3 text-sm border border-gray-300 rounded text-gray-700 bg-gray-50 cursor-pointer">
                                 <option value="">전체 캘린더</option>
                                 <!-- JS 동적 렌더링 (CALENDARS) -->
@@ -3114,9 +3117,6 @@
                             </select>
                             <button id="calendar-type-manage-btn" onclick="openScheduleTypeModal(document.getElementById('calendar-filter-dept').value)" class="hidden bg-gray-500 hover:bg-gray-600 text-white px-3 py-1.5 rounded text-sm transition-colors whitespace-nowrap">
                                 <i class="fas fa-sliders mr-1"></i>구분 관리
-                            </button>
-                            <button onclick="openPhoneSyncHelp()" class="bg-white border border-emerald-300 text-emerald-700 hover:bg-emerald-50 px-3 py-1.5 rounded text-sm transition-colors whitespace-nowrap">
-                                <i class="fas fa-mobile-screen-button mr-1"></i>휴대폰 연동 방법
                             </button>
                             <button onclick="openScheduleModal()" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded text-sm transition-colors">+ 일정 등록</button>
                         </div>
