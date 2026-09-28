@@ -3129,8 +3129,6 @@
                             <button onclick="openPhoneSyncHelp()" class="bg-white border border-emerald-300 text-emerald-700 hover:bg-emerald-50 px-3 py-1.5 rounded text-sm transition-colors whitespace-nowrap">
                                 <i class="fas fa-mobile-screen-button mr-1"></i>휴대폰 연동 방법
                             </button>
-                            <button type="button" id="calendar-bday-toggle" onclick="toggleCalendarBirthdays()" aria-pressed="true" title="전사일정의 구성원 생일을 보이거나 숨깁니다 (이 브라우저에만 기억)"
-                                    class="px-3 py-1.5 rounded text-sm border transition-colors whitespace-nowrap"></button>
                             <select id="calendar-filter-cal" onchange="renderCalendar()" class="py-1.5 px-3 text-sm border border-gray-300 rounded text-gray-700 bg-gray-50 cursor-pointer">
                                 <option value="">전체 캘린더</option>
                                 <!-- JS 동적 렌더링 (CALENDARS) -->
@@ -7775,7 +7773,7 @@
                                     <p class="text-[11px] text-gray-400 mt-1">조직도 카드에 <b>월·일</b>로 표시됩니다.</p>
                                     <label class="mt-1.5 inline-flex items-center gap-1.5 text-xs text-gray-700 cursor-pointer">
                                         <input type="checkbox" id="org-edit-show-birthday" class="w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500" checked>
-                                        캘린더(전사일정)에 생일 표시
+                                        캘린더(생일)에 생일 표시
                                     </label>
                                 </div>
                             </div>
@@ -16055,8 +16053,17 @@ const QUOTE_TEMPLATES = [
                 id: 'company', name: '전사일정', short: '전사', icon: 'fa-building-flag', share: 'all', progress: false,
                 dot: 'bg-rose-500', chip: 'bg-rose-100 text-rose-800', text: 'text-rose-600', swatch: 'bg-rose-500',
                 desc: '창립기념일·전사 회의·워크숍 등 전 직원이 함께 보는 회사 공식 일정입니다.'
+            },
+            {
+                // 구성원 생일 (2026-09-28) — 구성원 정보의 생일로 자동으로 채워집니다. 직접 등록하는 캘린더가 아닙니다(auto).
+                id: 'birthday', name: '생일', short: '생일', icon: 'fa-cake-candles', share: 'all', progress: false, auto: true,
+                dot: 'bg-pink-500', chip: 'bg-pink-100 text-pink-800', text: 'text-pink-600', swatch: 'bg-pink-500',
+                desc: '구성원 정보에 넣은 생일이 해마다 자동으로 표시됩니다. 생일은 조직도 관리 › 구성원 정보에서 바꿉니다.'
             }
         ];
+        // 일정을 직접 등록할 때 고를 수 있는 캘린더 — 자동으로 채워지는 캘린더(생일)는 뺍니다
+        function writableCalendars() { return CALENDARS.filter(c => !c.auto); }
+        const BIRTHDAY_CALENDAR_ID = 'birthday';
         const DEFAULT_CALENDAR_ID = 'team';
         // 전사일정은 부서를 이 값으로 고정하고, 같은 이름의 전용 구분 목록을 씁니다.
         const COMPANY_CALENDAR_ID = 'company';
@@ -16336,30 +16343,11 @@ const QUOTE_TEMPLATES = [
         // 조회 범위에 따라 볼 수 있는 일정 목록. scopeInfo = { scope, depts }
         // 구성원 생일(전사일정)도 함께 넣습니다 (2026-09-28).
         function getVisibleSchedules(scopeInfo) {
-            return schedules.filter(s => canViewSchedule(s, scopeInfo)).concat(calendarShowBirthdays() ? birthdaySchedules() : []);
-        }
-        // 일정캘린더 위 [생일] 켜기/끄기 — 보는 사람마다 이 브라우저에 기억합니다 (2026-09-28)
-        const CAL_BDAY_KEY = 'gwCalShowBirthday';
-        function calendarShowBirthdays() {
-            try { return kobStorage.getItem(CAL_BDAY_KEY) !== '0'; } catch (e) { return true; }
-        }
-        function paintCalendarBirthdayToggle() {
-            const b = document.getElementById('calendar-bday-toggle');
-            if (!b) return;
-            const on = calendarShowBirthdays();
-            b.setAttribute('aria-pressed', on ? 'true' : 'false');
-            b.className = 'px-3 py-1.5 rounded text-sm border transition-colors whitespace-nowrap '
-                + (on ? 'bg-rose-50 border-rose-300 text-rose-700 hover:bg-rose-100' : 'bg-white border-gray-300 text-gray-400 hover:bg-gray-50');
-            b.innerHTML = `<i class="fas fa-cake-candles mr-1"></i>생일 ${on ? '표시' : '숨김'}`;
-        }
-        function toggleCalendarBirthdays() {
-            try { kobStorage.setItem(CAL_BDAY_KEY, calendarShowBirthdays() ? '0' : '1'); } catch (e) { /* 저장이 막혀 있으면 이번 화면에서만 */ }
-            paintCalendarBirthdayToggle();
-            renderCalendar();
+            return schedules.filter(s => canViewSchedule(s, scopeInfo)).concat(birthdaySchedules());
         }
 
         // ---------- 구성원 생일 → 전사일정 (2026-09-28) ----------
-        // 조직도 관리 › 구성원 정보의 '생일' 을 읽어 **해마다 그날** 전사일정에 보여 줍니다.
+        // 조직도 관리 › 구성원 정보의 '생일' 을 읽어 **해마다 그날** '생일' 캘린더에 보여 줍니다(처음엔 전사일정 → 별도 캘린더로).
         //   · 저장하지 않고 그때그때 만듭니다 → 생일을 고치거나 지우면 곧바로 따라가고, 해마다 다시 만들 일이 없습니다
         //   · 그래서 수정 · 삭제할 수 없고(생일은 구성원 정보에서 고칩니다), 구글 캘린더(폰)로는 가지 않습니다
         //   · 생일을 넣은 사람은 모두 나옵니다 — 소속 없는 관리자 계정 · [조직도에 표시하지 않음] 도 포함 (2026-09-28 고침:
@@ -16384,7 +16372,7 @@ const QUOTE_TEMPLATES = [
                     out.push({
                         id: `${BIRTHDAY_ID_PREFIX}${u.id || u.email}:${y}`, birthday: true, userName: u.name,
                         title: `🎂 ${u.name} 생일`, date, allDay: true, startTime: '', endTime: '',
-                        calendar: COMPANY_CALENDAR_ID, dept: COMPANY_DEPT, type: '', progress: '', reminder: 'none',
+                        calendar: BIRTHDAY_CALENDAR_ID, dept: COMPANY_DEPT, type: '', progress: '', reminder: 'none',
                         salesperson: u.name, description: `${u.name}${u.rank ? ' ' + u.rank : ''} 님의 생일입니다. (${orgBirthdayText(u)})`,
                         attendees: []
                     });
@@ -16688,7 +16676,7 @@ const QUOTE_TEMPLATES = [
 
             // 캘린더 — 기존 일정이 있으면 그 값, 없으면 팀별 캘린더를 기본으로
             const calSel = document.getElementById('wsch-calendar');
-            calSel.innerHTML = CALENDARS.map(c => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.name)}</option>`).join('');
+            calSel.innerHTML = writableCalendars().map(c => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.name)}</option>`).join('');
             calSel.value = sch ? scheduleCalendarId(sch) : DEFAULT_CALENDAR_ID;
 
             document.getElementById('wsch-title').value = sch ? sch.title : src.title;
@@ -16878,7 +16866,6 @@ const QUOTE_TEMPLATES = [
         }
 
         function renderCalendar() {
-            paintCalendarBirthdayToggle();
             const grid = document.getElementById('cal-grid');
             const monthYearText = document.getElementById('cal-month-year');
             const dayHeader = document.getElementById('cal-day-header');
@@ -17174,8 +17161,8 @@ const QUOTE_TEMPLATES = [
 
         function fillScheduleCalendarSelect(selected) {
             const sel = document.getElementById('schedule-calendar');
-            sel.innerHTML = CALENDARS.map(c => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.name)}</option>`).join('');
-            sel.value = CALENDARS.some(c => c.id === selected) ? selected : DEFAULT_CALENDAR_ID;
+            sel.innerHTML = writableCalendars().map(c => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.name)}</option>`).join('');
+            sel.value = writableCalendars().some(c => c.id === selected) ? selected : DEFAULT_CALENDAR_ID;
             return sel.value;
         }
 
@@ -25536,7 +25523,7 @@ const QUOTE_TEMPLATES = [
             const calSel = wcEl(key, 'intake-cal-id');
             if (!calSel) return;
             if (calSel.dataset.filled !== '1') {
-                calSel.innerHTML = CALENDARS.map(c => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.name)}</option>`).join('');
+                calSel.innerHTML = writableCalendars().map(c => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.name)}</option>`).join('');
                 calSel.value = DEFAULT_CALENDAR_ID;
                 calSel.dataset.filled = '1';
             }
