@@ -175,7 +175,8 @@
         },
         rename: (oldEmail, newEmail, name) => api('/api/auth/users', { email: oldEmail, newEmail, name }, 'PATCH'),
         remove: (email) => api('/api/auth/users', { email }, 'DELETE'),
-        async signOut() { try { await client().auth.signOut(); } catch (e) { /* 이미 끝난 세션 */ } },
+        // 이 기기만 로그아웃합니다(scope local) — 기본값(global)은 폰 · 다른 PC 의 로그인까지 모두 끊습니다 (2026-09-28 검토)
+        async signOut() { window.__kobLoggingOut = true; try { await client().auth.signOut({ scope: 'local' }); } catch (e) { /* 이미 끝난 세션 */ } },
         // 로그인 창의 아이디 → 이메일 — 서버가 찾습니다 (직원 목록을 로그인 전에 받지 않도록 · 2026-09-28)
         async lookup(id) {
             let r;

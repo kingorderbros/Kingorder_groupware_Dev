@@ -102,6 +102,10 @@ export const ALL_KEYS = SHARED_KEYS.concat(OWN_KEYS);
 export const WRITE_KEYS = ['gwPartnerIntakes.v1', 'gwDevRequests.v1', 'gwDevNotiQueue.v1', 'gwInboundRecords.v1'];
 
 const arr = (v) => (Array.isArray(v) ? v : []);
+// 인바운드(gwInboundRecords.v1)는 목록이 아니라 { seq, records } 묶음으로 저장됩니다 (2026-09-28 검토에서 발견).
+// 이 키는 records 를 목록으로 다루고, seq(다음 번호)는 그대로 지니고 다닙니다.
+const WRAPPED_KEYS = ['gwInboundRecords.v1'];
+const listOf = (key, v) => (WRAPPED_KEYS.includes(key) ? arr(v && v.records) : arr(v));
 // 이 건이 이 파트너사 것인지
 export function owns(key, item, me) {
     if (!item || typeof item !== 'object') return false;
@@ -120,7 +124,8 @@ export function partnerView(store, me) {
     out['gwPartnerDeptPerm.v1'] = perm[me.loginId] ? { [me.loginId]: perm[me.loginId] } : {};
     out['gwPartnerIntakes.v1'] = arr(store['gwPartnerIntakes.v1']).filter(x => owns('gwPartnerIntakes.v1', x, me));
     out['gwDevRequests.v1'] = arr(store['gwDevRequests.v1']).filter(x => x && x.status !== 'draft' && owns('gwDevRequests.v1', x, me));
-    out['gwInboundRecords.v1'] = arr(store['gwInboundRecords.v1']).filter(x => owns('gwInboundRecords.v1', x, me));
+    const ib = store['gwInboundRecords.v1'];
+    out['gwInboundRecords.v1'] = { seq: Number(ib && ib.seq) || 0, records: listOf('gwInboundRecords.v1', ib).filter(x => owns('gwInboundRecords.v1', x, me)) };
     out['gwArchivePosts.v1'] = arr(store['gwArchivePosts.v1']).filter(x => x && x.open);
     out['gwDevNotiQueue.v1'] = [];     // 사내 알림 대기열 — 파트너는 넣기만 합니다
     return out;
@@ -140,7 +145,15 @@ function freeId(id, taken) {
 // current: 서버에 있는 전체 목록. 돌려주는 것: { list: 새 전체 목록, renamed: {옛 id → 새 id}, rejected: [id…] }
 export function applyPartnerWrite(key, current, upserts, removes, me) {
     if (!WRITE_KEYS.includes(key)) throw new Error('파트너가 저장할 수 없는 자료입니다: ' + key);
-    let list = arr(current).slice();
+    const wrapped = WRAPPED_KEYS.includes(key);
+    let list = listOf(key, current).slice();
+    const done = (res) => {
+        if (!wrapped) return res;
+        // 다음 번호 — 저장된 seq 와 지금 가장 큰 번호 + 1 중 큰 쪽
+        const maxNo = res.list.reduce((m, x) => { const n = Number((/(\d+)$/.exec(String(x && x.id)) || [])[1]); return n > m ? n : m; }, 0);
+        const seq = Math.max(Number(current && current.seq) || 0, maxNo + 1);
+        return Object.assign({}, res, { list: Object.assign({}, current && typeof current === 'object' ? current : {}, { seq, records: res.list }) });
+    };
     const renamed = {}, rejected = [];
     const ups = arr(upserts).filter(x => x && typeof x === 'object' && x.id !== undefined && x.id !== null && x.id !== '');
 
@@ -150,7 +163,8 @@ export function applyPartnerWrite(key, current, upserts, removes, me) {
         return { list: list.slice(-50), renamed, rejected };
     }
 
-    const taken = new Set(list.map(x => x && String(x.id)));
+    // 이미 있는 번호 + 이번에 들어온 번호 모두 — 새 번호를 고를 때 같은 요청의 다른 건과도 겹치지 않게
+    const taken = new Set(list.map(x => x && String(x.id)).concat(ups.map(x => String(x.id))));
     ups.forEach(item => {
         const id = String(item.id);
         const i = list.findIndex(x => x && String(x.id) === id);
@@ -179,7 +193,7 @@ export function applyPartnerWrite(key, current, upserts, removes, me) {
         if (i > -1 && owns(key, list[i], me)) list.splice(i, 1);
         else if (i > -1) rejected.push(String(rid));
     });
-    return { list, renamed, rejected };
+    return done({ list, renamed, rejected });
 }
 // 소유를 나타내는 칸은 서버가 다시 적습니다 — 다른 파트너사 이름으로 넣지 못하게
 function stamp(key, item, me) {

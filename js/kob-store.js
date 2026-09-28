@@ -32,7 +32,11 @@
     //   · 로그인하는 순간 통과해서 **실제 자료(직원 · 파트너 계정 등)를 기본값으로 덮을 수 있습니다.**
     // 그래서 로그인하지 않은 상태의 쓰기는 이 화면 메모리에만 두고 서버로 보내지 않습니다.
     // 파트너센터(?mode=partner)는 app_store 를 직접 만지지 않고 서버(/api/partner/*)를 거칩니다 — 아래 '파트너 모드'.
-    const VIEW_MODE = (function () { try { return new URLSearchParams(window.location.search).get('mode') || ''; } catch (e) { return ''; } })();
+    // 예전 주소(…#partner)도 파트너센터입니다 — 화면(isPartnerMode)과 같은 기준 (2026-09-28 검토)
+    const VIEW_MODE = (function () {
+        try { return new URLSearchParams(window.location.search).get('mode') || (window.location.hash === '#partner' ? 'partner' : ''); }
+        catch (e) { return ''; }
+    })();
     let authed = false;               // Supabase 로그인 세션이 있는지
     let warnedAnon = false;
     function canPush(k) { return authed; }
@@ -135,6 +139,7 @@
     let pcSession = null;             // { loginId, partnerId, partnerName }
     const pcChain = new Map();        // 키 → 진행 중인 저장 (같은 키는 차례대로)
     const pcBusy = new Map();         // 키 → 보내는 중인 저장 수 (그동안 받아 온 옛 값으로 덮지 않게)
+    const pcWrites = new Map();       // 키 → 이 화면에서 쓴 횟수 — 받아 오는 사이에 쓴 키는 받은 (옛) 값으로 덮지 않습니다
     function pcToken() { return ls.get(PC_TOKEN_KEY) || ''; }
     async function pcFetch(method, path, bodyObj) {
         const res = await fetch(API + path, {
@@ -153,6 +158,9 @@
         let a = [], b = [];
         try { a = JSON.parse(oldStr || '[]'); } catch (e) { a = []; }
         try { b = JSON.parse(newStr || '[]'); } catch (e) { b = []; }
+        // 인바운드처럼 { seq, records } 묶음으로 저장되는 자료는 records 를 견줍니다 (2026-09-28 검토)
+        if (a && !Array.isArray(a) && Array.isArray(a.records)) a = a.records;
+        if (b && !Array.isArray(b) && Array.isArray(b.records)) b = b.records;
         if (!Array.isArray(a)) a = []; if (!Array.isArray(b)) b = [];
         const before = new Map(a.filter(x => x && x.id !== undefined).map(x => [String(x.id), JSON.stringify(x)]));
         const upserts = b.filter(x => x && x.id !== undefined && before.get(String(x.id)) !== JSON.stringify(x));
@@ -164,15 +172,16 @@
         const old = cache.has(k) ? cache.get(k) : null;
         if (old === s) return;
         cache.set(k, s);
+        pcWrites.set(k, (pcWrites.get(k) || 0) + 1);
         if (!pcSession || !PC_WRITE_KEYS.includes(k)) { holdAnon(k); return; }
         const d = pcDiff(old, s);
         if (!d.upserts.length && !d.removes.length) return;
         pcBusy.set(k, (pcBusy.get(k) || 0) + 1);
         const prev = pcChain.get(k) || Promise.resolve();
-        const next = prev.then(() => pcSend(k, d, 0)).finally(() => pcBusy.set(k, pcBusy.get(k) - 1));
+        const next = prev.then(() => pcSend(k, d, 0, old, s)).finally(() => pcBusy.set(k, pcBusy.get(k) - 1));
         pcChain.set(k, next.catch(() => {}));
     }
-    async function pcSend(k, d, attempt) {
+    async function pcSend(k, d, attempt, oldStr, newStr) {
         try {
             const { status, j } = await pcFetch('POST', '/api/partner/save', { key: k, upserts: d.upserts, removes: d.removes });
             if (status === 401) { pcExpired(); return; }
@@ -186,8 +195,13 @@
         } catch (e) {
             console.error('[kob-store] 파트너 저장 실패', k, e);
             setStatus('error', e.message || String(e));
-            if (attempt < 2) { await new Promise(r => setTimeout(r, 3000)); return pcSend(k, d, attempt + 1); }
-            alert('저장하지 못했습니다. 인터넷 연결을 확인한 뒤 다시 시도해 주세요.\n\n' + (e.message || e));
+            if (attempt < 2) { await new Promise(r => setTimeout(r, 3000)); return pcSend(k, d, attempt + 1, oldStr, newStr); }
+            // 끝내 못 보냈으면 화면 값을 저장 전으로 되돌립니다 — 그대로 두면 다음 저장 때 차이가 없어 영영 안 보내집니다 (2026-09-28 검토)
+            if (cache.get(k) === newStr && oldStr !== undefined) {
+                if (oldStr === null) cache.delete(k); else cache.set(k, oldStr);
+                fireStorage(k, newStr, oldStr);
+            }
+            alert('저장하지 못했습니다. 인터넷 연결을 확인한 뒤 다시 시도해 주세요.\n(방금 입력한 내용은 저장되지 않았습니다)\n\n' + (e.message || e));
         }
     }
     function pcExpired() {
@@ -197,12 +211,14 @@
     }
     async function pcPull() {
         if (!pcSession) return;
+        const writesAtStart = new Map(pcWrites);
         let r;
         try { r = await pcFetch('GET', '/api/partner/boot'); } catch (e) { return; }
         if (r.status === 401) { pcExpired(); return; }
         if (!r.j || !r.j.ok) return;
         Object.keys(r.j.store || {}).forEach(k => {
             if (pcBusy.get(k) > 0) return;
+            if ((pcWrites.get(k) || 0) !== (writesAtStart.get(k) || 0)) return;   // 받아 오는 사이에 이 화면이 쓴 키
             const fresh = JSON.stringify(r.j.store[k]);
             const cur = cache.has(k) ? cache.get(k) : null;
             if (fresh === cur) return;
@@ -275,8 +291,15 @@
                 try { const { data: sd } = await client.auth.getSession(); authed = !!(sd && sd.session); } catch (e) { authed = false; }
                 try {
                     client.auth.onAuthStateChange((event, session) => {
+                        const was = authed;
                         authed = !!(session && session.access_token);
                         if (!authed) pending.clear();     // 로그아웃 — 보내지 못한 것도 버립니다 (다음 사람 이름으로 나가지 않게)
+                        // 이 화면에서 누른 로그아웃이 아닌데 로그인이 끊겼으면(다른 탭 · 기기에서 로그아웃, 만료)
+                        // 조용히 저장이 멈추지 않도록 알리고 로그인 화면으로 보냅니다 (2026-09-28 검토)
+                        if (was && !authed && !window.__kobLoggingOut) {
+                            setStatus('error', '로그인이 끊겼습니다');
+                            setTimeout(() => { alert('로그인이 끊겼습니다 (다른 곳에서 로그아웃했거나 시간이 지났습니다).\n다시 로그인해 주세요.'); window.location.reload(); }, 0);
+                        }
                     });
                 } catch (e) { /* 로그인 상태를 못 따라가면 처음 값(authed)을 그대로 씁니다 */ }
                 const { data, error } = await client.from('app_store').select('key,value');

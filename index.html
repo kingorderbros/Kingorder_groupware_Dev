@@ -11054,7 +11054,7 @@ const QUOTE_TEMPLATES = [
         // 화면이 뜰 때 — ① 재설정 메일의 링크로 들어왔으면 새 비밀번호 창, ② 로그인이 남아 있으면 바로 들어가기,
         //                ③ 계정이 하나도 없으면 처음 설정 안내
         (async function initAuthScreen() {
-            if (new URLSearchParams(location.search).get('mode')) return;   // 파트너센터 · 운행일지 화면은 해당 없음
+            if (new URLSearchParams(location.search).get('mode') || location.hash === '#partner') return;   // 파트너센터 · 운행일지 화면은 해당 없음
             try {
                 if (await kobAuth.recovery()) {
                     openPwChange({ force: true, title: '새 비밀번호 정하기', desc: '재설정 메일의 링크로 들어오셨습니다. 앞으로 쓸 새 비밀번호를 정해 주세요.',
@@ -12485,8 +12485,10 @@ const QUOTE_TEMPLATES = [
             // 본부 — 고칠 때는 원래 본부, 새로 올릴 때는 보고 있던 본부 → 내 본부 → 전사 공통 순으로 고릅니다
             const okDepts = archiveEditableDepts();
             const deptSel = document.getElementById('arc-dept');
-            deptSel.innerHTML = archiveDeptOptions().filter(d => okDepts.includes(d.id))
-                .map(d => `<option value="${d.id}">${escapeHtml(d.name)}</option>`).join('');
+            const deptOpts = archiveDeptOptions().filter(d => okDepts.includes(d.id));
+            // 고치는 글의 본부가 목록에 없으면(본부를 지웠거나 옛 값) 그 본부도 넣어 둡니다 — 관리자가 그대로 저장할 수 있게 (2026-09-28 검토)
+            if (x && !deptOpts.some(d => d.id === archivePostDept(x))) deptOpts.push({ id: archivePostDept(x), name: archiveDeptName(archivePostDept(x)) + ' (지금 없는 본부)' });
+            deptSel.innerHTML = deptOpts.map(d => `<option value="${escapeHtml(d.id)}">${escapeHtml(d.name)}</option>`).join('');
             const wantDept = x ? archivePostDept(x)
                 : [archiveDeptFilter, currentUserDept, ARCHIVE_DEPT_ALL].find(d => okDepts.includes(d));
             deptSel.value = wantDept || ARCHIVE_DEPT_ALL;
@@ -12555,7 +12557,8 @@ const QUOTE_TEMPLATES = [
             const title = String(document.getElementById('arc-title').value || '').trim();
             if (!title) { alert('제목을 입력해 주세요.'); document.getElementById('arc-title').focus(); return; }
             const dept = String(document.getElementById('arc-dept').value || '');
-            if (!archiveEditableDepts().includes(dept)) { alert('이 본부에는 자료를 올릴 수 없습니다.'); return; }
+            const keepOld = id && archivePostById(id) && archivePostDept(archivePostById(id)) === dept && canEditArchivePost(archivePostById(id));
+            if (!archiveEditableDepts().includes(dept) && !keepOld) { alert('이 본부에는 자료를 올릴 수 없습니다.'); return; }
             reloadArchivePosts();                     // 다른 창에서 바뀐 것을 먼저 읽고 얹습니다
             const id = String(document.getElementById('arc-id').value || '');
             const now = (typeof partnerNowStamp === 'function') ? partnerNowStamp()
@@ -32177,7 +32180,8 @@ const QUOTE_TEMPLATES = [
             const flat = {};
             Object.keys(rec).forEach(k => {
                 const v = rec[k];
-                if (v && typeof v === 'object' && !Array.isArray(v) && Object.keys(v).length && Object.values(v).every(prim)) {
+                if (k.indexOf('.') < 0 && v && typeof v === 'object' && !Array.isArray(v) && Object.keys(v).length
+                    && Object.values(v).every(prim) && Object.keys(v).every(c => c.indexOf('.') < 0)) {
                     Object.keys(v).forEach(c => { flat[k + '.' + c] = v[c]; });
                 } else flat[k] = v;
             });
@@ -32248,7 +32252,9 @@ const QUOTE_TEMPLATES = [
         function adminRecordSave() {
             const ctx = adminEditCtx; if (!ctx || !ctx.onSave) return;
             const rec = ctx.record, flatPatch = {};
-            const cur = (k) => { const [a, b] = k.split('.'); return b === undefined ? rec[a] : (rec[a] || {})[b]; };
+            // '묶음.칸' 은 첫 점에서만 나눕니다 — 칸 이름에 점이 있으면 펼치지 않았으므로 그대로 한 칸입니다 (2026-09-28 검토)
+            const splitKey = (k) => { const i = k.indexOf('.'); return (i < 0 || k in rec) ? [k, undefined] : [k.slice(0, i), k.slice(i + 1)]; };
+            const cur = (k) => { const [a, b] = splitKey(k); return b === undefined ? rec[a] : (rec[a] || {})[b]; };
             document.querySelectorAll('#admin-edit-modal [data-k]').forEach(el => {
                 const k = el.getAttribute('data-k'), t = el.getAttribute('data-t');
                 let v;
@@ -32263,7 +32269,7 @@ const QUOTE_TEMPLATES = [
             if (!confirm(`${n}개 항목을 바꿉니다.\n\n· ${Object.keys(flatPatch).map(k => execFieldLabel(k.split('.').pop())).join('\n· ')}\n\n저장할까요?`)) return;
             const patch = {};
             Object.keys(flatPatch).forEach(k => {
-                const [a, b] = k.split('.');
+                const [a, b] = splitKey(k);
                 if (b === undefined) { patch[a] = flatPatch[k]; return; }
                 patch[a] = Object.assign({}, rec[a] || {}, patch[a] || {}, { [b]: flatPatch[k] });
             });
@@ -50495,7 +50501,11 @@ const QUOTE_TEMPLATES = [
             const base = `PI-${String(d.getFullYear()).slice(2)}${p2(d.getMonth() + 1)}${p2(d.getDate())}-`;
             let n = 1;
             while (partnerIntakes.some(x => x.id === base + String(n).padStart(3, '0'))) n++;
-            return base + String(n).padStart(3, '0');
+            // 파트너센터(서버 모드)에서는 다른 파트너사 접수를 보지 못해 같은 번호를 매길 수 있습니다 —
+            // 짧은 무작위 글자를 붙여 겹치지 않게 합니다(서버도 겹치면 새 번호로 바꿉니다 · 2026-09-28 검토)
+            const tail = (typeof kobStorage !== 'undefined' && kobStorage.mode === 'partner')
+                ? '-' + Math.random().toString(36).slice(2, 5).toUpperCase() : '';
+            return base + String(n).padStart(3, '0') + tail;
         }
         function partnerStatusChip(k, size) {
             const st = partnerIntakeStatusDef(k);

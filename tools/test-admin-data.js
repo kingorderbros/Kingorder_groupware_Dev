@@ -64,6 +64,13 @@ global.fetch = async (url, opt = {}) => {
     ok(await call('staff@k.co', 'DELETE', '/api/vehicle-logs', { id: 'VL-0001' }) === 403, '일반 직원은 운행일지를 못 지운다');
     ok(await call('admin@k.co', 'DELETE', '/api/vehicle-logs', { id: 'VL-0001' }) === 200 && !tables.vehicle_logs.has('VL-0001'), '관리자는 운행일지를 지운다');
 
+    console.log('\n[3] 예약 수정도 겹침 확인 (2026-09-28 검토)');
+    tables.vehicle_reservations.set('VR-0010', { vehicle: '2호', applicant: 'A', status: '승인완료', start: '2026-10-01T09:00', end: '2026-10-01T12:00' });
+    tables.vehicle_reservations.set('VR-0011', { vehicle: '2호', applicant: 'B', status: '승인완료', start: '2026-10-01T13:00', end: '2026-10-01T15:00' });
+    ok(await call('admin@k.co', 'PATCH', '/api/reservations', { id: 'VR-0011', patch: { start: '2026-10-01T11:00' } }) === 400, '다른 예약과 겹치게 고치면 400');
+    ok(await call('admin@k.co', 'PATCH', '/api/reservations', { id: 'VR-0011', patch: { start: '2026-10-01T12:30' } }) === 200, '겹치지 않게 고치면 저장 (자기 자신과는 견주지 않음)');
+    ok(await call('admin@k.co', 'PATCH', '/api/reservations', { id: 'VR-0011', patch: { end: '2026-10-01T10:00' } }) === 400, '종료가 시작보다 앞이면 400');
+
     console.log(`\n=========== 통과 ${pass} · 실패 ${fail} ===========`);
     process.exit(fail ? 1 : 0);
 })().catch(e => { console.error(e); process.exit(1); });

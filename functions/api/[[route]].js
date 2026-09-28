@@ -313,7 +313,14 @@ export async function onRequest(context) {
                 if (!validEmail(email)) return bad('이메일 형식이 아닙니다.');
                 if (!(await auth.isEmpty())) return json(409, { ok: false, error: '처음 설정은 이미 끝났습니다. 로그인해 주세요.' });
                 const users = (await store.storeValue('gwUsers.v1')) || [];
-                const rec = (Array.isArray(users) ? users : []).find(u => str(u.email).toLowerCase() === email);
+                let rec = (Array.isArray(users) ? users : []).find(u => str(u.email).toLowerCase() === email);
+                // 완전히 새 환경(운영 첫 설정 등) — 직원 목록이 서버에 아직 없습니다. 화면은 로그인 전에는 저장하지 않으므로
+                // 여기서 관리자 한 명짜리 목록을 만들어 둡니다 (2026-09-28 검토: 없으면 첫 계정을 영영 못 만듦)
+                if (!rec && !(Array.isArray(users) && users.length)) {
+                    rec = { id: 'u1', name: str(input.name) || '관리자', dept: 'admin', team: '', rank: '관리자', email, groupId: 'admin', level: 'admin',
+                            duty: '시스템 관리', phone: '', mobile: '', birthday: '', joinedAt: '', note: '처음 설정에서 만든 관리자 계정' };
+                    await store.setStore('gwUsers.v1', [rec]);
+                }
                 if (!rec || rec.groupId !== 'admin') return json(403, { ok: false, error: '관리자 그룹 계정의 이메일만 처음 설정에 쓸 수 있습니다.' });
                 const password = tempPassword();
                 await auth.call('POST', '/admin/users', { email, password, email_confirm: true, user_metadata: { name: str(rec.name), must_change_password: true } });
@@ -571,6 +578,16 @@ export async function onRequest(context) {
             const patch = input.patch && typeof input.patch === 'object' ? Object.assign({}, input.patch) : {};
             delete patch.id;
             const next = Object.assign({}, cur, patch, { editedAt: new Date().toISOString(), editedBy: str((gate.rec || {}).name) });
+            if (isRes) {
+                // 새로 신청할 때와 같은 겹침 확인 (자기 자신은 빼고) — 2026-09-28 검토
+                if (next.start && next.end && new Date(next.end) <= new Date(next.start)) return bad('사용 종료 시간은 시작 시간보다 뒤여야 합니다.');
+                if (ACTIVE_RESERVE_STATUSES.includes(next.status) && next.start && next.end) {
+                    const s0 = new Date(next.start).getTime(), e0 = new Date(next.end).getTime();
+                    const clash = (await store.rows('vehicle_reservations')).find(r => r.id !== id && r.vehicle === next.vehicle
+                        && ACTIVE_RESERVE_STATUSES.includes(r.status) && r.start && r.end && s0 < new Date(r.end).getTime() && e0 > new Date(r.start).getTime());
+                    if (clash) return bad(`이미 예약된 시간과 겹칩니다: ${clash.id} (${clash.applicant})`);
+                }
+            }
             await store.upsert(table, id, next);
             return json(200, { ok: true, item: next });
         }

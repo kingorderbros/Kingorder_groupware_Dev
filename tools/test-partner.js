@@ -34,7 +34,8 @@ const ok = (c, m) => { if (c) { pass++; console.log('  ✓', m); } else { fail++
         'gwPartnerDeptPerm.v1': { p1: ['sales:new'], p2: ['ops:as'] },
         'gwPartnerIntakes.v1': [{ id: 'PI-1', partnerId: 'PA-1' }, { id: 'PI-2', partnerId: 'PA-2' }],
         'gwDevRequests.v1': [{ id: 'D1', partnerId: 'PA-1', status: 'working' }, { id: 'D2', partnerId: 'PA-1', status: 'draft' }, { id: 'D3', partnerId: 'PA-2' }, { id: 'D4', partnerName: '가나 상사', status: 'done' }],
-        'gwInboundRecords.v1': [{ id: 'IN-0001', vendor: '가나 상사' }, { id: 'IN-0002', vendor: '다라' }],
+        // 실제 저장 모양 — { seq, records } (2026-09-28 검토: 배열로 시험해서 버그를 놓쳤음)
+        'gwInboundRecords.v1': { seq: 3, records: [{ id: 'IN-0001', vendor: '가나 상사' }, { id: 'IN-0002', vendor: '다라' }] },
         'gwArchivePosts.v1': [{ id: 'A1', open: true }, { id: 'A2', open: false }],
         'gwUsers.v1': [{ email: 'staff@k.co' }],
         'gwOrgDepts.v1': [{ id: 'sales' }]
@@ -49,7 +50,7 @@ const ok = (c, m) => { if (c) { pass++; console.log('  ✓', m); } else { fail++
     ok(JSON.stringify(v['gwPartnerDeptPerm.v1']) === '{"p1":["sales:new"]}', '권한은 자기 아이디만');
     ok(v['gwPartnerIntakes.v1'].map(x => x.id).join() === 'PI-1', '접수는 자기 것만');
     ok(v['gwDevRequests.v1'].map(x => x.id).join() === 'D1,D4', '개발의뢰는 자기 것만 · 작성 중(draft) 제외 · 옛 자료는 이름으로');
-    ok(v['gwInboundRecords.v1'].map(x => x.id).join() === 'IN-0001', '인바운드는 자기 업체 것만');
+    ok(v['gwInboundRecords.v1'].records.map(x => x.id).join() === 'IN-0001' && v['gwInboundRecords.v1'].seq === 3, '인바운드는 자기 업체 것만 · 다음 번호(seq) 도 함께');
     ok(v['gwArchivePosts.v1'].map(x => x.id).join() === 'A1', '자료실은 공개 글만');
     ok(v['gwOrgDepts.v1'].length === 1, '공용 설정은 그대로');
 
@@ -63,7 +64,15 @@ const ok = (c, m) => { if (c) { pass++; console.log('  ✓', m); } else { fail++
     w = P.applyPartnerWrite('gwPartnerIntakes.v1', store['gwPartnerIntakes.v1'], [], ['PI-1', 'PI-2'], me);
     ok(!w.list.find(x => x.id === 'PI-1') && w.list.find(x => x.id === 'PI-2') && w.rejected.includes('PI-2'), '지우기는 자기 것만');
     w = P.applyPartnerWrite('gwInboundRecords.v1', store['gwInboundRecords.v1'], [{ id: 'IN-0002', vendor: '가나 상사', memo: 'x' }], [], me);
-    ok(w.list.find(x => x.id === 'IN-0002').vendor === '다라' && w.renamed['IN-0002'] === 'IN-0003', '인바운드 번호가 겹치면 새 번호 · 남의 것은 그대로');
+    ok(w.list.records.find(x => x.id === 'IN-0002').vendor === '다라' && w.renamed['IN-0002'] === 'IN-0003', '인바운드 번호가 겹치면 새 번호 · 남의 것은 그대로');
+    ok(w.list.records.length === 3 && w.list.seq === 4, '인바운드는 { seq, records } 모양을 지키고 다음 번호를 올린다');
+    w = P.applyPartnerWrite('gwInboundRecords.v1', store['gwInboundRecords.v1'], [{ id: 'IN-0003', memo: '새 건' }], [], me);
+    ok(w.list.records.some(x => x.id === 'IN-0001') && w.list.records.some(x => x.id === 'IN-0002' && x.vendor === '다라'), '다른 업체 인입은 지워지지 않는다');
+    // 같은 요청 안에서 새 번호가 뒤의 새 건과 겹치지 않게
+    const two = [{ id: 'PI-9-001', partnerId: 'PA-2' }, { id: 'PI-9-002', partnerId: 'PA-2' }];
+    w = P.applyPartnerWrite('gwPartnerIntakes.v1', two, [{ id: 'PI-9-001', title: '첫째' }, { id: 'PI-9-002', title: '둘째' }, { id: 'PI-9-003', title: '셋째' }], [], me);
+    const mine = w.list.filter(x => x.partnerId === 'PA-1').map(x => x.title).sort().join();
+    ok(mine === '둘째,셋째,첫째' && w.list.length === 5, '같은 요청의 새 건끼리 번호가 겹쳐도 하나도 잃지 않는다');
     w = P.applyPartnerWrite('gwDevRequests.v1', store['gwDevRequests.v1'], [{ id: 'D1', partnerId: 'PA-2', status: 'review' }, { id: 'D3', status: 'x' }, { id: 'D9' }], ['D1'], me);
     const d1 = w.list.find(x => x.id === 'D1');
     ok(d1.status === 'review' && d1.partnerId === 'PA-1', '개발의뢰는 진행만 고치고 상대 파트너사는 못 바꾼다');

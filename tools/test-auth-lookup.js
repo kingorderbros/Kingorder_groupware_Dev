@@ -42,6 +42,26 @@ global.fetch = async (url) => {
     r = await call('');
     ok(r.status === 400, '빈 아이디는 400');
 
+    console.log('\n[3] 완전히 새 환경의 처음 설정 (2026-09-28 검토)');
+    {
+        // 직원 목록도 로그인 계정도 없는 서버
+        let saved = null;
+        const realFetch = global.fetch;
+        global.fetch = async (url, opt = {}) => {
+            const u = String(url);
+            if (u.includes('/auth/v1/admin/users') && (opt.method || 'GET') === 'GET') return new Response(JSON.stringify({ users: [] }), { status: 200 });
+            if (u.includes('/auth/v1/admin/users') && opt.method === 'POST') return new Response(JSON.stringify({ id: 'x' }), { status: 200 });
+            if (u.includes('/rest/v1/app_store') && (opt.method || 'GET') === 'GET') return new Response('[]', { status: 200 });
+            if (u.includes('/rest/v1/app_store') && opt.method === 'POST') { saved = JSON.parse(opt.body); return new Response(null, { status: 201 }); }
+            return new Response('[]', { status: 200 });
+        };
+        const res = await onRequest({ request: new Request('https://gw/api/auth/bootstrap', { method: 'POST', body: JSON.stringify({ email: 'boss@k.co' }) }), env });
+        const j = await res.json();
+        ok(res.status === 200 && j.ok && j.password, '직원 목록이 없어도 첫 관리자 임시 비밀번호가 나온다');
+        ok(saved && saved[0].key === 'gwUsers.v1' && saved[0].value[0].email === 'boss@k.co' && saved[0].value[0].groupId === 'admin', '관리자 한 명짜리 직원 목록을 만들어 둔다');
+        global.fetch = realFetch;
+    }
+
     console.log(`\n=========== 통과 ${pass} · 실패 ${fail} ===========`);
     process.exit(fail ? 1 : 0);
 })().catch(e => { console.error(e); process.exit(1); });
