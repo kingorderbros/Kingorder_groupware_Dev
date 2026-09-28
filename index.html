@@ -16170,16 +16170,19 @@ const QUOTE_TEMPLATES = [
             return matchesCalendarScope(s, scopeInfo || getCalendarScopeFor(currentUserName, currentUserDept, currentUserLevel));
         }
 
-        // 일정 수정/삭제 권한 — 개인 일정은 본인만, 그 외는 부서 편집 권한을 따릅니다.
+        // 일정 수정/삭제 권한 — **등록한 사람과 관리자만** (2026-09-28 사용자 요청)
+        //   예전: 개인 일정은 본인 · 전사 일정은 등록자/대표/관리자 · 그 밖에는 같은 부서면 누구나.
+        //   등록한 사람은 새로 만들 때 남기는 createdBy(로그인 이메일)로 보고, 그 전에 만든 일정은 담당자(salesperson = 등록자 이름)로 봅니다.
+        //   폰(구글)에서 만든 일정은 그 캘린더 주인 · 만든 사람의 구글 주소로 찾은 직원이 담당자로 들어갑니다.
+        //   참석 여부 응답은 수정이 아니라 이 규칙과 상관없이 초대받은 사람이 할 수 있습니다.
+        function isScheduleCreator(s) {
+            if (!s) return false;
+            if (s.createdBy) return String(s.createdBy).toLowerCase() === String(currentUserEmail || '').toLowerCase();
+            return !!currentUserName && (s.salesperson || '') === currentUserName;
+        }
         function canEditSchedule(s) {
             if (!s) return false;
-            if (scheduleCalendar(s).share === 'self') return (s.salesperson || '') === currentUserName;
-            // 전사일정은 소속 부서가 없으므로 등록자 본인 · 대표 · 관리자만 수정할 수 있다
-            if ((s.dept || '') === COMPANY_DEPT) {
-                return (s.salesperson || '') === currentUserName
-                    || levelClass(currentUserLevel) === 'exec' || isSystemAdmin();
-            }
-            return canEditDeptRecord(s.dept);
+            return isSystemAdmin() || isScheduleCreator(s);
         }
 
         // 조회 범위에 따라 볼 수 있는 일정 목록. scopeInfo = { scope, depts }
@@ -17145,9 +17148,11 @@ const QUOTE_TEMPLATES = [
             };
             if (id) {
                 const schedule = schedules.find(s => s.id === id);
+                if (schedule && !canEditSchedule(schedule)) { alert('등록한 사람과 관리자만 수정할 수 있습니다.'); return; }
                 if (schedule) Object.assign(schedule, data);
             } else {
-                schedules.push({ id: nextScheduleId(), salesperson: currentUserName || document.getElementById('user-name').innerText, ...data });
+                schedules.push({ id: nextScheduleId(), salesperson: currentUserName || document.getElementById('user-name').innerText,
+                                 createdBy: String(currentUserEmail || '').toLowerCase(), ...data });
             }
             saveSchedules();
             closeScheduleModal();
@@ -17190,7 +17195,7 @@ const QUOTE_TEMPLATES = [
             if (roNote) roNote.classList.toggle('hidden', editable);
             if (roText) roText.innerText = sCal.share === 'self'
                 ? '다른 사용자의 개인 일정입니다. 조회만 가능합니다.'
-                : `${deptNames[sDept] || sDept} 일정입니다. 타 부서 일정은 조회만 가능합니다.`;
+                : `${schedule.salesperson || '다른 사람'} 님이 등록한 일정입니다. 등록한 사람과 관리자만 수정 · 삭제할 수 있습니다.`;
 
             renderScheduleAttendeeDetail(schedule);
             document.getElementById('schedule-detail-modal').classList.remove('hidden');
