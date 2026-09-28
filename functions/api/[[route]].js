@@ -72,6 +72,7 @@ function db(env) {
             const r = await call('GET', `app_store?select=key,value&key=in.(${encodeURIComponent(list)})`);
             const out = {}; (r || []).forEach(x => { out[x.key] = x.value; }); return out;
         },
+        remove: (table, id) => call('DELETE', `${table}?id=eq.${encodeURIComponent(id)}`, undefined, { Prefer: 'return=minimal' }),
         setStore: (key, value) => call('POST', 'app_store?on_conflict=key', [{ key, value, updated_at: new Date().toISOString() }], { Prefer: 'resolution=merge-duplicates,return=minimal' })
     };
 }
@@ -121,6 +122,24 @@ function tempPassword() {
     if (!/[0-9]/.test(pw)) pw = pw.slice(0, 9) + '7';
     if (!/[A-Za-z]/.test(pw)) pw = 'k' + pw.slice(1);
     return pw;
+}
+// 고치기 · 지우기 권한 (2026-09-28) — 관리자 이거나, 권한 그룹에 perms 중 하나가 켜져 있으면 통과.
+//   'data-admin' = 권한 관리의 '전체 자료 수정 · 삭제'. 화면(canManageAllData)과 같은 기준입니다.
+async function requirePerm(env, store, request, perms) {
+    const me = await authAdmin(env).whoami(request);
+    if (!me) return { error: json(401, { ok: false, error: '로그인이 필요합니다.' }) };
+    const v = await store.storeValues(['gwUsers.v1', 'gwPermissionGroups.v2']);
+    const users = Array.isArray(v['gwUsers.v1']) ? v['gwUsers.v1'] : [];
+    const rec = users.find(u => str(u.email).toLowerCase() === str(me.email).toLowerCase());
+    let ok = !!rec && (rec.groupId === 'admin' || rec.dept === 'admin' || rec.level === 'admin' || rec.isAdmin === true);
+    if (!ok && rec) {
+        const pg = v['gwPermissionGroups.v2'];                  // 저장 모양: { groups: [...], version } (예전엔 배열)
+        const groups = Array.isArray(pg) ? pg : (pg && Array.isArray(pg.groups) ? pg.groups : []);
+        const g = groups.find(x => x && x.id === rec.groupId);
+        ok = !!(g && Array.isArray(g.permissions) && perms.some(p => g.permissions.includes(p)));
+    }
+    if (!ok) return { error: json(403, { ok: false, error: '고치거나 지울 권한이 없습니다.' }) };
+    return { me, rec };
 }
 // 관리자 그룹 · 소속없는 관리자 · 직책 관리자 · 겸직 관리자 — /api/auth/users 와 같은 기준 (2026-09-21)
 async function requireAdmin(env, store, request) {
@@ -533,6 +552,27 @@ export async function onRequest(context) {
             }
             const users = (await store.storeValue('gwUsers.v1')) || [];
             return json(200, { drivers: (Array.isArray(users) ? users : []).map(u => u.name).filter(Boolean) });
+        }
+        // 법인차량 예약 · 운행일지 고치기 · 지우기 (2026-09-28)
+        //   예전에는 서버에 이 길이 없어 화면에서만 바뀌고 새로 불러오면 되돌아갔습니다.
+        //   고치기: 관리자 · 전체 자료 권한 · 그 화면 권한(예약관리 / 운행내역). 지우기: 관리자 · 전체 자료 권한만.
+        if ((path === '/api/reservations' || path === '/api/vehicle-logs') && (method === 'PATCH' || method === 'DELETE')) {
+            const isRes = path === '/api/reservations';
+            const perms = method === 'DELETE' ? ['data-admin'] : ['data-admin', isRes ? 'management-vehicle-reserve' : 'management-vehicle'];
+            const gate = await requirePerm(env, store, request, perms);
+            if (gate.error) return gate.error;
+            const table = isRes ? 'vehicle_reservations' : 'vehicle_logs';
+            const input = await body();
+            const id = str(input.id);
+            if (!id) return bad('id 가 필요합니다.');
+            const cur = (await store.rows(table)).find(x => x.id === id);
+            if (!cur) return bad('찾을 수 없습니다: ' + id);
+            if (method === 'DELETE') { await store.remove(table, id); return json(200, { ok: true, deleted: id }); }
+            const patch = input.patch && typeof input.patch === 'object' ? Object.assign({}, input.patch) : {};
+            delete patch.id;
+            const next = Object.assign({}, cur, patch, { editedAt: new Date().toISOString(), editedBy: str((gate.rec || {}).name) });
+            await store.upsert(table, id, next);
+            return json(200, { ok: true, item: next });
         }
         if (path === '/api/reservations' && method === 'GET') {
             const driver = str(url.searchParams.get('driver'));

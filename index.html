@@ -5605,7 +5605,8 @@
                 <button onclick="closeCollabDetailModal()" class="text-gray-400 hover:text-gray-600 ml-2 shrink-0"><i class="fas fa-times"></i></button>
             </div>
             <div id="collab-detail-body" class="overflow-y-auto text-sm space-y-4"></div>
-            <div class="flex justify-end mt-5 pt-4 border-t border-gray-100">
+            <div class="flex justify-end gap-2 mt-5 pt-4 border-t border-gray-100">
+                <span id="collab-detail-admin" class="mr-auto"></span>
                 <button type="button" onclick="closeCollabDetailModal()" class="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition-colors">닫기</button>
             </div>
         </div>
@@ -5680,7 +5681,8 @@
         <div class="bg-white w-full max-w-lg p-6 rounded-lg shadow-xl flex flex-col max-h-[90vh]">
             <div class="flex justify-between items-start mb-4">
                 <h3 id="detail-title" class="text-lg font-bold text-gray-800"></h3>
-                <button onclick="closeTaskDetailModal()" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times"></i></button>
+                <div class="flex items-center gap-2 shrink-0"><span id="task-detail-admin"></span>
+                <button onclick="closeTaskDetailModal()" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times"></i></button></div>
             </div>
             
             <div class="mb-4 text-sm text-gray-600 bg-gray-50 p-3 rounded border border-gray-100">
@@ -9628,6 +9630,7 @@ const QUOTE_TEMPLATES = [
             'settings-partner-perm': '파트너 접근 권한 (Partner Center Access)',
             'settings-archive': '자료실 관리 권한 (Archive Managers)',
             'partner-ids': '파트너 ID 관리 (Partner Accounts)',
+            'data-admin': '전체 자료 수정 · 삭제 (Data Admin)',
             'collab-center': '협업티켓센터 (Collaboration Ticket Center)',
             'project-center': '프로젝트 관리 (Project Management)',
             'exec-center': '경영 현황판 (Executive Overview)',
@@ -10404,6 +10407,9 @@ const QUOTE_TEMPLATES = [
                     { id: 'permissions', name: '권한 관리' },
                     { id: 'partner-ids', name: '파트너 ID 관리' },
                     { id: 'card-perm', name: '법인카드 조회 권한' },
+                    // 화면이 아니라 '권한' 하나입니다 — 켜진 그룹은 본부 · 작성자 · 처리 상태와 관계없이
+                    // 모든 자료(티켓 · 일정 · 거래처 · 파트너 · 접수 …)를 수정 · 삭제합니다. 관리자는 늘 켜져 있습니다 (2026-09-28)
+                    { id: 'data-admin', name: '전체 자료 수정 · 삭제', note: '본부 · 작성자 · 처리 상태와 관계없이' },
                     {
                         id: 'settings', name: '설정', children: [
                             { id: 'settings-contract-approval', name: '계약서 승인 설정' },
@@ -11760,7 +11766,8 @@ const QUOTE_TEMPLATES = [
                     const titleCls = t.done ? 'line-through text-gray-400' : 'text-gray-800';
                     return `<div class="flex items-center justify-between text-sm py-1 border-b border-gray-50 last:border-0">
                         <span class="${titleCls} truncate pr-2"><i class="fas ${t.done ? 'fa-check-circle text-green-500' : 'fa-circle-notch text-blue-400'} mr-1 text-xs"></i>${escapeHtml(t.title)}</span>
-                        <span class="flex items-center gap-1 shrink-0">${ddayBadge}<span class="text-xs text-gray-400">${t.dueDate || '미정'}</span></span>
+                        <span class="flex items-center gap-1 shrink-0">${ddayBadge}<span class="text-xs text-gray-400">${t.dueDate || '미정'}</span>
+                            ${canManageAllData() ? `<button type="button" title="관리자 수정" onclick="openMyTodoModal('${escapeHtml(t.id)}')" class="text-gray-400 hover:text-blue-600 px-1"><i class="fas fa-pen text-xs"></i></button><button type="button" title="관리자 삭제" onclick="deleteMyTodo('${escapeHtml(t.id)}'); renderTeamOverview();" class="text-gray-400 hover:text-red-600 px-1"><i class="fas fa-trash text-xs"></i></button>` : ''}</span>
                     </div>`;
                 }).join('') : '<p class="text-xs text-gray-400 py-1">등록된 업무가 없습니다.</p>';
 
@@ -11873,6 +11880,8 @@ const QUOTE_TEMPLATES = [
                 myTodos.push({ id: 'todo_' + myTodoIdCounter++, owner: currentUserName, done: false, scheduleId: null, ...data });
             }
             renderPersonalTasks(currentUserName);
+            // 관리자가 팀 통합현황에서 다른 사람 할 일을 고쳤으면 그 화면도 다시 그립니다 (2026-09-28)
+            { const tv = document.getElementById('sec-team-overview'); if (tv && !tv.classList.contains('hidden') && typeof renderTeamOverview === 'function') renderTeamOverview(); }
             closeMyTodoModal();
         }
 
@@ -12258,7 +12267,7 @@ const QUOTE_TEMPLATES = [
         let archiveManagers = loadJsonStore(ARCHIVE_MGR_KEY, []);
         if (!Array.isArray(archiveManagers)) archiveManagers = [];
         function saveArchiveManagers() { saveJsonStore(ARCHIVE_MGR_KEY, archiveManagers); }
-        function canEditArchive() { return isSystemAdmin() || archiveManagers.includes(currentUserName); }
+        function canEditArchive() { return canManageAllData() || archiveManagers.includes(currentUserName); }
 
         // ---------- 본부별 자료 (2026-09-28) ----------
         // 자료마다 dept 를 둡니다. 'company' = 전사 공통, 그 밖에는 조직도 본부 id (사외 조직 제외).
@@ -12279,11 +12288,12 @@ const QUOTE_TEMPLATES = [
         function archiveEditableDepts() {
             if (!canEditArchive()) return [];
             const all = archiveDeptOptions().map(d => d.id);
-            if (isSystemAdmin()) return all;
+            if (canManageAllData()) return all;
             return all.filter(id => id === ARCHIVE_DEPT_ALL || id === currentUserDept);
         }
         function canEditArchivePost(x) {
-            return !!x && archiveEditableDepts().includes(archivePostDept(x));
+            // 관리자 · 전체 자료 권한은 본부가 지워졌거나 목록에 없는 글도 고칩니다 (2026-09-28)
+            return !!x && (canManageAllData() || archiveEditableDepts().includes(archivePostDept(x)));
         }
 
         // 지금 화면이 https 인데 주소가 http 면 브라우저가 아예 막습니다(혼합 콘텐츠).
@@ -13412,9 +13422,23 @@ const QUOTE_TEMPLATES = [
             document.getElementById('detail-description').innerText = task.description || '상세 내용 없음';
 
             renderFollowUps(task);
+            const adm = document.getElementById('task-detail-admin');
+            if (adm) adm.innerHTML = adminEditButtonHtml(`openLocalTaskAdminEdit('${escapeHtml(taskId)}')`, '관리자 수정');
             document.getElementById('task-detail-modal').classList.remove('hidden');
         }
         
+        // 관리자 — 자부서 업무 · 이슈를 고치고 지웁니다 (2026-09-28)
+        function openLocalTaskAdminEdit(id) {
+            const t = localTasks.find(x => x.id === id);
+            if (!t) return;
+            openAdminRecordEditor({
+                title: `${t.type === 'issue' ? '이슈' : '업무'} · ${t.title || id}`, record: t,
+                choices: { status: [['todo', '할 일'], ['inprogress', '진행중'], ['done', '완료']].map(([v, l]) => ({ v, l })),
+                           type: [{ v: 'task', l: '업무' }, { v: 'issue', l: '이슈' }] },
+                onSave: (patch) => { Object.assign(t, patch); saveLocalTasks(); },
+                onDelete: () => { localTasks = localTasks.filter(x => x.id !== id); saveLocalTasks(); closeTaskDetailModal(); }
+            });
+        }
         function renderFollowUps(task) {
             const container = document.getElementById('detail-followups');
             container.innerHTML = '';
@@ -13840,7 +13864,8 @@ const QUOTE_TEMPLATES = [
             //  - self  : 내가 담당(assigneeUser)=받은 / 내가 요청자(assignee)=발행
             //  - dept↑ : 내 부서가 수신=받은 / 내 부서가 발행=발행 (개인 기준도 함께 포함)
             const wide = scope !== 'self';
-            const received = filtered.filter(r => r.assigneeUser === name || (wide && ((r.targetDept === dept && dept !== 'admin') || dept === 'admin')));
+            const allData = canManageAllData();     // 관리자 · 전체 자료 권한은 모든 티켓의 처리 단추를 봅니다 (2026-09-28)
+            const received = filtered.filter(r => r.assigneeUser === name || allData || (wide && ((r.targetDept === dept && dept !== 'admin') || dept === 'admin')));
             const sent = filtered.filter(r => r.assignee === name || (wide && ((r.sourceDept === dept && dept !== 'admin') || dept === 'admin')));
 
             // 받은 티켓 렌더
@@ -13855,7 +13880,7 @@ const QUOTE_TEMPLATES = [
                 .slice().sort((a, b) => (b.ageDays || 0) - (a.ageDays || 0));
             const pendEl = document.getElementById('collab-pending-list');
             pendEl.innerHTML = pending.length ? pending.map(r => {
-                const isInbox = r.assigneeUser === name || (wide && r.targetDept === dept);
+                const isInbox = r.assigneeUser === name || allData || (wide && r.targetDept === dept);
                 return collabTicketCard(r, isInbox ? 'inbox' : 'outbox');
             }).join('') : collabEmpty('액션이 필요한 대기·보류 티켓이 없습니다.');
 
@@ -14257,11 +14282,11 @@ const QUOTE_TEMPLATES = [
         // ---------- 티켓 상세: 첨부자료 목록 ----------
         // 요청한 쪽인지 판별 — 요청자 본인이거나 요청 부서 소속이면 '확인하는 사람' 입니다.
         function isCollabRequesterSide(req) {
-            return !!req && (req.assignee === currentUserName || req.sourceDept === currentUserDept || isSystemAdmin());
+            return !!req && (req.assignee === currentUserName || req.sourceDept === currentUserDept || canManageAllData());
         }
         // 요청받은 쪽인지 판별 — 요청 첨부자료를 '확인하는 사람' 입니다.
         function isCollabHandlerSide(req) {
-            return !!req && (req.assigneeUser === currentUserName || req.targetDept === currentUserDept || isSystemAdmin());
+            return !!req && (req.assigneeUser === currentUserName || req.targetDept === currentUserDept || canManageAllData());
         }
         // 요청 첨부를 더 붙일 수 있는 사람 — 요청한 쪽이, 티켓이 끝나기 전까지
         function canAddCollabRequestFile(req) {
@@ -14272,7 +14297,7 @@ const QUOTE_TEMPLATES = [
         // 처리한 쪽인지 판별 — 완료 후 자료를 더 붙일 수 있는 사람
         function canAddCollabCompleteFile(req) {
             if (!req || req.status !== 'completed') return false;
-            return req.assigneeUser === currentUserName || req.targetDept === currentUserDept || isSystemAdmin();
+            return req.assigneeUser === currentUserName || req.targetDept === currentUserDept || canManageAllData();
         }
 
         function collabCompleteFilesHtml(req) {
@@ -14624,7 +14649,7 @@ const QUOTE_TEMPLATES = [
         function canManageDirectiveGroup(groupId) {
             const items = directiveGroupItems(groupId);
             if (!items.length) return false;
-            if (isSystemAdmin() || levelClass(currentUserLevel) === 'exec') return true;
+            if (canManageAllData() || levelClass(currentUserLevel) === 'exec') return true;
             return items[0].assignee === currentUserName;
         }
         // 지시받은 사람들에게 묶음 변경 사항을 통보
@@ -14781,7 +14806,7 @@ const QUOTE_TEMPLATES = [
         function canUpdateDirectiveProgress(req) {
             if (!isDirective(req)) return false;
             if (req.status !== 'accepted') return false;
-            if (isSystemAdmin()) return true;
+            if (canManageAllData()) return true;
             if (req.assigneeUser) return req.assigneeUser === currentUserName;
             return req.targetDept === currentUserDept;
         }
@@ -14977,7 +15002,7 @@ const QUOTE_TEMPLATES = [
             if (!req || isDirective(req)) return false;
             if (req.status !== 'accepted') return false;
             if (req.scheduleChange && req.scheduleChange.status === 'pending') return false;   // 이미 요청 대기중
-            if (isSystemAdmin()) return true;
+            if (canManageAllData()) return true;
             if (req.assigneeUser) return req.assigneeUser === currentUserName;
             return req.targetDept === currentUserDept;
         }
@@ -14986,7 +15011,7 @@ const QUOTE_TEMPLATES = [
             if (!req || isDirective(req)) return false;
             if (req.status !== 'accepted') return false;
             if (!req.scheduleChange || req.scheduleChange.status !== 'pending') return false;
-            if (isSystemAdmin()) return true;
+            if (canManageAllData()) return true;
             if (req.assignee && req.assignee === currentUserName) return true;
             return req.sourceDept === currentUserDept;
         }
@@ -15131,9 +15156,13 @@ const QUOTE_TEMPLATES = [
         }
 
         // ---------- 티켓 상세 보기 ----------
+        let collabDetailId = '';
         function openCollabDetailModal(id) {
             const req = collabRequests.find(r => r.id === id);
             if (!req) return;
+            collabDetailId = id;
+            const adm = document.getElementById('collab-detail-admin');
+            if (adm) adm.innerHTML = adminEditButtonHtml(`openCollabAdminEdit('${escapeHtml(id)}')`);
             document.getElementById('collab-detail-type').innerHTML = collabTypeTag(req.type);
             document.getElementById('collab-detail-title').innerText = req.title || '(제목 없음)';
 
@@ -15313,6 +15342,25 @@ const QUOTE_TEMPLATES = [
             document.getElementById('collab-detail-modal').classList.remove('hidden');
         }
         function closeCollabDetailModal() { document.getElementById('collab-detail-modal').classList.add('hidden'); }
+        // 관리자 — 협업티켓 · 업무지시를 상태 · 부서 · 담당과 관계없이 고치고 지웁니다 (2026-09-28)
+        function openCollabAdminEdit(id) {
+            const req = collabRequests.find(r => r.id === id);
+            if (!req) return;
+            const depts = orgDeptList(false).map(d => ({ v: d.id, l: d.name })).concat([{ v: 'admin', l: '소속 없음 (관리자)' }]);
+            openAdminRecordEditor({
+                title: `${isDirective(req) ? '업무지시' : '협업티켓'} · ${req.title || id}`, record: req,
+                choices: {
+                    status: [['pending', '대기'], ['accepted', '진행중(수락)'], ['hold', '보류'], ['completed', '완료'], ['rejected', '거절'], ['cancelled', '취소']].map(([v, l]) => ({ v, l })),
+                    targetDept: depts, sourceDept: depts
+                },
+                onSave: (patch) => { Object.assign(req, patch); saveCollabRequests(); },
+                onDelete: () => {
+                    collabRequests = collabRequests.filter(r => r.id !== id);
+                    saveCollabRequests();
+                    closeCollabDetailModal();
+                }
+            });
+        }
 
         // ==================== 협업 티켓 이관 ====================
         // 받은 티켓을 ① 같은 부서의 다른 팀원 ② 다른 부서(개인 지정 가능) 로 넘깁니다.
@@ -15324,7 +15372,7 @@ const QUOTE_TEMPLATES = [
         function canTransferCollab(req) {
             if (!req) return false;
             if (req.status === 'completed' || req.status === 'rejected' || req.status === 'cancelled') return false;
-            if (isSystemAdmin()) return true;
+            if (canManageAllData()) return true;
             if (req.assigneeUser && req.assigneeUser === currentUserName) return true;
             return req.targetDept === currentUserDept;
         }
@@ -15966,7 +16014,7 @@ const QUOTE_TEMPLATES = [
 
         // 구분 편집 권한: 관리자는 전 부서, 팀장/본부장은 자기 부서만
         function canManageScheduleTypes(dept) {
-            if (isSystemAdmin()) return true;
+            if (canManageAllData()) return true;
             // 전사 구분은 특정 부서 소유가 아니므로 대표·본부장까지만 편집 가능
             if (dept === COMPANY_DEPT) return levelClass(currentUserLevel) === 'exec' || levelClass(currentUserLevel) === 'head';
             return dept === currentUserDept && (levelClass(currentUserLevel) === 'leader' || levelClass(currentUserLevel) === 'head');
@@ -16260,7 +16308,7 @@ const QUOTE_TEMPLATES = [
         }
         function canEditSchedule(s) {
             if (!s || isBirthdaySchedule(s)) return false;     // 생일은 구성원 정보에서 고칩니다
-            return isSystemAdmin() || isScheduleCreator(s) || isCalendarDelegateFor(s);
+            return canManageAllData() || isScheduleCreator(s) || isCalendarDelegateFor(s);
         }
 
         // ---------- 일정 대리 수정 권한 (2026-09-28) ----------
@@ -17069,7 +17117,7 @@ const QUOTE_TEMPLATES = [
         // 일정 모달에서 고를 수 있는 부서: 관리자는 전 부서, 그 외에는 본인 부서만
         // 'company'(전사)는 전사일정 캘린더에서만 쓰므로 일반 목록에서는 제외합니다.
         function scheduleDeptOptions() {
-            if (isSystemAdmin()) {
+            if (canManageAllData()) {
                 return Object.keys(scheduleTypesByDept).filter(d => d !== COMPANY_DEPT);
             }
             return [currentUserDept || 'sales'];
@@ -18317,7 +18365,7 @@ const QUOTE_TEMPLATES = [
         // 조회 범위 — 협업티켓과 같은 스코프 규칙을 그대로 씁니다.
         function visibleProjects() {
             const scope = getCollabScopeFor(currentUserName, currentUserDept, currentUserLevel);
-            if (scope === 'all' || scope === 'cross' || isSystemAdmin()) return projects.slice();
+            if (scope === 'all' || scope === 'cross' || canManageAllData()) return projects.slice();
             if (scope === 'self') {
                 return projects.filter(p => p.owner === currentUserName
                     || (p.wbs || []).some(w => w.assignee === currentUserName));
@@ -18328,14 +18376,14 @@ const QUOTE_TEMPLATES = [
         // 프로젝트를 편집할 수 있는 사람: PM · 주관 부서 본부장/팀장 · 대표/관리자
         function canEditProject(p) {
             if (!p) return false;
-            if (isSystemAdmin() || levelClass(currentUserLevel) === 'exec') return true;
+            if (canManageAllData() || levelClass(currentUserLevel) === 'exec') return true;
             if (p.owner === currentUserName) return true;
             return p.dept === currentUserDept && (levelClass(currentUserLevel) === 'head' || levelClass(currentUserLevel) === 'leader');
         }
         // WBS 를 다룰 수 있는 사람: 담당자 본인 · PM · 대표/관리자
         function isWbsHandler(p, w) {
             if (!p || !w) return false;
-            if (isSystemAdmin() || levelClass(currentUserLevel) === 'exec') return true;
+            if (canManageAllData() || levelClass(currentUserLevel) === 'exec') return true;
             return w.assignee === currentUserName || p.owner === currentUserName;
         }
         // 완료 버튼 — 아래 두 가지가 걸려 있으면 완료할 수 없습니다.
@@ -19737,6 +19785,7 @@ const QUOTE_TEMPLATES = [
 
             html += `<div class="flex flex-wrap gap-2 pt-1 border-t border-gray-100">
                 <button type="button" onclick="toggleProjectIssue('${p.id}','${i.id}'); openIssueDetailModal('${p.id}','${i.id}')" class="px-3 py-1.5 rounded text-sm font-semibold ${i.resolved ? 'bg-gray-100 text-gray-600 hover:bg-gray-200' : 'bg-blue-600 text-white hover:bg-blue-700'}">${i.resolved ? '되돌리기' : '해결 처리'}</button>
+                ${adminEditButtonHtml(`openProjectIssueAdminEdit('${p.id}','${i.id}')`)}
             </div>`;
 
             document.getElementById('issuedetail-body').innerHTML = html;
@@ -20183,6 +20232,17 @@ const QUOTE_TEMPLATES = [
             });
             closeProjectIssueModal();
             renderProjectCenter();
+        }
+        // 관리자 — 프로젝트 이슈를 고치고 지웁니다 (2026-09-28)
+        function openProjectIssueAdminEdit(projectId, issueId) {
+            const p = findProject(projectId);
+            const i = p ? (p.issues || []).find(x => x.id === issueId) : null;
+            if (!i) return;
+            openAdminRecordEditor({
+                title: `프로젝트 이슈 · ${p.name} · ${i.title || issueId}`, record: i,
+                onSave: (patch) => { Object.assign(i, patch); saveProjects(); if (typeof openIssueDetailModal === 'function') openIssueDetailModal(projectId, issueId); },
+                onDelete: () => { p.issues = (p.issues || []).filter(x => x.id !== issueId); saveProjects(); closeIssueDetailModal(); }
+            });
         }
         function toggleProjectIssue(projectId, issueId) {
             const p = findProject(projectId);
@@ -22964,7 +23024,13 @@ const QUOTE_TEMPLATES = [
             startPlan: '시작 예정', endPlan: '종료 예정', startActual: '시작', endActual: '종료',
             deliverable: '산출물', delayReason: '지연 사유', code: '코드',
             expiry: '유효기한', createdAt: '등록일', updatedAt: '최종 수정', claimedBy: '맡은 사람',
-            visitDate: '방문 예정일', address: '주소', industry: '업종', route: '유입경로'
+            visitDate: '방문 예정일', address: '주소', industry: '업종', route: '유입경로',
+            // 관리자 자료 수정 창에서도 씁니다 (2026-09-28)
+            partnerId: '파트너사 id', partnerName: '파트너사', shopName: '매장명', bizNo: '사업자번호', vendor: '업체',
+            sourceDept: '요청 부서', type: '구분', center: '업무센터', customerId: '고객 id', amount: '금액', approvalNo: '승인번호',
+            regType: '등록 구분', targetType: '수신 방식', merchant: '가맹점', requestedAt: '요청일', dueDate: '완료기한',
+            ownerName: '소유자', cardNo: '카드번호', usedAt: '사용일시', category: '분류', resolved: '해결됨', level: '심각도',
+            customerName: '고객명', workKey: '업무센터', workId: '업무 id', reRequestOf: '재요청 원본', payStatus: '결제 상태'
         };
         function execFieldLabel(k) { return EXEC_FIELD_LABELS[k] || k; }
 
@@ -25136,6 +25202,30 @@ const QUOTE_TEMPLATES = [
         // 이력 상세 맨 아래 줄 — 완료 건이면 읽기 전용 안내만, 처리 중인 건이면 처리 창을 여는 버튼을 함께 둡니다.
         // 업무이력이 완료 건만 모으던 때는 필요 없었지만, 이제 접수 이후 모든 건이 이력에 올라옵니다.
         function workHistoryDetailFootHtml(key, w, extraNote) {
+            // 관리자 — 처리 상태와 관계없이 고치고 지우는 단추 (2026-09-28)
+            const adm = canManageAllData()
+                ? `<div class="mt-3 pt-3 border-t border-gray-100 flex justify-end">${adminEditButtonHtml(`openWorkAdminEdit('${key}', '${escapeHtml(w.id)}')`)}</div>` : '';
+            return workHistoryDetailFootInner(key, w, extraNote) + adm;
+        }
+        function openWorkAdminEdit(key, workId) {
+            const def = wcDef(key);
+            const w = def ? def.works.find(x => x.id === workId) : null;
+            if (!w) return;
+            const derived = isDerivedWork(w);
+            openAdminRecordEditor({
+                title: `${def.title} · ${w.id} ${w.title || ''}`, record: w,
+                note: derived ? '상담 · 계약 · 견적에서 자동으로 만들어진 업무입니다. 여기서 고쳐도 원본이 바뀌면 다시 만들어지므로, 원본(상담 · 계약 · 견적)을 고쳐 주세요.' : '',
+                choices: { status: Object.entries(def.statusNames || {}).map(([v, l]) => ({ v, l })) },
+                onSave: (patch) => { Object.assign(w, patch); saveWorks(); if (typeof refreshWorkViews === 'function') refreshWorkViews(); },
+                onDelete: derived ? null : () => {
+                    def.works = def.works.filter(x => x.id !== workId);
+                    saveWorks();
+                    if (typeof closeWorkHistoryDetail === 'function') closeWorkHistoryDetail();
+                    if (typeof refreshWorkViews === 'function') refreshWorkViews();
+                }
+            });
+        }
+        function workHistoryDetailFootInner(key, w, extraNote) {
             const note = extraNote ? ' ' + extraNote : '';
             if (w.status === 'done') {
                 return `<p class="mt-3 text-[11px] text-gray-400"><i class="fas fa-circle-info mr-1"></i>처리가 끝난 건이라 입력 항목은 읽기 전용입니다.${note}</p>`;
@@ -27419,12 +27509,24 @@ const QUOTE_TEMPLATES = [
         }
         // 검수는 관리자 또는 운영본부 팀장 이상
         function canReviewInstallCheck() {
-            if (isSystemAdmin() || levelClass(currentUserLevel) === 'exec') return true;
+            if (canManageAllData() || levelClass(currentUserLevel) === 'exec') return true;
             return currentUserDept === 'ops' && ['leader', 'head'].indexOf(currentUserLevel) > -1;
+        }
+        // 관리자 — 체크리스트의 상태 · 기본 항목을 고치거나 지웁니다 (점검 결과는 체크리스트 창에서 바로 고침 · 2026-09-28)
+        function openInstallCheckAdminEdit(id) {
+            const chk = installChecks.find(c => c.id === id);
+            if (!chk) return;
+            openAdminRecordEditor({
+                title: `설치 체크리스트 · ${chk.id} ${chk.customerName || ''}`, record: chk,
+                note: '점검 항목의 결과는 체크리스트 창에서 바로 고칠 수 있습니다.',
+                choices: { status: Object.keys(INSTALL_CHECK_STATUS).filter(k => k !== 'none').map(k => ({ v: k, l: INSTALL_CHECK_STATUS[k].name })) },
+                onSave: (patch) => { Object.assign(chk, patch); saveInstallChecks(); if (installCheckCtx) renderInstallCheckModal(); },
+                onDelete: () => { installChecks = installChecks.filter(c => c.id !== id); saveInstallChecks(); closeInstallCheckModal(); }
+            });
         }
         // 작성은 운영본부 · 관리자
         function canEditInstallCheck() {
-            return isSystemAdmin() || currentUserDept === 'ops';
+            return canManageAllData() || currentUserDept === 'ops';
         }
         // 설치 예정 일시 — 캘린더에 연결된 일정이 있으면 그것, 없으면 접수의 설치요청일
         function installCheckSchedule(key, w) {
@@ -27715,7 +27817,8 @@ const QUOTE_TEMPLATES = [
             const w = asWork(key, workId);
             const chk = installCheckOf(key, workId);
             if (!w || !chk) { closeInstallCheckModal(); return; }
-            const editable = canEditInstallCheck() && (chk.status === 'draft' || chk.status === 'rework');
+            // 관리자 · 전체 자료 권한은 제출 · 승인 뒤에도 고칩니다 (2026-09-28)
+            const editable = (canEditInstallCheck() && (chk.status === 'draft' || chk.status === 'rework')) || canManageAllData();
             const reviewer = canReviewInstallCheck();
             const sch = installCheckSchedule(key, w);
             const prog = installCheckProgress(chk);
@@ -27725,7 +27828,8 @@ const QUOTE_TEMPLATES = [
             const dis = editable ? '' : ' disabled';
 
             document.getElementById('install-check-subject').textContent = `${chk.id} · ${w.id} · ${chk.customerName || '-'}`;
-            document.getElementById('install-check-status').innerHTML = installCheckChipHtml(chk);
+            document.getElementById('install-check-status').innerHTML = installCheckChipHtml(chk)
+                + (canManageAllData() ? ' ' + adminEditButtonHtml(`openInstallCheckAdminEdit('${escapeHtml(chk.id)}')`, '관리자') : '');
 
             const groupsHtml = installCheckGroupsFor(chk).map(g => {
                 const items = g.items;
@@ -32080,6 +32184,160 @@ const QUOTE_TEMPLATES = [
         // 그룹웨어 관리자 — 부서 'admin'(소속 없는 시스템 계정) · 직책 '관리자' · 권한 그룹 '관리자 그룹' 중 하나면 관리자입니다 (2026-09-21 확장).
         // 관리자는 등록되는 모든 자료를 추가 · 수정 · 삭제할 수 있습니다 — 아래 권한 판정 함수들이 이 함수를 먼저 봅니다.
         // (겸직 관리자는 본부 소속이라 예전의 isSystemAdmin() 검사로는 걸러지지 않았습니다)
+        // ==================== 관리자 자료 수정 창 (공용 · 2026-09-28) ====================
+        // 화면마다 따로 만들지 않고, 자료 한 건의 항목(글 · 숫자 · 예/아니오)을 모두 입력칸으로 보여 주는 창 하나를 씁니다.
+        // 협업티켓 · 업무 · 접수 · 보완서류 · 이슈처럼 '수정 · 삭제 화면이 없거나 상태 때문에 막힌' 자료에 붙입니다.
+        //   openAdminRecordEditor({ title, record, choices: { 칸: [{ v, l }] }, skip: [칸…], onSave(patch), onDelete() })
+        //   · 목록 · 첨부 같은 묶음 값과 그림 자료(data:)는 여기서 고치지 않습니다(그대로 둠)
+        //   · 저장하면 adminEditedAt · adminEditedBy 를 남깁니다
+        let adminEditCtx = null;
+        const ADMIN_EDIT_SKIP = ['id', '__rev', 'adminEditedAt', 'adminEditedBy'];
+        function openAdminRecordEditor(opts) {
+            if (!canManageAllData()) { alert('전체 자료 수정 · 삭제 권한이 없습니다.'); return; }
+            const rec = opts && opts.record;
+            if (!rec) { alert('자료를 찾지 못했습니다.'); return; }
+            adminEditCtx = opts;
+            let modal = document.getElementById('admin-edit-modal');
+            if (!modal) {
+                modal = document.createElement('div');
+                modal.id = 'admin-edit-modal';
+                modal.className = 'hidden fixed inset-0 bg-black bg-opacity-50 flex items-start justify-center z-[80] p-4 overflow-y-auto';
+                modal.addEventListener('click', (e) => { if (e.target === modal) closeAdminRecordEditor(); });
+                document.body.appendChild(modal);
+            }
+            const skip = ADMIN_EDIT_SKIP.concat(opts.skip || []);
+            const choices = opts.choices || {};
+            const prim = (v) => v === null || v === undefined || ['string', 'number', 'boolean'].includes(typeof v);
+            // 보기용 평면 자료 — 한 단계 묶음(예: extra)은 'extra.칸' 으로 펼칩니다
+            const flat = {};
+            Object.keys(rec).forEach(k => {
+                const v = rec[k];
+                if (v && typeof v === 'object' && !Array.isArray(v) && Object.keys(v).length && Object.values(v).every(prim)) {
+                    Object.keys(v).forEach(c => { flat[k + '.' + c] = v[c]; });
+                } else flat[k] = v;
+            });
+            const view = flat;
+            const keys = Object.keys(view).filter(k => !skip.includes(k) && !skip.includes(k.split('.')[0]));
+            const editable = keys.filter(k => {
+                const v = view[k];
+                if (v === null || v === undefined) return true;
+                if (typeof v === 'object' || typeof v === 'function') return false;
+                return !(typeof v === 'string' && v.indexOf('data:') === 0);
+            });
+            // 선택지를 준 칸은 자료에 아직 없어도 보여 줍니다(예: 상태)
+            Object.keys(choices).forEach(k => { if (!editable.includes(k) && !skip.includes(k)) editable.unshift(k); });
+            const kept = keys.filter(k => !editable.includes(k));
+            const cls = 'w-full p-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-red-400';
+            const labelOf = (k) => (opts.labels && opts.labels[k]) || execFieldLabel(k.split('.').pop());
+            const field = (k) => {
+                const v = view[k];
+                const lbl = `<label class="block text-xs font-medium text-gray-600 mb-1">${escapeHtml(labelOf(k))} <span class="font-normal text-gray-400">${escapeHtml(k)}</span></label>`;
+                const id = 'adm-f-' + k.replace(/[^A-Za-z0-9_-]/g, '_');
+                if (choices[k]) {
+                    const has = choices[k].some(c => String(c.v) === String(v));
+                    return `<div>${lbl}<select id="${id}" data-k="${escapeHtml(k)}" data-t="str" class="${cls}">
+                        ${has ? '' : `<option value="${escapeHtml(v == null ? '' : String(v))}" selected>${escapeHtml(v == null ? '(비어 있음)' : String(v))}</option>`}
+                        ${choices[k].map(c => `<option value="${escapeHtml(String(c.v))}"${String(c.v) === String(v) ? ' selected' : ''}>${escapeHtml(c.l)}</option>`).join('')}
+                    </select></div>`;
+                }
+                if (typeof v === 'boolean') {
+                    return `<div><label class="inline-flex items-center gap-2 text-sm text-gray-700 mt-5"><input type="checkbox" id="${id}" data-k="${escapeHtml(k)}" data-t="bool" class="w-4 h-4"${v ? ' checked' : ''}>${escapeHtml(labelOf(k))} <span class="text-xs text-gray-400">${escapeHtml(k)}</span></label></div>`;
+                }
+                if (typeof v === 'number') return `<div>${lbl}<input type="number" step="any" id="${id}" data-k="${escapeHtml(k)}" data-t="num" value="${escapeHtml(String(v))}" class="${cls}"></div>`;
+                const str = v == null ? '' : String(v);
+                if (str.length > 60 || str.indexOf('\n') > -1) {
+                    return `<div class="sm:col-span-2">${lbl}<textarea id="${id}" data-k="${escapeHtml(k)}" data-t="str" rows="3" class="${cls}">${escapeHtml(str)}</textarea></div>`;
+                }
+                return `<div>${lbl}<input type="text" id="${id}" data-k="${escapeHtml(k)}" data-t="str" value="${escapeHtml(str)}" class="${cls}"></div>`;
+            };
+            modal.innerHTML = `
+                <div class="bg-white rounded-lg shadow-xl w-full max-w-3xl my-8">
+                    <div class="flex items-start justify-between gap-2 px-5 py-3 border-b border-gray-200">
+                        <div class="min-w-0">
+                            <p class="text-xs font-semibold text-red-600"><i class="fas fa-user-shield mr-1"></i>관리자 자료 수정</p>
+                            <h3 class="font-bold text-gray-800 truncate">${escapeHtml(opts.title || '')}</h3>
+                            ${rec.adminEditedAt ? `<p class="text-[11px] text-gray-400">마지막 관리자 수정: ${escapeHtml(rec.adminEditedAt)} · ${escapeHtml(rec.adminEditedBy || '')}</p>` : ''}
+                        </div>
+                        <button type="button" onclick="closeAdminRecordEditor()" class="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
+                    </div>
+                    <div class="p-5">
+                        <p class="text-xs text-gray-500 bg-amber-50 border border-amber-200 rounded px-3 py-2 mb-4">
+                            <i class="fas fa-triangle-exclamation mr-1 text-amber-500"></i>본부 · 작성자 · 처리 상태와 관계없이 고칩니다. 잘못 고치면 되돌릴 수 없으니 확인하고 저장해 주세요.
+                            ${opts.note ? '<br>' + escapeHtml(opts.note) : ''}</p>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">${editable.map(field).join('') || '<p class="text-sm text-gray-400">고칠 수 있는 항목이 없습니다.</p>'}</div>
+                        ${kept.length ? `<p class="text-[11px] text-gray-400 mt-3">여기서 고치지 않고 그대로 두는 항목(목록 · 첨부 등): ${kept.map(k => escapeHtml(labelOf(k))).join(' · ')}</p>` : ''}
+                    </div>
+                    <div class="flex flex-wrap items-center justify-end gap-2 px-5 py-3 border-t border-gray-200 bg-gray-50 rounded-b-lg">
+                        ${opts.onDelete ? '<button type="button" onclick="adminRecordDelete()" class="mr-auto px-4 py-2 text-sm rounded border border-red-300 text-red-600 bg-white hover:bg-red-50"><i class="fas fa-trash mr-1"></i>삭제</button>' : ''}
+                        <button type="button" onclick="closeAdminRecordEditor()" class="px-4 py-2 text-sm rounded bg-gray-200 text-gray-700 hover:bg-gray-300">닫기</button>
+                        ${opts.onSave ? '<button type="button" onclick="adminRecordSave()" class="px-4 py-2 text-sm rounded bg-red-600 text-white hover:bg-red-700"><i class="fas fa-floppy-disk mr-1"></i>저장</button>' : ''}
+                    </div>
+                </div>`;
+            modal.classList.remove('hidden');
+        }
+        function closeAdminRecordEditor() {
+            const m = document.getElementById('admin-edit-modal');
+            if (m) m.classList.add('hidden');
+            adminEditCtx = null;
+        }
+        function adminRecordSave() {
+            const ctx = adminEditCtx; if (!ctx || !ctx.onSave) return;
+            const rec = ctx.record, flatPatch = {};
+            const cur = (k) => { const [a, b] = k.split('.'); return b === undefined ? rec[a] : (rec[a] || {})[b]; };
+            document.querySelectorAll('#admin-edit-modal [data-k]').forEach(el => {
+                const k = el.getAttribute('data-k'), t = el.getAttribute('data-t');
+                let v;
+                if (t === 'bool') v = !!el.checked;
+                else if (t === 'num') { v = el.value === '' ? null : Number(el.value); if (v !== null && isNaN(v)) v = cur(k); }
+                else v = el.value;
+                const before = cur(k) === undefined || cur(k) === null ? '' : cur(k);
+                if (String(before) !== String(v === null ? '' : v)) flatPatch[k] = v;
+            });
+            const n = Object.keys(flatPatch).length;
+            if (!n) { alert('바뀐 항목이 없습니다.'); return; }
+            if (!confirm(`${n}개 항목을 바꿉니다.\n\n· ${Object.keys(flatPatch).map(k => execFieldLabel(k.split('.').pop())).join('\n· ')}\n\n저장할까요?`)) return;
+            const patch = {};
+            Object.keys(flatPatch).forEach(k => {
+                const [a, b] = k.split('.');
+                if (b === undefined) { patch[a] = flatPatch[k]; return; }
+                patch[a] = Object.assign({}, rec[a] || {}, patch[a] || {}, { [b]: flatPatch[k] });
+            });
+            patch.adminEditedAt = new Date().toISOString().slice(0, 16).replace('T', ' ');
+            patch.adminEditedBy = currentUserName || '';
+            try { ctx.onSave(patch); }
+            catch (e) { alert('저장하지 못했습니다.\n' + (e && e.message || e)); return; }
+            closeAdminRecordEditor();
+            refreshVisibleScreen();
+            showAppToast('관리자 수정 — 저장했습니다.', 'green');
+        }
+        function adminRecordDelete() {
+            const ctx = adminEditCtx; if (!ctx || !ctx.onDelete) return;
+            if (!confirm(`'${ctx.title || '이 자료'}' 을(를) 삭제할까요?\n\n되돌릴 수 없습니다.`)) return;
+            try { ctx.onDelete(); }
+            catch (e) { alert('삭제하지 못했습니다.\n' + (e && e.message || e)); return; }
+            closeAdminRecordEditor();
+            refreshVisibleScreen();
+            showAppToast('관리자 수정 — 삭제했습니다.', 'gray');
+        }
+        // 지금 보고 있는 화면을 다시 그립니다 (관리자 수정 · 삭제 뒤)
+        function refreshVisibleScreen() {
+            const sec = Array.from(document.querySelectorAll('.content-section')).find(x => !x.classList.contains('hidden'));
+            if (!sec) return;
+            const id = sec.id.replace(/^sec-/, '');
+            try { navigate(id, document.getElementById('nav-' + id)); } catch (e) { /* 그 화면은 다음에 열 때 다시 그려집니다 */ }
+            try { refreshNotiBell(); } catch (e) { /* 무시 */ }
+        }
+        // 관리자 수정 단추 (각 상세 화면이 붙입니다)
+        function adminEditButtonHtml(onclickJs, label) {
+            if (!canManageAllData()) return '';
+            return `<button type="button" onclick="${onclickJs}" class="px-3 py-2 text-sm rounded border border-red-300 text-red-600 bg-white hover:bg-red-50 whitespace-nowrap"><i class="fas fa-user-shield mr-1"></i>${escapeHtml(label || '관리자 수정 · 삭제')}</button>`;
+        }
+
+        // 전체 자료 수정 · 삭제 권한 (2026-09-28) — 관리자이거나, 권한 관리에서 '전체 자료 수정 · 삭제' 를 켠 그룹.
+        // 자료마다 있는 '본인 · 같은 부서 · 처리 전' 같은 제한보다 앞서 봅니다.
+        function canManageAllData() {
+            return isSystemAdmin() || (typeof allowedPageIds !== 'undefined' && allowedPageIds.includes('data-admin'));
+        }
         function isSystemAdmin() {
             return currentUserIsAdmin || currentUserDept === 'admin' || currentUserLevel === 'admin'
                 || currentUserGroupId === 'admin' || currentUserRole === 'admin';
@@ -32087,7 +32345,7 @@ const QUOTE_TEMPLATES = [
         // 계정 객체 기준 (조회 범위처럼 이름 · 부서 · 직책을 인자로 받는 함수에서 씁니다)
         // isAdmin — 본부 소속 · 직급 · 권한 그룹은 그대로 두고 관리자 권한만 겸직으로 얹은 계정 (2026-09-21)
         function isAdminAccount(u) { return !!u && (u.isAdmin === true || u.dept === 'admin' || u.level === 'admin' || u.groupId === 'admin'); }
-        function canWriteNotice() { return isSystemAdmin() || noticeWriters().includes(currentUserName); }
+        function canWriteNotice() { return canManageAllData() || noticeWriters().includes(currentUserName); }
 
         // ---------- 승인권자 구성원 ----------
         // manageMembers 기능은 여기 담긴 사람만 승인권자로 지정할 수 있습니다.
@@ -41823,12 +42081,12 @@ const QUOTE_TEMPLATES = [
         // ---------- 역할 판정 ----------
         // 결제본부(+관리자): 요청 등록 · 항목 확인/반려 · 취합 확인 완료
         // 영업본부(+관리자): 요청 확인 · 서류 업로드 · 제출
-        function payDocIsSales() { return currentUserDept === 'sales' || isSystemAdmin(); }
-        function payDocCanReview() { return currentUserDept === 'payment' || isSystemAdmin(); }
+        function payDocIsSales() { return currentUserDept === 'sales' || canManageAllData(); }
+        function payDocCanReview() { return currentUserDept === 'payment' || canManageAllData(); }
         // 팀 전체 요청은 영업본부 누구나, 담당자 지정 요청은 지정된 본인만 업로드할 수 있습니다.
         function payDocCanUpload(r) {
             if (!payDocIsSales()) return false;
-            if (isSystemAdmin()) return true;
+            if (canManageAllData()) return true;
             if (r.targetType === 'team') return true;
             return r.targetName === currentUserName;
         }
@@ -42387,7 +42645,7 @@ const QUOTE_TEMPLATES = [
 
         // ---------- 발송된 요청의 보완서류 항목 편집 (결제본부 전용) ----------
         // 요청을 보낸 뒤 서류를 빠뜨렸거나 사유를 고쳐야 할 때 씁니다. 확인완료된 요청은 잠급니다.
-        function payDocItemEditable(r) { return payDocCanReview() && r && (r.status !== 'completed' || isSystemAdmin()); }
+        function payDocItemEditable(r) { return payDocCanReview() && r && (r.status !== 'completed' || canManageAllData()); }
 
         function payDocAddItem(reqId) {
             const r = payDocReq(reqId);
@@ -42455,6 +42713,21 @@ const QUOTE_TEMPLATES = [
             renderPaymentWorkCenter();
         }
 
+        // 관리자 — 보완서류 요청 한 건의 기본 항목(상태 · 수신 · 기한 · 가맹점 …)을 고치고, 요청째 지웁니다 (2026-09-28)
+        // 서류 항목 · 파일은 상세 창에서 바로 고칩니다.
+        function openPayDocAdminEdit(id) {
+            const r = payDocReq(id);
+            if (!r) return;
+            openAdminRecordEditor({
+                title: `보완서류 · ${r.id} ${r.merchant || ''}`, record: r,
+                note: '서류 항목과 올린 파일은 상세 창에서 바로 고칠 수 있습니다.',
+                choices: { status: Object.keys(PAY_REQ_STATUS).map(k => ({ v: k, l: PAY_REQ_STATUS[k].name })),
+                           regType: Object.keys(PAY_REG_TYPES).map(k => ({ v: k, l: PAY_REG_TYPES[k].name })),
+                           priority: Object.keys(PAY_PRIORITY).map(k => ({ v: k, l: PAY_PRIORITY[k].name })) },
+                onSave: (patch) => { Object.assign(r, patch); savePayDocs(); renderPayDocDetail(); },
+                onDelete: () => { payDocRequests = payDocRequests.filter(x => x.id !== id); savePayDocs(); closePayDocDetail(); }
+            });
+        }
         function renderPayDocDetail() {
             const r = payDocReq(payDocDetailId);
             const host = document.getElementById('paydoc-detail-body');
@@ -42464,7 +42737,8 @@ const QUOTE_TEMPLATES = [
             const reg = PAY_REG_TYPES[r.regType] || PAY_REG_TYPES.pg;
             const pr = PAY_PRIORITY[r.priority] || PAY_PRIORITY.normal;
             const p = payDocProgress(r);
-            const canUpload = payDocCanUpload(r) && r.status !== 'completed' && r.status !== 'submitted';
+            // 관리자 · 전체 자료 권한은 확인대기 · 확인완료 뒤에도 파일을 바꾸고 지웁니다 (2026-09-28)
+            const canUpload = payDocCanUpload(r) && ((r.status !== 'completed' && r.status !== 'submitted') || canManageAllData());
             const canReview = payDocCanReview() && (r.status === 'submitted' || r.status === 'returned');
             const canEditItems = payDocItemEditable(r);   // 보완필요서류 항목 추가·수정·삭제 (결제본부 전용)
             const dd = r.status === 'completed' ? null : getDdayInfo(r.dueDate);
@@ -42570,7 +42844,10 @@ const QUOTE_TEMPLATES = [
                         </div>
                         <p class="text-sm text-gray-500 mt-1">${escapeHtml(r.merchant)} · ${escapeHtml(r.bizNo || '-')}</p>
                     </div>
-                    <button type="button" onclick="closePayDocDetail()" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times"></i></button>
+                    <div class="flex items-center gap-2 shrink-0">
+                        ${adminEditButtonHtml(`openPayDocAdminEdit('${escapeHtml(r.id)}')`, '관리자 수정')}
+                        <button type="button" onclick="closePayDocDetail()" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times"></i></button>
+                    </div>
                 </div>
 
                 <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4 bg-gray-50 rounded-lg p-4">
@@ -43165,7 +43442,7 @@ const QUOTE_TEMPLATES = [
         }
         // 지금 로그인한 사람이 이 문서를 고칠 수 있는가 — 작성자 또는 관리자
         function canEditSalesDoc(doc) {
-            return !doc || doc.writer === currentUserName || doc.reporter === currentUserName || isSystemAdmin();
+            return !doc || doc.writer === currentUserName || doc.reporter === currentUserName || canManageAllData();
         }
 
         // ==================== 회의록 ====================
@@ -44049,7 +44326,7 @@ const QUOTE_TEMPLATES = [
         function setIssueStatus(id, status) {
             const x = findIssue(id);
             if (!x || !ISSUE_STATUS[status]) return;
-            if (!isIssueReceiver(x)) { alert('처리 상태는 보고 대상만 바꿀 수 있습니다.'); renderIssueDetail(); return; }
+            if (!isIssueReceiver(x) && !canManageAllData()) { alert('처리 상태는 보고 대상과 관리자만 바꿀 수 있습니다.'); renderIssueDetail(); return; }
             const before = x.status;
             if (before === status) return;
             x.status = status;
@@ -44420,7 +44697,7 @@ const QUOTE_TEMPLATES = [
         }
         // IT담당자만 의뢰서를 쓰고 검수합니다 (관리자 포함)
         function canHandleDevReq() {
-            return isSystemAdmin() || currentUserDept === 'it';
+            return canManageAllData() || currentUserDept === 'it';
         }
         // 이 의뢰가 파트너센터에 **닿을 수 있는지** 미리 짚어 봅니다 (2026-09-16).
         // "보냈는데 파트너센터에 안 보인다" 는 대개 셋 중 하나입니다 —
@@ -44568,7 +44845,7 @@ const QUOTE_TEMPLATES = [
         function openDevForm(id) {
             if (!canHandleDevReq()) { alert('개발의뢰서는 IT본부 담당자와 관리자만 쓸 수 있습니다.'); return; }
             const src = findDevReq(id);
-            if (src && src.status === 'done' && !isSystemAdmin()) { alert('검수완료된 건은 고칠 수 없습니다.'); return; }
+            if (src && src.status === 'done' && !canManageAllData()) { alert('검수완료된 건은 고칠 수 없습니다.'); return; }
             devDraft = src ? JSON.parse(JSON.stringify(src)) : {
                 id: '', title: '', partnerId: '', partnerName: '', requester: currentUserName || '',
                 reqType: DEV_TYPES[0], priority: 'normal', system: '', dueDate: '',
@@ -44956,7 +45233,7 @@ const QUOTE_TEMPLATES = [
                 ${devHistoryHtml(x, 'kob')}
 
                 <div class="mt-5 flex flex-wrap items-center justify-end gap-2">
-                    ${canHandle && x.status !== 'done' ? `<button type="button" onclick="openDevForm('${x.id}')" class="mr-auto px-3 py-2 text-sm rounded border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 transition-colors"><i class="fas fa-pen-to-square mr-1"></i>의뢰서 수정</button>` : ''}
+                    ${canHandle && (x.status !== 'done' || canManageAllData()) ? `<button type="button" onclick="openDevForm('${x.id}')" class="mr-auto px-3 py-2 text-sm rounded border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 transition-colors"><i class="fas fa-pen-to-square mr-1"></i>의뢰서 수정</button>` : ''}
                     <button type="button" onclick="closeDevModal()" class="px-4 py-2 text-sm bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition-colors">닫기</button>
                     ${canHandle && x.status === 'review' ? `<button type="button" onclick="devHold('${x.id}')" class="px-4 py-2 text-sm rounded bg-slate-600 text-white hover:bg-slate-700 transition-colors"><i class="fas fa-pause mr-1"></i>보류</button>` : ''}
                     ${canHandle && x.status === 'review' ? `<button type="button" onclick="devRework('${x.id}')" class="px-4 py-2 text-sm rounded bg-amber-500 text-white hover:bg-amber-600 transition-colors"><i class="fas fa-rotate-left mr-1"></i>재작업 요청</button>` : ''}
@@ -45847,7 +46124,7 @@ const QUOTE_TEMPLATES = [
         function isCardAdmin(dept, level) {
             const d = dept === undefined ? currentUserDept : dept;
             const lv = level === undefined ? currentUserLevel : level;
-            if (d === 'admin' || levelClass(lv) === 'admin' || (dept === undefined && isSystemAdmin())) return true;
+            if (d === 'admin' || levelClass(lv) === 'admin' || (dept === undefined && canManageAllData())) return true;
             return isMgmtDept(d) && (levelClass(lv) === 'leader' || levelClass(lv) === 'head' || levelClass(lv) === 'exec');
         }
         // 조회 범위: self(본인 카드만) / dept(자기 부서) / all(전사)
@@ -45866,6 +46143,7 @@ const QUOTE_TEMPLATES = [
                 return cardUserOverrides[user.id].scope || 'self';
             }
             if (isCardAdmin(dept, level)) return 'all';     // 카드 관리자는 업로드 주체라 전사
+            if (name === currentUserName && canManageAllData()) return 'all';   // 겸직 관리자 · 전체 자료 권한 (2026-09-28)
             return scopeOfLevel(cardLevelScope, level, 'self');
         }
         function myCardScope() { return getCardScopeFor(currentUserName, currentUserDept, currentUserLevel); }
@@ -45880,6 +46158,16 @@ const QUOTE_TEMPLATES = [
             return info.user ? info.user.name === currentUserName : false;
         }
         // 사용내용을 적을 수 있는가 — 카드 소유자 본인, 그리고 관리본부(대리작성)
+        // 관리자 — 카드 승인 내역 한 건을 고치거나 지웁니다(잘못 올라온 줄 정리 · 2026-09-28)
+        function openCardTxnAdminEdit(id) {
+            const t = cardTxns.find(x => x.id === id);
+            if (!t) return;
+            openAdminRecordEditor({
+                title: `법인카드 내역 · ${t.approvalNo ? '승인번호 ' + t.approvalNo : t.id}`, record: t,
+                onSave: (patch) => { Object.assign(t, patch); saveCardTxns(); },
+                onDelete: () => { cardTxns = cardTxns.filter(x => x.id !== id); saveCardTxns(); }
+            });
+        }
         function canEditCardUse(t) {
             const info = cardTxnOwnerInfo(t);
             if (info.user && info.user.name === currentUserName) return true;
@@ -46500,6 +46788,7 @@ const QUOTE_TEMPLATES = [
                             : (canEdit
                                 ? `<button onclick="openCardUseModal('${t.id}')" class="px-2 py-1 rounded text-xs font-medium ${doneOne ? 'bg-green-50 text-green-700 hover:bg-green-100' : 'bg-indigo-600 text-white hover:bg-indigo-700'}"><i class="fas ${doneOne ? 'fa-check' : 'fa-pen'} mr-1"></i>${doneOne ? '작성완료' : '작성'}</button>`
                                 : `<span class="text-xs ${doneOne ? 'text-green-600' : 'text-gray-400'}">${doneOne ? '작성완료' : '미작성'}</span>`)}
+                        ${canManageAllData() ? `<button type="button" title="관리자 수정 · 삭제" onclick="openCardTxnAdminEdit('${t.id}')" class="ml-1 px-1.5 py-1 rounded text-xs border border-red-200 text-red-600 hover:bg-red-50"><i class="fas fa-user-shield"></i></button>` : ''}
                     </td>
                 </tr>`;
             }).join('');
@@ -47478,10 +47767,16 @@ const QUOTE_TEMPLATES = [
             }
 
             if (id) {
-                // 수정: 서버에 개별 수정 API가 없어 로컬 반영 (데모). 상태 변경은 프로세스 버튼 사용 권장.
-                const idx = vehicleReserves.findIndex(r => r.id === id);
-                if (idx > -1) vehicleReserves[idx] = { ...vehicleReserves[idx], ...data };
-                renderVehicleReserves();
+                // 수정 — 서버(PATCH /api/reservations)에 저장합니다 (2026-09-28. 예전엔 화면에만 반영되어 새로 불러오면 되돌아갔음)
+                if (kobStorage.mode === 'supabase') {
+                    try { await kobAuth.call('/api/reservations', { id, patch: data }, 'PATCH'); }
+                    catch (e) { alert('예약을 고치지 못했습니다.\n' + (e.message || e)); return; }
+                    await reloadVehicleReserves();
+                } else {
+                    const idx = vehicleReserves.findIndex(r => r.id === id);
+                    if (idx > -1) vehicleReserves[idx] = { ...vehicleReserves[idx], ...data };
+                    renderVehicleReserves();
+                }
                 closeVehicleReserveModal();
                 alert('예약이 수정되었습니다.');
             } else {
@@ -47507,6 +47802,14 @@ const QUOTE_TEMPLATES = [
             }
         }
         async function deleteVehicleReserve(id) {
+            // 관리자 · 전체 자료 권한 — 기록째 지웁니다 (2026-09-28). 그 밖에는 예전처럼 '취소' 상태로 둡니다.
+            if (canManageAllData() && kobStorage.mode === 'supabase') {
+                if (!confirm('이 예약을 완전히 삭제할까요? (관리자)\n\n기록이 남지 않고 되돌릴 수 없습니다.')) return;
+                try { await kobAuth.call('/api/reservations', { id }, 'DELETE'); }
+                catch (e) { alert('예약을 지우지 못했습니다.\n' + (e.message || e)); return; }
+                await reloadVehicleReserves();
+                return;
+            }
             if (!confirm('이 예약을 취소(삭제)하시겠습니까?')) return;
             try {
                 await reserveAction(id, 'cancel');
@@ -47878,7 +48181,7 @@ const QUOTE_TEMPLATES = [
             document.getElementById('vehicle-log-modal').classList.add('hidden');
             document.getElementById('vehicle-log-form').reset();
         }
-        function submitVehicleLog(event) {
+        async function submitVehicleLog(event) {
             event.preventDefault();
             const id = document.getElementById('edit-vl-id').value;
             const data = {
@@ -47901,11 +48204,17 @@ const QUOTE_TEMPLATES = [
                 return;
             }
             if (id) {
-                // 수정: (데모 API는 append 전용이므로) 로컬 반영
-                const idx = vehicleLogs.findIndex(l => l.id === id);
-                if (idx > -1) vehicleLogs[idx] = { ...vehicleLogs[idx], ...data };
+                // 수정 — 서버(PATCH /api/vehicle-logs)에 저장합니다 (2026-09-28. 예전엔 화면에만 반영)
+                if (kobStorage.mode === 'supabase') {
+                    try { await kobAuth.call('/api/vehicle-logs', { id, patch: data }, 'PATCH'); }
+                    catch (e) { alert('운행내역을 고치지 못했습니다.\n' + (e.message || e)); return; }
+                    await reloadVehicleLogs();
+                } else {
+                    const idx = vehicleLogs.findIndex(l => l.id === id);
+                    if (idx > -1) vehicleLogs[idx] = { ...vehicleLogs[idx], ...data };
+                    renderVehicleLogs();
+                }
                 alert('운행내역이 수정되었습니다.');
-                renderVehicleLogs();
                 closeVehicleLogModal();
             } else {
                 // 신규: 서버에 저장하여 모바일 등록분과 동일 저장소에 반영, 성공 후 서버에서 재로딩
@@ -47928,11 +48237,18 @@ const QUOTE_TEMPLATES = [
                 });
             }
         }
-        function deleteVehicleLog(id) {
-            if (confirm('이 운행내역을 삭제하시겠습니까?')) {
-                vehicleLogs = vehicleLogs.filter(l => l.id !== id);
-                renderVehicleLogs();
+        async function deleteVehicleLog(id) {
+            if (!confirm('이 운행내역을 삭제하시겠습니까?')) return;
+            // 서버에서 지웁니다 (2026-09-28. 예전엔 화면에서만 사라지고 새로 불러오면 다시 나왔음) — 관리자 · 전체 자료 권한
+            if (kobStorage.mode === 'supabase') {
+                if (!canManageAllData()) { alert('운행내역 삭제는 관리자만 할 수 있습니다.'); return; }
+                try { await kobAuth.call('/api/vehicle-logs', { id }, 'DELETE'); }
+                catch (e) { alert('운행내역을 지우지 못했습니다.\n' + (e.message || e)); return; }
+                await reloadVehicleLogs();
+                return;
             }
+            vehicleLogs = vehicleLogs.filter(l => l.id !== id);
+            renderVehicleLogs();
         }
 
         // 초기 데이터 렌더링
@@ -53055,7 +53371,7 @@ const QUOTE_TEMPLATES = [
         const canSeePartnerCenter = (dept) => canSeePage('partner-center-' + dept);
         // 처리(상태 변경·담당 배정·답변)는 그 본부 사람 또는 관리자
         function canHandlePartnerIntake(dept) {
-            if (isSystemAdmin()) return true;
+            if (canManageAllData()) return true;
             return currentUserDept === dept;
         }
 
@@ -53501,8 +53817,10 @@ const QUOTE_TEMPLATES = [
                 </div>`;
             }
             // 관리자만 — 잘못 들어온 접수를 지웁니다 (2026-09-21). 파트너 화면의 '내 접수' 에서도 사라집니다.
-            if (isSystemAdmin()) {
-                html += `<div class="flex justify-end mt-3">
+            // 접수 내용도 관리자가 고칩니다 (2026-09-28)
+            if (canManageAllData()) {
+                html += `<div class="flex justify-end gap-2 mt-3">
+                    ${adminEditButtonHtml(`openPartnerIntakeAdminEdit('${x.id}')`, '접수 내용 수정 (관리자)')}
                     <button type="button" onclick="deletePartnerIntake('${x.id}')" class="px-3 py-1.5 text-xs bg-red-50 text-red-600 border border-red-200 rounded hover:bg-red-100">
                         <i class="fas fa-trash mr-1"></i>접수 삭제 (관리자)</button>
                 </div>`;
@@ -53511,8 +53829,22 @@ const QUOTE_TEMPLATES = [
             document.getElementById('pi-detail-body').innerHTML = html;
             document.getElementById('pi-detail-modal').classList.remove('hidden');
         }
+        function openPartnerIntakeAdminEdit(id) {
+            const x = partnerIntakeById(id);
+            if (!x) return;
+            openAdminRecordEditor({
+                title: `파트너 접수 · ${x.id} ${x.title || ''}`, record: x,
+                note: '고친 내용은 파트너 화면의 내 접수에도 그대로 보입니다. 서류 · 첨부는 접수 상세에서 다룹니다.',
+                choices: { status: Object.keys(PARTNER_INTAKE_STATUS).map(k => ({ v: k, l: PARTNER_INTAKE_STATUS[k].name })) },
+                onSave: (patch) => { Object.assign(x, patch); savePartnerIntakes(); refreshPartnerCenterViews(); },
+                onDelete: () => {
+                    partnerIntakes = partnerIntakes.filter(y => y.id !== id);
+                    savePartnerIntakes(); closePartnerIntakeDetail(); refreshPartnerCenterViews();
+                }
+            });
+        }
         function deletePartnerIntake(id) {
-            if (!isSystemAdmin()) { alert('접수 삭제는 관리자만 할 수 있습니다.'); return; }
+            if (!canManageAllData()) { alert('접수 삭제는 관리자만 할 수 있습니다.'); return; }
             const x = partnerIntakeById(id);
             if (!x) return;
             if (!confirm(`접수 ${x.id} (${x.title || partnerIntakeTypeName(x)}) 을(를) 지울까요?\n파트너 화면에서도 사라지며 되돌릴 수 없습니다.`)) return;

@@ -1,0 +1,69 @@
+// 관리자 자료 고치기 · 지우기 — 서버 쪽 법인차량 예약 · 운행일지 (2026-09-28). Supabase 는 가짜 fetch 로 대신합니다.
+let pass = 0, fail = 0;
+const ok = (c, m) => { if (c) { pass++; console.log('  ✓', m); } else { fail++; console.log('  ✗', m); } };
+
+const store = {
+    'gwUsers.v1': [
+        { email: 'admin@k.co', name: '관리', groupId: 'admin' },
+        { email: 'sub@k.co', name: '겸직', groupId: 'sales', isAdmin: true },
+        { email: 'data@k.co', name: '자료', groupId: 'dataGroup' },
+        { email: 'car@k.co', name: '차량', groupId: 'mgmtGroup' },
+        { email: 'staff@k.co', name: '직원', groupId: 'sales' }
+    ],
+    'gwPermissionGroups.v2': { version: 2, groups: [
+        { id: 'dataGroup', permissions: ['data-admin'] },
+        { id: 'mgmtGroup', permissions: ['management-vehicle-reserve', 'management-vehicle'] },
+        { id: 'sales', permissions: ['sales'] }
+    ] }
+};
+const tables = {
+    vehicle_reservations: new Map([['VR-0001', { vehicle: '1호', applicant: '직원', status: '승인완료' }]]),
+    vehicle_logs: new Map([['VL-0001', { driver: '직원', startKm: 10, endKm: 20 }]])
+};
+let whoEmail = '';
+global.fetch = async (url, opt = {}) => {
+    const u = new URL(String(url)), m = opt.method || 'GET';
+    const res = (body, status) => new Response(body === undefined ? null : JSON.stringify(body), { status: status || 200 });
+    if (u.pathname === '/auth/v1/user') return whoEmail ? res({ email: whoEmail }) : res({}, 401);
+    const t = u.pathname.replace('/rest/v1/', '');
+    if (t === 'app_store') {
+        const k = u.searchParams.get('key') || '';
+        const keys = k.startsWith('in.(') ? k.slice(4, -1).split(',').map(x => x.replace(/"/g, '')) : [k.replace(/^eq\./, '')];
+        return res(keys.filter(x => x in store).map(x => ({ key: x, value: store[x] })));
+    }
+    if (tables[t]) {
+        if (m === 'GET') return res(Array.from(tables[t].entries()).map(([id, data]) => ({ id, data })));
+        if (m === 'POST') { JSON.parse(opt.body).forEach(r => tables[t].set(r.id, r.data)); return res(undefined, 201); }
+        if (m === 'DELETE') { tables[t].delete(decodeURIComponent(u.searchParams.get('id')).replace(/^eq\./, '')); return res(undefined, 204); }
+    }
+    return res([], 200);
+};
+
+(async () => {
+    const { onRequest } = await import('../functions/api/[[route]].js');
+    const env = { SUPABASE_URL: 'https://x.supabase.co', SUPABASE_SERVICE_ROLE_KEY: 'k' };
+    const call = async (who, method, path, body) => {
+        whoEmail = who;
+        const r = await onRequest({ request: new Request('https://gw' + path, { method, headers: who ? { Authorization: 'Bearer t' } : {}, body: JSON.stringify(body) }), env });
+        return r.status;
+    };
+
+    console.log('\n[1] 예약 고치기');
+    ok(await call('', 'PATCH', '/api/reservations', { id: 'VR-0001', patch: { destination: 'x' } }) === 401, '로그인 없으면 401');
+    ok(await call('staff@k.co', 'PATCH', '/api/reservations', { id: 'VR-0001', patch: { destination: 'x' } }) === 403, '일반 직원은 403');
+    ok(await call('car@k.co', 'PATCH', '/api/reservations', { id: 'VR-0001', patch: { destination: '부산' } }) === 200
+        && tables.vehicle_reservations.get('VR-0001').destination === '부산', '예약관리 권한 그룹은 고칠 수 있다 · 서버에 저장된다');
+    ok(tables.vehicle_reservations.get('VR-0001').applicant === '직원', '안 보낸 항목은 그대로');
+    ok(await call('sub@k.co', 'PATCH', '/api/reservations', { id: 'VR-0001', patch: { status: '반납완료' } }) === 200, '겸직 관리자도 된다');
+    ok(await call('admin@k.co', 'PATCH', '/api/reservations', { id: 'NONE', patch: {} }) === 400, '없는 예약은 400');
+
+    console.log('\n[2] 지우기는 관리자 · 전체 자료 권한만');
+    ok(await call('car@k.co', 'DELETE', '/api/reservations', { id: 'VR-0001' }) === 403, '예약관리 권한만으로는 못 지운다');
+    ok(await call('data@k.co', 'DELETE', '/api/reservations', { id: 'VR-0001' }) === 200 && !tables.vehicle_reservations.has('VR-0001'), '전체 자료 권한 그룹은 지운다');
+    ok(await call('car@k.co', 'PATCH', '/api/vehicle-logs', { id: 'VL-0001', patch: { endKm: 25 } }) === 200 && tables.vehicle_logs.get('VL-0001').endKm === 25, '운행내역 권한 그룹은 운행일지를 고친다');
+    ok(await call('staff@k.co', 'DELETE', '/api/vehicle-logs', { id: 'VL-0001' }) === 403, '일반 직원은 운행일지를 못 지운다');
+    ok(await call('admin@k.co', 'DELETE', '/api/vehicle-logs', { id: 'VL-0001' }) === 200 && !tables.vehicle_logs.has('VL-0001'), '관리자는 운행일지를 지운다');
+
+    console.log(`\n=========== 통과 ${pass} · 실패 ${fail} ===========`);
+    process.exit(fail ? 1 : 0);
+})().catch(e => { console.error(e); process.exit(1); });

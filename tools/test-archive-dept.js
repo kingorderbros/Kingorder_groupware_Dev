@@ -26,6 +26,7 @@ vm.runInContext(`
     function deptName(id) { const d = DEPTS.find(x => x.id === id); return d ? d.name : id; }
     var __admin = false, __mgr = false, currentUserDept = '';
     function isSystemAdmin() { return __admin; }
+    function canManageAllData() { return __admin; }
     function canEditArchive() { return __admin || __mgr; }
     function __as(admin, mgr, dept) { __admin = admin; __mgr = mgr; currentUserDept = dept; }
 ` + CODE + `
