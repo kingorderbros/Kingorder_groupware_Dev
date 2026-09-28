@@ -1076,3 +1076,6 @@ Workspace 요금 없이 갑니다. 무료 구글 계정 `kingorderbrothers@gmail
 - `js/kob-db.js` — 표를 받을 때(처음 · Realtime) 줄 id 를 자료에 채워 넣음(`withId`). **이미 저장된 폰 일정도 바로 열립니다.**
 - `functions/api/_gcal.js` — 가져올 때 id 를 자료에서 빼지 않음.
 - `tools/test-kob-db.js` 에 3항목 추가.
+
+## 2026-09-28 — 그룹웨어 로그아웃 전에 한 번 묻기
+- 사이드바 [로그아웃] → "로그아웃할까요?" 확인 창 → [확인] 을 눌러야 로그아웃. [취소] 면 그대로. 파트너센터와 같은 방식.

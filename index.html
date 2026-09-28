@@ -11894,6 +11894,7 @@ const QUOTE_TEMPLATES = [
         }
 
         async function handleLogout() {
+            if (!confirm('로그아웃할까요?')) return;   // 파트너센터와 같게 한 번 묻습니다 (2026-09-28)
             // Supabase 모드 — 보내지 못한 저장을 먼저 보내고, 로그아웃한 뒤 페이지를 새로 불러
             // 화면 메모리에 남은 자료(앞사람이 본 것)를 모두 비웁니다 (2026-09-28)
             if (kobStorage.mode === 'supabase') {
