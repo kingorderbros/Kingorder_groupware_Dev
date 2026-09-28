@@ -116,11 +116,26 @@
         if (!res.ok || j.ok === false) throw new Error(j.error || ('서버 오류 ' + res.status));
         return j;
     }
+    // 서버(/api)에 닿지 않을 때 — 어떻게 열었는지에 따라 할 일이 달라서 나눠 알려 줍니다 (2026-09-28)
+    //   · 파일을 직접 연 경우(file://) · 에디터 미리보기처럼 /api 가 없는 곳에서 연 경우가 대부분입니다
+    function apiDownHint() {
+        const loc = window.location;
+        if (API) return `서버(${API})에 연결하지 못했습니다. 잠시 뒤 새로고침해 주세요.`;
+        if (loc.protocol === 'file:') {
+            return '파일을 직접 열어서 서버(/api)가 없습니다. 브라우저 주소창에 dev 주소(https://kingorder-groupware-dev.kingorderbros.workers.dev)를 넣어 열어 주세요.';
+        }
+        if (/^(localhost|127\.0\.0\.1)$/.test(loc.hostname)) {
+            return loc.port === '8788'
+                ? '서버(/api)에 연결하지 못했습니다. 터미널에서 npm run dev 가 켜져 있는지, 개발환경 폴더에 .dev.vars 가 있는지 확인해 주세요.'
+                : `이 주소(${loc.host})에는 서버(/api)가 없습니다. 개발환경 폴더에서 npm run dev 로 띄운 뒤 http://localhost:8788 로 열거나, dev 주소로 열어 주세요.`;
+        }
+        return '서버(/api)에 연결하지 못했습니다. 배포 중이면 1~2분 걸립니다 — 잠시 뒤 새로고침해 주세요.';
+    }
     const remote = {
         mode: 'supabase',
         async status() {
             try { const r = await (await fetch(API + '/api/auth/status', { cache: 'no-store' })).json(); return { mode: 'supabase', empty: !!r.empty, error: r.ok === false ? r.error : '' }; }
-            catch (e) { return { mode: 'supabase', empty: false, error: '서버(/api)에 연결하지 못했습니다. npm run dev 로 실행했는지, .dev.vars 가 있는지 확인해 주세요.' }; }
+            catch (e) { return { mode: 'supabase', empty: false, error: apiDownHint() }; }
         },
         bootstrap: (email) => api('/api/auth/bootstrap', { email }),
         setTemp: (email, name) => api('/api/auth/users', { email, name }),

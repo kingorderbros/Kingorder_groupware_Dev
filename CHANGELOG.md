@@ -961,3 +961,16 @@ Workspace 요금 없이 갑니다. 무료 구글 계정 `kingorderbrothers@gmail
 - 프로젝트 상세로 내려가는 것은 `selectProjectFromNotice()` 에 넣어 알림함에서 갈 때도 같습니다.
 - 새 시험 `tools/test-exec-open.js` (`npm run check` 에 넣음).
 - 검증: `npm run check` 전체 통과 · 헤드리스 PC/휴대폰 18경우 스크립트 오류 0.
+
+## 2026-09-28 — 로그인 화면 '서버(/api)에 연결하지 못했습니다' 안내를 상황별로
+
+`index.html` 을 파일로 직접 열었을 때(file://) 로그인 화면에 `npm run dev · .dev.vars 확인` 안내가 떠서 원인을 알기 어려웠습니다.
+배포된 dev 주소는 PC · 휴대폰 크기 모두 정상(`/api/auth/status` 200)임을 헤드리스 크롬으로 확인했습니다.
+`js/kob-auth.js` 의 `apiDownHint()` 가 여는 방식에 따라 나눠 안내합니다.
+
+| 연 방식 | 안내 |
+| --- | --- |
+| 파일 직접(file://) | dev 주소로 열라고 |
+| localhost:8788 (`npm run dev`) | npm run dev · .dev.vars 확인 (예전 문구) |
+| 그 밖의 localhost 포트(에디터 미리보기 등) | 이 주소에는 /api 가 없음 → 8788 또는 dev 주소 |
+| 배포된 주소 | 배포 중일 수 있으니 잠시 뒤 새로고침 |
