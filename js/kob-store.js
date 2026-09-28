@@ -45,6 +45,7 @@
     }
 
     const cache = new Map();          // key → 문자열(JSON) — Supabase 모드에서만 씁니다
+    const synced = new Map();         // key → 마지막으로 서버와 맞춘 값(문자열) — 저장할 때 '내가 바꾼 건' 을 가려내는 기준
     let client = null;                // supabase-js 클라이언트
     let mode = 'local';
     const pending = new Map();        // key → 값(또는 null=삭제) — 모아 보낼 쓰기
@@ -60,23 +61,82 @@
         if (flushTimer) return;
         flushTimer = setTimeout(flush, 300);
     }
+    // ---------- 목록 자료 합쳐 저장하기 (2026-09-28) ----------
+    // 설정 자료는 '키 하나 = 목록 통째' 라, 두 사람이 비슷한 때 저장하면 나중 사람이 앞사람의 변경을 덮었습니다.
+    // 목록(id 가 있는 항목들, 또는 { records: [...] } 묶음)이면 저장 직전에 서버의 최신 값을 다시 읽고,
+    // **내가 바꾼 항목(추가 · 수정 · 삭제)만** 그 위에 얹어 저장합니다. 같은 항목을 둘 다 고쳤으면 나중 것이 이깁니다.
+    function listShape(str) {
+        let v; try { v = JSON.parse(str); } catch (e) { return null; }
+        const isList = (a) => Array.isArray(a) && a.every(x => x && typeof x === 'object' && x.id !== undefined && x.id !== null);
+        if (isList(v)) return { list: v, wrap: null };
+        if (v && typeof v === 'object' && !Array.isArray(v) && isList(v.records)) return { list: v.records, wrap: v };
+        return null;
+    }
+    function mergeLists(baseStr, mineStr, serverStr) {
+        const mine = listShape(mineStr), server = listShape(serverStr);
+        if (!mine || !server || (!!mine.wrap !== !!server.wrap)) return null;          // 목록이 아니면 합치지 않고 통째로
+        const base = baseStr == null ? null : listShape(baseStr);
+        const key = (x) => String(x.id);
+        const before = new Map((base ? base.list : []).map(x => [key(x), JSON.stringify(x)]));
+        const mineIds = new Set(mine.list.map(key));
+        const changed = mine.list.filter(x => before.get(key(x)) !== JSON.stringify(x));      // 내가 더하거나 고친 것
+        const removed = base ? Array.from(before.keys()).filter(id => !mineIds.has(id)) : []; // 내가 지운 것
+        const out = server.list.filter(x => !removed.includes(key(x)));
+        changed.forEach(x => { const i = out.findIndex(y => key(y) === key(x)); if (i > -1) out[i] = x; else out.push(x); });
+        // 순서는 내 목록 순서를 따르고, 내가 모르는(남이 더한) 항목은 그 자리 뒤에 둡니다
+        const order = new Map(mine.list.map((x, i) => [key(x), i]));
+        out.sort((a, b) => (order.has(key(a)) ? order.get(key(a)) : 1e9) - (order.has(key(b)) ? order.get(key(b)) : 1e9));
+        if (!mine.wrap) return JSON.stringify(out);
+        const w = Object.assign({}, server.wrap, mine.wrap, { records: out });
+        if (typeof server.wrap.seq === 'number' || typeof mine.wrap.seq === 'number') w.seq = Math.max(Number(server.wrap.seq) || 0, Number(mine.wrap.seq) || 0);
+        return JSON.stringify(w);
+    }
+    let flushing = false;
     async function flush() {
         flushTimer = null;
         if (!client || !pending.size) return;
+        if (flushing) { scheduleFlush(); return; }             // 앞 저장이 끝난 뒤에 (같은 키를 겹쳐 보내지 않게)
         // 보내는 순간에도 한 번 더 — 그사이 로그아웃했으면 보내지 않습니다
         const batch = Array.from(pending.entries()).filter(([k]) => canPush(k)); pending.clear();
         if (!batch.length) return;
-        const ups = batch.filter(([, v]) => v !== null).map(([key, v]) => ({ key, value: safeJson(v), updated_at: new Date().toISOString() }));
+        flushing = true;
         const dels = batch.filter(([, v]) => v === null).map(([key]) => key);
         try {
-            if (ups.length) { const { error } = await client.from('app_store').upsert(ups, { onConflict: 'key' }); if (error) throw error; }
-            if (dels.length) { const { error } = await client.from('app_store').delete().in('key', dels); if (error) throw error; }
+            const plain = [];
+            for (const [key, v] of batch) {
+                if (v === null) continue;
+                if (!listShape(v)) { plain.push({ key, value: safeJson(v), updated_at: new Date().toISOString() }); continue; }
+                // 목록 — 서버 최신 값 위에 내 변경만 얹기
+                const { data: row, error: e1 } = await client.from('app_store').select('value').eq('key', key).maybeSingle();
+                if (e1) throw e1;
+                const serverStr = row ? toStr(row.value) : null;
+                let out = v;
+                if (serverStr !== null && serverStr !== synced.get(key)) {
+                    const merged = mergeLists(synced.has(key) ? synced.get(key) : null, v, serverStr);
+                    if (merged !== null) out = merged;
+                }
+                const { error: e2 } = await client.from('app_store').upsert([{ key, value: safeJson(out), updated_at: new Date().toISOString() }], { onConflict: 'key' });
+                if (e2) throw e2;
+                synced.set(key, out);
+                // 합친 결과가 내 화면 값과 다르면(남의 변경이 들어왔으면) 화면에 알립니다 — 그사이 새로 쓴 값은 건드리지 않음
+                if (out !== v && cache.get(key) === v && !pending.has(key)) {
+                    cache.set(key, out); ls.set(key, out);
+                    try { window.dispatchEvent(new StorageEvent('storage', { key, oldValue: v, newValue: out, storageArea: window.localStorage })); } catch (e) { /* 새로고침으로 */ }
+                }
+            }
+            if (plain.length) {
+                const { error } = await client.from('app_store').upsert(plain, { onConflict: 'key' }); if (error) throw error;
+                plain.forEach(r => synced.set(r.key, toStr(r.value)));
+            }
+            if (dels.length) { const { error } = await client.from('app_store').delete().in('key', dels); if (error) throw error; dels.forEach(k => synced.delete(k)); }
             setStatus('ok');
         } catch (e) {
             console.error('[kob-store] 저장 실패 — 다시 시도합니다', e);
             batch.forEach(([k, v]) => { if (!pending.has(k)) pending.set(k, v); });   // 새 쓰기가 있으면 그것을 우선
             setStatus('error', e.message || String(e));
             setTimeout(scheduleFlush, 3000);
+        } finally {
+            flushing = false;
         }
     }
     // 문자열 값은 jsonb 에 담기 위해 JSON 으로 해석해 보고, 아니면 문자열 그대로
@@ -304,7 +364,7 @@
                 } catch (e) { /* 로그인 상태를 못 따라가면 처음 값(authed)을 그대로 씁니다 */ }
                 const { data, error } = await client.from('app_store').select('key,value');
                 if (error) throw error;
-                (data || []).forEach(r => cache.set(r.key, toStr(r.value)));
+                (data || []).forEach(r => { cache.set(r.key, toStr(r.value)); synced.set(r.key, toStr(r.value)); });
                 mode = 'supabase';
                 // 다른 창 · 다른 사람의 변경 — Realtime (표에 REPLICA IDENTITY FULL 이 있어야 삭제도 옵니다)
                 try {
@@ -312,7 +372,8 @@
                         const key = (p.new && p.new.key) || (p.old && p.old.key);
                         if (!key) return;
                         const oldValue = cache.get(key) ?? null;
-                        if (p.eventType === 'DELETE') cache.delete(key); else cache.set(key, toStr(p.new.value));
+                        if (p.eventType === 'DELETE') { cache.delete(key); synced.delete(key); }
+                        else { synced.set(key, toStr(p.new.value)); if (!pending.has(key)) cache.set(key, toStr(p.new.value)); }
                         const newValue = cache.get(key) ?? null;
                         if (oldValue === newValue) return;                    // 내가 방금 쓴 값이 돌아온 것
                         try { window.dispatchEvent(new StorageEvent('storage', { key, oldValue, newValue, storageArea: window.localStorage })); }

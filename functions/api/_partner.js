@@ -174,32 +174,90 @@ export function applyPartnerWrite(key, current, upserts, removes, me) {
                 // 번호만 겹친 새 건 — 빈 번호로 바꿔 새로 넣습니다
                 const nid = freeId(id, taken);
                 taken.add(nid); renamed[id] = nid;
-                list.push(stamp(key, Object.assign({}, item, { id: nid }), me));
+                list.push(sanitizeNew(key, Object.assign({}, item, { id: nid }), me));
                 return;
             }
-            const next = stamp(key, item, me);
-            // 개발의뢰의 상대 파트너사는 사내가 정한 그대로 둡니다
-            if (key === 'gwDevRequests.v1') { next.partnerId = list[i].partnerId; next.partnerName = list[i].partnerName; }
-            list[i] = next;
+            // 이미 있는 자기 건 — 파트너가 바꿀 수 있는 칸만 서버 값 위에 얹습니다 (2026-09-28)
+            const merged = mergeExisting(key, list[i], item, me);
+            if (merged === null) { rejected.push(id); return; }
+            list[i] = merged;
             return;
         }
         if (key === 'gwDevRequests.v1') { rejected.push(id); return; }            // 개발의뢰는 사내에서만 만듭니다
         taken.add(id);
-        list.push(stamp(key, item, me));
+        list.push(sanitizeNew(key, item, me));
     });
-    arr(removes).forEach(rid => {
-        if (key === 'gwDevRequests.v1') { rejected.push(String(rid)); return; }  // 개발의뢰는 지우지 못합니다
-        const i = list.findIndex(x => x && String(x.id) === String(rid));
-        if (i > -1 && owns(key, list[i], me)) list.splice(i, 1);
-        else if (i > -1) rejected.push(String(rid));
-    });
+    // 파트너 화면에는 지우는 기능이 없습니다 — 지우기 요청은 모두 받지 않습니다
+    // (목록을 못 읽어 빈 목록을 저장하는 경우에도 서버 자료가 지워지지 않게 · 2026-09-28)
+    arr(removes).forEach(rid => rejected.push(String(rid)));
     return done({ list, renamed, rejected });
 }
-// 소유를 나타내는 칸은 서버가 다시 적습니다 — 다른 파트너사 이름으로 넣지 못하게
-function stamp(key, item, me) {
-    const o = Object.assign({}, item);
-    if (key === 'gwPartnerIntakes.v1') o.partnerId = me.partnerId;
-    if (key === 'gwInboundRecords.v1') o.vendor = me.partnerName;
-    if (key === 'gwDevRequests.v1' && !o.partnerId) o.partnerName = me.partnerName;
+
+// ---------- 파트너가 고칠 수 있는 칸 (2026-09-28) ----------
+// 파트너 화면 코드를 모두 따라가 본 결과입니다. 여기 없는 칸(처리 상태 · 담당 · 결제 · 답변 · 사내 처리 칸 …)은
+// 파트너가 보낸 값이 무엇이든 서버 값을 그대로 둡니다.
+const clone = (v) => JSON.parse(JSON.stringify(v === undefined ? null : v));
+// 기록(history · thread) — 서버에 있는 것은 그대로 두고, 뒤에 붙인 것 중 조건에 맞는 것만 받습니다
+function appended(serverArr, incomingArr, max, okEntry) {
+    const base = arr(serverArr).slice();
+    const extra = arr(incomingArr).slice(base.length).filter(okEntry).slice(0, max);
+    return base.concat(extra);
+}
+const DEV_PARTNER_STEPS = ['received', 'working', 'hold', 'review'];
+const INBOUND_VENDOR_FIELDS = ['inDate', 'routes', 'services', 'company', 'name', 'bizNo', 'phone', 'email', 'firstContactAt', 'requestNote', 'needs'];
+const INTAKE_STAFF_FIELDS = ['rejectKind', 'rejectAlt', 'holdReason', 'payStatus', 'taxInvoice', 'payMemo', 'method', 'deptWork', 'siteConfirm',
+                             'workId', 'workAt', 'adminEditedAt', 'adminEditedBy'];
+
+function mergeExisting(key, server, incoming, me) {
+    const o = clone(server);
+    if (key === 'gwPartnerIntakes.v1') {
+        // 반려된 접수를 다시 요청할 때만 — 원 접수에 '재요청 연결' 과 기록 한 줄
+        if (server.status === 'rejected' && !server.reRequestedTo && incoming.reRequestedTo && typeof incoming.reRequestedTo === 'string') {
+            o.reRequestedTo = incoming.reRequestedTo;
+            o.history = appended(server.history, incoming.history, 1, (h) => h && typeof h === 'object' && /재요청/.test(String(h.text || '')));
+        }
+        return o;
+    }
+    if (key === 'gwDevRequests.v1') {
+        if (server.status === 'draft') return null;                          // 작성 중인 의뢰는 파트너에게 안 보입니다
+        const st = incoming.status;
+        if (st !== server.status && DEV_PARTNER_STEPS.includes(st) && server.status !== 'done') {
+            o.status = st;
+            if (server.status === 'rework' && st === 'received') { o.reworkRound = (Number(server.reworkRound) || 0) + 1; o.progress = 0; }
+            if (st === 'review') o.progress = 100;
+            if (st === 'hold') { o.holdReason = String(incoming.holdReason || ''); o.holdBy = me.partnerName; o.holdAt = String(incoming.holdAt || ''); }
+        }
+        if ((o.status === 'working') && incoming.progress !== undefined && incoming.progress !== server.progress) {
+            const n = Math.round(Number(incoming.progress));
+            if (!isNaN(n)) o.progress = Math.max(0, Math.min(100, n));
+        }
+        const fromPartner = (e) => e && typeof e === 'object' && e.side === 'partner' && e.system !== true;
+        o.thread = appended(server.thread, incoming.thread, 20, fromPartner);
+        o.history = appended(server.history, incoming.history, 20, fromPartner);
+        if (incoming.partnerSeenAt) o.partnerSeenAt = String(incoming.partnerSeenAt);
+        if (incoming.updatedAt) o.updatedAt = String(incoming.updatedAt);
+        return o;
+    }
+    if (key === 'gwInboundRecords.v1') {
+        INBOUND_VENDOR_FIELDS.forEach(f => { if (f in incoming) o[f] = clone(incoming[f]); else delete o[f]; });
+        o.vendor = server.vendor;                                            // 업체 이름 · 사내 처리 칸(kob)은 그대로
+        return o;
+    }
+    return o;
+}
+function sanitizeNew(key, item, me) {
+    const o = clone(item);
+    if (key === 'gwPartnerIntakes.v1') {
+        o.partnerId = me.partnerId;
+        o.status = 'received'; o.assignee = ''; o.rejectReason = ''; o.reRequestedTo = ''; o.replies = [];
+        INTAKE_STAFF_FIELDS.forEach(f => { delete o[f]; });
+        o.history = arr(o.history).slice(0, 1);
+    }
+    if (key === 'gwInboundRecords.v1') {
+        const keep = { id: o.id, createdAt: o.createdAt || new Date().toISOString(), vendor: me.partnerName,
+                       kob: { contactAt: '', salesStatus: '', result: '', failReason: '', owner: '', extras: [] } };
+        INBOUND_VENDOR_FIELDS.forEach(f => { if (f in o) keep[f] = o[f]; });
+        return keep;
+    }
     return o;
 }

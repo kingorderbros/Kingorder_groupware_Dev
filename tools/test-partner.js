@@ -56,13 +56,13 @@ const ok = (c, m) => { if (c) { pass++; console.log('  ✓', m); } else { fail++
 
     console.log('\n[4] 파트너 저장 합치기');
     let w = P.applyPartnerWrite('gwPartnerIntakes.v1', store['gwPartnerIntakes.v1'], [{ id: 'PI-1', partnerId: 'PA-1', memo: '고침' }, { id: 'PI-3', partnerId: 'PA-2', memo: '새 건' }], [], me);
-    ok(w.list.find(x => x.id === 'PI-1').memo === '고침', '자기 건은 고친다');
+    ok(w.list.find(x => x.id === 'PI-1').memo === undefined, '자기 기존 접수라도 파트너가 고칠 수 없는 칸은 그대로 (2026-09-28)');
     ok(w.list.find(x => x.id === 'PI-3').partnerId === 'PA-1', '새 건의 파트너사는 서버가 자기 것으로 적는다');
     ok(w.list.find(x => x.id === 'PI-2').partnerId === 'PA-2' && !w.list.find(x => x.id === 'PI-2').memo, '남의 건은 그대로');
     w = P.applyPartnerWrite('gwPartnerIntakes.v1', store['gwPartnerIntakes.v1'], [{ id: 'PI-2', memo: '번호만 겹친 새 건' }], [], me);
     ok(w.renamed['PI-2'] === 'PI-3' && w.list.find(x => x.id === 'PI-2').partnerId === 'PA-2', '번호가 남의 것과 겹치면 빈 번호로 새로 넣고 남의 건은 그대로');
     w = P.applyPartnerWrite('gwPartnerIntakes.v1', store['gwPartnerIntakes.v1'], [], ['PI-1', 'PI-2'], me);
-    ok(!w.list.find(x => x.id === 'PI-1') && w.list.find(x => x.id === 'PI-2') && w.rejected.includes('PI-2'), '지우기는 자기 것만');
+    ok(w.list.find(x => x.id === 'PI-1') && w.list.find(x => x.id === 'PI-2') && w.rejected.includes('PI-1'), '파트너의 지우기 요청은 받지 않는다 (자기 것도)');
     w = P.applyPartnerWrite('gwInboundRecords.v1', store['gwInboundRecords.v1'], [{ id: 'IN-0002', vendor: '가나 상사', memo: 'x' }], [], me);
     ok(w.list.records.find(x => x.id === 'IN-0002').vendor === '다라' && w.renamed['IN-0002'] === 'IN-0003', '인바운드 번호가 겹치면 새 번호 · 남의 것은 그대로');
     ok(w.list.records.length === 3 && w.list.seq === 4, '인바운드는 { seq, records } 모양을 지키고 다음 번호를 올린다');
@@ -82,6 +82,40 @@ const ok = (c, m) => { if (c) { pass++; console.log('  ✓', m); } else { fail++
     ok(w.list.map(x => x.id).join() === 'n1,n2', '알림 대기열은 새 것만 붙이고 지우지 않는다');
     let threw = false; try { P.applyPartnerWrite('gwUsers.v1', [], [], [], me); } catch (e) { threw = true; }
     ok(threw, '그 밖의 자료는 저장 거절');
+
+    console.log('\n[5] 파트너가 고칠 수 있는 칸만 (2026-09-28)');
+    {
+        const srv = [{ id: 'PI-5', partnerId: 'PA-1', status: 'working', payStatus: '미결제', assignee: '김', replies: [{ side: 'kob', text: '안내' }], history: [{ text: '접수' }] }];
+        let r = P.applyPartnerWrite('gwPartnerIntakes.v1', srv, [{ id: 'PI-5', partnerId: 'PA-1', status: 'done', payStatus: '결제완료', assignee: '', replies: [], history: [], title: '바꿈' }], [], me);
+        const x = r.list[0];
+        ok(x.status === 'working' && x.payStatus === '미결제' && x.assignee === '김' && x.replies.length === 1 && x.history.length === 1 && x.title === undefined,
+           '접수: 상태 · 결제 · 담당 · 답변 · 기록 · 내용을 파트너가 바꾸지 못한다');
+        const rej = [{ id: 'PI-6', partnerId: 'PA-1', status: 'rejected', reRequestedTo: '', history: [{ text: '접수' }] }];
+        r = P.applyPartnerWrite('gwPartnerIntakes.v1', rej, [{ id: 'PI-6', status: 'rejected', reRequestedTo: 'PI-7', history: [{ text: '접수' }, { text: '재요청 (PI-7)' }, { text: '끼워 넣기' }] }], [], me);
+        ok(r.list[0].reRequestedTo === 'PI-7' && r.list[0].history.length === 2, '반려 접수의 재요청 연결 · 기록 한 줄만 받는다');
+        r = P.applyPartnerWrite('gwPartnerIntakes.v1', [], [{ id: 'PI-8', status: 'done', assignee: '누구', payStatus: '결제완료', replies: [{ side: 'kob' }], history: [{ text: '접수' }, { text: '가짜' }] }], [], me);
+        ok(r.list[0].status === 'received' && r.list[0].assignee === '' && r.list[0].payStatus === undefined && r.list[0].replies.length === 0 && r.list[0].history.length === 1,
+           '새 접수: 상태는 접수완료 · 사내 칸은 비운다');
+
+        const dev = [{ id: 'D5', partnerId: 'PA-1', status: 'working', progress: 30, title: '원래', thread: [{ side: 'kob', text: '요청' }], history: [] }];
+        r = P.applyPartnerWrite('gwDevRequests.v1', dev, [{ id: 'D5', partnerId: 'PA-1', status: 'working', progress: 60, title: '바꿈', thread: [{ side: 'kob', text: '요청' }, { side: 'partner', text: '진행 중' }, { side: 'kob', text: '가짜 사내 답' }] }], [], me);
+        ok(r.list[0].progress === 60 && r.list[0].title === '원래' && r.list[0].thread.length === 2 && r.list[0].thread[1].side === 'partner',
+           '개발의뢰: 진행률 · 파트너 대화만 받고 의뢰 내용 · 사내 대화는 못 넣는다');
+        r = P.applyPartnerWrite('gwDevRequests.v1', dev, [{ id: 'D5', partnerId: 'PA-1', status: 'done' }], [], me);
+        ok(r.list[0].status === 'working', '개발의뢰: 검수완료(done)는 파트너가 못 한다');
+        r = P.applyPartnerWrite('gwDevRequests.v1', dev, [{ id: 'D5', partnerId: 'PA-1', status: 'review' }], [], me);
+        ok(r.list[0].status === 'review' && r.list[0].progress === 100, '개발의뢰: 검수요청은 된다(진행률 100)');
+        r = P.applyPartnerWrite('gwDevRequests.v1', [{ id: 'D6', partnerId: 'PA-1', status: 'draft' }], [{ id: 'D6', status: 'working' }], [], me);
+        ok(r.rejected.includes('D6') && r.list[0].status === 'draft', '개발의뢰: 작성 중(draft)은 건드리지 못한다');
+
+        const ib = { seq: 5, records: [{ id: 'IN-0004', vendor: '가나 상사', company: '옛', phone: '1', kob: { result: '영업수주', owner: '김' } }] };
+        r = P.applyPartnerWrite('gwInboundRecords.v1', ib, [{ id: 'IN-0004', vendor: '다른이름', company: '새', kob: { result: '실패' } }], [], me);
+        const q = r.list.records[0];
+        ok(q.company === '새' && q.phone === undefined && q.vendor === '가나 상사' && q.kob.result === '영업수주', '인바운드: 업체 칸만 바뀌고 업체 이름 · 사내 처리(kob)는 그대로');
+        r = P.applyPartnerWrite('gwInboundRecords.v1', ib, [{ id: 'IN-0005', company: '신규', kob: { result: '영업수주' }, secret: 1 }], [], me);
+        const n = r.list.records.find(x => x.id === 'IN-0005');
+        ok(n.kob.result === '' && n.vendor === '가나 상사' && n.secret === undefined, '새 인입: 사내 처리 칸은 비우고 업체 칸만');
+    }
 
     console.log(`\n=========== 통과 ${pass} · 실패 ${fail} ===========`);
     process.exit(fail ? 1 : 0);
