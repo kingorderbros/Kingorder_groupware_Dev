@@ -1408,7 +1408,11 @@
             </div>
             <div class="p-5 space-y-4">
                 <input type="hidden" id="arc-id" />
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                        <label class="block text-xs font-medium text-gray-600 mb-1">본부 <span class="text-red-500">*</span></label>
+                        <select id="arc-dept" class="w-full p-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500"></select>
+                    </div>
                     <div>
                         <label class="block text-xs font-medium text-gray-600 mb-1">분류 <span class="text-red-500">*</span></label>
                         <select id="arc-cat" class="w-full p-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500"></select>
@@ -12161,6 +12165,32 @@ const QUOTE_TEMPLATES = [
         function saveArchiveManagers() { saveJsonStore(ARCHIVE_MGR_KEY, archiveManagers); }
         function canEditArchive() { return isSystemAdmin() || archiveManagers.includes(currentUserName); }
 
+        // ---------- 본부별 자료 (2026-09-28) ----------
+        // 자료마다 dept 를 둡니다. 'company' = 전사 공통, 그 밖에는 조직도 본부 id (사외 조직 제외).
+        // 예전에 올린 자료(dept 없음)는 전사 공통으로 봅니다.
+        //   · 관리자        : 모든 본부에 올리고 고치고 지움
+        //   · 관리 가능자   : 자기 본부 + 전사 공통만
+        const ARCHIVE_DEPT_ALL = 'company';
+        const archivePostDept = (x) => (x && x.dept) || ARCHIVE_DEPT_ALL;
+        function archiveDeptOptions() {
+            return [{ id: ARCHIVE_DEPT_ALL, name: '전사 공통' }]
+                .concat(orgDeptList(false).filter(d => d.id !== 'admin').map(d => ({ id: d.id, name: d.name })));
+        }
+        function archiveDeptName(id) {
+            if (!id || id === ARCHIVE_DEPT_ALL) return '전사 공통';
+            return deptName(id);
+        }
+        // 이 사람이 올릴 수 있는 본부 id 목록
+        function archiveEditableDepts() {
+            if (!canEditArchive()) return [];
+            const all = archiveDeptOptions().map(d => d.id);
+            if (isSystemAdmin()) return all;
+            return all.filter(id => id === ARCHIVE_DEPT_ALL || id === currentUserDept);
+        }
+        function canEditArchivePost(x) {
+            return !!x && archiveEditableDepts().includes(archivePostDept(x));
+        }
+
         // 지금 화면이 https 인데 주소가 http 면 브라우저가 아예 막습니다(혼합 콘텐츠).
         // 이때는 '닿지 않음' 이 아니라 그 사실을 그대로 알려 줘야 합니다.
         function archiveMixedBlocked(url) {
@@ -12235,9 +12265,11 @@ const QUOTE_TEMPLATES = [
         // ---------- 자료실 탭 (게시판 · 파일서버) ----------
         let archiveTab = 'board';
         let archiveCatFilter = 'all';
+        let archiveDeptFilter = 'all';
         let archiveSearch = '';
         function setArchiveTab(t) { archiveTab = t; renderArchive(); }
         function setArchiveCat(c) { archiveCatFilter = c; renderArchiveBoard(); }
+        function setArchiveDept(d) { archiveDeptFilter = d; renderArchiveBoard(); }
         function onArchiveSearch() {
             const el = document.getElementById('arc-q');
             archiveSearch = el ? el.value : '';
@@ -12265,13 +12297,27 @@ const QUOTE_TEMPLATES = [
             if (archiveTab !== 'board') { host.innerHTML = ''; return; }
             const admin = canEditArchive();
             const cats = [{ id: 'all', name: '전체', icon: 'fa-list' }].concat(ARCHIVE_CATS);
+            const depts = [{ id: 'all', name: '전체 본부' }].concat(archiveDeptOptions());
+            // 지워진 본부를 고른 채로 남아 있으면 전체로 되돌립니다
+            if (!depts.some(d => d.id === archiveDeptFilter)) archiveDeptFilter = 'all';
+            const inDept = archivePosts.filter(x => archiveDeptFilter === 'all' || archivePostDept(x) === archiveDeptFilter);
             host.innerHTML = `
                 <div class="bg-white rounded-lg shadow-sm border border-gray-200">
+                    <div class="flex flex-wrap gap-1.5 px-4 pt-3">
+                        ${depts.map(d => {
+                            const on = archiveDeptFilter === d.id;
+                            const n = d.id === 'all' ? archivePosts.length : archivePosts.filter(x => archivePostDept(x) === d.id).length;
+                            return `<button type="button" onclick="setArchiveDept('${d.id}')"
+                                class="px-3 py-1.5 rounded text-xs font-semibold border transition ${on
+                                    ? 'bg-gray-800 border-gray-800 text-white' : 'bg-white border-gray-300 text-gray-600 hover:bg-gray-50'}">
+                                ${escapeHtml(d.name)} <span class="opacity-70">${n}</span></button>`;
+                        }).join('')}
+                    </div>
                     <div class="flex flex-wrap items-center justify-between gap-2 px-4 py-3 border-b border-gray-100">
                         <div class="flex flex-wrap gap-1.5">
                             ${cats.map(c => {
                                 const on = archiveCatFilter === c.id;
-                                const n = c.id === 'all' ? archivePosts.length : archivePosts.filter(x => x.cat === c.id).length;
+                                const n = c.id === 'all' ? inDept.length : inDept.filter(x => x.cat === c.id).length;
                                 return `<button type="button" onclick="setArchiveCat('${c.id}')"
                                     class="px-3 py-1.5 rounded-full text-xs font-semibold border transition ${on
                                         ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-white border-gray-300 text-gray-600 hover:bg-gray-50'}">
@@ -12302,7 +12348,8 @@ const QUOTE_TEMPLATES = [
             const admin = canEditArchive();
             const kw = String(archiveSearch || '').trim().toLowerCase();
             const list = archiveSorted(archivePosts.filter(x =>
-                (archiveCatFilter === 'all' || x.cat === archiveCatFilter)
+                (archiveDeptFilter === 'all' || archivePostDept(x) === archiveDeptFilter)
+                && (archiveCatFilter === 'all' || x.cat === archiveCatFilter)
                 && (!kw || `${x.title} ${x.body}`.toLowerCase().includes(kw))));
             if (!list.length) {
                 box.innerHTML = `<p class="p-10 text-center text-sm text-gray-400">
@@ -12321,6 +12368,7 @@ const QUOTE_TEMPLATES = [
                         <div class="min-w-0 flex-1">
                             <div class="flex flex-wrap items-center gap-1.5">
                                 ${x.pin ? '<span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-red-100 text-red-700">고정</span>' : ''}
+                                <span class="text-[11px] font-semibold px-2 py-0.5 rounded bg-gray-800 text-white">${escapeHtml(archiveDeptName(archivePostDept(x)))}</span>
                                 <span class="text-[11px] font-semibold px-2 py-0.5 rounded-full border border-gray-200 bg-gray-50 text-gray-600">
                                     <i class="fas ${c.icon} mr-1"></i>${escapeHtml(c.name)}</span>
                                 ${x.open
@@ -12334,7 +12382,7 @@ const QUOTE_TEMPLATES = [
                                 ${(x.files || []).length ? ` · <i class="fas fa-paperclip"></i> ${x.files.length}` : ''}
                             </p>
                         </div>
-                        ${admin ? `<div class="flex flex-col gap-1 shrink-0" onclick="event.stopPropagation()">
+                        ${canEditArchivePost(x) ? `<div class="flex flex-col gap-1 shrink-0" onclick="event.stopPropagation()">
                             <button type="button" onclick="openArchivePost('${x.id}')" class="px-2 py-1 text-xs rounded border border-gray-300 text-gray-600 hover:bg-white">수정</button>
                             <button type="button" onclick="deleteArchivePost('${x.id}')" class="px-2 py-1 text-xs rounded border border-red-200 text-red-600 hover:bg-red-50">삭제</button>
                         </div>` : ''}
@@ -12349,6 +12397,18 @@ const QUOTE_TEMPLATES = [
         function openArchivePost(id) {
             if (!canEditArchive()) { alert('자료를 올리려면 자료실 관리 권한이 필요합니다.'); return; }
             const x = id ? archivePostById(id) : null;
+            if (x && !canEditArchivePost(x)) {
+                alert(`'${archiveDeptName(archivePostDept(x))}' 자료는 고칠 수 없습니다.\n\n자기 본부 자료와 전사 공통 자료만 고칠 수 있습니다.`);
+                return;
+            }
+            // 본부 — 고칠 때는 원래 본부, 새로 올릴 때는 보고 있던 본부 → 내 본부 → 전사 공통 순으로 고릅니다
+            const okDepts = archiveEditableDepts();
+            const deptSel = document.getElementById('arc-dept');
+            deptSel.innerHTML = archiveDeptOptions().filter(d => okDepts.includes(d.id))
+                .map(d => `<option value="${d.id}">${escapeHtml(d.name)}</option>`).join('');
+            const wantDept = x ? archivePostDept(x)
+                : [archiveDeptFilter, currentUserDept, ARCHIVE_DEPT_ALL].find(d => okDepts.includes(d));
+            deptSel.value = wantDept || ARCHIVE_DEPT_ALL;
             document.getElementById('arc-post-title').innerHTML = x
                 ? '<i class="fas fa-pen mr-1.5 text-indigo-600"></i>자료 수정'
                 : '<i class="fas fa-folder-open mr-1.5 text-indigo-600"></i>자료 올리기';
@@ -12413,11 +12473,14 @@ const QUOTE_TEMPLATES = [
             if (!canEditArchive()) { alert('자료를 올리려면 자료실 관리 권한이 필요합니다.'); return; }
             const title = String(document.getElementById('arc-title').value || '').trim();
             if (!title) { alert('제목을 입력해 주세요.'); document.getElementById('arc-title').focus(); return; }
+            const dept = String(document.getElementById('arc-dept').value || '');
+            if (!archiveEditableDepts().includes(dept)) { alert('이 본부에는 자료를 올릴 수 없습니다.'); return; }
             reloadArchivePosts();                     // 다른 창에서 바뀐 것을 먼저 읽고 얹습니다
             const id = String(document.getElementById('arc-id').value || '');
             const now = (typeof partnerNowStamp === 'function') ? partnerNowStamp()
                 : new Date().toISOString().slice(0, 16).replace('T', ' ');
             const data = {
+                dept,
                 cat: document.getElementById('arc-cat').value,
                 title,
                 body: String(document.getElementById('arc-body').value || ''),
@@ -12428,6 +12491,7 @@ const QUOTE_TEMPLATES = [
             if (id) {
                 const x = archivePostById(id);
                 if (!x) { alert('이미 삭제된 자료입니다.'); closeArchivePost(); renderArchive(); return; }
+                if (!canEditArchivePost(x)) { alert('이 자료는 고칠 수 없습니다.'); return; }
                 Object.assign(x, data, { at: now, by: x.by || currentUserName || '' });
             } else {
                 archivePosts.unshift(Object.assign({ id: nextArchivePostId(), by: currentUserName || '', at: now, hit: 0 }, data));
@@ -12441,6 +12505,7 @@ const QUOTE_TEMPLATES = [
             if (!canEditArchive()) { alert('자료를 지우려면 자료실 관리 권한이 필요합니다.'); return; }
             const x = archivePostById(id);
             if (!x) return;
+            if (!canEditArchivePost(x)) { alert('자기 본부 자료와 전사 공통 자료만 지울 수 있습니다.'); return; }
             if (!confirm(`'${x.title}' 자료를 지울까요?\n\n되돌릴 수 없습니다.`)) return;
             archivePosts = archivePosts.filter(y => y.id !== id);
             if (!saveArchivePosts()) return;
@@ -12453,8 +12518,10 @@ const QUOTE_TEMPLATES = [
             const x = archivePostById(id);
             if (!x) return;
             const c = archiveCat(x.cat);
+            const inPartner = typeof partnerUser !== 'undefined' && !!partnerUser;
             document.getElementById('arc-view-badges').innerHTML =
-                `<span class="text-[11px] font-semibold px-2 py-0.5 rounded-full border border-gray-200 bg-gray-50 text-gray-600">
+                (inPartner ? '' : `<span class="text-[11px] font-semibold px-2 py-0.5 rounded bg-gray-800 text-white">${escapeHtml(archiveDeptName(archivePostDept(x)))}</span>`)
+                + `<span class="text-[11px] font-semibold px-2 py-0.5 rounded-full border border-gray-200 bg-gray-50 text-gray-600">
                     <i class="fas ${c.icon} mr-1"></i>${escapeHtml(c.name)}</span>`
                 + (x.pin ? '<span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-red-100 text-red-700">고정</span>' : '');
             document.getElementById('arc-view-title').textContent = x.title || '';
@@ -32031,7 +32098,7 @@ const QUOTE_TEMPLATES = [
                         <span class="w-10 h-10 rounded-lg bg-emerald-50 flex items-center justify-center mr-3"><i class="fas fa-folder-open text-emerald-500"></i></span>
                         <div>
                             <h4 class="font-semibold text-gray-800">자료실 관리 가능자 <span class="text-xs font-normal text-gray-400 ml-1">${list.length}명</span></h4>
-                            <p class="text-xs text-gray-400">여기에 등록된 사람과 관리자만 자료실에서 자료를 올리고 고치고 지울 수 있습니다. 파트너센터 자료실에는 공개로 올린 자료만 보입니다.</p>
+                            <p class="text-xs text-gray-400">여기에 등록된 사람과 관리자만 자료실에서 자료를 올리고 고치고 지울 수 있습니다. 등록된 사람은 <b>자기 본부 자료와 전사 공통 자료</b>만, 관리자는 모든 본부 자료를 다룹니다. 파트너센터 자료실에는 공개로 올린 자료만 보입니다.</p>
                         </div>
                     </div>
                     <div class="flex flex-wrap gap-1.5 mb-3">${chips}</div>
