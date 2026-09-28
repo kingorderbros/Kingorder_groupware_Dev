@@ -1228,7 +1228,10 @@
                         </div>
                         <div class="mb-5">
                             <label class="block text-sm font-medium text-gray-700 mb-1">비밀번호</label>
-                            <input type="password" id="pc-login-pw" required autocomplete="current-password" class="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="비밀번호" />
+                            <div class="relative">
+                                <input type="password" id="pc-login-pw" required autocomplete="current-password" class="w-full p-3 pr-11 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="비밀번호" />
+                                <button type="button" onclick="togglePwVisible('pc-login-pw', this)" aria-label="비밀번호 보기" title="비밀번호 보기" class="absolute inset-y-0 right-0 w-11 flex items-center justify-center text-gray-400 hover:text-gray-600"><i class="fas fa-eye"></i></button>
+                            </div>
                         </div>
                         <!-- 아이디 기억하기 — 사내 로그인 화면과 같은 방식입니다 (2026-09-05) -->
                         <div class="flex items-center mb-4">
@@ -1533,7 +1536,10 @@
                 </div>
                 <div class="mb-6">
                     <label class="block text-sm font-medium text-gray-700 mb-1">비밀번호</label>
-                    <input type="password" id="login-password" required autocomplete="current-password" class="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="••••••••" />
+                    <div class="relative">
+                        <input type="password" id="login-password" required autocomplete="current-password" class="w-full p-3 pr-11 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="••••••••" />
+                        <button type="button" onclick="togglePwVisible('login-password', this)" aria-label="비밀번호 보기" title="비밀번호 보기" class="absolute inset-y-0 right-0 w-11 flex items-center justify-center text-gray-400 hover:text-gray-600"><i class="fas fa-eye"></i></button>
+                    </div>
                 </div>
                 <div class="mb-6 flex items-center justify-between">
                     <div class="flex items-center">
@@ -10741,6 +10747,19 @@ const QUOTE_TEMPLATES = [
         // 1) 입력한 아이디로 조직도 계정(localUsers)을 찾고 → 2) 그 이메일 · 비밀번호로 kobAuth 에 확인 →
         // 3) 임시 비밀번호(첫 로그인)면 새 비밀번호를 받은 뒤 → 4) enterApp() 으로 들어갑니다.
         // 시연본의 데모 접두어 로그인(sales · ops …)은 없앴습니다 — 등록된 계정 + 비밀번호만 됩니다.
+        // 로그인 창 비밀번호 칸의 눈 표시 — 누르면 글자로 보이고, 한 번 더 누르면 다시 가립니다 (2026-09-28)
+        function togglePwVisible(inputId, btn) {
+            const el = document.getElementById(inputId);
+            if (!el) return;
+            const show = el.type === 'password';
+            el.type = show ? 'text' : 'password';
+            const label = show ? '비밀번호 숨기기' : '비밀번호 보기';
+            if (btn) {
+                btn.setAttribute('aria-label', label); btn.title = label;
+                const i = btn.querySelector('i'); if (i) i.className = 'fas ' + (show ? 'fa-eye-slash' : 'fa-eye');
+            }
+            el.focus();
+        }
         function showLoginMsg(text) {
             const el = document.getElementById('login-msg');
             if (!el) return;
