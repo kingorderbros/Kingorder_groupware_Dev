@@ -9655,20 +9655,6 @@ const QUOTE_TEMPLATES = [
         };
 
         // 협업 요청(티켓): assigneeUser = 수신 부서의 담당자(개인). ageDays = 발행 후 경과일(데모용 지연 계산).
-        // 시연용 첨부 이미지 — 서버가 없는 DEV환경이라 시드 데이터의 첨부는 그림을 그려서 대신합니다.
-        // (실제로 올린 파일은 브라우저 메모리의 원본이 그대로 표시됩니다)
-        function sampleCollabFileUrl(caption, bg) {
-            const esc = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-            const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="800" height="560" viewBox="0 0 800 560" font-family="'Malgun Gothic','Apple SD Gothic Neo',sans-serif">
-                <rect width="800" height="560" fill="${bg || '#f1f5f9'}"/>
-                <rect x="60" y="60" width="680" height="400" fill="#ffffff" stroke="#cbd5e1" stroke-width="2" rx="8"/>
-                <text x="400" y="270" font-size="30" font-weight="bold" fill="#334155" text-anchor="middle">${esc(caption)}</text>
-                <text x="400" y="310" font-size="15" fill="#94a3b8" text-anchor="middle">처리 결과 확인용 현장 사진 (시연 이미지)</text>
-                <text x="400" y="510" font-size="13" fill="#94a3b8" text-anchor="middle">※ 시연용 자료입니다. 실제로 첨부한 이미지·문서는 원본이 이 자리에 표시됩니다.</text>
-            </svg>`;
-            return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
-        }
-
         // ---------- 저장 (2026-09-17) ----------
         // 협업티켓은 Supabase 'collab_requests' 표에 한 건 = 한 줄로 둡니다 (js/kob-db.js).
         let collabRequests = (window.kobDb ? kobDb.rows('collab_requests') : []);
@@ -10096,14 +10082,6 @@ const QUOTE_TEMPLATES = [
         // 통합 조회 권한 여부 (팀장/본부장만 팀 통합현황 접근 가능)
         function canViewTeam(level) {
             return levelClass(level) === 'leader' || levelClass(level) === 'head' || levelClass(level) === 'exec';
-        }
-
-        // 타 부서 레코드를 '수정'할 수 있는지.
-        // 본부장의 크로스체크와 대표의 전사 조회는 확인 목적이므로 타 부서는 조회 전용으로 둡니다.
-        // (시스템 관리자만 부서 구분 없이 편집 가능)
-        function canEditDeptRecord(recordDept) {
-            if (isSystemAdmin()) return true;
-            return (recordDept || 'sales') === currentUserDept;
         }
 
         // 운행내역 조회 권한: 관리본부(management) 소속의 팀장/본부장, 또는 관리자(admin)만 허용
@@ -13514,7 +13492,7 @@ const QUOTE_TEMPLATES = [
         function getVisibleTickets() {
             const name = currentUserName, dept = currentUserDept, level = currentUserLevel;
             const scope = getCollabScopeFor(name, dept, level);
-            // cross(본부장 크로스체크)는 조회 범위상 전사와 동일 — 편집 제한은 canEditDeptRecord()에서 처리
+            // cross(본부장 크로스체크)는 조회 범위상 전사와 동일 — 편집은 등록한 사람 · 관리자 · 대리 수정자만(canEditSchedule)
             if (scope === 'all' || scope === 'cross') return collabRequests.slice();
             if (scope === 'self') {
                 return collabRequests.filter(r => r.assigneeUser === name || r.assignee === name);
@@ -16278,7 +16256,7 @@ const QUOTE_TEMPLATES = [
         function matchesCalendarScope(s, scopeInfo) {
             const name = currentUserName, dept = currentUserDept;
             const scope = scopeInfo.scope;
-            // cross(본부장 크로스체크)는 조회 범위상 전사와 동일 — 편집 제한은 canEditDeptRecord()에서 처리
+            // cross(본부장 크로스체크)는 조회 범위상 전사와 동일 — 편집은 등록한 사람 · 관리자 · 대리 수정자만(canEditSchedule)
             if (scope === 'all' || scope === 'cross' || dept === 'admin') return true;
             if (scope === 'self') return (s.salesperson || '') === name;
             if (scope === 'custom') {
@@ -32836,8 +32814,6 @@ const QUOTE_TEMPLATES = [
         }
 
         // ==================== 계약관리 로직 (Salesforce Contract 참고) ====================
-        // 시드 계약의 날짜를 오늘 기준으로 만듭니다 (언제 열어 봐도 D-day · 지연이 자연스럽게 보이도록).
-        function ctSeedDay(n) { const d = new Date(); d.setDate(d.getDate() + n); return ymd(d); }
         // 계약 결재선 (작성자 제출 → 순차 승인). Salesforce Approval Process 참고
         const contractApprovalLine = ['팀장', '본부장'];
 
@@ -42720,7 +42696,7 @@ const QUOTE_TEMPLATES = [
             const host = document.getElementById('paydoc-detail-body');
             if (!r || !host) return;
 
-            const st = PAY_REQ_STATUS[r.status];
+            const st = PAY_REQ_STATUS[r.status] || PAY_REQ_STATUS.requested;
             const reg = PAY_REG_TYPES[r.regType] || PAY_REG_TYPES.pg;
             const pr = PAY_PRIORITY[r.priority] || PAY_PRIORITY.normal;
             const p = payDocProgress(r);
@@ -42733,7 +42709,7 @@ const QUOTE_TEMPLATES = [
             const info = (label, value) => `<div><p class="text-xs text-gray-400">${label}</p><p class="text-sm text-gray-800 mt-0.5">${value}</p></div>`;
 
             const itemRows = r.items.map((it, idx) => {
-                const is = PAY_ITEM_STATUS[it.status];
+                const is = PAY_ITEM_STATUS[it.status] || PAY_ITEM_STATUS.pending;   // 모르는 값이면 미제출로 (2026-09-28)
                 // 첨부 칸: 파일 정보 + 열람 버튼 + (결제본부에게) 열람 여부 배지
                 const viewBadge = !payDocCanReview() || it.status === 'pending' ? ''
                     : (it.viewed
@@ -43129,7 +43105,7 @@ const QUOTE_TEMPLATES = [
             const it = r && r.items.find(i => i.docId === payDocPreviewRef.docId);
             if (!r || !it) return;
 
-            const is = PAY_ITEM_STATUS[it.status];
+            const is = PAY_ITEM_STATUS[it.status] || PAY_ITEM_STATUS.pending;
             const size = payDocFileSize(it.fileSize);
             const canReview = payDocCanReview() && (r.status === 'submitted' || r.status === 'returned') && it.status === 'uploaded';
 
