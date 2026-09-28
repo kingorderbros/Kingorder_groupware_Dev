@@ -8207,7 +8207,7 @@
     <div id="quote-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
         <div class="bg-white w-full max-w-4xl rounded-lg shadow-xl max-h-[90vh] overflow-y-auto">
             <div class="p-6">
-                <div class="flex justify-between items-start mb-4">
+                <div class="flex justify-between items-start mb-4 pr-10">
                     <h3 id="quote-modal-title" class="text-lg font-bold text-gray-800">신규 견적 작성</h3>
                     <span id="quote-modal-number" class="text-sm font-mono text-gray-400"></span>
                 </div>
@@ -9823,10 +9823,12 @@ const QUOTE_TEMPLATES = [
         }
 
         // 대시보드 알림에서 그 업무센터 탭으로 바로 이동
+        // def.section 은 'sec-…' 가 붙은 화면 id 라 navigate 에 그대로 넘기면 'sec-sec-…' 를 찾다가
+        // 모든 화면이 숨겨진 빈 화면이 됩니다. navigate 에는 'sales-work-center' 처럼 앞을 뗀 이름을 넘깁니다. (2026-09-28)
         function openWorkFromNotice(key, typeId) {
             const def = wcDef(key);
             if (!def) return;
-            navigate(def.section, null);
+            navigate(`${key}-work-center`, document.getElementById(`nav-${key}-work-center`));
             if (typeId) setWorkType(key, typeId);
         }
         // ==================== 조직 마스터 — 본부(부서) · 팀 ====================
@@ -18285,6 +18287,9 @@ const QUOTE_TEMPLATES = [
         function selectProjectFromNotice(id) {
             currentProjectId = id;
             navigate('project-center', document.getElementById('nav-project-center'));
+            // 상세는 요약 카드 · 목록 아래에 있어 휴대폰에서는 화면 밖입니다 — 그 자리까지 내려 줍니다 (2026-09-28)
+            const detail = document.getElementById('project-detail');
+            if (detail && !detail.classList.contains('hidden') && detail.scrollIntoView) detail.scrollIntoView({ block: 'start' });
         }
 
         function renderProjectDetail() {
@@ -22749,14 +22754,20 @@ const QUOTE_TEMPLATES = [
         function execOpenSourceJs(i) {
             switch (i.kind) {
                 case 'collab': case 'directive': return `openCollabDetailModal('${escapeHtml(i.id)}')`;
-                case 'work':    return i.srcKey ? `openWorkFromNotice('${escapeHtml(i.srcKey)}', '${escapeHtml(i.srcType || '')}')` : '';
+                case 'work':    return i.srcKey ? `execOpenWork('${escapeHtml(i.srcKey)}', '${escapeHtml(i.id)}')` : '';
                 case 'project': return `selectProjectFromNotice('${escapeHtml(i.id)}')`;
                 case 'wbs':     return i.projectId ? `openWbsDetailModal('${escapeHtml(i.projectId)}', '${escapeHtml(i.id)}')` : '';
                 case 'quote':   return `openQuoteModal('${escapeHtml(i.id)}')`;
                 case 'inbound': return `openInboundModal('${escapeHtml(i.id)}')`;
-                case 'paydoc':  return `navigate('payment-work-center', document.getElementById('nav-payment-work-center'))`;
+                case 'paydoc':  return `navigate('payment-work-center', document.getElementById('nav-payment-work-center')); openPayDocDetail('${escapeHtml(i.id)}')`;
                 default:        return '';
             }
+        }
+
+        // 업무 건 — 그 업무센터로 가서 고객 · 업무유형 탭을 맞춘 뒤 그 업무의 상세 팝업까지 엽니다 (2026-09-28)
+        function execOpenWork(key, workId) {
+            goToWorkCenterItem(key, workId);
+            openWorkHistoryDetail(key, workId);
         }
 
         // 목록·팝업이 거르기 전 전체에서 찾습니다 (필터를 바꿔도 열려 있던 건이 사라지지 않게)
