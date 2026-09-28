@@ -15992,6 +15992,7 @@ const QUOTE_TEMPLATES = [
         }
         // 참가 가능한 일정: 조회할 수 있고, 내가 주최자가 아니며, 아직 참석자가 아닌 일정
         function canJoinSchedule(s) {
+            if (isBirthdaySchedule(s)) return false;   // 생일에는 참가하지 않습니다 (2026-09-28)
             if (!s || !currentUserName) return false;
             if (isScheduleOrganizer(s)) return false;
             if (attendeeOf(s, currentUserName)) return false;
@@ -16181,13 +16182,52 @@ const QUOTE_TEMPLATES = [
             return !!currentUserName && (s.salesperson || '') === currentUserName;
         }
         function canEditSchedule(s) {
-            if (!s) return false;
+            if (!s || isBirthdaySchedule(s)) return false;     // 생일은 구성원 정보에서 고칩니다
             return isSystemAdmin() || isScheduleCreator(s);
         }
 
         // 조회 범위에 따라 볼 수 있는 일정 목록. scopeInfo = { scope, depts }
+        // 구성원 생일(전사일정)도 함께 넣습니다 (2026-09-28).
         function getVisibleSchedules(scopeInfo) {
-            return schedules.filter(s => canViewSchedule(s, scopeInfo));
+            return schedules.filter(s => canViewSchedule(s, scopeInfo)).concat(birthdaySchedules());
+        }
+
+        // ---------- 구성원 생일 → 전사일정 (2026-09-28) ----------
+        // 조직도 관리 › 구성원 정보의 '생일' 을 읽어 **해마다 그날** 전사일정에 보여 줍니다.
+        //   · 저장하지 않고 그때그때 만듭니다 → 생일을 고치거나 지우면 곧바로 따라가고, 해마다 다시 만들 일이 없습니다
+        //   · 그래서 수정 · 삭제할 수 없고(생일은 구성원 정보에서 고칩니다), 구글 캘린더(폰)로는 가지 않습니다
+        //   · 사외 조직 · 관리자 계정 · 조직도에 표시하지 않는 사람은 뺍니다. 2월 29일은 평년엔 2월 28일.
+        //   · 올해 앞뒤 2년까지 만듭니다(캘린더를 앞뒤로 넘겨 봐도 보이게).
+        const BIRTHDAY_ID_PREFIX = 'bday:';
+        function isBirthdaySchedule(s) { return !!s && s.birthday === true; }
+        function birthdaySchedules() {
+            const users = (typeof localUsers !== 'undefined' && Array.isArray(localUsers)) ? localUsers : [];
+            const hiddenDepts = (typeof ORG_HIDDEN_DEPTS !== 'undefined') ? ORG_HIDDEN_DEPTS : ['vendor', 'admin'];
+            const y0 = new Date().getFullYear();
+            const leap = (y) => (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
+            const out = [];
+            users.forEach(u => {
+                if (!u || !u.name || u.hideInOrg === true || hiddenDepts.includes(u.dept)) return;
+                const md = orgBirthdayMMDD(u);
+                const mm = Number(md.slice(0, 2)), dd = Number(md.slice(3));
+                if (!md || mm < 1 || mm > 12 || dd < 1 || dd > 31) return;
+                for (let y = y0 - 2; y <= y0 + 2; y++) {
+                    const date = (md === '02-29' && !leap(y)) ? `${y}-02-28` : `${y}-${md}`;
+                    out.push({
+                        id: `${BIRTHDAY_ID_PREFIX}${u.id || u.email}:${y}`, birthday: true, userName: u.name,
+                        title: `🎂 ${u.name} 생일`, date, allDay: true, startTime: '', endTime: '',
+                        calendar: COMPANY_CALENDAR_ID, dept: COMPANY_DEPT, type: '', progress: '', reminder: 'none',
+                        salesperson: u.name, description: `${u.name}${u.rank ? ' ' + u.rank : ''} 님의 생일입니다. (${orgBirthdayText(u)})`,
+                        attendees: []
+                    });
+                }
+            });
+            return out;
+        }
+        function findScheduleForView(id) {
+            return schedules.find(s => s.id === id)
+                || (String(id).indexOf(BIRTHDAY_ID_PREFIX) === 0 ? birthdaySchedules().find(s => s.id === id) : null)
+                || null;
         }
 
         // 캘린더 필터 셀렉트는 CALENDARS 정의에서 한 번만 채웁니다.
@@ -16204,7 +16244,10 @@ const QUOTE_TEMPLATES = [
             const el = document.getElementById('calendar-legend');
             if (!el) return;
             const chips = CALENDARS.map(c => {
-                const count = visibleSchedules.filter(s => scheduleCalendarId(s) === c.id).length;
+                // 생일은 앞뒤 해까지 만들어 두므로 올해 것만 셉니다 (2026-09-28)
+                const thisYear = String(new Date().getFullYear());
+                const count = visibleSchedules.filter(s => scheduleCalendarId(s) === c.id
+                    && (!isBirthdaySchedule(s) || String(s.date).slice(0, 4) === thisYear)).length;
                 const on = activeId === c.id;
                 const ring = on ? 'ring-2 ring-offset-1 ring-gray-400' : 'opacity-90 hover:opacity-100';
                 return `<button type="button" onclick="filterCalendarBy('${c.id}')" title="${escapeHtml(c.desc)}" class="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition-all ${c.chip} ${ring}">
@@ -16247,7 +16290,7 @@ const QUOTE_TEMPLATES = [
                 : `<span class="inline-block w-1.5 h-1.5 rounded-full mr-1 align-middle ${calendarDeptDot(s.dept)}"></span>`;
             const size = o.large ? 'px-2 py-1 text-xs sm:text-sm' : 'px-1.5 py-0.5 text-[10px] sm:text-xs';
             // 날짜 셀 전체가 '하루 요약' 클릭 영역이므로, 칩 클릭은 상세 모달만 열리도록 전파를 막는다
-            return `<div onclick="event.stopPropagation(); openScheduleDetailModal('${s.id}')" class="rounded truncate cursor-pointer hover:opacity-80 ${size} ${cal.chip}${dim}" title="${escapeHtml(tooltip)}">${timeHtml}${inviteIcon}${escapeHtml(s.title)} <span class="opacity-70">(${escapeHtml(s.salesperson || '미지정')})</span></div>`;
+            return `<div onclick="event.stopPropagation(); openScheduleDetailModal('${s.id}')" class="rounded truncate cursor-pointer hover:opacity-80 ${size} ${cal.chip}${dim}" title="${escapeHtml(tooltip)}">${timeHtml}${inviteIcon}${escapeHtml(s.title)}${isBirthdaySchedule(s) ? '' : ` <span class="opacity-70">(${escapeHtml(s.salesperson || '미지정')})</span>`}</div>`;
         }
 
         // ==================== 하루 일정 요약 모달 ====================
@@ -17160,7 +17203,7 @@ const QUOTE_TEMPLATES = [
             if (typeof renderTodaySchedule === 'function') renderTodaySchedule(currentUserName);
         }
         function openScheduleDetailModal(id) {
-            const schedule = schedules.find(s => s.id === id);
+            const schedule = findScheduleForView(id);
             if (!schedule) return;
             document.getElementById('detail-schedule-title').innerText = schedule.title;
             document.getElementById('detail-schedule-date').innerText = `${schedule.date} · ${scheduleTimeLabel(schedule)}`;
@@ -17178,7 +17221,7 @@ const QUOTE_TEMPLATES = [
             // 구분 이름은 해당 일정이 속한 부서의 구분 목록에서 찾는다
             const sDept = schedule.dept || 'sales';
             const sType = getScheduleType(sDept, schedule.type);
-            const parts = [`${deptNames[sDept] || sDept} · ${sType.name}`];
+            const parts = [isBirthdaySchedule(schedule) ? '구성원 생일' : `${deptNames[sDept] || sDept} · ${sType.name}`];
             if (schedule.reminder && schedule.reminder !== 'none') parts.push(`알림: ${reminderMap[schedule.reminder] || ''}`);
             document.getElementById('detail-schedule-type').innerText = parts.join(' · ');
             document.getElementById('detail-schedule-salesperson').innerText = schedule.salesperson || '담당자 미지정';
@@ -17193,7 +17236,9 @@ const QUOTE_TEMPLATES = [
             const roNote = document.getElementById('detail-schedule-readonly');
             const roText = document.getElementById('detail-schedule-readonly-text');
             if (roNote) roNote.classList.toggle('hidden', editable);
-            if (roText) roText.innerText = sCal.share === 'self'
+            if (roText) roText.innerText = isBirthdaySchedule(schedule)
+                ? '구성원 정보의 생일로 자동 표시되는 일정입니다. 생일은 조직도 관리 › 구성원 정보에서 바꿉니다.'
+                : sCal.share === 'self'
                 ? '다른 사용자의 개인 일정입니다. 조회만 가능합니다.'
                 : `${schedule.salesperson || '다른 사람'} 님이 등록한 일정입니다. 등록한 사람과 관리자만 수정 · 삭제할 수 있습니다.`;
 
