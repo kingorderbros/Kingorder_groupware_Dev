@@ -297,6 +297,16 @@ function load(win) {
         ok(!threw, '로그인 전이어도 저장이 터지지 않는다' + (threw ? ' — ' + threw.message : ''));
     }
 
+    console.log('\n[+] 서버가 data 에 id 를 빼고 저장한 줄 (구글 캘린더에서 가져온 일정 · 2026-09-28)');
+    {
+        const db = load(makeWindow());
+        await db.__init(makeClient({ schedules: [{ id: 'sg1', data: { title: '폰 일정' }, rev: 1 }, { id: 'S2', data: { id: 'S2', title: '그룹웨어 일정' }, rev: 1 }] }), 'supabase');
+        const rows = db.rows('schedules');
+        ok(rows.find(r => r.title === '폰 일정').id === 'sg1', '줄 id 를 자료에 채워 넣는다 (화면이 s.id 로 찾을 수 있게)');
+        ok(rows.find(r => r.title === '그룹웨어 일정').id === 'S2', '원래 있던 id 는 그대로');
+        ok(db.get('schedules', 'sg1').id === 'sg1', 'get 도 id 가 있다');
+    }
+
     console.log(`\n=========== 통과 ${pass} · 실패 ${fail} ===========`);
     process.exit(fail ? 1 : 0);
 })();

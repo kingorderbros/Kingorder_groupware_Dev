@@ -443,7 +443,8 @@ export async function syncPull(env, store, ctx) {
                 const hash = hashOf(toGoogleEvent(s, ctx));
                 if (link && link.content_hash === hash) { out.skipped++; continue; }   // 방금 우리가 보낸 것
 
-                const data = Object.assign({}, s); delete data.id; delete data.__rev;
+                // id 는 자료 안에도 남깁니다 — 화면은 s.id 로 일정을 찾습니다 (빼고 저장했더니 폰 일정을 눌러도 안 열렸음 · 2026-09-28)
+                const data = Object.assign({}, s); delete data.__rev;
                 await store.saveSchedule(kobId, data, '구글 캘린더');
                 await store.saveLink({ kob_id: kobId, google_calendar_id: calId, google_event_id: ev.id, content_hash: hash, gcal_updated: ev.updated, last_dir: 'pull' });
                 if (before) out.updated++; else out.added++;

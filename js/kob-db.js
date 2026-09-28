@@ -54,6 +54,9 @@
     const failed = new Map();          // '표:id' → { table, id, kind } — 다시 보낼 것
 
     const now = () => new Date().toISOString();
+    // 줄의 id 를 자료 안에도 넣어 둡니다 — 서버(구글 캘린더 가져오기 등)가 data 에 id 를 빼고 저장한 줄이 있어,
+    // 화면이 s.id 로 찾을 때 못 찾던 일이 있었습니다 (폰에서 만든 일정을 눌러도 안 열림 · 2026-09-28)
+    const withId = (data, id) => Object.assign({}, data || {}, { id: (data && data.id !== undefined && data.id !== null && data.id !== '') ? data.id : id });
     // '저장한 사람' 으로 남길 값. 본체가 window 에 실어 주지만(로그인할 때),
     // 혹시 빠져도 전역에서 한 번 더 찾아봅니다. (let 로 선언한 변수는 window 에 안 보이므로 try 로 감쌉니다)
     const who = () => {
@@ -100,7 +103,7 @@
             const { data, error } = await client
                 .from(t).select('id,data,rev').order('id', { ascending: true }).range(from, from + PAGE - 1);
             if (error) throw error;
-            (data || []).forEach(r => m.set(r.id, { data: r.data || {}, rev: r.rev || 1 }));
+            (data || []).forEach(r => m.set(r.id, { data: withId(r.data, r.id), rev: r.rev || 1 }));
             if (!data || data.length < PAGE) break;
         }
         loaded.add(t);
@@ -125,7 +128,7 @@
                     const cur = m.get(id);
                     // 내가 방금 쓴 값이 되돌아온 것이면 알리지 않습니다 (화면이 헛되이 다시 그리지 않게)
                     if (cur && cur.rev === p.new.rev) return;
-                    m.set(id, { data: p.new.data || {}, rev: p.new.rev || 1 });
+                    m.set(id, { data: withId(p.new.data, id), rev: p.new.rev || 1 });
                     fire('kob-db-change', { table: t, id, reason: 'remote' });
                 })
                 .subscribe();
