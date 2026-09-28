@@ -10771,17 +10771,26 @@ const QUOTE_TEMPLATES = [
             if (rememberId) kobStorage.setItem('savedLoginId', emailInput.value);
             else kobStorage.removeItem('savedLoginId');
 
-            const found = findLoginAccount(typed);
-            if (found.error) { showLoginMsg(found.error); return; }
-            const user = found.user;
-            if (!user) { showLoginMsg('등록되지 않은 계정입니다. 관리자에게 계정 발급을 요청하세요.'); return; }
+            // Supabase 모드 — 직원 목록은 로그인해야 받을 수 있으므로 아이디 → 이메일은 서버가 찾고,
+            // 로그인이 끝나면 페이지를 새로 불러 그 권한으로 자료를 다시 읽은 뒤 들어갑니다 (2026-09-28)
+            const remote = kobStorage.mode === 'supabase';
+            let user = null, email = '';
+            if (!remote) {
+                const found = findLoginAccount(typed);
+                if (found.error) { showLoginMsg(found.error); return; }
+                user = found.user;
+                if (!user) { showLoginMsg('등록되지 않은 계정입니다. 관리자에게 계정 발급을 요청하세요.'); return; }
+                email = user.email;
+            }
+            if (!typed) { showLoginMsg('아이디를 입력해 주세요.'); return; }
             if (!pw) { showLoginMsg('비밀번호를 입력해 주세요.'); if (pwInput) pwInput.focus(); return; }
 
             const btn = document.getElementById('login-submit');
             if (btn) { btn.disabled = true; btn.textContent = '확인 중…'; }
             let result;
             try {
-                result = await kobAuth.signIn(user.email, pw);
+                if (remote) email = await kobAuth.lookup(typed);
+                result = await kobAuth.signIn(email, pw);
             } catch (e) {
                 const m = String(e && e.message || e);
                 if (m === 'BAD_PASSWORD') showLoginMsg('이메일 또는 비밀번호가 맞지 않습니다.');
@@ -10794,6 +10803,12 @@ const QUOTE_TEMPLATES = [
             }
             if (pwInput) pwInput.value = '';
 
+            if (remote) {
+                // 첫 로그인(임시 비밀번호)이면 새로 불러온 뒤 enterFromSession() 이 비밀번호 변경 창을 띄웁니다
+                if (btn) { btn.disabled = true; btn.textContent = '들어가는 중…'; }
+                location.reload();
+                return;
+            }
             if (result && result.mustChange) {
                 // 임시 비밀번호로 들어온 첫 로그인 — 새 비밀번호를 정해야 화면으로 갑니다
                 openPwChange({ force: true, title: '새 비밀번호를 정해 주세요', desc: `${user.name} 님, 임시 비밀번호로 처음 로그인하셨습니다. 앞으로 쓸 비밀번호를 정해야 그룹웨어를 쓸 수 있습니다.`,
@@ -10994,7 +11009,25 @@ const QUOTE_TEMPLATES = [
             } catch (e) { alert('처음 설정을 하지 못했습니다.\n' + String(e && e.message || e)); }
         }
 
-        // 화면이 뜰 때 — ① 재설정 메일의 링크로 들어왔으면 새 비밀번호 창, ② 계정이 하나도 없으면 처음 설정 안내
+        // 이 브라우저에 로그인이 남아 있으면 로그인 창 없이 들어갑니다 (2026-09-28)
+        // 자료는 kob-store.js 가 그 로그인 권한으로 이미 읽어 두었습니다.
+        async function enterFromSession(sess) {
+            const user = localUsers.find(u => String(u.email || '').toLowerCase() === sess.email);
+            if (!user) {
+                await kobAuth.signOut();
+                showLoginMsg('이 계정은 직원 목록에 없습니다. 관리자에게 문의해 주세요.');
+                return;
+            }
+            if (sess.mustChange) {
+                openPwChange({ force: true, title: '새 비밀번호를 정해 주세요', desc: `${user.name} 님, 임시 비밀번호로 처음 로그인하셨습니다. 앞으로 쓸 비밀번호를 정해야 그룹웨어를 쓸 수 있습니다.`,
+                    onDone: () => { alert('비밀번호를 바꿨습니다. 다음부터는 새 비밀번호로 로그인하세요.'); enterApp(user); } });
+                return;
+            }
+            enterApp(user);
+        }
+
+        // 화면이 뜰 때 — ① 재설정 메일의 링크로 들어왔으면 새 비밀번호 창, ② 로그인이 남아 있으면 바로 들어가기,
+        //                ③ 계정이 하나도 없으면 처음 설정 안내
         (async function initAuthScreen() {
             if (new URLSearchParams(location.search).get('mode')) return;   // 파트너센터 · 운행일지 화면은 해당 없음
             try {
@@ -11006,6 +11039,10 @@ const QUOTE_TEMPLATES = [
                             alert('비밀번호를 바꿨습니다. 새 비밀번호로 로그인하세요.');
                         } });
                     return;
+                }
+                if (kobStorage.mode === 'supabase') {
+                    const sess = await kobAuth.session();
+                    if (sess) { await enterFromSession(sess); return; }
                 }
                 const st = await kobAuth.status();
                 const box = document.getElementById('login-bootstrap');
@@ -11858,8 +11895,16 @@ const QUOTE_TEMPLATES = [
             renderPersonalTasks(currentUserName);
         }
 
-        function handleLogout() {
-            kobAuth.signOut();   // Supabase 세션(로컬 모드는 메모리)도 함께 끝냅니다
+        async function handleLogout() {
+            // Supabase 모드 — 보내지 못한 저장을 먼저 보내고, 로그아웃한 뒤 페이지를 새로 불러
+            // 화면 메모리에 남은 자료(앞사람이 본 것)를 모두 비웁니다 (2026-09-28)
+            if (kobStorage.mode === 'supabase') {
+                try { if (kobStorage.flush) await kobStorage.flush(); } catch (e) { /* 저장 실패는 화면 아래 표시로 알립니다 */ }
+                await kobAuth.signOut();
+                location.reload();
+                return;
+            }
+            kobAuth.signOut();   // 로컬 모드는 메모리 세션만 끝냅니다
             currentUserEmail = '';
             window.currentUserEmail = '';
             currentUserIsAdmin = false;   // 겸직 관리자 표시는 다음 로그인 때 다시 정합니다
@@ -35911,7 +35956,9 @@ const QUOTE_TEMPLATES = [
             payoutRecords = kobDb.rows('settlements');
             payoutRecordsSaved = new Map(payoutRecords.map(x => [x.id, JSON.stringify(x)]));
             syncPayoutsIdCounter();
-            if (typeof renderPayoutCenter === 'function') renderPayoutCenter();
+            // 지급명세는 거래처 관리(renderSupplyCenter) 안의 탭이라 그 화면을 다시 그려야 합니다.
+            // renderPayoutCenter() 를 그릴 자리 없이 부르면 오류가 났습니다 (로그인 직후 표를 다시 받을 때 · 2026-09-28)
+            if (typeof renderSupplyCenter === 'function') renderSupplyCenter();
         }
         window.addEventListener('kob-db-change', (e) => {
             const d = e.detail || {};

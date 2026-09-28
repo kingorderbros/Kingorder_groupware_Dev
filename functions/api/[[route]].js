@@ -203,6 +203,23 @@ export async function onRequest(context) {
             if (path === '/api/auth/status' && method === 'GET') {
                 return json(200, { ok: true, empty: await auth.isEmpty() });
             }
+            if (path === '/api/auth/lookup' && method === 'POST') {
+                // 로그인 창의 아이디 → 이메일 (2026-09-28)
+                // 직원 목록(gwUsers.v1)을 로그인 전 브라우저에 내려보내지 않기 위해 서버가 대신 찾습니다.
+                // 이메일 앞부분만 넣어도 되고('sales.lee'), 겹치면 전체 주소를 넣어 달라고만 합니다(목록은 알려 주지 않음).
+                const input = await body();
+                const typed = str(input.id).toLowerCase();
+                if (!typed) return bad('아이디를 입력해 주세요.');
+                const users = (await store.storeValue('gwUsers.v1')) || [];
+                const list = Array.isArray(users) ? users : [];
+                const localPart = (v) => str(v).toLowerCase().split('@')[0];
+                const hits = typed.includes('@')
+                    ? list.filter(u => str(u.email).toLowerCase() === typed)
+                    : list.filter(u => localPart(u.email) === typed);
+                if (hits.length > 1) return json(200, { ok: false, error: `'${typed}' 로 시작하는 계정이 ${hits.length}개 있습니다. 이메일 전체를 입력해 주세요.` });
+                if (!hits.length) return json(200, { ok: false, error: '등록되지 않은 계정입니다. 관리자에게 계정 발급을 요청하세요.' });
+                return json(200, { ok: true, email: str(hits[0].email).toLowerCase() });
+            }
             if (path === '/api/auth/bootstrap' && method === 'POST') {
                 // 계정이 하나도 없을 때 한 번만 — 화면의 관리자(gwUsers.v1 의 dept 'admin') 이메일로 첫 계정을 만듭니다
                 const input = await body();

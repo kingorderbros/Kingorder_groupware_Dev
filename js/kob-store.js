@@ -25,6 +25,25 @@
                         /^gwWcLastCustomer\.v1$/];   // 업무센터에서 마지막으로 보던 고객 — 사람마다 다름
     const isLocalOnly = (k) => LOCAL_ONLY.some(re => re.test(String(k)));
 
+    // ---------- 로그인 전에는 서버에 쓰지 않습니다 (2026-09-28) ----------
+    // 화면이 켜질 때 '값이 없으면 기본값을 저장' 하는 곳이 여럿 있습니다. 로그인 전(anon)에 그런 쓰기가 나가면
+    //   · app_store 를 로그인 사용자로 좁힌 뒤에는 거절되고, 재시도 대기열에 남아 있다가
+    //   · 로그인하는 순간 통과해서 **실제 자료(직원 · 파트너 계정 등)를 기본값으로 덮을 수 있습니다.**
+    // 그래서 로그인하지 않은 상태의 쓰기는 이 화면 메모리에만 두고 서버로 보내지 않습니다.
+    // 예외 — 파트너센터(?mode=partner)는 아직 Supabase 로그인이 없어서, 파트너가 실제로 쓰는 키만 보냅니다.
+    //        (2단계에서 파트너센터가 /api/partner/* 를 거치게 되면 이 예외는 없앱니다)
+    const VIEW_MODE = (function () { try { return new URLSearchParams(window.location.search).get('mode') || ''; } catch (e) { return ''; } })();
+    const PARTNER_ANON_WRITE = ['gwPartnerIntakes.v1', 'gwDevRequests.v1', 'gwDevNotiQueue.v1', 'gwInboundRecords.v1'];
+    let authed = false;               // Supabase 로그인 세션이 있는지
+    let warnedAnon = false;
+    function canPush(k) {
+        if (authed) return true;
+        return VIEW_MODE === 'partner' && PARTNER_ANON_WRITE.includes(String(k));
+    }
+    function holdAnon(k) {
+        if (!warnedAnon) { warnedAnon = true; console.info('[kob-store] 로그인 전이라 서버에 저장하지 않습니다 (이 화면에만 반영):', k); }
+    }
+
     const cache = new Map();          // key → 문자열(JSON) — Supabase 모드에서만 씁니다
     let client = null;                // supabase-js 클라이언트
     let mode = 'local';
@@ -44,7 +63,9 @@
     async function flush() {
         flushTimer = null;
         if (!client || !pending.size) return;
-        const batch = Array.from(pending.entries()); pending.clear();
+        // 보내는 순간에도 한 번 더 — 그사이 로그아웃했으면 보내지 않습니다
+        const batch = Array.from(pending.entries()).filter(([k]) => canPush(k)); pending.clear();
+        if (!batch.length) return;
         const ups = batch.filter(([, v]) => v !== null).map(([key, v]) => ({ key, value: safeJson(v), updated_at: new Date().toISOString() }));
         const dels = batch.filter(([, v]) => v === null).map(([key]) => key);
         try {
@@ -84,15 +105,23 @@
         setItem(k, v) {
             const s = String(v);
             if (mode !== 'supabase' || isLocalOnly(k)) { ls.set(k, s); return; }
+            // 내용이 같으면 보내지 않습니다 — 화면을 그릴 때마다 저장하는 곳(예: 파트너사 목록)이 있어
+            // 같은 값을 통째로 다시 올리면 그사이 남이 고친 것을 덮을 수 있습니다 (2026-09-28)
+            if (cache.get(k) === s && !pending.has(k)) return;
             cache.set(k, s); ls.set(k, s);            // 로컬에도 사본 (오프라인 · 새로고침 직후 대비)
+            if (!canPush(k)) { holdAnon(k); return; }
             pending.set(k, s); scheduleFlush();
         },
         removeItem(k) {
             if (mode !== 'supabase' || isLocalOnly(k)) { ls.del(k); return; }
             cache.delete(k); ls.del(k);
+            if (!canPush(k)) { holdAnon(k); return; }
             pending.set(k, null); scheduleFlush();
         },
-        get mode() { return mode; }
+        get mode() { return mode; },
+        get authed() { return mode !== 'supabase' ? true : authed; },
+        // 모아 둔 쓰기를 지금 보냅니다 — 로그아웃 직전에 부릅니다 (2026-09-28)
+        flush() { if (flushTimer) { clearTimeout(flushTimer); flushTimer = null; } return flush(); }
     };
 
     function loadScript(src) {
@@ -113,6 +142,14 @@
                 if (!window.supabase) await loadScript(cfg.supabaseJs || 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js');
                 client = window.supabase.createClient(cfg.supabaseUrl, cfg.supabaseAnonKey);
                 window.kobSupabase = client;              // 로그인(js/kob-auth.js)이 같은 클라이언트를 씁니다
+                // 남아 있는 로그인 세션이 있으면 그 권한으로 읽습니다 (없으면 anon)
+                try { const { data: sd } = await client.auth.getSession(); authed = !!(sd && sd.session); } catch (e) { authed = false; }
+                try {
+                    client.auth.onAuthStateChange((event, session) => {
+                        authed = !!(session && session.access_token);
+                        if (!authed) pending.clear();     // 로그아웃 — 보내지 못한 것도 버립니다 (다음 사람 이름으로 나가지 않게)
+                    });
+                } catch (e) { /* 로그인 상태를 못 따라가면 처음 값(authed)을 그대로 씁니다 */ }
                 const { data, error } = await client.from('app_store').select('key,value');
                 if (error) throw error;
                 (data || []).forEach(r => cache.set(r.key, toStr(r.value)));

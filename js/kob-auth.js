@@ -176,6 +176,22 @@
         rename: (oldEmail, newEmail, name) => api('/api/auth/users', { email: oldEmail, newEmail, name }, 'PATCH'),
         remove: (email) => api('/api/auth/users', { email }, 'DELETE'),
         async signOut() { try { await client().auth.signOut(); } catch (e) { /* 이미 끝난 세션 */ } },
+        // 로그인 창의 아이디 → 이메일 — 서버가 찾습니다 (직원 목록을 로그인 전에 받지 않도록 · 2026-09-28)
+        async lookup(id) {
+            let r;
+            try { r = await (await fetch(API + '/api/auth/lookup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) })).json(); }
+            catch (e) { throw new Error(apiDownHint()); }
+            if (!r || r.ok === false) throw new Error((r && r.error) || '계정을 확인하지 못했습니다.');
+            return r.email;
+        },
+        // 이 브라우저에 남아 있는 로그인 — 있으면 { email, mustChange }
+        async session() {
+            try {
+                const { data } = await client().auth.getSession();
+                const u = data && data.session ? data.session.user : null;
+                return u ? { email: norm(u.email), mustChange: !!((u.user_metadata || {}).must_change_password) } : null;
+            } catch (e) { return null; }
+        },
         // 재설정 메일의 링크로 들어왔고 그 세션이 살아 있으면 true — 화면은 새 비밀번호 입력창을 띄웁니다
         async recovery() {
             if (!recoveryHint) return false;
@@ -210,6 +226,9 @@
         remove: (email) => pick().remove(email),
         signOut: () => pick().signOut(),
         recovery: () => pick().recovery(),
+        lookup: (id) => (pick().lookup ? pick().lookup(id) : Promise.resolve('')),
+        session: () => (pick().session ? pick().session() : Promise.resolve(null)),
+        isRecoveryLink: () => recoveryHint,
         call: (path, body, method) => pick().call(path, body, method)
     };
 })();
