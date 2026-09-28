@@ -2385,6 +2385,26 @@
                                 </table>
                             </div>
                         </div>
+
+                        <!-- 일정 대리 수정 권한 (2026-09-28) — 등록한 사람 · 관리자 말고도 남의 일정을 고치고 지울 수 있는 사람 -->
+                        <div class="bg-white rounded-lg shadow-sm border border-gray-100 overflow-hidden mt-5">
+                            <div class="p-4 border-b border-gray-100 flex flex-wrap justify-between items-center gap-2">
+                                <div>
+                                    <h4 class="font-semibold text-gray-800">일정 대리 수정 권한</h4>
+                                    <p class="text-xs text-gray-500 mt-0.5">일정은 <b>등록한 사람과 관리자</b>만 수정 · 삭제할 수 있습니다. 여기에 지정한 사람은 다른 사람의 일정도 대신 수정 · 삭제할 수 있습니다. 바꾸면 곧바로 저장됩니다.</p>
+                                </div>
+                                <select id="calendar-editor-add" class="text-sm p-1.5 border border-gray-300 rounded bg-gray-50"></select>
+                            </div>
+                            <div class="overflow-x-auto">
+                                <table class="w-full text-sm text-left">
+                                    <thead class="bg-gray-50 text-gray-500 text-xs uppercase">
+                                        <tr><th class="p-3 font-medium">사용자</th><th class="p-3 font-medium">부서·직책</th><th class="p-3 font-medium">수정할 수 있는 일정</th><th class="p-3 font-medium text-center">삭제</th></tr>
+                                    </thead>
+                                    <tbody id="calendar-editor-body" class="divide-y divide-gray-100"></tbody>
+                                </table>
+                            </div>
+                            <p class="p-3 bg-gray-50 text-xs text-gray-500 border-t border-gray-100"><i class="fas fa-lock mr-1"></i>다른 사람의 <b>개인</b> 일정은 대리 수정할 수 없습니다(본인만 보는 일정). 생일은 구성원 정보에서 바꿉니다.</p>
+                        </div>
                     </section>
 
                     <!-- 위약금 계산 설정 — 계산에 쓰는 항목과 금액을 여기서 정합니다.
@@ -15563,8 +15583,59 @@ const QUOTE_TEMPLATES = [
                 if (this.value) { syncCalendarDeptChecksToModel(); calendarUserOverrides[this.value] = { scope: 'dept', enabled: true, depts: [] }; renderCalendarPermissions(); }
             };
 
+            renderCalendarEditors();
+
             const prev = document.getElementById('calendar-perm-preview');
             if (prev) prev.innerHTML = `<b>현재 적용 예:</b> 팀장 → <b>${calendarScopeNames[calendarLevelScope.leader]}</b>, 본부장 → <b>${calendarScopeNames[calendarLevelScope.head]}</b>, 대표 → <b>${calendarScopeNames[calendarLevelScope.exec]}</b> · <span class="text-gray-500">'자기 부서 + 지정 부서'를 고르면 볼 부서를 체크할 수 있습니다. '크로스체크'는 전 부서를 보되 타 부서는 수정할 수 없습니다.</span>`;
+        }
+
+        // 설정 › 일정 대리 수정 권한 — 추가 · 범위 변경 · 삭제는 곧바로 저장합니다 (2026-09-28)
+        function renderCalendarEditors() {
+            const body = document.getElementById('calendar-editor-body');
+            if (!body) return;
+            const rows = calendarEditors.map(e => ({ e, u: localUsers.find(x => x.id === e.uid) })).filter(x => x.u);
+            body.innerHTML = rows.length ? rows.map(({ e, u }) => `<tr>
+                    <td class="p-3 align-top">${collabAssigneeChip(u.name)}</td>
+                    <td class="p-3 text-gray-500 align-top">${escapeHtml(deptNames[u.dept] || u.dept || '')} · ${escapeHtml(u.rank || '')}(${escapeHtml(levelNames[u.level] || u.level || '')})</td>
+                    <td class="p-3"><select onchange="setCalendarEditorScope('${escapeHtml(u.id)}', this.value)" class="text-sm p-1.5 border border-gray-300 rounded bg-gray-50">
+                        ${Object.entries(CALENDAR_EDITOR_SCOPES).map(([v, l]) => `<option value="${v}"${e.scope === v ? ' selected' : ''}>${l}${v === 'dept' ? ` (${escapeHtml(deptNames[u.dept] || u.dept || '')})` : ''}</option>`).join('')}
+                    </select></td>
+                    <td class="p-3 text-center"><button type="button" onclick="removeCalendarEditor('${escapeHtml(u.id)}')" class="px-2 py-1 text-xs rounded border border-red-200 text-red-600 hover:bg-red-50">삭제</button></td>
+                </tr>`).join('')
+                : '<tr><td colspan="4" class="p-4 text-center text-gray-400 text-sm">지정한 사람이 없습니다. 우측 상단에서 추가하세요.</td></tr>';
+            const add = document.getElementById('calendar-editor-add');
+            if (add) {
+                const cands = localUsers.filter(u => !calendarEditors.some(e => e.uid === u.id) && !isAdminAccount(u) && u.dept !== 'vendor');
+                add.innerHTML = '<option value="">＋ 대리 수정자 추가…</option>'
+                    + cands.map(u => `<option value="${escapeHtml(u.id)}">${escapeHtml(u.name)} (${escapeHtml(deptNames[u.dept] || u.dept || '')})</option>`).join('');
+                add.onchange = function () { if (this.value) addCalendarEditor(this.value); };
+            }
+        }
+        function calendarEditorGuard() {
+            if (!canSeePage('settings-calendar-perm')) { alert('일정 권한은 관리자만 설정할 수 있습니다.'); return false; }
+            return true;
+        }
+        function addCalendarEditor(uid) {
+            if (!calendarEditorGuard()) return;
+            if (!calendarEditors.some(e => e.uid === uid)) calendarEditors.push({ uid, scope: 'dept', at: ymd(new Date()), by: currentUserName || '' });
+            saveCalendarEditors(); renderCalendarEditors();
+            const u = localUsers.find(x => x.id === uid);
+            showAppToast(`${u ? u.name : ''} 님을 일정 대리 수정자로 지정했습니다.`, 'green');
+        }
+        function setCalendarEditorScope(uid, scope) {
+            if (!calendarEditorGuard()) return;
+            const e = calendarEditors.find(x => x.uid === uid);
+            if (!e || !CALENDAR_EDITOR_SCOPES[scope]) return;
+            e.scope = scope; saveCalendarEditors(); renderCalendarEditors();
+            showAppToast('일정 대리 수정 범위를 저장했습니다.', 'green');
+        }
+        function removeCalendarEditor(uid) {
+            if (!calendarEditorGuard()) return;
+            const u = localUsers.find(x => x.id === uid);
+            if (!confirm(`'${u ? u.name : uid}' 님을 일정 대리 수정자에서 뺄까요?`)) return;
+            calendarEditors = calendarEditors.filter(e => e.uid !== uid);
+            saveCalendarEditors(); renderCalendarEditors();
+            showAppToast('일정 대리 수정자에서 뺐습니다.', 'gray');
         }
 
         // 화면의 지정 부서 체크박스 → 배열로 수집
@@ -16183,7 +16254,29 @@ const QUOTE_TEMPLATES = [
         }
         function canEditSchedule(s) {
             if (!s || isBirthdaySchedule(s)) return false;     // 생일은 구성원 정보에서 고칩니다
-            return isSystemAdmin() || isScheduleCreator(s);
+            return isSystemAdmin() || isScheduleCreator(s) || isCalendarDelegateFor(s);
+        }
+
+        // ---------- 일정 대리 수정 권한 (2026-09-28) ----------
+        // 설정 › 일정 조회 권한 › '일정 대리 수정 권한' 에서 지정합니다. [{ uid, scope: 'all' | 'dept' }]
+        //   all  — 모든 일정 (다른 사람의 개인 일정은 빼고)
+        //   dept — 자기 소속 본부의 일정 (개인 일정은 빼고)
+        const CALENDAR_EDITORS_KEY = 'gwCalendarEditors.v1';
+        const CALENDAR_EDITOR_SCOPES = { all: '모든 일정', dept: '소속 본부 일정' };
+        let calendarEditors = loadJsonStore(CALENDAR_EDITORS_KEY, []);
+        if (!Array.isArray(calendarEditors)) calendarEditors = [];
+        function saveCalendarEditors() { saveJsonStore(CALENDAR_EDITORS_KEY, calendarEditors); }
+        function myCalendarEditor() {
+            const email = String(currentUserEmail || '').toLowerCase();
+            const me = email ? localUsers.find(u => String(u.email || '').toLowerCase() === email) : null;
+            return me ? (calendarEditors.find(e => e.uid === me.id) || null) : null;
+        }
+        function isCalendarDelegateFor(s) {
+            const e = myCalendarEditor();
+            if (!e || !s) return false;
+            if (scheduleCalendar(s).share === 'self') return false;          // 남의 개인 일정은 안 됩니다
+            if (e.scope === 'all') return true;
+            return (s.dept || 'sales') === currentUserDept;
         }
 
         // 조회 범위에 따라 볼 수 있는 일정 목록. scopeInfo = { scope, depts }
@@ -17191,7 +17284,7 @@ const QUOTE_TEMPLATES = [
             };
             if (id) {
                 const schedule = schedules.find(s => s.id === id);
-                if (schedule && !canEditSchedule(schedule)) { alert('등록한 사람과 관리자만 수정할 수 있습니다.'); return; }
+                if (schedule && !canEditSchedule(schedule)) { alert('등록한 사람 · 관리자 · 일정 대리 수정 권한자만 수정할 수 있습니다.'); return; }
                 if (schedule) Object.assign(schedule, data);
             } else {
                 schedules.push({ id: nextScheduleId(), salesperson: currentUserName || document.getElementById('user-name').innerText,
@@ -17240,7 +17333,7 @@ const QUOTE_TEMPLATES = [
                 ? '구성원 정보의 생일로 자동 표시되는 일정입니다. 생일은 조직도 관리 › 구성원 정보에서 바꿉니다.'
                 : sCal.share === 'self'
                 ? '다른 사용자의 개인 일정입니다. 조회만 가능합니다.'
-                : `${schedule.salesperson || '다른 사람'} 님이 등록한 일정입니다. 등록한 사람과 관리자만 수정 · 삭제할 수 있습니다.`;
+                : `${schedule.salesperson || '다른 사람'} 님이 등록한 일정입니다. 등록한 사람 · 관리자 · 일정 대리 수정 권한자만 수정 · 삭제할 수 있습니다.`;
 
             renderScheduleAttendeeDetail(schedule);
             document.getElementById('schedule-detail-modal').classList.remove('hidden');
@@ -39312,9 +39405,9 @@ const QUOTE_TEMPLATES = [
                 render: () => renderCollabPermissions()
             },
             {
-                id: 'calendar-perm', name: '일정 조회 권한', icon: 'fa-calendar-check',
+                id: 'calendar-perm', name: '일정 조회 · 수정 권한', icon: 'fa-calendar-check',
                 panel: 'sec-settings-calendar-perm', perm: 'settings-calendar-perm',
-                desc: '직책 레벨별로 일정캘린더에서 조회할 수 있는 범위를 정합니다.',
+                desc: '직책 레벨별 일정 조회 범위와, 다른 사람의 일정을 대신 수정 · 삭제할 수 있는 사람을 정합니다.',
                 render: () => renderCalendarPermissions()
             },
             {
