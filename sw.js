@@ -3,9 +3,12 @@
 // 서비스 워커도 하나만 둡니다. (2026-09-05)
 //
 // 화면(HTML)은 자주 고쳐지므로 **네트워크 먼저**, 안 되면 캐시로 — 옛 화면이 남지 않게 합니다.
-// 그림·스크립트 같은 딸린 파일은 **캐시 먼저** 로 빠르게 띄웁니다.
+// 스크립트(js) · 스타일(css) · 설정도 **네트워크 먼저** 입니다 (2026-09-28).
+//   예전에는 캐시 먼저라, 배포 뒤에도 옛 js/kob-store.js · js/kob-auth.js 를 계속 써서
+//   새 화면(index.html)과 옛 스크립트가 섞여 돌았습니다 — 파트너센터 로그인이 안 되던 원인.
+// 그림 · 글꼴처럼 잘 안 바뀌는 파일만 **캐시 먼저** 로 빠르게 띄웁니다.
 // 운행일지 등 /api/ 요청은 캐시하지 않습니다 — 지난 값이 남으면 안 되는 자료입니다.
-const CACHE = 'kob-dev-v2';   // 이름을 올리면 activate 에서 옛 캐시를 지웁니다 (2026-09-05)
+const CACHE = 'kob-dev-v3';   // 이름을 올리면 activate 에서 옛 캐시를 지웁니다 (2026-09-05 · v3 2026-09-28 옛 스크립트 정리)
 const OFFLINE_HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>연결 없음</title></head>
@@ -38,17 +41,21 @@ self.addEventListener('fetch', (e) => {
     // 캐시가 남으면 이름을 고쳐도 옛 이름으로 계속 담깁니다. (2026-09-05)
     if (url.pathname.endsWith('.webmanifest')) return;
 
-    // 화면 이동 · HTML — 네트워크 먼저
-    if (req.mode === 'navigate' || (req.headers.get('accept') || '').includes('text/html')) {
+    // 화면 이동 · HTML · 스크립트 · 스타일 — 네트워크 먼저 (안 되면 캐시)
+    const code = /\.(js|mjs|css|json)$/i.test(url.pathname);
+    if (code || req.mode === 'navigate' || (req.headers.get('accept') || '').includes('text/html')) {
         e.respondWith((async () => {
             try {
-                const fresh = await fetch(req);
-                const cache = await caches.open(CACHE);
-                cache.put(req, fresh.clone());
+                const fresh = await fetch(req, code ? { cache: 'no-cache' } : undefined);
+                if (fresh && fresh.ok) {
+                    const cache = await caches.open(CACHE);
+                    cache.put(req, fresh.clone());
+                }
                 return fresh;
             } catch (err) {
                 const hit = await caches.match(req, { ignoreSearch: true });
                 if (hit) return hit;
+                if (code) return new Response('', { status: 504, statusText: 'Offline' });
                 return new Response(OFFLINE_HTML, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
             }
         })());

@@ -50831,6 +50831,12 @@ const QUOTE_TEMPLATES = [
                 if (partnerUser) renderPartnerMyList();
             });
 
+            // 새 화면에 옛 스크립트(js/kob-store.js)가 섞여 돌면 로그인이 되지 않습니다 — 새로 고치라고 알립니다 (2026-09-28)
+            const cfgOn = !!(window.KOB_CONFIG && KOB_CONFIG.supabaseUrl && KOB_CONFIG.supabaseAnonKey);
+            if (cfgOn && (kobStorage.mode !== 'partner' || !window.kobPartner || !window.kobPartnerPw)) {
+                const m = document.getElementById('pc-login-msg');
+                if (m) m.textContent = '화면이 예전 판입니다. 새로고침을 한두 번 해 주세요 (PC 는 Ctrl+Shift+R).';
+            }
             // 서버 모드 — 로그인이 남아 있으면(토큰) 로그인 창 없이 들어갑니다 (2026-09-28)
             if (kobStorage.mode === 'partner' && window.kobPartner && kobPartner.session) {
                 const me = partnerAccountList().find(a => a.loginId === kobPartner.session.loginId);
@@ -51492,6 +51498,7 @@ const QUOTE_TEMPLATES = [
                 return;
             }
 
+            if (!window.kobPartnerPw) { msg.textContent = '화면이 예전 판입니다. 새로고침을 한두 번 해 주세요 (PC 는 Ctrl+Shift+R).'; return; }
             const hit = partnerAccountList().find(a => a.loginId.toLowerCase() === id);
             if (!hit || !(await kobPartnerPw.check(partnerAccounts.find(a => a.loginId === hit.loginId), pw))) {
                 msg.textContent = '아이디 또는 비밀번호가 맞지 않습니다.';
