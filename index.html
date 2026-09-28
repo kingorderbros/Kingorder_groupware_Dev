@@ -3129,6 +3129,8 @@
                             <button onclick="openPhoneSyncHelp()" class="bg-white border border-emerald-300 text-emerald-700 hover:bg-emerald-50 px-3 py-1.5 rounded text-sm transition-colors whitespace-nowrap">
                                 <i class="fas fa-mobile-screen-button mr-1"></i>휴대폰 연동 방법
                             </button>
+                            <button type="button" id="calendar-bday-toggle" onclick="toggleCalendarBirthdays()" aria-pressed="true" title="전사일정의 구성원 생일을 보이거나 숨깁니다 (이 브라우저에만 기억)"
+                                    class="px-3 py-1.5 rounded text-sm border transition-colors whitespace-nowrap"></button>
                             <select id="calendar-filter-cal" onchange="renderCalendar()" class="py-1.5 px-3 text-sm border border-gray-300 rounded text-gray-700 bg-gray-50 cursor-pointer">
                                 <option value="">전체 캘린더</option>
                                 <!-- JS 동적 렌더링 (CALENDARS) -->
@@ -7769,6 +7771,10 @@
                                     <label class="block text-xs font-medium text-gray-600 mb-1">생일</label>
                                     <input type="date" id="org-edit-birthday" class="w-full p-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500" />
                                     <p class="text-[11px] text-gray-400 mt-1">조직도 카드에 <b>월·일</b>로 표시됩니다.</p>
+                                    <label class="mt-1.5 inline-flex items-center gap-1.5 text-xs text-gray-700 cursor-pointer">
+                                        <input type="checkbox" id="org-edit-show-birthday" class="w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500" checked>
+                                        캘린더(전사일정)에 생일 표시
+                                    </label>
                                 </div>
                             </div>
                             <div>
@@ -16282,7 +16288,26 @@ const QUOTE_TEMPLATES = [
         // 조회 범위에 따라 볼 수 있는 일정 목록. scopeInfo = { scope, depts }
         // 구성원 생일(전사일정)도 함께 넣습니다 (2026-09-28).
         function getVisibleSchedules(scopeInfo) {
-            return schedules.filter(s => canViewSchedule(s, scopeInfo)).concat(birthdaySchedules());
+            return schedules.filter(s => canViewSchedule(s, scopeInfo)).concat(calendarShowBirthdays() ? birthdaySchedules() : []);
+        }
+        // 일정캘린더 위 [생일] 켜기/끄기 — 보는 사람마다 이 브라우저에 기억합니다 (2026-09-28)
+        const CAL_BDAY_KEY = 'gwCalShowBirthday';
+        function calendarShowBirthdays() {
+            try { return kobStorage.getItem(CAL_BDAY_KEY) !== '0'; } catch (e) { return true; }
+        }
+        function paintCalendarBirthdayToggle() {
+            const b = document.getElementById('calendar-bday-toggle');
+            if (!b) return;
+            const on = calendarShowBirthdays();
+            b.setAttribute('aria-pressed', on ? 'true' : 'false');
+            b.className = 'px-3 py-1.5 rounded text-sm border transition-colors whitespace-nowrap '
+                + (on ? 'bg-rose-50 border-rose-300 text-rose-700 hover:bg-rose-100' : 'bg-white border-gray-300 text-gray-400 hover:bg-gray-50');
+            b.innerHTML = `<i class="fas fa-cake-candles mr-1"></i>생일 ${on ? '표시' : '숨김'}`;
+        }
+        function toggleCalendarBirthdays() {
+            try { kobStorage.setItem(CAL_BDAY_KEY, calendarShowBirthdays() ? '0' : '1'); } catch (e) { /* 저장이 막혀 있으면 이번 화면에서만 */ }
+            paintCalendarBirthdayToggle();
+            renderCalendar();
         }
 
         // ---------- 구성원 생일 → 전사일정 (2026-09-28) ----------
@@ -16302,6 +16327,7 @@ const QUOTE_TEMPLATES = [
             const out = [];
             users.forEach(u => {
                 if (!u || !u.name || externalDepts.includes(u.dept)) return;
+                if (u.showBirthday === false) return;                 // 구성원 정보에서 '캘린더에 생일 표시' 를 끈 사람
                 const md = orgBirthdayMMDD(u);
                 const mm = Number(md.slice(0, 2)), dd = Number(md.slice(3));
                 if (!md || mm < 1 || mm > 12 || dd < 1 || dd > 31) return;
@@ -16804,6 +16830,7 @@ const QUOTE_TEMPLATES = [
         }
 
         function renderCalendar() {
+            paintCalendarBirthdayToggle();
             const grid = document.getElementById('cal-grid');
             const monthYearText = document.getElementById('cal-month-year');
             const dayHeader = document.getElementById('cal-day-header');
@@ -35930,6 +35957,8 @@ const QUOTE_TEMPLATES = [
             if (adminChk) adminChk.checked = !!(u && u.isAdmin === true);
             const hideChk = document.getElementById('org-edit-hide-org');
             if (hideChk) hideChk.checked = !!(u && u.hideInOrg === true);
+            const bdayChk = document.getElementById('org-edit-show-birthday');
+            if (bdayChk) bdayChk.checked = !(u && u.showBirthday === false);     // 기본은 표시 (2026-09-28)
             onOrgEditAdminChange();          // 관리자면 부서 · 직급 · 팀을 선택 사항으로 (2026-09-21)
             document.getElementById('org-edit-modal').classList.remove('hidden');
         }
@@ -35962,7 +35991,8 @@ const QUOTE_TEMPLATES = [
                 level: v('level') || 'manager',
                 groupId: v('group') || 'sales',
                 isAdmin: !!((document.getElementById('org-edit-admin') || {}).checked),   // 겸직 관리자 (2026-09-21)
-                hideInOrg: !!((document.getElementById('org-edit-hide-org') || {}).checked)   // 조직도에 안 내보내기 (2026-09-23)
+                hideInOrg: !!((document.getElementById('org-edit-hide-org') || {}).checked),   // 조직도에 안 내보내기 (2026-09-23)
+                showBirthday: (document.getElementById('org-edit-show-birthday') || { checked: true }).checked   // 캘린더에 생일 표시 (2026-09-28)
             };
             let created = null, oldEmail = '';
             if (orgEditId) {

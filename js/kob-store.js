@@ -23,7 +23,8 @@
     const LOCAL_ONLY = [/^savedLoginId$/, /^pcSavedLoginId$/, /^gwTheme$/, /^pcTheme$/, /^gwPartnerIntakeDraft\.v1$/,
                         /^gwToastPos\.v1$/, /^gwPartnerDeptPerm\.newMenus\./,
                         /^gwWcLastCustomer\.v1$/,
-                        /^pcToken\.v1$/];   // 파트너센터 로그인 토큰 — 이 브라우저에만 (2026-09-28)   // 업무센터에서 마지막으로 보던 고객 — 사람마다 다름
+                        /^pcToken\.v1$/,
+                        /^gwCalShowBirthday$/];   // 일정캘린더 [생일] 켜기/끄기 — 사람마다 다름 (2026-09-28)   // 파트너센터 로그인 토큰 — 이 브라우저에만 (2026-09-28)   // 업무센터에서 마지막으로 보던 고객 — 사람마다 다름
     const isLocalOnly = (k) => LOCAL_ONLY.some(re => re.test(String(k)));
 
     // ---------- 로그인 전에는 서버에 쓰지 않습니다 (2026-09-28) ----------
