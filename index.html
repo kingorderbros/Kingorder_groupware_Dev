@@ -16289,18 +16289,19 @@ const QUOTE_TEMPLATES = [
         // 조직도 관리 › 구성원 정보의 '생일' 을 읽어 **해마다 그날** 전사일정에 보여 줍니다.
         //   · 저장하지 않고 그때그때 만듭니다 → 생일을 고치거나 지우면 곧바로 따라가고, 해마다 다시 만들 일이 없습니다
         //   · 그래서 수정 · 삭제할 수 없고(생일은 구성원 정보에서 고칩니다), 구글 캘린더(폰)로는 가지 않습니다
-        //   · 사외 조직 · 관리자 계정 · 조직도에 표시하지 않는 사람은 뺍니다. 2월 29일은 평년엔 2월 28일.
+        //   · 생일을 넣은 사람은 모두 나옵니다 — 소속 없는 관리자 계정 · [조직도에 표시하지 않음] 도 포함 (2026-09-28 고침:
+        //     처음엔 이 둘을 뺐더니 실제 생일 2건이 모두 빠졌습니다). 사외 조직(외주업체)만 뺍니다. 2월 29일은 평년엔 2월 28일.
         //   · 올해 앞뒤 2년까지 만듭니다(캘린더를 앞뒤로 넘겨 봐도 보이게).
         const BIRTHDAY_ID_PREFIX = 'bday:';
         function isBirthdaySchedule(s) { return !!s && s.birthday === true; }
         function birthdaySchedules() {
             const users = (typeof localUsers !== 'undefined' && Array.isArray(localUsers)) ? localUsers : [];
-            const hiddenDepts = (typeof ORG_HIDDEN_DEPTS !== 'undefined') ? ORG_HIDDEN_DEPTS : ['vendor', 'admin'];
+            const externalDepts = (typeof orgDeptList === 'function' ? orgDepts.filter(d => d.external).map(d => d.id) : []).concat(['vendor']);
             const y0 = new Date().getFullYear();
             const leap = (y) => (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
             const out = [];
             users.forEach(u => {
-                if (!u || !u.name || u.hideInOrg === true || hiddenDepts.includes(u.dept)) return;
+                if (!u || !u.name || externalDepts.includes(u.dept)) return;
                 const md = orgBirthdayMMDD(u);
                 const mm = Number(md.slice(0, 2)), dd = Number(md.slice(3));
                 if (!md || mm < 1 || mm > 12 || dd < 1 || dd > 31) return;
