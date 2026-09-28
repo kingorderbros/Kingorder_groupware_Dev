@@ -60,5 +60,32 @@ console.log('\n[5] 화면');
 ok(/id="arc-dept"/.test(html), '올리기 창에 본부 선택칸이 있다');
 ok(/setArchiveDept\(/.test(html), '목록에 본부 고르기가 있다');
 
+// [저장] 을 실제로 눌렀을 때 — 2026-09-29 'id' 를 선언 전에 읽어 저장 자체가 멈추던 것
+console.log('\n[6] 저장 버튼');
+{
+    const i = html.indexOf('        function saveArchivePost() {');
+    const SAVE = html.slice(i, html.indexOf('\n        function deleteArchivePost(', i));
+    const saveCtx = vm.createContext({ console, JSON, Array, String, Number, Object, Date });
+    vm.runInContext(`
+        const __el = { 'arc-title': '회의록', 'arc-dept': 'sales', 'arc-id': '', 'arc-cat': 'doc', 'arc-body': '', 'arc-open': '1' };
+        const document = { getElementById: id => id === 'arc-pin' ? { checked: false } : { value: __el[id], focus() {} } };
+        var archivePosts = [], archiveDraftFiles = [], __alerts = [], __saved = 0, currentUserName = '홍길동';
+        function alert(m) { __alerts.push(m); }
+        function canEditArchive() { return true; }
+        function archiveEditableDepts() { return ['company', 'sales']; }
+        function archivePostById(id) { return archivePosts.find(x => x.id === id); }
+        function archivePostDept(p) { return p.dept || 'company'; }
+        function canEditArchivePost() { return true; }
+        function reloadArchivePosts() {}
+        function nextArchivePostId() { return 'A-1'; }
+        function saveArchivePosts() { __saved++; return true; }
+        function closeArchivePost() {} function renderArchive() {} function showAppToast() {}
+    ` + SAVE + `
+    ;globalThis.__s = () => { let err = ''; try { saveArchivePost(); } catch (e) { err = String(e); } return { err, n: archivePosts.length, saved: __saved, alerts: __alerts }; };`, saveCtx);
+    const r = vm.runInContext('__s()', saveCtx);
+    ok(!r.err, '저장 중 오류가 나지 않는다' + (r.err ? ' — ' + r.err : ''));
+    ok(r.n === 1 && r.saved === 1, '새 자료가 목록에 들어가고 저장된다');
+}
+
 console.log(`\n=========== 통과 ${pass} · 실패 ${fail} ===========`);
 process.exit(fail ? 1 : 0);

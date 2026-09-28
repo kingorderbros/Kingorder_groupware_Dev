@@ -12586,10 +12586,10 @@ const QUOTE_TEMPLATES = [
             const title = String(document.getElementById('arc-title').value || '').trim();
             if (!title) { alert('제목을 입력해 주세요.'); document.getElementById('arc-title').focus(); return; }
             const dept = String(document.getElementById('arc-dept').value || '');
+            const id = String(document.getElementById('arc-id').value || '');
             const keepOld = id && archivePostById(id) && archivePostDept(archivePostById(id)) === dept && canEditArchivePost(archivePostById(id));
             if (!archiveEditableDepts().includes(dept) && !keepOld) { alert('이 본부에는 자료를 올릴 수 없습니다.'); return; }
             reloadArchivePosts();                     // 다른 창에서 바뀐 것을 먼저 읽고 얹습니다
-            const id = String(document.getElementById('arc-id').value || '');
             const now = (typeof partnerNowStamp === 'function') ? partnerNowStamp()
                 : new Date().toISOString().slice(0, 16).replace('T', ' ');
             const data = {
