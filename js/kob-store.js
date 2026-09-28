@@ -22,7 +22,8 @@
     const cfg = window.KOB_CONFIG || {};
     const LOCAL_ONLY = [/^savedLoginId$/, /^pcSavedLoginId$/, /^gwTheme$/, /^pcTheme$/, /^gwPartnerIntakeDraft\.v1$/,
                         /^gwToastPos\.v1$/, /^gwPartnerDeptPerm\.newMenus\./,
-                        /^gwWcLastCustomer\.v1$/];   // 업무센터에서 마지막으로 보던 고객 — 사람마다 다름
+                        /^gwWcLastCustomer\.v1$/,
+                        /^pcToken\.v1$/];   // 파트너센터 로그인 토큰 — 이 브라우저에만 (2026-09-28)   // 업무센터에서 마지막으로 보던 고객 — 사람마다 다름
     const isLocalOnly = (k) => LOCAL_ONLY.some(re => re.test(String(k)));
 
     // ---------- 로그인 전에는 서버에 쓰지 않습니다 (2026-09-28) ----------
@@ -30,16 +31,11 @@
     //   · app_store 를 로그인 사용자로 좁힌 뒤에는 거절되고, 재시도 대기열에 남아 있다가
     //   · 로그인하는 순간 통과해서 **실제 자료(직원 · 파트너 계정 등)를 기본값으로 덮을 수 있습니다.**
     // 그래서 로그인하지 않은 상태의 쓰기는 이 화면 메모리에만 두고 서버로 보내지 않습니다.
-    // 예외 — 파트너센터(?mode=partner)는 아직 Supabase 로그인이 없어서, 파트너가 실제로 쓰는 키만 보냅니다.
-    //        (2단계에서 파트너센터가 /api/partner/* 를 거치게 되면 이 예외는 없앱니다)
+    // 파트너센터(?mode=partner)는 app_store 를 직접 만지지 않고 서버(/api/partner/*)를 거칩니다 — 아래 '파트너 모드'.
     const VIEW_MODE = (function () { try { return new URLSearchParams(window.location.search).get('mode') || ''; } catch (e) { return ''; } })();
-    const PARTNER_ANON_WRITE = ['gwPartnerIntakes.v1', 'gwDevRequests.v1', 'gwDevNotiQueue.v1', 'gwInboundRecords.v1'];
     let authed = false;               // Supabase 로그인 세션이 있는지
     let warnedAnon = false;
-    function canPush(k) {
-        if (authed) return true;
-        return VIEW_MODE === 'partner' && PARTNER_ANON_WRITE.includes(String(k));
-    }
+    function canPush(k) { return authed; }
     function holdAnon(k) {
         if (!warnedAnon) { warnedAnon = true; console.info('[kob-store] 로그인 전이라 서버에 저장하지 않습니다 (이 화면에만 반영):', k); }
     }
@@ -94,17 +90,19 @@
         const env = cfg.env ? ` · ${cfg.env}` : '';
         if (state === 'error') { el.style.background = '#fee2e2'; el.style.color = '#991b1b'; el.textContent = `저장 실패 — 다시 시도 중${env}`; el.title = detail || ''; }
         else if (mode === 'supabase') { el.style.background = '#dcfce7'; el.style.color = '#166534'; el.textContent = `Supabase${env}`; }
+        else if (mode === 'partner') { el.style.background = '#dcfce7'; el.style.color = '#166534'; el.textContent = `서버${env}`; }
         else { el.style.background = '#e5e7eb'; el.style.color = '#374151'; el.textContent = `로컬 저장소${env} — Supabase 미설정`; }
     }
 
     window.kobStorage = {
         getItem(k) {
-            if (mode !== 'supabase' || isLocalOnly(k)) return ls.get(k);
+            if (mode === 'local' || isLocalOnly(k)) return ls.get(k);
             return cache.has(k) ? cache.get(k) : null;
         },
         setItem(k, v) {
             const s = String(v);
-            if (mode !== 'supabase' || isLocalOnly(k)) { ls.set(k, s); return; }
+            if (mode === 'local' || isLocalOnly(k)) { ls.set(k, s); return; }
+            if (mode === 'partner') { pcSet(k, s); return; }
             // 내용이 같으면 보내지 않습니다 — 화면을 그릴 때마다 저장하는 곳(예: 파트너사 목록)이 있어
             // 같은 값을 통째로 다시 올리면 그사이 남이 고친 것을 덮을 수 있습니다 (2026-09-28)
             if (cache.get(k) === s && !pending.has(k)) return;
@@ -113,15 +111,138 @@
             pending.set(k, s); scheduleFlush();
         },
         removeItem(k) {
-            if (mode !== 'supabase' || isLocalOnly(k)) { ls.del(k); return; }
+            if (mode === 'local' || isLocalOnly(k)) { ls.del(k); return; }
+            if (mode === 'partner') { cache.delete(k); return; }     // 파트너는 목록을 통째로 지우지 못합니다 — 화면에서만
             cache.delete(k); ls.del(k);
             if (!canPush(k)) { holdAnon(k); return; }
             pending.set(k, null); scheduleFlush();
         },
         get mode() { return mode; },
-        get authed() { return mode !== 'supabase' ? true : authed; },
+        get authed() { return mode === 'supabase' ? authed : (mode === 'partner' ? !!pcSession : true); },
         // 모아 둔 쓰기를 지금 보냅니다 — 로그아웃 직전에 부릅니다 (2026-09-28)
         flush() { if (flushTimer) { clearTimeout(flushTimer); flushTimer = null; } return flush(); }
+    };
+
+    // ==================== 파트너 모드 (?mode=partner · 2026-09-28 자료 보호 2단계) ====================
+    // 로그인  : kobPartner.login(아이디, 비밀번호) → 서버가 확인하고 토큰을 줍니다 → 화면이 새로 불러옵니다
+    // 켤 때   : 토큰이 있으면 GET /api/partner/boot 로 **그 파트너사 몫만** 받아 메모리에 얹고 본체를 실행합니다
+    // 저장    : 파트너가 쓰는 4개 자료만, 바뀐 건(upserts · removes)만 POST /api/partner/save 로 보냅니다.
+    //           서버가 그 파트너사 것인지 확인한 뒤 반영하고, 반영된 목록을 돌려주면 메모리에 얹습니다.
+    // 새 소식 : 30초마다(또 창으로 돌아올 때) 다시 받아 바뀐 키는 'storage' 이벤트로 화면에 알립니다.
+    const API = cfg.apiBase || '';
+    const PC_TOKEN_KEY = 'pcToken.v1';
+    const PC_WRITE_KEYS = ['gwPartnerIntakes.v1', 'gwDevRequests.v1', 'gwDevNotiQueue.v1', 'gwInboundRecords.v1'];
+    let pcSession = null;             // { loginId, partnerId, partnerName }
+    const pcChain = new Map();        // 키 → 진행 중인 저장 (같은 키는 차례대로)
+    const pcBusy = new Map();         // 키 → 보내는 중인 저장 수 (그동안 받아 온 옛 값으로 덮지 않게)
+    function pcToken() { return ls.get(PC_TOKEN_KEY) || ''; }
+    async function pcFetch(method, path, bodyObj) {
+        const res = await fetch(API + path, {
+            method, cache: 'no-store',
+            headers: Object.assign({ 'Content-Type': 'application/json' }, pcToken() ? { Authorization: 'Bearer ' + pcToken() } : {}),
+            body: bodyObj === undefined ? undefined : JSON.stringify(bodyObj)
+        });
+        const j = await res.json().catch(() => ({}));
+        return { status: res.status, j };
+    }
+    function fireStorage(key, oldValue, newValue) {
+        try { window.dispatchEvent(new StorageEvent('storage', { key, oldValue, newValue, storageArea: window.localStorage })); } catch (e) { /* 새로고침으로 */ }
+    }
+    // 목록 두 개의 차이 — id 기준
+    function pcDiff(oldStr, newStr) {
+        let a = [], b = [];
+        try { a = JSON.parse(oldStr || '[]'); } catch (e) { a = []; }
+        try { b = JSON.parse(newStr || '[]'); } catch (e) { b = []; }
+        if (!Array.isArray(a)) a = []; if (!Array.isArray(b)) b = [];
+        const before = new Map(a.filter(x => x && x.id !== undefined).map(x => [String(x.id), JSON.stringify(x)]));
+        const upserts = b.filter(x => x && x.id !== undefined && before.get(String(x.id)) !== JSON.stringify(x));
+        const now = new Set(b.filter(x => x && x.id !== undefined).map(x => String(x.id)));
+        const removes = Array.from(before.keys()).filter(id => !now.has(id));
+        return { upserts, removes };
+    }
+    function pcSet(k, s) {
+        const old = cache.has(k) ? cache.get(k) : null;
+        if (old === s) return;
+        cache.set(k, s);
+        if (!pcSession || !PC_WRITE_KEYS.includes(k)) { holdAnon(k); return; }
+        const d = pcDiff(old, s);
+        if (!d.upserts.length && !d.removes.length) return;
+        pcBusy.set(k, (pcBusy.get(k) || 0) + 1);
+        const prev = pcChain.get(k) || Promise.resolve();
+        const next = prev.then(() => pcSend(k, d, 0)).finally(() => pcBusy.set(k, pcBusy.get(k) - 1));
+        pcChain.set(k, next.catch(() => {}));
+    }
+    async function pcSend(k, d, attempt) {
+        try {
+            const { status, j } = await pcFetch('POST', '/api/partner/save', { key: k, upserts: d.upserts, removes: d.removes });
+            if (status === 401) { pcExpired(); return; }
+            if (!j.ok) throw new Error(j.error || ('서버 오류 ' + status));
+            setStatus('ok');
+            if (j.rejected && j.rejected.length) console.warn('[kob-store] 서버가 받지 않은 건:', k, j.rejected);
+            // 서버에 반영된 목록으로 맞춥니다 (번호가 겹쳐 새 번호를 받은 건도 여기서 바뀝니다)
+            const fresh = JSON.stringify(j.value);
+            const cur = cache.get(k);
+            if (fresh !== cur) { cache.set(k, fresh); fireStorage(k, cur, fresh); }
+        } catch (e) {
+            console.error('[kob-store] 파트너 저장 실패', k, e);
+            setStatus('error', e.message || String(e));
+            if (attempt < 2) { await new Promise(r => setTimeout(r, 3000)); return pcSend(k, d, attempt + 1); }
+            alert('저장하지 못했습니다. 인터넷 연결을 확인한 뒤 다시 시도해 주세요.\n\n' + (e.message || e));
+        }
+    }
+    function pcExpired() {
+        ls.del(PC_TOKEN_KEY);
+        alert('로그인이 끝났습니다. 다시 로그인해 주세요.');
+        window.location.reload();
+    }
+    async function pcPull() {
+        if (!pcSession) return;
+        let r;
+        try { r = await pcFetch('GET', '/api/partner/boot'); } catch (e) { return; }
+        if (r.status === 401) { pcExpired(); return; }
+        if (!r.j || !r.j.ok) return;
+        Object.keys(r.j.store || {}).forEach(k => {
+            if (pcBusy.get(k) > 0) return;
+            const fresh = JSON.stringify(r.j.store[k]);
+            const cur = cache.has(k) ? cache.get(k) : null;
+            if (fresh === cur) return;
+            cache.set(k, fresh);
+            fireStorage(k, cur, fresh);
+        });
+    }
+    async function bootPartner() {
+        mode = 'partner';
+        if (pcToken()) {
+            try {
+                const r = await pcFetch('GET', '/api/partner/boot');
+                if (r.status === 401) ls.del(PC_TOKEN_KEY);
+                else if (r.j && r.j.ok) {
+                    pcSession = r.j.session;
+                    Object.keys(r.j.store || {}).forEach(k => cache.set(k, JSON.stringify(r.j.store[k])));
+                }
+            } catch (e) { console.error('[kob-store] 파트너 자료를 받지 못했습니다', e); }
+        }
+        if (pcSession) {
+            setInterval(pcPull, 30000);
+            window.addEventListener('focus', pcPull);
+        }
+    }
+    window.kobPartner = {
+        get session() { return pcSession; },
+        // 성공하면 토큰을 남기고 { ok: true } — 화면은 새로 불러 들어갑니다
+        async login(loginId, pw) {
+            let r;
+            try { r = await pcFetch('POST', '/api/partner/login', { loginId, pw }); }
+            catch (e) { return { ok: false, error: '서버에 연결하지 못했습니다. 잠시 뒤 다시 시도해 주세요.' }; }
+            if (!r.j || !r.j.ok) return { ok: false, error: (r.j && r.j.error) || ('서버 오류 ' + r.status) };
+            ls.set(PC_TOKEN_KEY, r.j.token);
+            return { ok: true };
+        },
+        async logout() {
+            await Promise.all(Array.from(pcChain.values()));     // 보내는 중인 저장은 끝내고
+            ls.del(PC_TOKEN_KEY);
+            window.location.reload();
+        }
     };
 
     function loadScript(src) {
@@ -137,6 +258,14 @@
     }
 
     async function boot() {
+        if (VIEW_MODE === 'partner' && cfg.supabaseUrl && cfg.supabaseAnonKey) {
+            await bootPartner();
+            if (window.kobDb && window.kobDb.__init) { try { await window.kobDb.__init(null, 'local'); } catch (e) { /* 파트너는 표를 쓰지 않습니다 */ } }
+            runMain();
+            document.documentElement.setAttribute('data-kob-ready', '1');
+            setStatus('ok');
+            return;
+        }
         if (cfg.supabaseUrl && cfg.supabaseAnonKey) {
             try {
                 if (!window.supabase) await loadScript(cfg.supabaseJs || 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js');

@@ -1238,10 +1238,7 @@
                         <p id="pc-login-msg" class="text-sm text-red-600 mb-3 min-h-[1.25rem]"></p>
                         <button type="submit" class="w-full py-3 px-4 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg shadow-md transition">로그인</button>
                     </form>
-                    <div class="mt-5 pt-4 border-t border-gray-100">
-                        <p class="text-xs font-semibold text-gray-500 mb-1.5">테스트 계정 <span class="font-normal text-gray-400">— 비밀번호는 모두 <b>1234</b></span></p>
-                        <div id="pc-login-accounts" class="text-xs text-gray-500 space-y-0.5 max-h-40 overflow-y-auto"></div>
-                    </div>
+                    <p class="mt-5 pt-4 border-t border-gray-100 text-xs text-gray-400">아이디 · 비밀번호를 모르시면 킹오더브라더스 담당자에게 문의해 주세요.</p>
                 </div>
                 <p class="text-center text-xs text-gray-400 mt-4">문의 : 담당 영업사원에게 연락해 주세요.</p>
                 <!-- 화면 판 표시 — 고친 것이 반영됐는지(옛 파일·캐시를 보고 있는 건 아닌지) 바로 가릴 수 있게 (2026-09-16) -->
@@ -10879,6 +10876,7 @@ const QUOTE_TEMPLATES = [
             document.getElementById('user-dept').innerText = userDept + ' · ' + (levelNames[level] || '');
 
             fillDeptSelects();         // 화면의 부서 선택칸을 조직 마스터로 채웁니다
+            migratePartnerPasswords(); // 예전 평문 파트너 비밀번호가 남아 있으면 암호화 (2026-09-28)
             syncDeptMenuNames();       // 사이드바 본부 이름도 조직 마스터를 따릅니다
             renderPersonalDashboard(userName, role);
             if (canViewTeam(level)) renderTeamOverview();
@@ -49486,7 +49484,8 @@ const QUOTE_TEMPLATES = [
         function partnerAccountSeed() {
             const ps = (typeof partners !== 'undefined' ? partners : []);
             const stamp = ymd(new Date());
-            const acct = (p, loginId) => ({ loginId, pw: '1234', partnerId: p.id, manager: '', phone: '', active: true,
+            // 비밀번호는 넣지 않습니다 — 파트너 ID 관리에서 정해 줘야 로그인됩니다 (2026-09-28, 예전엔 모두 '1234')
+            const acct = (p, loginId) => ({ loginId, partnerId: p.id, manager: '', phone: '', active: true,
                                             createdAt: stamp, createdBy: '시스템(초기)', memo: '' });
             const out = ps.slice(0, 8).map((p, i) => acct(p, 'partner' + (i + 1)));
             ps.forEach(p => {
@@ -49499,6 +49498,21 @@ const QUOTE_TEMPLATES = [
         let partnerAccounts = loadJsonStore(PARTNER_ACCOUNT_KEY, null);
         if (!Array.isArray(partnerAccounts)) { partnerAccounts = partnerAccountSeed(); saveJsonStore(PARTNER_ACCOUNT_KEY, partnerAccounts); }
         function savePartnerAccounts() { saveJsonStore(PARTNER_ACCOUNT_KEY, partnerAccounts); }
+        // 예전에 평문으로 저장된 파트너 비밀번호를 암호화로 바꿉니다 (2026-09-28).
+        // 사내 직원이 로그인한 뒤(서버에 쓸 수 있을 때) 한 번 돕니다. 파트너가 먼저 로그인하면 서버도 바꿔 둡니다.
+        async function migratePartnerPasswords() {
+            if (!window.kobPartnerPw || !kobStorage.authed) return 0;
+            const olds = partnerAccounts.filter(a => typeof a.pw === 'string');
+            if (!olds.length) return 0;
+            try {
+                for (const a of olds) {
+                    if (a.pw) Object.assign(a, await kobPartnerPw.hash(a.pw));
+                    delete a.pw;
+                }
+            } catch (e) { console.warn('[partner] 비밀번호 암호화를 건너뜁니다', e); return 0; }
+            savePartnerAccounts();
+            return olds.length;
+        }
         // partnerCustTypeName() 은 파트너센터 쪽(위)에 이미 있습니다 — 그대로 씁니다
         function partnerCustTypeChip(p) {
             if (!p) return '<span class="px-1.5 py-0.5 rounded text-[11px] bg-gray-100 text-gray-500">파트너사 없음</span>';
@@ -49778,7 +49792,7 @@ const QUOTE_TEMPLATES = [
             return { loginId: v('pacc-login').toLowerCase(), pw: v('pacc-pw'), manager: v('pacc-manager'), phone: v('pacc-phone'), memo: v('pacc-memo'),
                      active: !!(document.getElementById('pacc-active') || {}).checked };
         }
-        function savePartnerId() {
+        async function savePartnerId() {
             const st = partnerIdModalState; if (!st) return;
             const f = partnerIdCollect();
             const ps = (typeof partners !== 'undefined' ? partners : []);
@@ -49796,14 +49810,20 @@ const QUOTE_TEMPLATES = [
             } else if (f.pw && f.pw.length < 4) { alert('비밀번호는 4자 이상 입력해 주세요.'); document.getElementById('pacc-pw').focus(); return; }
             if (!st.menus.some(m => m.indexOf(':') > -1) && !confirm('켜진 업무가 하나도 없습니다. 이 아이디는 로그인해도 쓸 수 있는 업무가 없습니다.\n그래도 저장할까요?')) return;
 
+            // 비밀번호는 평문으로 두지 않고 암호화한 값만 저장합니다 (2026-09-28)
+            let pwRec = null;
+            if (f.pw) {
+                try { pwRec = await kobPartnerPw.hash(f.pw); }
+                catch (e) { alert(String(e && e.message || e)); return; }
+            }
             const now = new Date();
             if (editing) {
-                if (f.pw) editing.pw = f.pw;
+                if (pwRec) { Object.assign(editing, pwRec); delete editing.pw; }
                 editing.manager = f.manager; editing.phone = f.phone; editing.memo = f.memo; editing.active = f.active;
                 editing.updatedAt = ymd(now); editing.updatedBy = currentUserName || '';
             } else {
-                partnerAccounts.push({ loginId: f.loginId, pw: f.pw, partnerId: p.id, manager: f.manager, phone: f.phone, memo: f.memo, active: f.active,
-                                       createdAt: ymd(now), createdBy: currentUserName || '' });
+                partnerAccounts.push(Object.assign({ loginId: f.loginId, partnerId: p.id, manager: f.manager, phone: f.phone, memo: f.memo, active: f.active,
+                                       createdAt: ymd(now), createdBy: currentUserName || '' }, pwRec || {}));
             }
             const key = editing ? editing.loginId : f.loginId;
             partnerDeptPerm[key] = st.menus.slice();
@@ -50797,13 +50817,7 @@ const QUOTE_TEMPLATES = [
                 renderPartnerTopMenu();
             });
 
-            // 테스트 계정 안내
-            const host = document.getElementById('pc-login-accounts');
-            if (host) {
-                host.innerHTML = partnerAccountList().map(a =>
-                    `<p>· <b class="text-gray-700">${escapeHtml(a.loginId)}</b> — ${escapeHtml(a.partnerName)}</p>`).join('')
-                    || '<p class="text-gray-400">등록된 파트너사가 없습니다.</p>';
-            }
+            // 로그인 화면의 '테스트 계정 안내'(모든 아이디 · 파트너사 이름 · 비밀번호 1234)는 없앴습니다 (2026-09-28)
             // 다른 창(그룹웨어)에서 상태가 바뀌면 내 내역에도 바로 반영합니다
             window.addEventListener('storage', (e) => {
                 // 그룹웨어 › 인바운드 관리에서 인입을 고치면 이 창에도 곧바로 반영합니다 (2026-09-08)
@@ -50816,6 +50830,12 @@ const QUOTE_TEMPLATES = [
                 loadPartnerIntakes();
                 if (partnerUser) renderPartnerMyList();
             });
+
+            // 서버 모드 — 로그인이 남아 있으면(토큰) 로그인 창 없이 들어갑니다 (2026-09-28)
+            if (kobStorage.mode === 'partner' && window.kobPartner && kobPartner.session) {
+                const me = partnerAccountList().find(a => a.loginId === kobPartner.session.loginId);
+                if (me) enterPartner(me);
+            }
         }
 
         // ---------- 화면 색 테마 (3벌) ----------
@@ -51441,14 +51461,39 @@ const QUOTE_TEMPLATES = [
                 </div>`;
         }
 
-        function handlePartnerLogin(event) {
+        // 파트너 로그인 (2026-09-28 자료 보호 2단계)
+        //   · 서버 모드 — 아이디 · 비밀번호를 서버(/api/partner/login)가 확인하고, 화면을 새로 불러
+        //                그 파트너사 몫의 자료만 받은 뒤 bootPartnerView() 가 들어갑니다.
+        //   · 로컬 모드 — 예전처럼 이 브라우저의 계정 목록으로 확인합니다 (암호화된 비밀번호도 확인).
+        async function handlePartnerLogin(event) {
             event.preventDefault();
             const idInput = document.getElementById('pc-login-id');
             const id = String(idInput.value || '').trim().toLowerCase();
             const pw = String(document.getElementById('pc-login-pw').value || '');
             const msg = document.getElementById('pc-login-msg');
+            if (!id || !pw) { msg.textContent = '아이디와 비밀번호를 입력해 주세요.'; return; }
+            // 아이디 기억하기 — 체크했으면 이 브라우저에 아이디만 남깁니다 (비밀번호는 남기지 않습니다)
+            const remember = (document.getElementById('pc-remember-id') || {}).checked;
+            if (remember) kobStorage.setItem(PC_SAVED_ID_KEY, idInput.value.trim());
+            else kobStorage.removeItem(PC_SAVED_ID_KEY);
+
+            if (kobStorage.mode === 'partner') {
+                const btn = event.submitter || document.querySelector('#partner-login button[type="submit"]');
+                const label = btn ? btn.innerHTML : '';
+                if (btn) { btn.disabled = true; btn.textContent = '확인 중…'; }
+                const r = await kobPartner.login(id, pw);
+                if (!r.ok) {
+                    if (btn) { btn.disabled = false; btn.innerHTML = label; }
+                    msg.textContent = r.error;
+                    return;
+                }
+                msg.textContent = '';
+                location.reload();
+                return;
+            }
+
             const hit = partnerAccountList().find(a => a.loginId.toLowerCase() === id);
-            if (!hit || hit.pw !== pw) {
+            if (!hit || !(await kobPartnerPw.check(partnerAccounts.find(a => a.loginId === hit.loginId), pw))) {
                 msg.textContent = '아이디 또는 비밀번호가 맞지 않습니다.';
                 return;
             }
@@ -51457,10 +51502,10 @@ const QUOTE_TEMPLATES = [
                 return;
             }
             msg.textContent = '';
-            // 아이디 기억하기 — 체크했으면 이 브라우저에 아이디만 남깁니다 (비밀번호는 남기지 않습니다)
-            const remember = (document.getElementById('pc-remember-id') || {}).checked;
-            if (remember) kobStorage.setItem(PC_SAVED_ID_KEY, idInput.value.trim());
-            else kobStorage.removeItem(PC_SAVED_ID_KEY);
+            enterPartner(hit);
+        }
+        // 확인이 끝난 파트너 계정으로 파트너센터에 들어갑니다
+        function enterPartner(hit) {
             // 업무는 로그인 뒤 [요청하기] 에서 고릅니다 — 여기서는 아직 정하지 않습니다
             partnerUser = Object.assign({}, hit, { dept: '' });
             partnerPickedDept = '';
@@ -51481,6 +51526,8 @@ const QUOTE_TEMPLATES = [
         }
         function handlePartnerLogout() {
             if (!confirm('로그아웃할까요?')) return;
+            // 서버 모드 — 토큰을 지우고 새로 불러 화면 메모리의 자료를 비웁니다 (2026-09-28)
+            if (kobStorage.mode === 'partner') { kobPartner.logout(); return; }
             partnerUser = null;
             partnerPickedDept = '';
             partnerFormType = '';

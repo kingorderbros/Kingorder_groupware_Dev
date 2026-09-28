@@ -1,0 +1,79 @@
+// 파트너센터 서버 통로 시험 (2026-09-28 · 자료 보호 2단계) — functions/api/_partner.js 판단만.
+let pass = 0, fail = 0;
+const ok = (c, m) => { if (c) { pass++; console.log('  ✓', m); } else { fail++; console.log('  ✗', m); } };
+
+(async () => {
+    const P = await import('../functions/api/_partner.js');
+    const SECRET = 'service-role-secret';
+
+    console.log('\n[1] 비밀번호');
+    const h = await P.hashPassword('abcd1234');
+    ok(h.pwHash.length === 64 && h.pwSalt.length === 32 && h.pwIter === P.PBKDF2_ITER, 'PBKDF2 결과 · 소금 · 횟수를 남긴다');
+    ok((await P.checkPassword(h, 'abcd1234')).ok, '맞는 비밀번호');
+    ok(!(await P.checkPassword(h, 'abcd1235')).ok, '틀린 비밀번호');
+    const old = await P.checkPassword({ pw: '1234' }, '1234');
+    ok(old.ok && old.needUpgrade, '예전 평문도 받아 주고 암호화가 필요하다고 알린다');
+    ok(!(await P.checkPassword({ pw: '' }, '')).ok, '비밀번호가 없는 계정은 로그인 불가');
+    ok(!(await P.checkPassword({}, 'x')).ok, '비밀번호 칸이 아예 없어도 불가');
+
+    console.log('\n[2] 토큰');
+    const t = await P.makeToken(SECRET, 'p1', 'PA-1');
+    const r = await P.readToken(SECRET, t);
+    ok(r && r.loginId === 'p1' && r.partnerId === 'PA-1', '만든 토큰을 읽는다');
+    ok(!(await P.readToken('other', t)), '다른 열쇠로 만든 것은 거절');
+    const [body, sig] = t.split('.');
+    const forged = Buffer.from(JSON.stringify({ l: 'p2', p: 'PA-2', exp: 9999999999 })).toString('base64url') + '.' + sig;
+    ok(!(await P.readToken(SECRET, forged)), '내용을 바꾸면 거절');
+    ok(!(await P.readToken(SECRET, await P.makeToken(SECRET, 'p1', 'PA-1', Date.now() - 8 * 86400000))), '7일 지난 토큰은 거절');
+    ok(!(await P.readToken(SECRET, 'garbage')), '엉터리 토큰은 거절');
+
+    console.log('\n[3] 파트너가 받는 자료');
+    const store = {
+        'gwPartners.v1': [{ id: 'PA-1', name: '가나\n상사' }, { id: 'PA-2', name: '다라' }],
+        'gwPartnerAccounts.v1': [{ loginId: 'p1', partnerId: 'PA-1', pwHash: 'h', pwSalt: 's', pwIter: 1 }, { loginId: 'p2', partnerId: 'PA-2', pw: '1234' }],
+        'gwPartnerDeptPerm.v1': { p1: ['sales:new'], p2: ['ops:as'] },
+        'gwPartnerIntakes.v1': [{ id: 'PI-1', partnerId: 'PA-1' }, { id: 'PI-2', partnerId: 'PA-2' }],
+        'gwDevRequests.v1': [{ id: 'D1', partnerId: 'PA-1', status: 'working' }, { id: 'D2', partnerId: 'PA-1', status: 'draft' }, { id: 'D3', partnerId: 'PA-2' }, { id: 'D4', partnerName: '가나 상사', status: 'done' }],
+        'gwInboundRecords.v1': [{ id: 'IN-0001', vendor: '가나 상사' }, { id: 'IN-0002', vendor: '다라' }],
+        'gwArchivePosts.v1': [{ id: 'A1', open: true }, { id: 'A2', open: false }],
+        'gwUsers.v1': [{ email: 'staff@k.co' }],
+        'gwOrgDepts.v1': [{ id: 'sales' }]
+    };
+    const f = P.findAccount(store['gwPartnerAccounts.v1'], store['gwPartners.v1'], 'P1');
+    ok(f && f.partnerName === '가나 상사', '계정 찾기 · 파트너사 이름(줄바꿈은 띄어쓰기)');
+    const me = { loginId: 'p1', partnerId: 'PA-1', partnerName: f.partnerName };
+    const v = P.partnerView(store, me);
+    ok(!('gwUsers.v1' in v), '직원 목록은 내려가지 않는다');
+    ok(v['gwPartners.v1'].length === 1 && v['gwPartners.v1'][0].id === 'PA-1', '파트너사는 자기 것만');
+    ok(v['gwPartnerAccounts.v1'].length === 1 && !('pwHash' in v['gwPartnerAccounts.v1'][0]) && !('pw' in v['gwPartnerAccounts.v1'][0]), '계정은 자기 것만 · 비밀번호 칸 없음');
+    ok(JSON.stringify(v['gwPartnerDeptPerm.v1']) === '{"p1":["sales:new"]}', '권한은 자기 아이디만');
+    ok(v['gwPartnerIntakes.v1'].map(x => x.id).join() === 'PI-1', '접수는 자기 것만');
+    ok(v['gwDevRequests.v1'].map(x => x.id).join() === 'D1,D4', '개발의뢰는 자기 것만 · 작성 중(draft) 제외 · 옛 자료는 이름으로');
+    ok(v['gwInboundRecords.v1'].map(x => x.id).join() === 'IN-0001', '인바운드는 자기 업체 것만');
+    ok(v['gwArchivePosts.v1'].map(x => x.id).join() === 'A1', '자료실은 공개 글만');
+    ok(v['gwOrgDepts.v1'].length === 1, '공용 설정은 그대로');
+
+    console.log('\n[4] 파트너 저장 합치기');
+    let w = P.applyPartnerWrite('gwPartnerIntakes.v1', store['gwPartnerIntakes.v1'], [{ id: 'PI-1', partnerId: 'PA-1', memo: '고침' }, { id: 'PI-3', partnerId: 'PA-2', memo: '새 건' }], [], me);
+    ok(w.list.find(x => x.id === 'PI-1').memo === '고침', '자기 건은 고친다');
+    ok(w.list.find(x => x.id === 'PI-3').partnerId === 'PA-1', '새 건의 파트너사는 서버가 자기 것으로 적는다');
+    ok(w.list.find(x => x.id === 'PI-2').partnerId === 'PA-2' && !w.list.find(x => x.id === 'PI-2').memo, '남의 건은 그대로');
+    w = P.applyPartnerWrite('gwPartnerIntakes.v1', store['gwPartnerIntakes.v1'], [{ id: 'PI-2', memo: '번호만 겹친 새 건' }], [], me);
+    ok(w.renamed['PI-2'] === 'PI-3' && w.list.find(x => x.id === 'PI-2').partnerId === 'PA-2', '번호가 남의 것과 겹치면 빈 번호로 새로 넣고 남의 건은 그대로');
+    w = P.applyPartnerWrite('gwPartnerIntakes.v1', store['gwPartnerIntakes.v1'], [], ['PI-1', 'PI-2'], me);
+    ok(!w.list.find(x => x.id === 'PI-1') && w.list.find(x => x.id === 'PI-2') && w.rejected.includes('PI-2'), '지우기는 자기 것만');
+    w = P.applyPartnerWrite('gwInboundRecords.v1', store['gwInboundRecords.v1'], [{ id: 'IN-0002', vendor: '가나 상사', memo: 'x' }], [], me);
+    ok(w.list.find(x => x.id === 'IN-0002').vendor === '다라' && w.renamed['IN-0002'] === 'IN-0003', '인바운드 번호가 겹치면 새 번호 · 남의 것은 그대로');
+    w = P.applyPartnerWrite('gwDevRequests.v1', store['gwDevRequests.v1'], [{ id: 'D1', partnerId: 'PA-2', status: 'review' }, { id: 'D3', status: 'x' }, { id: 'D9' }], ['D1'], me);
+    const d1 = w.list.find(x => x.id === 'D1');
+    ok(d1.status === 'review' && d1.partnerId === 'PA-1', '개발의뢰는 진행만 고치고 상대 파트너사는 못 바꾼다');
+    ok(w.list.find(x => x.id === 'D3').status === undefined && !w.list.find(x => x.id === 'D9'), '남의 개발의뢰 · 새 개발의뢰는 받지 않는다');
+    ok(w.rejected.includes('D3') && w.rejected.includes('D9') && w.list.find(x => x.id === 'D1'), '개발의뢰는 지우지 못한다');
+    w = P.applyPartnerWrite('gwDevNotiQueue.v1', [{ id: 'n1' }], [{ id: 'n1' }, { id: 'n2' }], ['n1'], me);
+    ok(w.list.map(x => x.id).join() === 'n1,n2', '알림 대기열은 새 것만 붙이고 지우지 않는다');
+    let threw = false; try { P.applyPartnerWrite('gwUsers.v1', [], [], [], me); } catch (e) { threw = true; }
+    ok(threw, '그 밖의 자료는 저장 거절');
+
+    console.log(`\n=========== 통과 ${pass} · 실패 ${fail} ===========`);
+    process.exit(fail ? 1 : 0);
+})().catch(e => { console.error(e); process.exit(1); });

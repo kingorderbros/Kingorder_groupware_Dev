@@ -212,6 +212,26 @@
         }
     };
 
+    // ---------- 파트너 계정 비밀번호 (2026-09-28) ----------
+    // 서버(functions/api/_partner.js)와 같은 방식 — PBKDF2-SHA256 · 소금 16바이트 · 10,000회.
+    // 그룹웨어 › 파트너 ID 관리에서 비밀번호를 정할 때 평문 대신 이것을 저장합니다.
+    const PC_ITER = 10000;
+    const hexOf = (buf) => Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+    async function pcHash(pw, saltHex, iter) {
+        if (!(window.crypto && window.crypto.subtle)) throw new Error('이 브라우저에서는 비밀번호를 암호화할 수 없습니다 (https 주소로 열어 주세요).');
+        const salt = saltHex ? Uint8Array.from(saltHex.match(/../g).map(h => parseInt(h, 16))) : window.crypto.getRandomValues(new Uint8Array(16));
+        const n = iter || PC_ITER;
+        const key = await window.crypto.subtle.importKey('raw', new TextEncoder().encode(String(pw)), 'PBKDF2', false, ['deriveBits']);
+        const bits = await window.crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt, iterations: n }, key, 256);
+        return { pwSalt: hexOf(salt), pwHash: hexOf(bits), pwIter: n };
+    }
+    async function pcCheck(acct, pw) {
+        if (!acct) return false;
+        if (acct.pwHash && acct.pwSalt) return (await pcHash(pw, acct.pwSalt, acct.pwIter || PC_ITER)).pwHash === acct.pwHash;
+        return typeof acct.pw === 'string' && acct.pw !== '' && acct.pw === String(pw);
+    }
+    window.kobPartnerPw = { hash: (pw) => pcHash(pw), check: pcCheck };
+
     const pick = () => (client() ? remote : local);
     window.kobAuth = {
         get mode() { return pick().mode; },

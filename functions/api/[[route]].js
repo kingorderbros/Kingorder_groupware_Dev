@@ -33,9 +33,16 @@
  *   POST /api/calendar/setup       캘린더 만들기 · 직원에게 공유 — { limit } 만큼씩 나눠서
  *   callback 을 뺀 나머지는 관리자만 (requireAdmin).
  *   환경변수 GOOGLE_CLIENT_ID · GOOGLE_CLIENT_SECRET 이 더 필요합니다.
+ *
+ * 파트너센터 (2026-09-28 · 자료 보호 2단계 — 판단은 _partner.js)
+ *   POST /api/partner/login   { loginId, pw }                → { token, session }   (예전 평문 비밀번호는 이때 암호화로 바꿈)
+ *   GET  /api/partner/boot    그 파트너사 몫의 자료만         (Authorization: Bearer 토큰)
+ *   POST /api/partner/save    { key, upserts, removes }       그 파트너사 것만 반영 → 반영된 목록
+ *   POST /api/auth/lookup     { id }                          로그인 창 아이디 → 이메일 (1단계)
  */
 
 import * as gcal from './_gcal.js';
+import * as pc from './_partner.js';
 
 const ACTIVE_RESERVE_STATUSES = ['신청완료', '승인대기중', '승인완료', '반납요청'];
 const num = (v) => (v === '' || v === null || v === undefined ? 0 : Number(v) || 0);
@@ -58,7 +65,14 @@ function db(env) {
     return {
         rows: async (table) => (await call('GET', `${table}?select=id,data&order=id.asc`)).map(r => Object.assign({ id: r.id }, r.data)),
         upsert: (table, id, data) => call('POST', table, [{ id, data }], { Prefer: 'resolution=merge-duplicates,return=minimal' }),
-        storeValue: async (key) => { const r = await call('GET', `app_store?select=value&key=eq.${encodeURIComponent(key)}`); return r && r[0] ? r[0].value : null; }
+        storeValue: async (key) => { const r = await call('GET', `app_store?select=value&key=eq.${encodeURIComponent(key)}`); return r && r[0] ? r[0].value : null; },
+        // 여러 키를 한 번에 — { key → 값 } (2026-09-28 파트너센터)
+        storeValues: async (keys) => {
+            const list = keys.map(k => '"' + String(k).replace(/"/g, '') + '"').join(',');
+            const r = await call('GET', `app_store?select=key,value&key=in.(${encodeURIComponent(list)})`);
+            const out = {}; (r || []).forEach(x => { out[x.key] = x.value; }); return out;
+        },
+        setStore: (key, value) => call('POST', 'app_store?on_conflict=key', [{ key, value, updated_at: new Date().toISOString() }], { Prefer: 'resolution=merge-duplicates,return=minimal' })
     };
 }
 // ---------- Supabase Auth 관리자 API (GoTrue /auth/v1/admin) ----------
@@ -197,6 +211,59 @@ export async function onRequest(context) {
     try { store = db(env); } catch (e) { return json(500, { ok: false, error: e.message }); }
 
     try {
+        // ---------- 파트너센터 (2026-09-28 · 자료 보호 2단계 — 판단은 _partner.js) ----------
+        if (path.startsWith('/api/partner/')) {
+            const secret = str(env.SUPABASE_SERVICE_ROLE_KEY);
+            // 토큰 → 지금 계정 (중지 · 삭제되었으면 null)
+            const who = async () => {
+                const t = await pc.readToken(secret, str(request.headers.get('Authorization')).replace(/^Bearer\s+/i, ''));
+                if (!t) return null;
+                const v = await store.storeValues(['gwPartnerAccounts.v1', 'gwPartners.v1']);
+                const f = pc.findAccount(v['gwPartnerAccounts.v1'], v['gwPartners.v1'], t.loginId);
+                if (!f || f.acct.active === false || f.acct.partnerId !== t.partnerId) return null;
+                return { loginId: f.acct.loginId, partnerId: f.acct.partnerId, partnerName: f.partnerName };
+            };
+            if (path === '/api/partner/login' && method === 'POST') {
+                const input = await body();
+                const loginId = str(input.loginId).toLowerCase();
+                const pw = input.pw === undefined || input.pw === null ? '' : String(input.pw);
+                const v = await store.storeValues(['gwPartnerAccounts.v1', 'gwPartners.v1']);
+                const accounts = Array.isArray(v['gwPartnerAccounts.v1']) ? v['gwPartnerAccounts.v1'] : [];
+                const f = loginId && pw ? pc.findAccount(accounts, v['gwPartners.v1'], loginId) : null;
+                const chk = f ? await pc.checkPassword(f.acct, pw) : { ok: false };
+                if (!chk.ok) return json(200, { ok: false, error: '아이디 또는 비밀번호가 맞지 않습니다.' });
+                if (f.acct.active === false) return json(200, { ok: false, error: '사용이 중지된 아이디입니다. 킹오더브라더스 담당자에게 문의해 주세요.' });
+                if (chk.needUpgrade) {
+                    // 예전 평문 비밀번호 — 이번에 암호화로 바꿔 둡니다 (그사이 바뀐 목록 위에 그 계정만 고칩니다)
+                    try {
+                        const fresh = await store.storeValue('gwPartnerAccounts.v1');
+                        const list = Array.isArray(fresh) ? fresh : [];
+                        const a = list.find(x => str(x.loginId).toLowerCase() === loginId);
+                        if (a && a.pw === pw) { Object.assign(a, await pc.hashPassword(pw)); delete a.pw; await store.setStore('gwPartnerAccounts.v1', list); }
+                    } catch (e) { console.error('[partner] 비밀번호 암호화 저장 실패', e && e.message); }
+                }
+                const token = await pc.makeToken(secret, f.acct.loginId, f.acct.partnerId);
+                return json(200, { ok: true, token, session: { loginId: f.acct.loginId, partnerId: f.acct.partnerId, partnerName: f.partnerName } });
+            }
+            const me = await who();
+            if (!me) return json(401, { ok: false, error: '다시 로그인해 주세요.' });
+            if (path === '/api/partner/boot' && method === 'GET') {
+                const v = await store.storeValues(pc.ALL_KEYS);
+                return json(200, { ok: true, session: me, store: pc.partnerView(v, me) });
+            }
+            if (path === '/api/partner/save' && method === 'POST') {
+                const input = await body();
+                const key = str(input.key);
+                if (!pc.WRITE_KEYS.includes(key)) return json(403, { ok: false, error: '저장할 수 없는 자료입니다.' });
+                const cur = await store.storeValue(key);
+                const r = pc.applyPartnerWrite(key, cur, input.upserts, input.removes, me);
+                await store.setStore(key, r.list);
+                const view = pc.partnerView({ [key]: r.list }, me)[key];
+                return json(200, { ok: true, value: view, renamed: r.renamed, rejected: r.rejected });
+            }
+            return json(404, { ok: false, error: '없는 주소입니다: ' + path });
+        }
+
         // ---------- 로그인 계정 ----------
         if (path.startsWith('/api/auth/')) {
             const auth = authAdmin(env);
