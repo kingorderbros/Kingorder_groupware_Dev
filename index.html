@@ -11320,7 +11320,8 @@ const QUOTE_TEMPLATES = [
                 : '<p class="mt-4 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded px-3 py-2"><i class="fas fa-circle-info mr-1"></i>조직도에 등록되지 않은 계정이라 사진·연락처를 저장할 수 없습니다. (데모 계정)</p>'}
 
                 <div class="mt-5 flex flex-wrap items-center justify-end gap-2">
-                    <button type="button" onclick="openPwChange()" class="px-4 py-2 text-sm rounded border border-amber-300 text-amber-700 bg-amber-50 hover:bg-amber-100 transition-colors mr-auto"><i class="fas fa-key mr-1"></i>비밀번호 변경</button>
+                    <button type="button" onclick="openPwChange()" class="px-4 py-2 text-sm rounded border border-amber-300 text-amber-700 bg-amber-50 hover:bg-amber-100 transition-colors"><i class="fas fa-key mr-1"></i>비밀번호 변경</button>
+                    <button type="button" onclick="handleLogout()" class="px-4 py-2 text-sm rounded border border-red-200 text-red-600 bg-white hover:bg-red-50 transition-colors mr-auto"><i class="fas fa-sign-out-alt mr-1"></i>로그아웃</button>
                     <button type="button" onclick="closeMyProfile()" class="px-4 py-2 text-sm bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition-colors">닫기</button>
                     ${me ? '<button type="button" onclick="submitMyProfile()" class="px-4 py-2 text-sm rounded bg-blue-600 text-white hover:bg-blue-700 transition-colors"><i class="fas fa-floppy-disk mr-1"></i>저장</button>' : ''}
                 </div>`;
@@ -11895,6 +11896,9 @@ const QUOTE_TEMPLATES = [
 
         async function handleLogout() {
             if (!confirm('로그아웃할까요?')) return;   // 파트너센터와 같게 한 번 묻습니다 (2026-09-28)
+            // [내 정보] 창에서 눌렀으면 그 창도 닫습니다
+            const myProfile = document.getElementById('my-profile-modal');
+            if (myProfile) myProfile.classList.add('hidden');
             // Supabase 모드 — 보내지 못한 저장을 먼저 보내고, 로그아웃한 뒤 페이지를 새로 불러
             // 화면 메모리에 남은 자료(앞사람이 본 것)를 모두 비웁니다 (2026-09-28)
             if (kobStorage.mode === 'supabase') {
