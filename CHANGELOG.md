@@ -1263,3 +1263,10 @@ Workspace 요금 없이 갑니다. 무료 구글 계정 `kingorderbrothers@gmail
 - 되돌리기 SQL 포함. PGlite(PostgreSQL)로 역할을 흉내 내 확인: 로그인 안 함/외부인 0줄 · 직원(대소문자 무관) 전부 · 쓰기 거절 · 새 표 · 되돌리기.
 
 **검증**: `npm run check` 전체 통과(test-partner 44 · test-kob-store-merge 8 추가) · 파트너센터/로그인 전체 흐름 · 전체 화면 점검(PC · 휴대폰) 오류 0.
+
+## 2026-09-28 — 3단계 적용 확인 (dev)
+사용자가 Supabase 대시보드에서 가입 끄기 · `schema-v6.sql` 실행.
+- 가입 `disable_signup=true` · 공개 키로 `app_store` 읽기 0줄 · 쓰기 거절(RLS 42501) · 업무 표(schedules) 0줄.
+- 서버 경로 정상: `/api/auth/lookup` · `/api/auth/status` · `/api/partner/login` · `/api/vehicles`.
+- 실제 dev 에서 partner1 로그인 → `/api/partner/boot` 로 자기 몫만 받음(직원 목록 없음).
+- 사내 로그인 · 여러 창 동시 반영(Realtime)은 사용자 화면 확인.
