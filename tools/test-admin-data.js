@@ -8,8 +8,10 @@ const store = {
         { email: 'sub@k.co', name: '겸직', groupId: 'sales', isAdmin: true },
         { email: 'data@k.co', name: '자료', groupId: 'dataGroup' },
         { email: 'car@k.co', name: '차량', groupId: 'mgmtGroup' },
-        { email: 'staff@k.co', name: '직원', groupId: 'sales' }
+        { email: 'staff@k.co', name: '직원', groupId: 'sales' },
+        { email: 'other@k.co', name: '다른직원', groupId: 'sales' }
     ],
+    'gwVehicles.v1': [{ id: 'CAR-1', plate: '1가1', model: '차', status: '운행가능' }],
     'gwPermissionGroups.v2': { version: 2, groups: [
         { id: 'dataGroup', permissions: ['data-admin'] },
         { id: 'mgmtGroup', permissions: ['management-vehicle-reserve', 'management-vehicle'] },
@@ -42,9 +44,11 @@ global.fetch = async (url, opt = {}) => {
 (async () => {
     const { onRequest } = await import('../functions/api/[[route]].js');
     const env = { SUPABASE_URL: 'https://x.supabase.co', SUPABASE_SERVICE_ROLE_KEY: 'k' };
+    let last = null;
     const call = async (who, method, path, body) => {
         whoEmail = who;
-        const r = await onRequest({ request: new Request('https://gw' + path, { method, headers: who ? { Authorization: 'Bearer t' } : {}, body: JSON.stringify(body) }), env });
+        const r = await onRequest({ request: new Request('https://gw' + path, { method, headers: who ? { Authorization: 'Bearer t' } : {}, body: method === 'GET' ? undefined : JSON.stringify(body) }), env });
+        last = await r.json().catch(() => null);
         return r.status;
     };
 
@@ -70,6 +74,26 @@ global.fetch = async (url, opt = {}) => {
     ok(await call('admin@k.co', 'PATCH', '/api/reservations', { id: 'VR-0011', patch: { start: '2026-10-01T11:00' } }) === 400, '다른 예약과 겹치게 고치면 400');
     ok(await call('admin@k.co', 'PATCH', '/api/reservations', { id: 'VR-0011', patch: { start: '2026-10-01T12:30' } }) === 200, '겹치지 않게 고치면 저장 (자기 자신과는 견주지 않음)');
     ok(await call('admin@k.co', 'PATCH', '/api/reservations', { id: 'VR-0011', patch: { end: '2026-10-01T10:00' } }) === 400, '종료가 시작보다 앞이면 400');
+
+    console.log('\n[4] 운행일지 · 예약 — 로그인한 직원만 · 운전자는 본인 (2026-09-28 · 4단계)');
+    ok(await call('', 'GET', '/api/vehicles') === 401, '로그인 없이 차량 목록 401');
+    ok(await call('', 'POST', '/api/vehicle-logs', { date: '2026-10-01', vehicle: '1가1', driver: '누구', from: 'a', to: 'b' }) === 401, '로그인 없이 운행일지 등록 401');
+    ok(await call('nobody@x.co', 'GET', '/api/vehicles') === 403, '직원 목록에 없는 계정 403');
+    ok(await call('staff@k.co', 'GET', '/api/vehicles') === 200 && last.vehicles.length === 1, '직원은 차량 목록을 본다');
+    ok(await call('staff@k.co', 'POST', '/api/reservations', { vehicle: '1가1', applicant: '다른직원', start: '2026-11-01T09:00', end: '2026-11-01T10:00' }) === 201
+        && last.reservation.applicant === '직원', '예약 신청자는 로그인한 본인으로 적힌다(다른 이름으로 못 넣음)');
+    const rid = last.reservation.id;
+    ok(await call('staff@k.co', 'POST', '/api/reservations/action', { id: rid, action: 'approve' }) === 403, '일반 직원은 승인 못 함');
+    ok(await call('car@k.co', 'POST', '/api/reservations/action', { id: rid, action: 'approve' }) === 200, '차량 담당은 승인');
+    ok(await call('other@k.co', 'POST', '/api/reservations/action', { id: rid, action: 'cancel' }) === 403, '남의 예약은 취소 못 함');
+    ok(await call('staff@k.co', 'POST', '/api/reservations/action', { id: rid, action: 'return-request', startKm: 1, endKm: 5 }) === 200, '본인 예약은 반납 요청');
+    ok(await call('staff@k.co', 'POST', '/api/vehicle-logs', { date: '2026-10-01', vehicle: '1가1', driver: '다른직원', from: 'a', to: 'b', startKm: 1 }) === 201
+        && last.log.driver === '직원', '운행일지 운전자도 본인으로 적힌다');
+    const lid = last.log.id;
+    ok(await call('other@k.co', 'POST', '/api/vehicle-logs/complete', { id: lid, endKm: 9 }) === 403, '남의 운행일지는 못 마침');
+    ok(await call('staff@k.co', 'POST', '/api/vehicle-logs/complete', { id: lid, endKm: 9 }) === 200, '본인 운행일지는 마침');
+    ok(await call('car@k.co', 'POST', '/api/vehicle-logs', { date: '2026-10-01', vehicle: '1가1', driver: '다른직원', from: 'a', to: 'b', startKm: 1 }) === 201
+        && last.log.driver === '다른직원', '차량 담당은 다른 운전자 이름으로 대신 적을 수 있다');
 
     console.log(`\n=========== 통과 ${pass} · 실패 ${fail} ===========`);
     process.exit(fail ? 1 : 0);

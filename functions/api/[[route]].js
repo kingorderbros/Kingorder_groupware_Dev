@@ -123,6 +123,22 @@ function tempPassword() {
     if (!/[A-Za-z]/.test(pw)) pw = 'k' + pw.slice(1);
     return pw;
 }
+// 로그인한 그룹웨어 직원인가 (2026-09-28 · 4단계 — 법인차량 · 운행일지)
+//   { rec: 직원 기록, admin: 관리자인가, can(perms): 권한 그룹에 그중 하나가 켜져 있는가 }
+async function requireStaff(env, store, request) {
+    const me = await authAdmin(env).whoami(request);
+    if (!me) return { error: json(401, { ok: false, error: '로그인이 필요합니다. 그룹웨어 아이디로 로그인해 주세요.' }) };
+    const v = await store.storeValues(['gwUsers.v1', 'gwPermissionGroups.v2']);
+    const users = Array.isArray(v['gwUsers.v1']) ? v['gwUsers.v1'] : [];
+    const rec = users.find(u => str(u.email).toLowerCase() === str(me.email).toLowerCase());
+    if (!rec) return { error: json(403, { ok: false, error: '직원 목록에 없는 계정입니다. 관리자에게 문의해 주세요.' }) };
+    const admin = rec.groupId === 'admin' || rec.dept === 'admin' || rec.level === 'admin' || rec.isAdmin === true;
+    const pg = v['gwPermissionGroups.v2'];
+    const groups = Array.isArray(pg) ? pg : (pg && Array.isArray(pg.groups) ? pg.groups : []);
+    const g = groups.find(x => x && x.id === rec.groupId);
+    const perms = new Set(g && Array.isArray(g.permissions) ? g.permissions : []);
+    return { me, rec, admin, can: (list) => admin || list.some(p => perms.has(p)) };
+}
 // 고치기 · 지우기 권한 (2026-09-28) — 관리자 이거나, 권한 그룹에 perms 중 하나가 켜져 있으면 통과.
 //   'data-admin' = 권한 관리의 '전체 자료 수정 · 삭제'. 화면(canManageAllData)과 같은 기준입니다.
 async function requirePerm(env, store, request, perms) {
@@ -547,6 +563,15 @@ export async function onRequest(context) {
             return json(404, { ok: false, error: '없는 주소입니다: ' + path });
         }
 
+        // ---------- 법인차량 · 운행일지 — 로그인한 직원만 (2026-09-28 · 4단계) ----------
+        //   · 운전자(일반 직원)는 **자기 이름으로만** 예약 · 운행일지 · 반납 요청을 합니다(이름은 로그인한 사람으로 서버가 적음)
+        //   · 승인 · 차키 전달 · 반납 확인은 차량 담당(예약관리 권한) · 관리자만. 취소는 신청한 본인도.
+        let staff = null;
+        if (['/api/vehicles', '/api/drivers', '/api/reservations', '/api/reservations/action', '/api/vehicle-logs', '/api/vehicle-logs/complete'].includes(path)) {
+            staff = await requireStaff(env, store, request);
+            if (staff.error) return staff.error;
+        }
+        const carManager = () => staff && staff.can(['data-admin', 'management-vehicle-reserve', 'management-vehicle', 'management-work-center']);
         if (path === '/api/vehicles' && method === 'GET') {
             const list = (await store.storeValue('gwVehicles.v1')) || [];
             // 화면(법인차량관리)이 쓰는 모양 그대로 — 모바일은 plate · model 로 표시합니다
@@ -600,6 +625,7 @@ export async function onRequest(context) {
         }
         if (path === '/api/reservations' && method === 'POST') {
             const input = await body();
+            if (!carManager()) input.applicant = str(staff.rec.name);           // 차량 담당이 아니면 본인 이름으로만
             const vehicle = str(input.vehicle), applicant = str(input.applicant), start = str(input.start), end = str(input.end);
             if (!vehicle) return bad('차량(vehicle)은 필수입니다.');
             if (!applicant) return bad('신청자(applicant)는 필수입니다.');
@@ -620,6 +646,11 @@ export async function onRequest(context) {
             if (!id) return bad('예약 id가 필요합니다.');
             const r = (await store.rows('vehicle_reservations')).find(x => x.id === id);
             if (!r) return bad('해당 예약을 찾을 수 없습니다.');
+            const mine = str(r.applicant) === str(staff.rec.name);
+            const managerOnly = ['approve', 'handover', 'return-confirm'].includes(action);
+            if ((managerOnly && !carManager()) || (!managerOnly && !mine && !carManager())) {
+                return json(403, { ok: false, error: managerOnly ? '승인 · 차키 전달 · 반납 확인은 차량 담당자만 할 수 있습니다.' : '본인이 신청한 예약만 처리할 수 있습니다.' });
+            }
             const now = new Date().toISOString();
             if (action === 'approve') {
                 if (r.status !== '승인대기중' && r.status !== '신청완료') return bad('승인 대기 상태의 예약만 승인할 수 있습니다.');
@@ -651,6 +682,7 @@ export async function onRequest(context) {
             if (!(endKm > 0)) return bad('도착 주행거리를 입력하세요.');
             const log = (await store.rows('vehicle_logs')).find(l => l.id === id);
             if (!log) return bad('해당 운행일지를 찾을 수 없습니다.');
+            if (str(log.driver) !== str(staff.rec.name) && !carManager()) return json(403, { ok: false, error: '본인 운행일지만 마칠 수 있습니다.' });
             if (endKm < num(log.startKm)) return bad('도착 주행거리는 출발보다 작을 수 없습니다.');
             log.endKm = endKm;
             if (input.fuel !== undefined && str(input.fuel) !== '') log.fuel = num(input.fuel);
@@ -673,6 +705,7 @@ export async function onRequest(context) {
             }
             if (method === 'POST') {
                 const input = await body();
+                if (!carManager()) input.driver = str(staff.rec.name);           // 차량 담당이 아니면 본인 이름으로만
                 const logs = await store.rows('vehicle_logs');
                 let log;
                 try { log = normalizeLog(input, nextId(logs, 'VL-', 4)); } catch (e) { return bad(e.message); }

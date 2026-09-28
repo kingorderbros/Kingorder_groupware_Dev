@@ -901,6 +901,21 @@
 
             <!-- 1단계: 운전자 선택 -->
             <div id="m-login" class="flex-1 p-6 flex flex-col justify-center">
+                <!-- 그룹웨어 아이디로 로그인 (2026-09-28 · 4단계) — 서버가 있을 때. 로그인하면 운전자는 본인으로 정해집니다 -->
+                <div id="m-auth" class="hidden">
+                    <p class="text-center text-gray-500 text-sm mb-4">그룹웨어 아이디로 로그인하세요.<br><span class="text-xs text-gray-400">한 번 로그인하면 이 폰에서는 계속 유지됩니다.</span></p>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">그룹웨어 ID(이메일)</label>
+                    <input type="text" id="m-auth-id" autocomplete="username" class="w-full p-3 border border-gray-300 rounded-lg text-base focus:outline-none focus:ring-2 focus:ring-indigo-500 mb-3" placeholder="예: sales.lee" />
+                    <label class="block text-sm font-medium text-gray-700 mb-1">비밀번호</label>
+                    <div class="relative mb-4">
+                        <input type="password" id="m-auth-pw" autocomplete="current-password" class="w-full p-3 pr-11 border border-gray-300 rounded-lg text-base focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="비밀번호"
+                               onkeydown="if(event.key==='Enter')mobileLogin()" />
+                        <button type="button" onclick="togglePwVisible('m-auth-pw', this)" aria-label="비밀번호 보기" title="비밀번호 보기" class="absolute inset-y-0 right-0 w-11 flex items-center justify-center text-gray-400 hover:text-gray-600"><i class="fas fa-eye"></i></button>
+                    </div>
+                    <button type="button" id="m-auth-btn" onclick="mobileLogin()" class="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg shadow">로그인</button>
+                    <p id="m-auth-msg" class="text-center text-xs text-red-500 mt-3 min-h-[1rem] whitespace-pre-line"></p>
+                </div>
+                <div id="m-picker">
                 <p class="text-center text-gray-500 text-sm mb-4">운행일지를 작성할 운전자를 선택하세요.</p>
                 <label class="block text-sm font-medium text-gray-700 mb-1">운전자(본인) 선택</label>
                 <select id="m-driver-select" class="w-full p-3 border border-gray-300 rounded-lg text-base focus:outline-none focus:ring-2 focus:ring-indigo-500 mb-4">
@@ -908,6 +923,7 @@
                 </select>
                 <button onclick="mobileEnterForm()" class="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg shadow">시작하기</button>
                 <p id="m-login-msg" class="text-center text-xs text-red-500 mt-3 h-4"></p>
+                </div>
             </div>
 
             <!-- 2단계: 탭 (운행일지 입력 / 차량 반납) -->
@@ -1013,7 +1029,7 @@
                     </div>
                     <div id="m-form-msg" class="text-sm h-5"></div>
                     <button type="submit" class="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg shadow text-base">운행일지 제출</button>
-                    <button type="button" onclick="mobileBackToLogin()" class="w-full py-2 text-gray-500 text-sm">운전자 변경</button>
+                    <button type="button" id="m-back-btn" onclick="mobileBackToLogin()" class="w-full py-2 text-gray-500 text-sm">운전자 변경</button>
                 </form>
 
                 <!-- 완료 대기: 도착 주행거리 입력이 필요한(진행중) 운행일지 -->
@@ -9607,6 +9623,19 @@ const QUOTE_TEMPLATES = [
         // 별도 호스팅 시 아래 API_BASE를 서버 주소로 지정 (예: 'https://api.example.com').
         const API_BASE = (window.KOB_CONFIG && window.KOB_CONFIG.apiBase) || '';   // 개발환경 — config/app-config.js
         const VEHICLE_LOG_API = API_BASE + '/api/vehicle-logs';
+        // 법인차량 · 운행일지 서버 호출 — 로그인 토큰을 붙입니다 (2026-09-28 · 4단계: 서버가 로그인한 직원만 받음)
+        async function apiFetch(url, opts) {
+            const o = Object.assign({}, opts || {});
+            o.headers = Object.assign({}, o.headers || {});
+            try {
+                const c = window.kobSupabase;
+                if (c && c.auth) {
+                    const { data } = await c.auth.getSession();
+                    if (data && data.session) o.headers.Authorization = 'Bearer ' + data.session.access_token;
+                }
+            } catch (e) { /* 로그인 전 — 토큰 없이 보내면 서버가 로그인하라고 답합니다 */ }
+            return fetch(url, o);
+        }
 
         const pageTitles = {
             'partner-center-sales': '파트너센터 - 영업본부 (Partner Center)',
@@ -47243,8 +47272,9 @@ const QUOTE_TEMPLATES = [
         const RESERVE_ACTIVE_STATUSES = ['신청완료', '승인대기중', '승인완료', '반납요청'];
         // 서버에서 예약 목록을 불러와 vehicleReserves에 반영 후 화면 갱신
         async function reloadVehicleReserves() {
+            if (kobStorage.mode === 'supabase' && !kobStorage.authed) return;   // 로그인 전엔 서버가 받지 않습니다 (4단계)
             try {
-                const res = await fetch(RESERVE_API, { cache: 'no-store' });
+                const res = await apiFetch(RESERVE_API, { cache: 'no-store' });
                 const data = await res.json();
                 if (Array.isArray(data.reservations)) {
                     vehicleReserves = data.reservations;
@@ -47256,7 +47286,7 @@ const QUOTE_TEMPLATES = [
         }
         // 예약 상태 액션 호출 (승인/차키전달/반납확인/취소)
         async function reserveAction(id, action, extra) {
-            const res = await fetch(RESERVE_API + '/action', {
+            const res = await apiFetch(RESERVE_API + '/action', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ id, action, ...(extra || {}) })
@@ -47751,7 +47781,7 @@ const QUOTE_TEMPLATES = [
             } else {
                 // 신규: 서버에 등록 → 승인대기중 상태로 저장, 사용자 앱과 공유
                 try {
-                    const res = await fetch(RESERVE_API, {
+                    const res = await apiFetch(RESERVE_API, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(data)
@@ -48094,10 +48124,11 @@ const QUOTE_TEMPLATES = [
         // - 모바일에서 운전자가 등록한 내역이 여기 표시됨
         // - 서버 미연결 시 기존 시드 데이터로 폴백 (오프라인 데모 가능)
         async function reloadVehicleLogs() {
+            if (kobStorage.mode === 'supabase' && !kobStorage.authed) return;   // 로그인 전엔 서버가 받지 않습니다 (4단계)
             const statusEl = document.getElementById('vl-sync-status');
             if (statusEl) { statusEl.className = 'text-xs text-gray-400'; statusEl.innerText = '동기화 중...'; }
             try {
-                const res = await fetch(VEHICLE_LOG_API, { cache: 'no-store' });
+                const res = await apiFetch(VEHICLE_LOG_API, { cache: 'no-store' });
                 if (!res.ok) throw new Error('HTTP ' + res.status);
                 const data = await res.json();
                 vehicleLogs = Array.isArray(data.logs) ? data.logs : [];
@@ -48188,7 +48219,7 @@ const QUOTE_TEMPLATES = [
             } else {
                 // 신규: 서버에 저장하여 모바일 등록분과 동일 저장소에 반영, 성공 후 서버에서 재로딩
                 data.source = 'direct';
-                fetch(VEHICLE_LOG_API, {
+                apiFetch(VEHICLE_LOG_API, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(data)
@@ -54437,10 +54468,40 @@ const QUOTE_TEMPLATES = [
             const dateEl = document.getElementById('m-date');
             if (dateEl) dateEl.value = ymd(new Date());
 
+            // 서버 모드 — 그룹웨어 아이디로 로그인한 사람이 운전자입니다 (2026-09-28 · 4단계)
+            if (kobStorage.mode === 'supabase') {
+                document.getElementById('m-picker').classList.add('hidden');
+                const back = document.getElementById('m-back-btn');
+                if (back) { back.textContent = '로그아웃'; back.setAttribute('onclick', 'mobileLogout()'); }
+                const sess = await kobAuth.session();
+                if (!sess) { document.getElementById('m-auth').classList.remove('hidden'); return; }
+                const me = localUsers.find(u => String(u.email || '').toLowerCase() === sess.email);
+                const msg = document.getElementById('m-auth-msg');
+                if (!me) {
+                    await kobAuth.signOut();
+                    document.getElementById('m-auth').classList.remove('hidden');
+                    msg.textContent = '직원 목록에 없는 계정입니다. 관리자에게 문의해 주세요.';
+                    return;
+                }
+                if (sess.mustChange) {
+                    // 임시 비밀번호 — 새 비밀번호는 그룹웨어 화면에서 정합니다
+                    await kobAuth.signOut();
+                    document.getElementById('m-auth').classList.remove('hidden');
+                    msg.innerHTML = '임시 비밀번호로 처음 로그인하셨습니다.<br>먼저 <a href="' + location.pathname + '" class="underline font-semibold">그룹웨어</a>에서 새 비밀번호를 정한 뒤 다시 열어 주세요.';
+                    return;
+                }
+                const sel = document.getElementById('m-driver-select');
+                sel.innerHTML = `<option value="${escapeHtml(me.name)}" selected>${escapeHtml(me.name)}</option>`;
+                sel.value = me.name;
+                await loadMobileVehicles();
+                mobileEnterForm();
+                return;
+            }
+
             // 운전자 목록 로드: 법인차량을 예약 신청한 사람만 선택 가능
             const driverSel = document.getElementById('m-driver-select');
             try {
-                const res = await fetch(API_BASE + '/api/drivers?reservedOnly=1');
+                const res = await apiFetch(API_BASE + '/api/drivers?reservedOnly=1');
                 const data = await res.json();
                 const drivers = data.drivers || [];
                 if (drivers.length === 0) {
@@ -54455,10 +54516,13 @@ const QUOTE_TEMPLATES = [
                 driverSel.outerHTML = '<input type="text" id="m-driver-select" class="w-full p-3 border border-gray-300 rounded-lg text-base focus:outline-none focus:ring-2 focus:ring-indigo-500 mb-4" placeholder="운전자 이름 입력" />';
             }
 
-            // 차량 목록 로드
+            await loadMobileVehicles();
+        }
+        // 차량 목록 (운행 가능한 차량)
+        async function loadMobileVehicles() {
             const vehSel = document.getElementById('m-vehicle');
             try {
-                const res = await fetch(API_BASE + '/api/vehicles');
+                const res = await apiFetch(API_BASE + '/api/vehicles');
                 const data = await res.json();
                 vehSel.innerHTML = '<option value="">차량 선택</option>' +
                     (data.vehicles || []).map(v => `<option value="${escapeHtml(v.label)}">${escapeHtml(v.label)}</option>`).join('');
@@ -54512,7 +54576,7 @@ const QUOTE_TEMPLATES = [
             const statusEl = document.getElementById('m-return-status-list');
             if (!driver) return;
             try {
-                const res = await fetch(RESERVE_API + '?driver=' + encodeURIComponent(driver), { cache: 'no-store' });
+                const res = await apiFetch(RESERVE_API + '?driver=' + encodeURIComponent(driver), { cache: 'no-store' });
                 const data = await res.json();
                 const mine = data.reservations || [];
                 renderMobileReturnable(mine.filter(r => r.status === '승인완료'));
@@ -54604,7 +54668,7 @@ const QUOTE_TEMPLATES = [
             if (!purpose) { setMsg('text-red-500', '사용 목적을 입력하세요.'); return; }
             setMsg('text-gray-400', '반납 요청 전송 중...');
             try {
-                const res = await fetch(RESERVE_API + '/action', {
+                const res = await apiFetch(RESERVE_API + '/action', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ id, action: 'return-request', startKm, endKm, purpose, fuel })
@@ -54624,7 +54688,7 @@ const QUOTE_TEMPLATES = [
             const hint = document.getElementById('m-vehicle-hint');
             if (!vehSel) return;
             try {
-                const res = await fetch(API_BASE + '/api/reservations?driver=' + encodeURIComponent(driver));
+                const res = await apiFetch(API_BASE + '/api/reservations?driver=' + encodeURIComponent(driver));
                 const data = await res.json();
                 const list = (data.reservations || []).filter(r => r.vehicle);
                 if (list.length === 0) {
@@ -54661,6 +54725,30 @@ const QUOTE_TEMPLATES = [
             }
         }
 
+        // 운행일지 화면 로그인 · 로그아웃 (2026-09-28 · 4단계)
+        async function mobileLogin() {
+            const id = String(document.getElementById('m-auth-id').value || '').trim().toLowerCase();
+            const pw = String(document.getElementById('m-auth-pw').value || '');
+            const msg = document.getElementById('m-auth-msg');
+            const btn = document.getElementById('m-auth-btn');
+            if (!id || !pw) { msg.textContent = '아이디와 비밀번호를 입력해 주세요.'; return; }
+            btn.disabled = true; btn.textContent = '확인 중…'; msg.textContent = '';
+            try {
+                const email = await kobAuth.lookup(id);
+                await kobAuth.signIn(email, pw);
+                location.reload();                       // 로그인한 권한으로 자료를 다시 읽고 들어갑니다
+            } catch (e) {
+                const m = String(e && e.message || e);
+                msg.textContent = m === 'BAD_PASSWORD' ? '아이디 또는 비밀번호가 맞지 않습니다.'
+                    : (m === 'NO_ACCOUNT' ? '아직 비밀번호가 발급되지 않은 계정입니다. 관리자에게 요청해 주세요.' : m);
+                btn.disabled = false; btn.textContent = '로그인';
+            }
+        }
+        async function mobileLogout() {
+            if (!confirm('로그아웃할까요?')) return;
+            await kobAuth.signOut();
+            location.reload();
+        }
         function mobileBackToLogin() {
             document.getElementById('m-form-wrap').classList.add('hidden');
             document.getElementById('m-driver-badge').classList.add('hidden');
@@ -54722,7 +54810,7 @@ const QUOTE_TEMPLATES = [
             msg.className = 'text-sm h-5 text-gray-400';
             msg.innerText = '전송 중...';
             try {
-                const res = await fetch(VEHICLE_LOG_API, {
+                const res = await apiFetch(VEHICLE_LOG_API, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
@@ -54751,7 +54839,7 @@ const QUOTE_TEMPLATES = [
             const driver = document.getElementById('m-driver-name').innerText;
             if (!driver) { el.innerHTML = ''; return; }
             try {
-                const res = await fetch(VEHICLE_LOG_API + '?status=진행중&driver=' + encodeURIComponent(driver), { cache: 'no-store' });
+                const res = await apiFetch(VEHICLE_LOG_API + '?status=진행중&driver=' + encodeURIComponent(driver), { cache: 'no-store' });
                 const data = await res.json();
                 renderMobilePending(data.logs || []);
             } catch (e) {
@@ -54824,7 +54912,7 @@ const QUOTE_TEMPLATES = [
             if (!(endKm > 0)) { if (pmsg) { pmsg.className = 'text-xs mt-1 h-4 text-red-500'; pmsg.innerText = '도착 주행거리를 입력하세요.'; } return; }
             if (pmsg) { pmsg.className = 'text-xs mt-1 h-4 text-gray-400'; pmsg.innerText = '처리 중...'; }
             try {
-                const res = await fetch(VEHICLE_LOG_API + '/complete', {
+                const res = await apiFetch(VEHICLE_LOG_API + '/complete', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ id, endKm, arriveTime, fuel, toll, passengers, memo })
