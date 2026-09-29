@@ -36076,8 +36076,12 @@ const QUOTE_TEMPLATES = [
                     <i class="fas fa-user-slash text-3xl text-gray-300 block mb-3"></i>
                     <p class="text-sm text-gray-500">조건에 맞는 구성원이 없습니다.</p>
                 </div>` : orgView === 'tree' ? `
-                <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-2 sm:p-4">
-                    ${renderOrgTreeHtml(list, groupOpts)}
+                <div class="relative overflow-hidden bg-slate-100 rounded-lg shadow-sm border border-gray-200 p-2 sm:p-4">
+                    <!-- 배경 — 파트너센터 · 새로고침 화면과 같은 로고 워터마크 (2026-09-29). 계층도 높이에 맞춰 줄어듭니다 -->
+                    <div aria-hidden="true" class="pointer-events-none absolute inset-0 flex items-center justify-center p-4">
+                        <img src="image/logo.png" alt="" class="max-h-[85%] max-w-[min(560px,70%)] object-contain opacity-[0.05]" />
+                    </div>
+                    <div class="relative">${renderOrgTreeHtml(list, groupOpts)}</div>
                 </div>` : groups.map(g => `
                 <div class="mb-5">
                     <div class="flex flex-wrap items-center gap-2 mb-2">
