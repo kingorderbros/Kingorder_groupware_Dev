@@ -39,10 +39,16 @@
  *   GET  /api/partner/boot    그 파트너사 몫의 자료만         (Authorization: Bearer 토큰)
  *   POST /api/partner/save    { key, upserts, removes }       그 파트너사 것만 반영 → 반영된 목록
  *   POST /api/auth/lookup     { id }                          로그인 창 아이디 → 이메일 (1단계)
+ *
+ * 첨부파일 (2026-09-29 · 3단계 — 판단은 _files.js)
+ *   POST /api/files/session             로그인 토큰 → 파일용 쿠키 (직원 · 파트너 모두)
+ *   POST /api/files/upload?name=&type=  본문 = 파일 → { file: { path, name, type, size } }
+ *   GET  /api/files/get?p=경로&n=이름[&dl=1]
  */
 
 import * as gcal from './_gcal.js';
 import * as pc from './_partner.js';
+import * as fs from './_files.js';
 
 const ACTIVE_RESERVE_STATUSES = ['신청완료', '승인대기중', '승인완료', '반납요청'];
 const num = (v) => (v === '' || v === null || v === undefined ? 0 : Number(v) || 0);
@@ -246,6 +252,82 @@ export async function onRequest(context) {
     try { store = db(env); } catch (e) { return json(500, { ok: false, error: e.message }); }
 
     try {
+        // ---------- 첨부파일 (2026-09-29 · 3단계 — 판단은 _files.js) ----------
+        if (path.startsWith('/api/files/')) {
+            const secret = str(env.SUPABASE_SERVICE_ROLE_KEY);
+            const base = str(env.SUPABASE_URL).replace(/\/+$/, '');
+            const skey = { apikey: secret, Authorization: `Bearer ${secret}` };
+            const objUrl = (p) => `${base}/storage/v1/object/files/${p.split('/').map(encodeURIComponent).join('/')}`;
+            // 파트너 토큰이면 그 계정 (중지 · 삭제면 null)
+            const partnerWho = async (token) => {
+                const t = await pc.readToken(secret, token);
+                if (!t) return null;
+                const v = await store.storeValues(['gwPartnerAccounts.v1', 'gwPartners.v1']);
+                const f = pc.findAccount(v['gwPartnerAccounts.v1'], v['gwPartners.v1'], t.loginId);
+                if (!f || f.acct.active === false || f.acct.partnerId !== t.partnerId) return null;
+                return { loginId: f.acct.loginId, partnerId: f.acct.partnerId, partnerName: f.partnerName };
+            };
+            if (path === '/api/files/session' && method === 'POST') {
+                const token = str(request.headers.get('Authorization')).replace(/^Bearer\s+/i, '');
+                let who = null;
+                const pt = token ? await partnerWho(token) : null;
+                if (pt) who = { k: 'partner', id: pt.loginId, p: pt.partnerId };
+                else {
+                    const st = await requireStaff(env, store, request);
+                    if (st.error) return st.error;
+                    who = { k: 'staff', id: str(st.me.email).toLowerCase() };
+                }
+                const value = await fs.makeCookieValue(secret, who);
+                return new Response(JSON.stringify({ ok: true, kind: who.k, hours: fs.COOKIE_HOURS }), {
+                    status: 200,
+                    headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'Set-Cookie': fs.setCookieHeader(value, url.protocol === 'https:') }
+                });
+            }
+            const who = await fs.readCookieValue(secret, fs.cookieFrom(request));
+            if (!who) return json(401, { ok: false, error: '다시 로그인해 주세요 (파일 확인 시간이 지났습니다).' });
+            // 파트너는 그사이 중지 · 삭제되었는지 한 번 더 봅니다
+            let pview = null;
+            if (who.k === 'partner') {
+                const v = await store.storeValues(pc.ALL_KEYS);
+                const f = pc.findAccount(v['gwPartnerAccounts.v1'], v['gwPartners.v1'], who.id);
+                if (!f || f.acct.active === false || f.acct.partnerId !== who.p) return json(401, { ok: false, error: '다시 로그인해 주세요.' });
+                pview = pc.partnerView(v, { loginId: f.acct.loginId, partnerId: f.acct.partnerId, partnerName: f.partnerName });
+            }
+            if (path === '/api/files/upload' && method === 'POST') {
+                const name = str(url.searchParams.get('name')).slice(0, 200) || 'file';
+                const type = str(url.searchParams.get('type')).slice(0, 100) || 'application/octet-stream';
+                const len = Number(request.headers.get('Content-Length') || 0);
+                if (len > fs.MAX_BYTES) return json(413, { ok: false, error: '한 파일 20MB 까지 올릴 수 있습니다.' });
+                const buf = await request.arrayBuffer();
+                if (!buf.byteLength) return bad('빈 파일입니다.');
+                if (buf.byteLength > fs.MAX_BYTES) return json(413, { ok: false, error: '한 파일 20MB 까지 올릴 수 있습니다.' });
+                const p = fs.newPath(who, name);
+                const res = await fetch(objUrl(p), { method: 'POST', headers: Object.assign({ 'Content-Type': type, 'x-upsert': 'false' }, skey), body: buf });
+                if (!res.ok) return json(502, { ok: false, error: '파일 저장소에 올리지 못했습니다 (' + res.status + ').', detail: (await res.text()).slice(0, 300) });
+                return json(200, { ok: true, file: { path: p, name, type, size: buf.byteLength } });
+            }
+            if (path === '/api/files/get' && method === 'GET') {
+                const p = str(url.searchParams.get('p'));
+                if (!fs.validPath(p)) return bad('파일 주소가 올바르지 않습니다.');
+                if (who.k === 'partner' && !fs.partnerMayRead(p, who, pview)) return json(403, { ok: false, error: '볼 수 없는 파일입니다.' });
+                const res = await fetch(objUrl(p), { headers: skey });
+                if (res.status === 404 || res.status === 400) return json(404, { ok: false, error: '파일이 없습니다 (지워졌을 수 있습니다).' });
+                if (!res.ok) return json(502, { ok: false, error: '파일 저장소에서 받지 못했습니다 (' + res.status + ').' });
+                const type = res.headers.get('Content-Type') || 'application/octet-stream';
+                const dl = url.searchParams.get('dl') === '1' || !fs.inlineSafe(type);
+                return new Response(res.body, {
+                    status: 200,
+                    headers: {
+                        'Content-Type': type,
+                        'Content-Disposition': fs.dispositionHeader(url.searchParams.get('n') || p.split('/').pop(), dl),
+                        'Cache-Control': 'private, max-age=3600',
+                        'X-Content-Type-Options': 'nosniff'
+                    }
+                });
+            }
+            return json(404, { ok: false, error: '없는 주소입니다: ' + path });
+        }
+
         // ---------- 파트너센터 (2026-09-28 · 자료 보호 2단계 — 판단은 _partner.js) ----------
         if (path.startsWith('/api/partner/')) {
             const secret = str(env.SUPABASE_SERVICE_ROLE_KEY);

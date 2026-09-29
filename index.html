@@ -9617,6 +9617,7 @@ const QUOTE_TEMPLATES = [
     <script src="js/kob-auth.js"></script>
     <script src="js/kob-db.js"></script>
     <script src="js/kob-store.js"></script>
+    <script src="js/kob-files.js"></script>
     <script type="text/x-kob-main" id="kob-main">
         // ==================== 운행내역 백엔드 API 설정 ====================
         // 같은 서버(server.js)에서 HTML을 서빙하면 상대경로로 동작.
@@ -9686,7 +9687,7 @@ const QUOTE_TEMPLATES = [
         // 협업 요청(티켓): assigneeUser = 수신 부서의 담당자(개인). ageDays = 발행 후 경과일(데모용 지연 계산).
         // ---------- 저장 (2026-09-17) ----------
         // 협업티켓은 Supabase 'collab_requests' 표에 한 건 = 한 줄로 둡니다 (js/kob-db.js).
-        let collabRequests = (window.kobDb ? kobDb.rows('collab_requests') : []);
+        let collabRequests = (window.kobDb ? ((r) => (typeof gwDropDeadBlobs === 'function' ? gwDropDeadBlobs(r) : r))(kobDb.rows('collab_requests')) : []);
         let collabRequestsSaved = new Map(collabRequests.map(x => [x.id, JSON.stringify(x)]));
 
         function saveCollabRequests() {
@@ -9718,7 +9719,7 @@ const QUOTE_TEMPLATES = [
         }
         function reloadCollabRequestsFromDb() {
             if (!window.kobDb) return;
-            collabRequests = kobDb.rows('collab_requests');
+            collabRequests = ((r) => (typeof gwDropDeadBlobs === 'function' ? gwDropDeadBlobs(r) : r))(kobDb.rows('collab_requests'));
             collabRequestsSaved = new Map(collabRequests.map(x => [x.id, JSON.stringify(x)]));
             syncCollabRequestsIdCounter();
             if (typeof renderCollabCenter === 'function') renderCollabCenter();
@@ -9840,6 +9841,82 @@ const QUOTE_TEMPLATES = [
             box.onclick = () => box.remove();
             host.appendChild(box);
             setTimeout(() => { if (box.parentNode) box.remove(); }, 5000);
+        }
+
+        // ---------- 첨부 올리기 공용 (2026-09-29 · 3단계) ----------
+        // 파일을 Storage 에 올리고, 자료에 넣을 { path, name, type, size } 를 돌려줍니다 (로컬 모드면 { dataUrl, … }).
+        //   opts.max       한 파일 최대 바이트 (기본 20MB)
+        //   opts.shrinkPx  그림이면 긴 변을 이만큼으로 줄여서 올림 (shrinkImageToDataUrl)
+        // 돌려주는 것: { files: [...], failed: ['이름 (까닭)', ...] }
+        function gwFileSizeText(n) {
+            n = Number(n) || 0;
+            return n >= 1048576 ? (n / 1048576).toFixed(1) + 'MB' : Math.max(1, Math.round(n / 1024)) + 'KB';
+        }
+        function gwUploadBusy(text) {
+            if (typeof document === 'undefined' || !document.body) return;
+            let el = document.getElementById('gw-upload-busy');
+            if (!text) { if (el) el.remove(); return; }
+            if (!el) {
+                el = document.createElement('div');
+                el.id = 'gw-upload-busy';
+                el.className = 'fixed bottom-5 left-1/2 -translate-x-1/2 z-[9999] bg-gray-900/90 text-white text-sm rounded-full shadow-lg px-4 py-2 flex items-center gap-2';
+                document.body.appendChild(el);
+            }
+            el.innerHTML = `<i class="fas fa-spinner fa-spin"></i><span>${escapeHtml(text)}</span>`;
+        }
+        async function gwUploadAttachments(files, opts) {
+            const o = opts || {};
+            const list = Array.from(files || []);
+            const max = o.max || (window.kobFiles ? kobFiles.MAX_BYTES : 20 * 1024 * 1024);
+            const out = [], failed = [];
+            for (let i = 0; i < list.length; i++) {
+                const f = list[i];
+                if ((f.size || 0) > max) { failed.push(`${f.name} (${gwFileSizeText(f.size)} — 한 파일 ${gwFileSizeText(max)} 까지)`); continue; }
+                gwUploadBusy(list.length > 1 ? `파일 올리는 중… (${i + 1}/${list.length})` : '파일 올리는 중…');
+                try {
+                    let meta = null;
+                    if (o.shrinkPx && /^image\//.test(f.type || '') && typeof shrinkImageToDataUrl === 'function') {
+                        const d = await shrinkImageToDataUrl(f, o.shrinkPx);
+                        if (d && String(d).indexOf('data:') === 0) meta = await kobFiles.uploadDataUrl(d, f.name);
+                    }
+                    if (!meta) meta = await kobFiles.upload(f);
+                    meta.name = f.name;
+                    out.push(meta);
+                } catch (e) { failed.push(`${f.name} (${(e && e.message) || '올리지 못함'})`); }
+            }
+            gwUploadBusy('');
+            return { files: out, failed };
+        }
+        function gwUploadFailedAlert(failed) {
+            if (failed && failed.length) alert('아래 파일은 올리지 못했습니다.\n\n· ' + failed.join('\n· '));
+        }
+        // 고르자마자 목록에 보이는 첨부(협업티켓 · WBS 산출물) — 화면에는 이 창의 blob: 주소로 바로 보여 주고,
+        // 뒤에서 Storage 에 올린 뒤 entry.path · entry.url 을 실제 주소로 바꾸고 저장합니다 (afterSave).
+        function gwUploadEntryLater(entry, file, afterSave) {
+            if (!window.kobFiles || !file) return;
+            entry.uploading = true;
+            gwUploadAttachments([file]).then(r => {
+                delete entry.uploading;
+                const m = r.files[0];
+                if (m) {
+                    const oldUrl = entry.url;
+                    if (m.path) entry.path = m.path;
+                    entry.url = m.path ? kobFiles.src(m) : (m.dataUrl || entry.url);
+                    if (/^blob:/.test(oldUrl || '') && oldUrl !== entry.url) { try { URL.revokeObjectURL(oldUrl); } catch (e) { /* 무시 */ } }
+                } else { entry.uploadFailed = true; gwUploadFailedAlert(r.failed); }
+                if (typeof afterSave === 'function') afterSave();
+            });
+        }
+        // 저장된 자료에 남은 blob: 주소(그 창에서만 살아 있던 것)는 비웁니다 — 깨진 그림 대신 '파일 없음' 으로 보이게 (2026-09-29)
+        function gwDropDeadBlobs(rows) {
+            const walk = (v) => {
+                if (Array.isArray(v)) { v.forEach(walk); return; }
+                if (!v || typeof v !== 'object') return;
+                if (typeof v.url === 'string' && /^blob:/.test(v.url) && !v.path) v.url = '';
+                Object.keys(v).forEach(k => { if (v[k] && typeof v[k] === 'object') walk(v[k]); });
+            };
+            walk(rows);
+            return rows;
         }
 
         // ---------- 업무접수 알림 ----------
@@ -10881,6 +10958,7 @@ const QUOTE_TEMPLATES = [
             let level = 'manager';           // 권한 레벨(직책)
             let groupId = 'admin';           // 적용된 권한 그룹 (사외 계정 여부 판단에 씁니다)
 
+            if (window.kobFiles) kobFiles.session();   // 첨부파일을 보려면 파일용 쿠키가 필요합니다 (2026-09-29 · 3단계)
             applyMyProfileOverrides();   // 본인이 올려 둔 사진·연락처를 조직도 자료에 얹고 시작합니다
 
             // 계정의 실제 이메일을 씁니다 — 내 정보·사진이 이메일을 열쇠로 쓰기 때문입니다
@@ -11390,7 +11468,12 @@ const QUOTE_TEMPLATES = [
             if (!/^image\//.test(f.type)) { alert('이미지 파일만 올릴 수 있습니다.'); return; }
             const url = await shrinkImageToDataUrl(f, MY_PHOTO_MAX_PX);
             if (!url) { alert('사진을 읽지 못했습니다. 다른 파일로 해 보세요.'); return; }
-            myPhotoDraft = url;
+            // 줄인 사진을 Storage 에 올리고 주소만 저장 (2026-09-29 · 3단계 — 예전엔 base64 가 직원 목록 안에)
+            let meta = null;
+            try { gwUploadBusy('사진 올리는 중…'); meta = await kobFiles.uploadDataUrl(url, f.name); }
+            catch (e) { alert('사진을 올리지 못했습니다: ' + ((e && e.message) || '')); return; }
+            finally { gwUploadBusy(''); }
+            myPhotoDraft = kobFiles.src(meta);
             renderMyProfileBody();
         }
         function clearMyPhoto() { myPhotoDraft = ''; renderMyProfileBody(); }
@@ -12218,7 +12301,8 @@ const QUOTE_TEMPLATES = [
         //   · 받아 보는 곳     : 그룹웨어 › 자료실 · 파트너센터 › 자료실 (공개로 올린 글만)
         // 큰 파일은 파일서버(넥스트클라우드) 쪽을 쓰고, 여기에는 바로 보여 줄 자료를 둡니다.
         const ARCHIVE_POST_KEY = 'gwArchivePosts.v1';
-        const ARCHIVE_FILE_MAX = 3 * 1024 * 1024;          // 한 파일 3MB
+        // 한 파일 한도 — Storage 에 올리면 20MB, 로컬 모드(자료 안에 base64)는 예전처럼 3MB (2026-09-29 · 3단계)
+        const ARCHIVE_FILE_MAX = (window.kobFiles && kobFiles.remote) ? 20 * 1024 * 1024 : 3 * 1024 * 1024;
         const ARCHIVE_CATS = [
             { id: 'manual',  name: '매뉴얼',      icon: 'fa-book' },
             { id: 'form',    name: '서류 양식',   icon: 'fa-file-lines' },
@@ -12472,7 +12556,7 @@ const QUOTE_TEMPLATES = [
                 return `<div class="p-4 hover:bg-gray-50 transition cursor-pointer" onclick="openArchiveView('${x.id}')">
                     <div class="flex gap-3">
                         ${imgs.length
-                            ? `<img src="${imgs[0].dataUrl}" alt="" class="w-16 h-16 object-cover rounded border border-gray-200 shrink-0" />`
+                            ? `<img src="${escapeHtml(kobFiles.src(imgs[0]))}" alt="" class="w-16 h-16 object-cover rounded border border-gray-200 shrink-0" />`
                             : `<div class="w-16 h-16 rounded border border-gray-200 bg-gray-50 flex items-center justify-center text-gray-300 shrink-0">
                                  <i class="fas ${c.icon} text-xl"></i></div>`}
                         <div class="min-w-0 flex-1">
@@ -12546,7 +12630,7 @@ const QUOTE_TEMPLATES = [
             box.innerHTML = archiveDraftFiles.map((f, i) => `
                 <div class="flex items-center gap-2 rounded border border-gray-200 px-2.5 py-2">
                     ${archiveIsImage(f)
-                        ? `<img src="${f.dataUrl}" alt="" class="w-10 h-10 object-cover rounded border border-gray-200" />`
+                        ? `<img src="${escapeHtml(kobFiles.src(f))}" alt="" class="w-10 h-10 object-cover rounded border border-gray-200" />`
                         : '<i class="fas fa-file text-gray-400 w-10 text-center"></i>'}
                     <span class="flex-1 min-w-0 text-sm text-gray-700 truncate">${escapeHtml(f.name)}</span>
                     <span class="text-[11px] text-gray-400 shrink-0">${archiveFileSize(f.size)}</span>
@@ -12559,26 +12643,11 @@ const QUOTE_TEMPLATES = [
         async function addArchiveFiles(input) {
             const files = [...(input.files || [])];
             input.value = '';
-            const over = [];
-            for (const f of files) {
-                if (f.size > ARCHIVE_FILE_MAX) { over.push(`${f.name} (${archiveFileSize(f.size)})`); continue; }
-                const isImg = String(f.type || '').indexOf('image/') === 0;
-                let dataUrl = '';
-                try {
-                    dataUrl = (isImg && typeof shrinkImageToDataUrl === 'function')
-                        ? await shrinkImageToDataUrl(f, 1600)
-                        : await new Promise((res, rej) => {
-                            const r = new FileReader();
-                            r.onload = () => res(r.result);
-                            r.onerror = rej;
-                            r.readAsDataURL(f);
-                        });
-                } catch (e) { dataUrl = ''; }
-                if (!dataUrl) { over.push(`${f.name} (읽지 못함)`); continue; }
-                archiveDraftFiles.push({ name: f.name, type: f.type || '', size: f.size || 0, dataUrl });
-            }
+            // 파일은 Storage 에 올리고 글에는 주소만 (2026-09-29 · 3단계). 그림은 긴 변 1600px 로 줄여서.
+            const r = await gwUploadAttachments(files, { max: ARCHIVE_FILE_MAX, shrinkPx: 1600 });
+            r.files.forEach(m => archiveDraftFiles.push(m));
             renderArchiveDraftFiles();
-            if (over.length) alert('아래 파일은 담지 못했습니다 (한 파일 3MB 까지).\n\n· ' + over.join('\n· '));
+            gwUploadFailedAlert(r.failed);
         }
 
         function saveArchivePost() {
@@ -12647,10 +12716,10 @@ const QUOTE_TEMPLATES = [
                 <div class="space-y-2">
                     ${files.map(f => archiveIsImage(f)
                         ? `<div class="rounded border border-gray-200 overflow-hidden">
-                             <img src="${f.dataUrl}" alt="${escapeHtml(f.name)}" class="w-full" />
+                             <img src="${escapeHtml(kobFiles.src(f))}" alt="${escapeHtml(f.name)}" class="w-full" />
                              <div class="flex items-center justify-between gap-2 px-3 py-2 bg-gray-50">
                                  <span class="text-xs text-gray-600 truncate">${escapeHtml(f.name)}</span>
-                                 <a href="${f.dataUrl}" download="${escapeHtml(f.name)}"
+                                 <a href="${escapeHtml(kobFiles.src(f, { download: true }))}" download="${escapeHtml(f.name)}"
                                     class="shrink-0 px-2.5 py-1 text-xs rounded bg-indigo-600 text-white hover:bg-indigo-700">내려받기</a>
                              </div>
                            </div>`
@@ -12658,7 +12727,7 @@ const QUOTE_TEMPLATES = [
                              <i class="fas fa-file text-gray-400"></i>
                              <span class="flex-1 min-w-0 text-sm text-gray-700 truncate">${escapeHtml(f.name)}</span>
                              <span class="text-[11px] text-gray-400">${archiveFileSize(f.size)}</span>
-                             <a href="${f.dataUrl}" download="${escapeHtml(f.name)}"
+                             <a href="${escapeHtml(kobFiles.src(f, { download: true }))}" download="${escapeHtml(f.name)}"
                                 class="px-2.5 py-1 text-xs rounded bg-indigo-600 text-white hover:bg-indigo-700">내려받기</a>
                            </div>`).join('')}
                 </div>` : '<p class="text-sm text-gray-400">첨부파일이 없습니다.</p>'}`;
@@ -14098,19 +14167,24 @@ const QUOTE_TEMPLATES = [
         }
 
         // 첨부 항목 한 건 만들기 — 요청 첨부(requestFiles)·완료 첨부(completeFiles)가 같은 구조를 씁니다.
-        function newCollabFileEntry(file) {
+        function newCollabFileEntryLocal(file) {
             return {
                 id: 'cfile_' + collabFileIdCounter++,
                 name: file.name,
                 type: file.type || '',
                 size: file.size || 0,
                 url: (typeof URL !== 'undefined' && URL.createObjectURL) ? URL.createObjectURL(file) : '',
-                ref: file,                 // 텍스트류를 내려받지 않고 읽어 보기 위해 원본 참조 보관
+                ref: file,                 // 텍스트류를 내려받지 않고 읽어 보기 위해 원본 참조 보관 (저장되면 {} — 그때는 path 로 읽음)
                 textCache: '',
                 by: currentUserName || '',
                 at: ymd(new Date()),
                 viewedBy: '', viewedAt: ''
             };
+        }
+        function newCollabFileEntry(file) {
+            const e = newCollabFileEntryLocal(file);
+            gwUploadEntryLater(e, file, () => saveCollabRequests());   // Storage 에 올리고 경로 저장 (2026-09-29 · 3단계)
+            return e;
         }
 
         // ---------- 완료 모달: 파일 고르기 ----------
@@ -14452,7 +14526,14 @@ const QUOTE_TEMPLATES = [
         // 텍스트류는 내려받지 않고 읽어서 화면에 그대로 펼칩니다
         function collabFileLoadText(reqId, fileId) {
             const hit = collabFileOf(reqId, fileId);
-            if (!hit || hit.f.textCache || !hit.f.ref || typeof FileReader === 'undefined') return;
+            if (!hit || hit.f.textCache) return;
+            if (!(hit.f.ref instanceof Blob)) {                        // 저장된 파일 — Storage 에서 받아 읽습니다 (2026-09-29)
+                if (!hit.f.path) return;
+                kobFiles.text(hit.f).then(s => { hit.f.textCache = String(s || '').slice(0, 200000); }).catch(() => { hit.f.textCache = '(파일을 읽을 수 없습니다)'; })
+                    .then(() => { if (collabFileViewRef && collabFileViewRef.fileId === fileId) renderCollabFileViewer(); });
+                return;
+            }
+            if (typeof FileReader === 'undefined') return;
             const reader = new FileReader();
             reader.onload  = () => { hit.f.textCache = String(reader.result || '').slice(0, 200000); if (collabFileViewRef && collabFileViewRef.fileId === fileId) renderCollabFileViewer(); };
             reader.onerror = () => { hit.f.textCache = '(파일을 읽을 수 없습니다)';                  if (collabFileViewRef && collabFileViewRef.fileId === fileId) renderCollabFileViewer(); };
@@ -18002,7 +18083,7 @@ const QUOTE_TEMPLATES = [
             return { key: 'none', name: '해당 없음', chip: 'text-gray-500 bg-gray-100 border-gray-300', icon: 'fa-minus' };
         }
         // 산출물 파일 한 건 만들기 (구조는 협업티켓 첨부 newCollabFileEntry 와 같습니다)
-        function newWbsFileEntry(file) {
+        function newWbsFileEntryLocal(file) {
             return {
                 id: 'wfile_' + wbsFileSeq++,
                 name: file.name, type: file.type || '', size: file.size || 0,
@@ -18011,6 +18092,11 @@ const QUOTE_TEMPLATES = [
                 fmt: deliverableFormatOfFile(file),
                 by: currentUserName || '', at: ymd(new Date())
             };
+        }
+        function newWbsFileEntry(file) {
+            const e = newWbsFileEntryLocal(file);
+            gwUploadEntryLater(e, file, () => saveProjects());          // Storage 에 올리고 경로 저장 (2026-09-29 · 3단계)
+            return e;
         }
         // 고른 파일을 검사해 바구니에 담습니다. 반환값은 실제로 담긴 건수.
         function pushWbsFiles(w, bucket, fileList) {
@@ -18050,7 +18136,7 @@ const QUOTE_TEMPLATES = [
 
         // ---------- 저장 (2026-09-17) ----------
         // 프로젝트은 Supabase 'projects' 표에 한 건 = 한 줄로 둡니다 (js/kob-db.js).
-        let projects = (window.kobDb ? kobDb.rows('projects') : []);
+        let projects = (window.kobDb ? ((r) => (typeof gwDropDeadBlobs === 'function' ? gwDropDeadBlobs(r) : r))(kobDb.rows('projects')) : []);
         let projectsSaved = new Map(projects.map(x => [x.id, JSON.stringify(x)]));
 
         function saveProjects() {
@@ -18082,7 +18168,7 @@ const QUOTE_TEMPLATES = [
         }
         function reloadProjectsFromDb() {
             if (!window.kobDb) return;
-            projects = kobDb.rows('projects');
+            projects = ((r) => (typeof gwDropDeadBlobs === 'function' ? gwDropDeadBlobs(r) : r))(kobDb.rows('projects'));
             projectsSaved = new Map(projects.map(x => [x.id, JSON.stringify(x)]));
             syncProjectsIdCounter();
             if (typeof renderProjectCenter === 'function') renderProjectCenter();
@@ -19558,9 +19644,15 @@ const QUOTE_TEMPLATES = [
         // 글자 자료는 내려받지 않고 읽어서 화면에 그대로 펼칩니다
         function wbsFileLoadText(ref) {
             const hit = wbsFileOf(ref.projectId, ref.wbsId, ref.fileId);
-            if (!hit || hit.f.textCache || !hit.f.ref || typeof FileReader === 'undefined') return;
-            const reader = new FileReader();
+            if (!hit || hit.f.textCache) return;
             const after = (v) => { hit.f.textCache = v; if (wbsFileViewRef && wbsFileViewRef.fileId === ref.fileId) renderWbsFileViewer(); };
+            if (!(hit.f.ref instanceof Blob)) {                        // 저장된 파일 — Storage 에서 받아 읽습니다 (2026-09-29)
+                if (!hit.f.path) return;
+                kobFiles.text(hit.f).then(s => after(String(s || '').slice(0, 200000))).catch(() => after('(파일을 읽을 수 없습니다)'));
+                return;
+            }
+            if (typeof FileReader === 'undefined') return;
+            const reader = new FileReader();
             reader.onload  = () => after(String(reader.result || '').slice(0, 200000));
             reader.onerror = () => after('(파일을 읽을 수 없습니다)');
             reader.readAsText(hit.f.ref);
@@ -28140,7 +28232,7 @@ const QUOTE_TEMPLATES = [
             const list = w.installPhotos || [];
             const thumbs = list.map(p => `
                         <div class="relative group">
-                            <img src="${p.dataUrl}" alt="${escapeHtml(p.name || '설치사진')}" title="${escapeHtml(p.name || '')}"
+                            <img src="${escapeHtml(kobFiles.src(p))}" alt="${escapeHtml(p.name || '설치사진')}" title="${escapeHtml(p.name || '')}"
                                  onclick="openInstallPhotoViewer('${key}', '${w.id}', '${p.id}')"
                                  class="w-20 h-20 object-cover rounded border border-gray-200 cursor-pointer hover:opacity-80 transition-opacity" />
                             <button type="button" onclick="removeInstallPhoto('${key}', '${w.id}', '${p.id}', '${ctx}')" title="사진 삭제"
@@ -28169,7 +28261,7 @@ const QUOTE_TEMPLATES = [
             const list = w.installPhotos || [];
             if (!list.length) return '<span class="text-gray-300">-</span>';
             return `<span class="inline-flex items-center gap-1 align-middle">
-                        ${list.slice(0, 3).map(p => `<img src="${p.dataUrl}" alt="설치사진" class="w-8 h-8 object-cover rounded border border-gray-200" />`).join('')}
+                        ${list.slice(0, 3).map(p => `<img src="${escapeHtml(kobFiles.src(p))}" alt="설치사진" class="w-8 h-8 object-cover rounded border border-gray-200" />`).join('')}
                         <span class="text-xs text-gray-500">${list.length}장</span>
                     </span>`;
         }
@@ -28184,19 +28276,13 @@ const QUOTE_TEMPLATES = [
             input.value = '';
             if (!files.length) { alert('이미지 파일만 올릴 수 있습니다.'); return; }
 
-            let left = files.length;
-            const done = () => { if (--left <= 0) { refreshInstallPhotoHost(ctx); refreshWorkViews(); } };
-            files.forEach(f => {
-                const reader = new FileReader();
-                reader.onload = e => {
-                    w.installPhotos.push({
-                        id: 'ph' + (installPhotoSeq++), name: f.name, dataUrl: e.target.result,
-                        at: ymd(new Date()), by: currentUserName || '담당자'
-                    });
-                    done();
-                };
-                reader.onerror = done;
-                reader.readAsDataURL(f);
+            // 긴 변 1600px 로 줄여 Storage 에 올리고 주소만 (2026-09-29 · 3단계 — 예전엔 원본 base64 가 업무 건 안에)
+            gwUploadAttachments(files, { shrinkPx: 1600 }).then(r => {
+                r.files.forEach(m => w.installPhotos.push(Object.assign({
+                    id: 'ph' + (installPhotoSeq++), at: ymd(new Date()), by: currentUserName || '담당자'
+                }, m)));
+                gwUploadFailedAlert(r.failed);
+                refreshInstallPhotoHost(ctx); refreshWorkViews();
             });
         }
 
@@ -28223,7 +28309,7 @@ const QUOTE_TEMPLATES = [
             const w = asWork(key, workId);
             const p = w ? (w.installPhotos || []).find(x => x.id === photoId) : null;
             if (!p) return;
-            document.getElementById('install-photo-img').src = p.dataUrl;
+            document.getElementById('install-photo-img').src = kobFiles.src(p);
             document.getElementById('install-photo-caption').textContent =
                 `${w.id} · ${p.name || '설치사진'}${p.at ? ` · ${p.at} ${p.by || ''}` : ''}`;
             document.getElementById('install-photo-modal').classList.remove('hidden');
@@ -33142,7 +33228,7 @@ const QUOTE_TEMPLATES = [
 
             const attachHtml = c.noAttachment
                 ? `<span class="text-amber-700">첨부 없음</span>${c.noAttachmentReason ? ` <span class="text-xs text-gray-500">· ${escapeHtml(c.noAttachmentReason)}</span>` : ''}`
-                : (c.attachmentName ? `<i class="fas fa-paperclip text-gray-400 mr-1"></i>${escapeHtml(c.attachmentName)}` : '');
+                : (c.attachmentName ? `<i class="fas fa-paperclip text-gray-400 mr-1"></i>${contractAttachLinkHtml(c)}` : '');
 
             const stepsHtml = steps.length === 0
                 ? '<p class="text-sm text-gray-400">결재선이 아직 만들어지지 않았습니다.</p>'
@@ -33240,6 +33326,7 @@ const QUOTE_TEMPLATES = [
             const fileCurrent = document.getElementById('contract-file-current');
             fileCurrent.classList.add('hidden');
             fileCurrent.innerHTML = '';
+            contractFileDraft = null;
             document.getElementById('contract-file').disabled = false;
 
             customerSelect.innerHTML = '<option value="">고객사 선택</option>' +
@@ -33277,7 +33364,7 @@ const QUOTE_TEMPLATES = [
                 contractItemsDraft = contractItems(c).map(i => Object.assign({}, i));
                 // 첨부 상태 복원 (파일 input은 보안상 값 설정 불가 → 현재 첨부명 표시)
                 if (c.attachmentName) {
-                    fileCurrent.innerHTML = '<i class="fas fa-file-alt mr-1 text-blue-500"></i>현재 첨부: ' + escapeHtml(c.attachmentName);
+                    fileCurrent.innerHTML = '<i class="fas fa-file-alt mr-1 text-blue-500"></i>현재 첨부: ' + contractAttachLinkHtml(c);
                     fileCurrent.classList.remove('hidden');
                 }
                 document.getElementById('contract-no-attach').checked = !!c.noAttachment;
@@ -33325,12 +33412,22 @@ const QUOTE_TEMPLATES = [
             if (checked) fileInput.value = '';
         }
         // 파일 선택 시: '미첨부' 자동 해제
+        // 계약서 파일 — 고르자마자 Storage 에 올려 둡니다 (2026-09-29 · 3단계 — 예전엔 이름만 남고 파일은 버려졌음)
+        //   contractFileDraft = { name, busy: true } → 다 올리면 { name, meta: { path, name, type, size } } · 실패면 { name, failed }
+        let contractFileDraft = null;
         function onContractFileChange() {
             const fileInput = document.getElementById('contract-file');
             if (fileInput.files && fileInput.files.length) {
                 document.getElementById('contract-no-attach').checked = false;
                 document.getElementById('contract-no-attach-wrap').classList.add('hidden');
-            }
+                const f = fileInput.files[0];
+                const draft = contractFileDraft = { name: f.name, busy: true };
+                gwUploadAttachments([f]).then(r => {
+                    draft.busy = false;
+                    if (r.files[0]) draft.meta = r.files[0];
+                    else { draft.failed = true; gwUploadFailedAlert(r.failed); }
+                });
+            } else contractFileDraft = null;
         }
         // 현재 폼의 첨부 상태 읽기
         function readContractAttachment() {
@@ -33338,7 +33435,15 @@ const QUOTE_TEMPLATES = [
             const hasNewFile = !!(fileInput && fileInput.files && fileInput.files.length);
             const noAttach = !!(document.getElementById('contract-no-attach') || {}).checked;
             const reason = ((document.getElementById('contract-no-attach-reason') || {}).value || '').trim();
-            return { hasNewFile, fileName: hasNewFile ? fileInput.files[0].name : '', noAttach, reason };
+            const d = hasNewFile ? contractFileDraft : null;
+            return { hasNewFile, fileName: hasNewFile ? fileInput.files[0].name : '', noAttach, reason,
+                     file: d && d.meta ? d.meta : null, busy: !!(d && d.busy), failed: !!(hasNewFile && (!d || d.failed)) };
+        }
+        // 첨부된 계약서 이름 — 파일이 있으면 내려받기 링크로
+        function contractAttachLinkHtml(c) {
+            const name = escapeHtml(c.attachmentName || '');
+            if (!c.attachment || !kobFiles.has(c.attachment)) return name;
+            return `<a href="${escapeHtml(kobFiles.src(c.attachment, { download: true }))}" download="${name}" onclick="event.stopPropagation()" class="underline hover:text-blue-700" title="계약서 내려받기">${name}</a>`;
         }
 
         // 계약 모달 고객사 드롭다운 변경: '+ 고객사 생성 바로가기' 선택 시
@@ -33442,10 +33547,12 @@ const QUOTE_TEMPLATES = [
 
             // 첨부 상태 반영 (새 파일 선택 / 미첨부+사유 시에만 갱신, 그 외 기존값 유지)
             const att = readContractAttachment();
+            if (att.hasNewFile && att.busy) { alert('계약서 파일을 올리는 중입니다. 잠시 뒤 다시 눌러 주세요.'); return; }
+            if (att.hasNewFile && att.failed) { alert('계약서 파일을 올리지 못했습니다. 파일을 다시 골라 주세요.'); return; }
             if (att.hasNewFile) {
-                data.attachmentName = att.fileName; data.noAttachment = false; data.noAttachmentReason = '';
+                data.attachmentName = att.fileName; data.attachment = att.file; data.noAttachment = false; data.noAttachmentReason = '';
             } else if (att.noAttach) {
-                data.attachmentName = ''; data.noAttachment = true; data.noAttachmentReason = att.reason;
+                data.attachmentName = ''; data.attachment = null; data.noAttachment = true; data.noAttachmentReason = att.reason;
             }
 
             if (id) {
@@ -33519,7 +33626,7 @@ const QUOTE_TEMPLATES = [
             const attInfo = c.noAttachment
                 ? `<div class="mb-2 text-xs bg-amber-50 border border-amber-200 rounded p-2 text-amber-800"><i class="fas fa-exclamation-triangle mr-1"></i><b>계약서 미첨부</b> · 사유: ${escapeHtml(c.noAttachmentReason || '-')}</div>`
                 : (c.attachmentName
-                    ? `<div class="mb-2 text-xs bg-blue-50 border border-blue-200 rounded p-2 text-blue-800"><i class="fas fa-file-alt mr-1"></i>첨부 계약서: <b>${escapeHtml(c.attachmentName)}</b></div>`
+                    ? `<div class="mb-2 text-xs bg-blue-50 border border-blue-200 rounded p-2 text-blue-800"><i class="fas fa-file-alt mr-1"></i>첨부 계약서: <b>${contractAttachLinkHtml(c)}</b></div>`
                     : `<div class="mb-2 text-xs bg-gray-50 border border-gray-200 rounded p-2 text-gray-500"><i class="fas fa-paperclip mr-1"></i>첨부 없음 — 승인 요청 시 계약서 첨부 또는 미첨부 사유가 필요합니다.</div>`);
 
             // 액션 영역
@@ -33564,6 +33671,8 @@ const QUOTE_TEMPLATES = [
 
             // ----- 승인 요청 전 계약서 첨부 검증 -----
             const att = readContractAttachment();
+            if (att.hasNewFile && att.busy) { alert('계약서 파일을 올리는 중입니다. 잠시 뒤 다시 눌러 주세요.'); return; }
+            if (att.hasNewFile && att.failed) { alert('계약서 파일을 올리지 못했습니다. 파일을 다시 골라 주세요.'); return; }
             const hasFile = att.hasNewFile || !!c.attachmentName;
             if (!att.noAttach && !hasFile) {
                 alert('승인을 요청하려면 계약서를 첨부해야 합니다.\n첨부가 어려운 경우 "계약서 미첨부"를 선택하고 사유를 입력하세요.');
@@ -33577,9 +33686,9 @@ const QUOTE_TEMPLATES = [
             }
             // 검증 통과 → 첨부 상태를 계약서에 확정 반영
             if (att.hasNewFile) {
-                c.attachmentName = att.fileName; c.noAttachment = false; c.noAttachmentReason = '';
+                c.attachmentName = att.fileName; c.attachment = att.file; c.noAttachment = false; c.noAttachmentReason = '';
             } else if (att.noAttach) {
-                c.attachmentName = ''; c.noAttachment = true; c.noAttachmentReason = att.reason;
+                c.attachmentName = ''; c.attachment = null; c.noAttachment = true; c.noAttachmentReason = att.reason;
             }
 
             c.approvalSteps = buildApprovalSteps();
@@ -39944,7 +40053,7 @@ const QUOTE_TEMPLATES = [
                         ? `<span class="ml-2 text-xs text-yellow-600 font-bold"><i class="fas fa-sync-alt mr-1"></i>D-${daysLeft} 갱신임박</span>`
                         : (c.autoRenew && c.status === '활성' ? '<span class="ml-2 text-xs text-blue-500"><i class="fas fa-sync-alt mr-1"></i>자동갱신</span>' : '');
                     const attach = c.attachmentName
-                        ? `<span class="text-emerald-600"><i class="fas fa-paperclip mr-1"></i>${escapeHtml(c.attachmentName)}</span>`
+                        ? `<span class="text-emerald-600"><i class="fas fa-paperclip mr-1"></i>${contractAttachLinkHtml(c)}</span>`
                         : (c.noAttachment ? `<span class="text-amber-600"><i class="fas fa-exclamation-triangle mr-1"></i>미첨부: ${escapeHtml(c.noAttachmentReason || '-')}</span>` : '<span class="text-gray-400">첨부 없음</span>');
                     return `
                         <div class="border border-gray-200 rounded-lg p-4 hover:border-cyan-300 transition-colors">
@@ -40388,7 +40497,8 @@ const QUOTE_TEMPLATES = [
             const kb = Math.round(JSON.stringify(quoteTplDraft).length / 1024);
             const totalKb = Math.round(JSON.stringify(userQuoteTemplates).length / 1024);
             el.innerText = `이 템플릿 약 ${kb}KB · 저장된 내 템플릿 전체 약 ${totalKb}KB `
-                + '(브라우저 저장 공간은 보통 5MB 정도입니다. 이미지가 많으면 저장이 막힐 수 있습니다)';
+                + ((window.kobFiles && kobFiles.remote) ? '(이미지는 파일 저장소에 따로 올라가 여기에 크게 잡히지 않습니다)'
+                    : '(브라우저 저장 공간은 보통 5MB 정도입니다. 이미지가 많으면 저장이 막힐 수 있습니다)');
         }
 
         // ---------- 값 바꾸기 (입력 포커스 유지를 위해 다시 그리지 않습니다) ----------
@@ -40468,10 +40578,10 @@ const QUOTE_TEMPLATES = [
             const files = Array.from(input.files || []).filter(f => /^image\//.test(f.type));
             input.value = '';
             if (!files.length) return;
-            for (const f of files) {
-                const url = await shrinkImageToDataUrl(f, QUOTE_TPL_MAX_IMG_PX);
-                if (url) quoteTplDraft.images.push(url);
-            }
+            // 줄인 그림을 Storage 에 올리고 템플릿에는 주소만 (2026-09-29 · 3단계 — 예전엔 base64 가 템플릿 안에)
+            const r = await gwUploadAttachments(files, { shrinkPx: QUOTE_TPL_MAX_IMG_PX });
+            r.files.forEach(m => quoteTplDraft.images.push(kobFiles.src(m)));
+            gwUploadFailedAlert(r.failed);
             renderQuoteTplImages();
             renderQuoteTplSize();
         }
@@ -42019,13 +42129,14 @@ const QUOTE_TEMPLATES = [
         // ---------- 보완서류 요청 데이터 (DEV환경) ----------
         // 항목의 파일 관련 필드
         //   fileName/fileType/fileSize : 업로드된 첨부 정보
-        //   fileUrl                    : 브라우저 메모리의 미리보기 주소(URL.createObjectURL). 시드 데이터는 실물이 없어 빈 값
+        //   fileUrl                    : 열어 볼 주소. Storage 파일이면 /api/files/get?… (filePath 로 다시 만듦 · 2026-09-29), 시드 데이터는 실물이 없어 빈 값
+        //   filePath                   : Storage 경로 (2026-09-29 · 3단계)
         //   viewed/viewedBy/viewedAt   : 결제본부가 첨부를 열어 내용을 확인했는지 — 열람 전에는 '확인' 처리를 막습니다
         let payDocSeq = 5;
         const payDocItem = (docId, reason, over) => Object.assign({
             docId, name: (payDocCatalogItem(docId) || {}).name || docId,
             reason: reason || '', status: 'pending',
-            fileName: '', fileType: '', fileSize: 0, fileUrl: '',
+            fileName: '', fileType: '', fileSize: 0, fileUrl: '', filePath: '',
             fileRef: null, textCache: '', sample: false,
             uploadedBy: '', uploadedAt: '', rejectReason: '',
             viewed: false, viewedBy: '', viewedAt: ''
@@ -42072,7 +42183,12 @@ const QUOTE_TEMPLATES = [
         // (열람 모달에서 문서 형태의 지면을 그려 주어 열람→확인 흐름을 그대로 볼 수 있습니다)
         // items 가 없는 자료도 있을 수 있어(저장소에서 불러온 옛 자료 등) 빈 목록으로 받아 넘깁니다. (2026-09-17)
         function markPayDocSamples() {
-            payDocRequests.forEach(r => (r && r.items || []).forEach(it => { if (it.fileName && !it.fileUrl) it.sample = true; }));
+            payDocRequests.forEach(r => (r && r.items || []).forEach(it => {
+                // Storage 에 올린 파일은 주소를 다시 만들고, 예전 blob: 주소(새로고침으로 사라짐)는 비웁니다 (2026-09-29 · 3단계)
+                if (it.filePath) it.fileUrl = kobFiles.src({ path: it.filePath, name: it.fileName });
+                else if (/^blob:/.test(it.fileUrl || '')) it.fileUrl = '';
+                if (it.fileName && !it.fileUrl) it.sample = true;
+            }));
         }
         markPayDocSamples();
 
@@ -42928,20 +43044,26 @@ const QUOTE_TEMPLATES = [
             gwSetFileInput(input, files);
         }
 
-        function onPayDocFilePicked(event) {
+        async function onPayDocFilePicked(event) {
             const file = event.target.files && event.target.files[0];
             if (!file || !payDocUploadTarget) return;
-            const r = payDocReq(payDocUploadTarget.reqId);
-            const it = r && r.items.find(i => i.docId === payDocUploadTarget.docId);
+            const target = payDocUploadTarget;
+            event.target.value = '';
+            // 파일은 Storage 에 올리고 자료에는 경로만 (2026-09-29 · 3단계 — 예전엔 이 창 메모리(blob:)에만 있어 새로고침하면 사라졌음)
+            const up = await gwUploadAttachments([file]);
+            if (!up.files.length) { gwUploadFailedAlert(up.failed); return; }
+            const meta = up.files[0];
+            const r = payDocReq(target.reqId);
+            const it = r && r.items.find(i => i.docId === target.docId);
             if (!r || !it) return;
 
-            // 서버가 없는 DEV환경이라 파일은 브라우저 메모리에만 두고(objectURL) 결제본부가 열람할 수 있게 합니다.
-            if (it.fileUrl) URL.revokeObjectURL(it.fileUrl);
+            if (/^blob:/.test(it.fileUrl || '')) URL.revokeObjectURL(it.fileUrl);
             it.fileName = file.name;
             it.fileType = file.type || '';
             it.fileSize = file.size || 0;
-            it.fileUrl = (typeof URL !== 'undefined' && URL.createObjectURL) ? URL.createObjectURL(file) : '';
-            it.fileRef = file;        // 텍스트류를 내려받지 않고 읽어 보기 위해 원본 참조 보관
+            it.filePath = meta.path || '';
+            it.fileUrl = meta.path ? kobFiles.src(meta) : (meta.dataUrl || '');
+            it.fileRef = null;
             it.textCache = '';
             it.sample = false;        // 실제 업로드본이므로 샘플 지면이 아닙니다
             it.status = 'uploaded';
@@ -42956,7 +43078,6 @@ const QUOTE_TEMPLATES = [
             payDocLog(r, `'${it.name}' 업로드 (${file.name})`);
 
             payDocUploadTarget = null;
-            event.target.value = '';
             renderPayDocDetail();
         }
 
@@ -42966,8 +43087,8 @@ const QUOTE_TEMPLATES = [
             if (!r || !it || !payDocCanUpload(r)) return;
             if (!confirm(`'${it.name}' 첨부를 삭제할까요?`)) return;
             const removed = it.fileName;
-            if (it.fileUrl) URL.revokeObjectURL(it.fileUrl);
-            it.fileName = ''; it.fileType = ''; it.fileSize = 0; it.fileUrl = '';
+            if (/^blob:/.test(it.fileUrl || '')) URL.revokeObjectURL(it.fileUrl);
+            it.fileName = ''; it.fileType = ''; it.fileSize = 0; it.fileUrl = ''; it.filePath = '';
             it.fileRef = null; it.textCache = ''; it.sample = false;
             it.status = 'pending'; it.uploadedBy = ''; it.uploadedAt = '';
             it.viewed = false; it.viewedBy = ''; it.viewedAt = '';
@@ -43002,7 +43123,15 @@ const QUOTE_TEMPLATES = [
         function payDocLoadText(reqId, docId) {
             const r = payDocReq(reqId);
             const it = r && r.items.find(i => i.docId === docId);
-            if (!it || it.textCache || !it.fileRef || typeof FileReader === 'undefined') return;
+            if (!it || it.textCache) return;
+            if (it.filePath || /^data:/.test(it.fileUrl || '')) {       // Storage · 예전 base64 — 받아서 읽습니다 (2026-09-29)
+                kobFiles.text(it.filePath ? { path: it.filePath, name: it.fileName } : { dataUrl: it.fileUrl })
+                    .then(s => { it.textCache = String(s || '').slice(0, 200000); })
+                    .catch(() => { it.textCache = '(파일을 읽을 수 없습니다)'; })
+                    .then(() => { if (payDocPreviewRef && payDocPreviewRef.docId === docId) renderPayDocPreview(); });
+                return;
+            }
+            if (!(it.fileRef instanceof Blob) || typeof FileReader === 'undefined') return;   // 저장된 자료에서는 {} 로 옵니다
             const reader = new FileReader();
             reader.onload = () => {
                 it.textCache = String(reader.result || '').slice(0, 200000);   // 과대 파일 방어
@@ -43071,7 +43200,8 @@ const QUOTE_TEMPLATES = [
             const app = payDocAppOf(it);
             // blob:/data: 는 브라우저 메모리에만 있는 DEV환경 파일이라 Office 가 읽을 수 없습니다.
             // 서버에서 서비스되는 주소(절대/상대 경로 모두)면 스킴으로 바로 실행할 수 있습니다.
-            const servedByServer = !/^(blob:|data:)/i.test(it.fileUrl);
+            // Storage 파일(/api/files)은 로그인 쿠키가 있어야 받을 수 있어 Office 가 직접 못 엽니다 → 내려받기로 (2026-09-29)
+            const servedByServer = !/^(blob:|data:)/i.test(it.fileUrl) && !it.filePath;
 
             if (app && app.scheme && servedByServer) {
                 // 설치된 Office 가 바로 실행됩니다 (미설치 시 브라우저가 안내를 띄움)
@@ -44384,7 +44514,8 @@ const QUOTE_TEMPLATES = [
         //      (미흡하면 [재작업 요청] 으로 되돌립니다)
         // 자료는 이 브라우저에 남습니다.
         const DEVREQ_KEY = 'gwDevRequests.v1';
-        const DEV_FILE_MAX_SIZE = 5 * 1024 * 1024;   // 한 건 5MB
+        // 한 건 한도 — Storage 에 올리면 20MB, 로컬 모드(자료 안에 base64)는 예전처럼 5MB (2026-09-29 · 3단계)
+        const DEV_FILE_MAX_SIZE = (window.kobFiles && kobFiles.remote) ? 20 * 1024 * 1024 : 5 * 1024 * 1024;
         const DEV_IMG_MAX_PX = 1280;
 
         // 개발의뢰 진행 상태
@@ -44640,6 +44771,16 @@ const QUOTE_TEMPLATES = [
         // 파일을 그대로 data URL 로 읽습니다 (이미지는 줄여서 담습니다).
         // 파트너 접수 화면이 이 이름으로 부르고 있었는데 정작 어디에도 없어, 이미지가 아닌 파일을
         // 올리면 오류가 났습니다. 여기서 만들어 함께 씁니다. (2026-09-05)
+        // 파일 하나를 Storage 에 올리고, 예전 모양({ dataUrl })을 지켜 돌려줍니다 (2026-09-29 · 3단계).
+        //   dataUrl 칸에는 이제 base64 대신 **열어 볼 주소**(/api/files/get?…)가 들어가고 path 가 함께 남습니다.
+        //   파트너 접수 · 개발의뢰 화면은 dataUrl 을 '파일 있음' 과 주소로 두루 쓰므로 칸 이름은 그대로 둡니다.
+        async function gwUploadAsDataUrlShape(file, shrinkPx) {
+            const r = await gwUploadAttachments([file], { shrinkPx });
+            const m = r.files[0];
+            if (!m) return { error: (r.failed[0] || file.name) };
+            return m.path ? { name: file.name, type: m.type || file.type || '', size: m.size || file.size || 0, path: m.path, dataUrl: kobFiles.src(m) }
+                          : { name: file.name, type: m.type || file.type || '', size: m.size || file.size || 0, dataUrl: m.dataUrl };
+        }
         function partnerReadDataUrl(file) {
             return new Promise(resolve => {
                 try {
@@ -44657,13 +44798,11 @@ const QUOTE_TEMPLATES = [
             const out = [], over = [];
             for (const file of picked) {
                 if (file.size > DEV_FILE_MAX_SIZE) { over.push(`${file.name} (${collabFileSize(file.size)})`); continue; }
-                const isImg = String(file.type || '').indexOf('image/') === 0;
-                const dataUrl = isImg ? await shrinkImageToDataUrl(file, DEV_IMG_MAX_PX) : await partnerReadDataUrl(file);
-                if (!dataUrl) { over.push(`${file.name} (읽지 못했습니다)`); continue; }
-                out.push({ id: 'f_' + Date.now() + '_' + out.length, name: file.name, type: file.type || '',
-                           size: file.size || 0, dataUrl, by: by || '', at: ymd(new Date()) });
+                const up = await gwUploadAsDataUrlShape(file, DEV_IMG_MAX_PX);
+                if (up.error) { over.push(up.error); continue; }
+                out.push(Object.assign({ id: 'f_' + Date.now() + '_' + out.length, by: by || '', at: ymd(new Date()) }, up));
             }
-            if (over.length) alert('아래 파일은 올리지 못했습니다 (한 건 5MB 까지).\n\n· ' + over.join('\n· '));
+            if (over.length) alert(`아래 파일은 올리지 못했습니다 (한 건 ${gwFileSizeText(DEV_FILE_MAX_SIZE)} 까지).\n\n· ` + over.join('\n· '));
             return out;
         }
         // 첨부 한 줄 — 누르면 새 탭에서 열리고, 지울 수 있으면 휴지통이 붙습니다
@@ -48283,7 +48422,8 @@ const QUOTE_TEMPLATES = [
         // 본부별 '접수해야 하는 항목' 은 PARTNER_INTAKE_DEPTS[*].types · fields 에 적습니다.
         // 지금은 공통 항목(제목·내용·희망 처리일·첨부)만 쓰고, 본부에서 확정해 주면 fields 에 채워 넣습니다.
         const PARTNER_INTAKE_KEY = 'gwPartnerIntakes.v1';
-        const PARTNER_FILE_MAX_SIZE = 3 * 1024 * 1024;   // 한 건 3MB (localStorage 로 옮기므로 작게 잡습니다)
+        // 한 건 한도 — Storage 에 올리면 20MB, 로컬 모드는 예전처럼 3MB (2026-09-29 · 3단계)
+        const PARTNER_FILE_MAX_SIZE = (window.kobFiles && kobFiles.remote) ? 20 * 1024 * 1024 : 3 * 1024 * 1024;
         const PARTNER_IMG_MAX_PX = 1280;
 
         // 접수 상태 — 보완서류 요청과 같은 흐름입니다.
@@ -50390,7 +50530,7 @@ const QUOTE_TEMPLATES = [
         // 그리면서 한 건씩 담고, 누를 때 쓸 자리 번호를 돌려줍니다 (파일이 없으면 -1)
         function partnerViewAdd(f, label) {
             if (!f || !f.dataUrl) return -1;
-            partnerViewFiles.push({ name: f.name || '', type: f.type || '', size: f.size || 0, dataUrl: f.dataUrl, label: label || '' });
+            partnerViewFiles.push({ name: f.name || '', type: f.type || '', size: f.size || 0, dataUrl: f.dataUrl, path: f.path || '', label: label || '' });
             return partnerViewFiles.length - 1;
         }
         function openPartnerFileViewer(i) {
@@ -50453,8 +50593,14 @@ const QUOTE_TEMPLATES = [
             } else if (collabFileIsPdf(f)) {
                 body = `<iframe src="${f.dataUrl}#view=FitH" class="w-full h-[72vh] bg-white rounded-lg border border-gray-200" title="${escapeHtml(f.name)}"></iframe>`;
             } else if (collabFileIsText(f)) {
-                const t = partnerDataUrlText(f.dataUrl);
-                body = t
+                // Storage 파일은 받아서 읽습니다 (2026-09-29) — 다 받으면 다시 그립니다
+                if (f.path && f.textCache === undefined) {
+                    f.textCache = null;
+                    kobFiles.text({ path: f.path, name: f.name }).then(s => { f.textCache = String(s || ''); }).catch(() => { f.textCache = ''; })
+                        .then(() => { if (partnerViewFiles[partnerViewAt] === f) renderPartnerFileViewer(); });
+                }
+                const t = f.path ? (f.textCache || '') : partnerDataUrlText(f.dataUrl);
+                body = (f.path && f.textCache === null) ? '<div class="bg-white rounded-lg p-10 text-center text-sm text-gray-500"><i class="fas fa-spinner fa-spin mr-1"></i>불러오는 중…</div>' : t
                     ? `<pre class="bg-white rounded-lg border border-gray-200 p-4 text-xs text-gray-800 whitespace-pre-wrap break-all max-h-[72vh] overflow-auto">${escapeHtml(t.slice(0, 200000))}</pre>`
                     : '<div class="bg-white rounded-lg p-10 text-center text-sm text-gray-500">내용을 펼쳐 볼 수 없습니다. 아래 <b>내려받기</b>로 확인하세요.</div>';
             } else {
@@ -51732,7 +51878,7 @@ const QUOTE_TEMPLATES = [
                 return `<div class="p-4 hover:bg-gray-50 transition cursor-pointer" onclick="openArchiveView('${x.id}')">
                     <div class="flex gap-3">
                         ${imgs.length
-                            ? `<img src="${imgs[0].dataUrl}" alt="" class="w-16 h-16 object-cover rounded border border-gray-200 shrink-0" />`
+                            ? `<img src="${escapeHtml(kobFiles.src(imgs[0]))}" alt="" class="w-16 h-16 object-cover rounded border border-gray-200 shrink-0" />`
                             : `<div class="w-16 h-16 rounded border border-gray-200 bg-gray-50 flex items-center justify-center text-gray-300 shrink-0">
                                  <i class="fas ${c.icon} text-xl"></i></div>`}
                         <div class="min-w-0 flex-1">
@@ -51805,7 +51951,7 @@ const QUOTE_TEMPLATES = [
                             return `<div class="p-4 hover:bg-gray-50 transition cursor-pointer" onclick="openArchiveView('${x.id}')">
                                 <div class="flex gap-3">
                                     ${imgs.length
-                                        ? `<img src="${imgs[0].dataUrl}" alt="" class="w-16 h-16 object-cover rounded border border-gray-200 shrink-0" />`
+                                        ? `<img src="${escapeHtml(kobFiles.src(imgs[0]))}" alt="" class="w-16 h-16 object-cover rounded border border-gray-200 shrink-0" />`
                                         : `<div class="w-16 h-16 rounded border border-gray-200 bg-gray-50 flex items-center justify-center text-gray-300 shrink-0">
                                              <i class="fas ${c.icon} text-xl"></i></div>`}
                                     <div class="min-w-0 flex-1">
@@ -52031,6 +52177,7 @@ const QUOTE_TEMPLATES = [
         }
         // 확인이 끝난 파트너 계정으로 파트너센터에 들어갑니다
         function enterPartner(hit) {
+            if (window.kobFiles) kobFiles.session();   // 첨부파일용 쿠키 (2026-09-29 · 3단계)
             // 업무는 로그인 뒤 [요청하기] 에서 고릅니다 — 여기서는 아직 정하지 않습니다
             partnerUser = Object.assign({}, hit, { dept: '' });
             partnerPickedDept = '';
@@ -52597,13 +52744,12 @@ const QUOTE_TEMPLATES = [
             const over = [];
             for (const file of picked.slice(0, room)) {
                 if (file.size > PARTNER_FILE_MAX_SIZE) { over.push(`${file.name} (${collabFileSize(file.size)})`); continue; }
-                const isImg = String(file.type || '').indexOf('image/') === 0;
-                const dataUrl = isImg ? await shrinkImageToDataUrl(file, PARTNER_IMG_MAX_PX) : await partnerReadDataUrl(file);
-                if (!dataUrl) { over.push(`${file.name} (읽지 못했습니다)`); continue; }
-                partnerVanShots.push({ name: file.name, type: file.type || '', size: file.size || 0, dataUrl });
+                const up = await gwUploadAsDataUrlShape(file, PARTNER_IMG_MAX_PX);
+                if (up.error) { over.push(up.error); continue; }
+                partnerVanShots.push(up);
             }
             if (picked.length > room) alert(`스냅샷은 최대 ${PARTNER_VAN_SHOT_MAX}장까지입니다. ${room}장만 올렸습니다.`);
-            if (over.length) alert('아래 파일은 올리지 못했습니다 (한 장 3MB 까지).\n\n· ' + over.join('\n· '));
+            if (over.length) alert(`아래 파일은 올리지 못했습니다 (한 장 ${gwFileSizeText(PARTNER_FILE_MAX_SIZE)} 까지).\n\n· ` + over.join('\n· '));
             renderPartnerVanShots();
         }
         function removePartnerVanShot(i) {
@@ -52772,12 +52918,11 @@ const QUOTE_TEMPLATES = [
             const docId = partnerDocTarget;
             input.value = ''; partnerDocTarget = '';
             if (!file || !docId) return;
-            if (file.size > PARTNER_FILE_MAX_SIZE) { alert(`${file.name} (${collabFileSize(file.size)}) — 3MB 를 넘습니다.`); return; }
-            const isImg = String(file.type || '').indexOf('image/') === 0;
-            const dataUrl = isImg ? await shrinkImageToDataUrl(file, PARTNER_IMG_MAX_PX) : await partnerReadDataUrl(file);
-            if (!dataUrl) { alert('파일을 읽지 못했습니다.'); return; }
+            if (file.size > PARTNER_FILE_MAX_SIZE) { alert(`${file.name} (${collabFileSize(file.size)}) — ${gwFileSizeText(PARTNER_FILE_MAX_SIZE)} 를 넘습니다.`); return; }
+            const up = await gwUploadAsDataUrlShape(file, PARTNER_IMG_MAX_PX);
+            if (up.error) { alert('파일을 올리지 못했습니다.\n\n· ' + up.error); return; }
             const prev = partnerDocFiles[docId] || {};
-            partnerDocFiles[docId] = { name: file.name, type: file.type || '', size: file.size || 0, dataUrl, tidNo: prev.tidNo || '' };
+            partnerDocFiles[docId] = Object.assign(up, { tidNo: prev.tidNo || '' });
             renderPartnerDocSection();
         }
         function removePartnerDoc(docId) {
@@ -52940,7 +53085,7 @@ const QUOTE_TEMPLATES = [
                     return {
                         docId: x.id, name: x.name, required: !!x.required, tid: !!x.tid,
                         tidNo: f.tidNo || '',
-                        file: f.dataUrl ? { name: f.name, type: f.type, size: f.size, dataUrl: f.dataUrl } : null
+                        file: f.dataUrl ? Object.assign({ name: f.name, type: f.type, size: f.size, dataUrl: f.dataUrl }, f.path ? { path: f.path } : {}) : null
                     };
                 });
                 // VAN사 구역에서 받은 TID 번호와 채번 스냅샷을 '채번 캡처본' 서류 자리에 담습니다
@@ -52950,7 +53095,7 @@ const QUOTE_TEMPLATES = [
                         docId: sd.id, name: sd.name, required: !!PARTNER_VAN_NEEDS_CAPTURE[van], tid: true,
                         tidNo: tidList.join(', '),
                         file: null,
-                        files: partnerVanShots.map(f => ({ name: f.name, type: f.type, size: f.size, dataUrl: f.dataUrl }))
+                        files: partnerVanShots.map(f => Object.assign({ name: f.name, type: f.type, size: f.size, dataUrl: f.dataUrl }, f.path ? { path: f.path } : {}))
                     });
                 }
             }
