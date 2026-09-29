@@ -39,6 +39,7 @@
  *   GET  /api/partner/boot    그 파트너사 몫의 자료만         (Authorization: Bearer 토큰)
  *   POST /api/partner/save    { key, upserts, removes }       그 파트너사 것만 반영 → 반영된 목록
  *   POST /api/auth/lookup     { id }                          로그인 창 아이디 → 이메일 (1단계)
+ *   GET  /api/auth/logins     모든 직원의 마지막 로그인 시각 (관리자만 · 2026-09-29)
  *
  * 첨부파일 (2026-09-29 · 3단계 — 판단은 _files.js)
  *   POST /api/files/session             로그인 토큰 → 파일용 쿠키 (직원 · 파트너 모두)
@@ -423,6 +424,20 @@ export async function onRequest(context) {
                 const password = tempPassword();
                 await auth.call('POST', '/admin/users', { email, password, email_confirm: true, user_metadata: { name: str(rec.name), must_change_password: true } });
                 return json(200, { ok: true, password });
+            }
+            // 모든 직원의 마지막 로그인 시각 — 사용자 관리 표용 (2026-09-29 · 관리자만)
+            //   Supabase Auth 의 last_sign_in_at = 아이디 · 비밀번호로 실제 로그인한 때 (자동 로그인 유지 중에는 바뀌지 않습니다)
+            if (path === '/api/auth/logins' && method === 'GET') {
+                const ad = await requireAdmin(env, store, request);
+                if (ad.error) return ad.error;
+                const out = {};
+                for (let page = 1; page <= 25; page++) {
+                    const r = await auth.call('GET', `/admin/users?page=${page}&per_page=200`);
+                    const list = (r && r.users) || [];
+                    list.forEach(u => { if (u.email) out[str(u.email).toLowerCase()] = { lastSignIn: u.last_sign_in_at || '', createdAt: u.created_at || '' }; });
+                    if (list.length < 200) break;
+                }
+                return json(200, { ok: true, logins: out });
             }
             if (path === '/api/auth/users') {
                 // 관리자 그룹(gwUsers.v1 의 groupId 'admin') 으로 로그인한 사람만

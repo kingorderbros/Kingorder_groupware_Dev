@@ -1848,6 +1848,19 @@
                             <span class="gw-dot" aria-hidden="true"></span><span class="gw-label">컴팩트</span>
                         </button>
                     </div>
+                    <!-- 접속 중 — 지금 그룹웨어를 열어 둔 사람 수와 목록 (2026-09-29) -->
+                    <div class="relative" id="presence-wrap">
+                        <button type="button" id="presence-btn" onclick="togglePresencePanel()" title="접속 중인 사람" aria-label="접속 중인 사람" class="relative text-gray-500 hover:text-gray-700 h-8 px-2 flex items-center gap-1.5 rounded-full border border-gray-200 bg-white text-xs">
+                            <span class="w-2 h-2 rounded-full bg-green-500"></span><span id="presence-count">1</span>
+                        </button>
+                        <div id="presence-panel" class="hidden absolute right-0 top-full mt-2 w-[20rem] max-w-[92vw] bg-white rounded-lg shadow-xl border border-gray-200 z-50">
+                            <div class="px-4 py-2.5 border-b border-gray-100 flex items-center justify-between">
+                                <p class="text-sm font-bold text-gray-800"><i class="fas fa-circle text-[8px] text-green-500 mr-1 align-middle"></i>접속 상태 <span id="presence-panel-count" class="ml-1 text-[11px] font-normal text-gray-400"></span></p>
+                                <button type="button" onclick="togglePresencePanel(false)" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times"></i></button>
+                            </div>
+                            <div id="presence-panel-list" class="max-h-[60vh] overflow-y-auto divide-y divide-gray-50"></div>
+                        </div>
+                    </div>
                     <!-- 알림함 — 받은 알림을 모두 모아 두고, 안 읽은 건수를 숫자로 보여 줍니다 (2026-09-05) -->
                     <div class="relative">
                         <button type="button" id="noti-bell-btn" onclick="toggleNotiPanel()" title="알림" aria-label="알림" class="relative text-gray-400 hover:text-gray-600 w-8 h-8 flex items-center justify-center">
@@ -2124,7 +2137,7 @@
                                 </div>
                             </div>
                             <div class="overflow-x-auto">
-                                <table class="w-full text-left border-collapse">
+                                <table class="w-full text-left border-collapse min-w-[1400px]">
                                     <thead>
                                         <tr class="bg-gray-50 text-gray-500 text-sm border-b border-gray-200">
                                             <th class="p-4 font-medium">이름</th>
@@ -2135,6 +2148,9 @@
                                             <th class="p-4 font-medium">권한 레벨</th>
                                             <th class="p-4 font-medium">권한 그룹</th>
                                             <th class="p-4 font-medium">이메일</th>
+                                            <th class="p-4 font-medium text-center whitespace-nowrap">로그인 상태</th>
+                                            <th class="p-4 font-medium whitespace-nowrap">마지막 로그인</th>
+                                            <th class="p-4 font-medium whitespace-nowrap">마지막 접속</th>
                                             <th class="p-4 font-medium text-center">비밀번호</th>
                                             <th class="p-4 font-medium text-center">관리</th>
                                         </tr>
@@ -9620,6 +9636,7 @@ const QUOTE_TEMPLATES = [
     <script src="js/kob-db.js"></script>
     <script src="js/kob-store.js"></script>
     <script src="js/kob-files.js"></script>
+    <script src="js/kob-presence.js"></script>
     <script type="text/x-kob-main" id="kob-main">
         // ==================== 운행내역 백엔드 API 설정 ====================
         // 같은 서버(server.js)에서 HTML을 서빙하면 상대경로로 동작.
@@ -11032,6 +11049,12 @@ const QUOTE_TEMPLATES = [
                     navigate(match[1], firstMenu);
                 }
             }
+            // 접속 상태 — 나를 '접속 중' 으로 알리고 마지막 로그인 · 접속을 남깁니다 (2026-09-29)
+            if (window.kobPresence) {
+                const acct = myAccount();
+                if (acct && acct.id) kobPresence.start({ id: acct.id, justLoggedIn: true });
+            }
+            renderPresenceUi();
         }
 
         // ==================== 비밀번호 — 변경 · 재설정 · 임시 발급 (2026-09-16) ====================
@@ -11282,6 +11305,114 @@ const QUOTE_TEMPLATES = [
             // 열려 있는 알림함도 함께 새로 그립니다
             const panel = document.getElementById('noti-panel');
             if (panel && !panel.classList.contains('hidden')) renderNotiPanel();
+        }
+
+        // ==================== 접속 상태 (2026-09-29) ====================
+        // 자료는 js/kob-presence.js. 여기서는 점 · 숫자 · 목록 · 사용자 관리 칸을 그립니다.
+        let authLogins = null;        // 관리자만 — { 이메일: { lastSignIn } } (서버 /api/auth/logins)
+        let authLoginsAsked = false;
+        function presenceWhen(iso) {
+            if (!iso) return '';
+            const d = new Date(iso); if (isNaN(d)) return '';
+            const min = Math.floor((Date.now() - d.getTime()) / 60000);
+            if (min < 1) return '방금 전';
+            if (min < 60) return `${min}분 전`;
+            if (min < 24 * 60) return `${Math.floor(min / 60)}시간 전`;
+            const pad = n => String(n).padStart(2, '0');
+            const days = Math.floor(min / 1440);
+            const md = `${d.getMonth() + 1}월 ${d.getDate()}일 ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+            return days < 7 ? `${days}일 전 (${md})` : (d.getFullYear() === new Date().getFullYear() ? md : `${d.getFullYear()}. ${md}`);
+        }
+        function presenceInfo(u) {
+            const id = u && u.id ? u.id : u;
+            const p = window.kobPresence ? kobPresence.info(id) : { online: false, lastLogin: '', lastSeen: '' };
+            const rec = (u && u.email && authLogins) ? authLogins[String(u.email).toLowerCase()] : null;
+            // 서버 기록과 이 목록 기록 중 늦은 것
+            const lastLogin = [p.lastLogin, rec && rec.lastSignIn].filter(Boolean).sort().pop() || '';
+            return { online: p.online, lastLogin, lastSeen: p.lastSeen };
+        }
+        function presenceDotClass(id) { return presenceInfo(id).online ? 'bg-green-500' : 'bg-gray-300'; }
+        function presenceTitle(id) {
+            const p = presenceInfo(id);
+            return p.online ? '접속 중' : (p.lastSeen ? `오프라인 · 마지막 접속 ${presenceWhen(p.lastSeen)}` : '오프라인');
+        }
+        function presenceUserCells(user) {
+            const p = presenceInfo(user);
+            const state = p.online
+                ? '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-green-50 text-green-700 border border-green-200"><span class="w-1.5 h-1.5 rounded-full bg-green-500"></span>접속 중</span>'
+                : '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-gray-50 text-gray-500 border border-gray-200"><span class="w-1.5 h-1.5 rounded-full bg-gray-300"></span>오프라인</span>';
+            const cell = v => v ? `<span title="${escapeHtml(new Date(v).toLocaleString('ko-KR'))}">${escapeHtml(presenceWhen(v))}</span>` : '<span class="text-gray-300">-</span>';
+            return `<td class="p-4 text-center whitespace-nowrap" data-presence-state="${escapeHtml(String(user.id))}">${state}</td>
+                        <td class="p-4 whitespace-nowrap text-gray-600" data-presence-login="${escapeHtml(String(user.id))}">${cell(p.lastLogin)}</td>
+                        <td class="p-4 whitespace-nowrap text-gray-600" data-presence-seen="${escapeHtml(String(user.id))}">${p.online ? '<span class="text-green-600">지금</span>' : cell(p.lastSeen)}</td>`;
+        }
+        // 관리자면 서버에서 모든 직원의 마지막 로그인을 한 번 받아 옵니다 (그룹웨어를 새로 연 뒤로 안 들어온 사람도 보이게)
+        function loadAuthLogins() {
+            if (authLoginsAsked || !(window.kobStorage && kobStorage.mode === 'supabase')) return;
+            authLoginsAsked = true;
+            apiFetch(API_BASE + '/api/auth/logins').then(r => r.ok ? r.json() : null).then(j => {
+                if (j && j.logins) { authLogins = j.logins; renderPresenceUi(); }
+            }).catch(() => {});
+        }
+        // 눈에 보이는 사람 (조직도에 숨긴 사람 · 관리자 계정 빼고)
+        function presencePeople() {
+            return (typeof localUsers !== 'undefined' ? localUsers : [])
+                .filter(u => u && u.id && u.hideInOrg !== true && !(typeof ORG_HIDDEN_DEPTS !== 'undefined' && ORG_HIDDEN_DEPTS.includes(u.dept)));
+        }
+        // 점 · 숫자 · 목록 · 표 칸을 그 자리에서 고칩니다 (화면 전체를 다시 그리지 않음)
+        function renderPresenceUi() {
+            if (typeof document === 'undefined') return;
+            const people = presencePeople();
+            const on = new Set(window.kobPresence ? kobPresence.onlineIds() : []);
+            const cnt = people.filter(u => on.has(String(u.id))).length;
+            const c = document.getElementById('presence-count'); if (c) c.textContent = String(Math.max(cnt, window.kobPresence && kobPresence.enabled() ? 1 : 0));
+            document.querySelectorAll('[data-presence-dot]').forEach(el => {
+                const id = el.getAttribute('data-presence-dot');
+                el.classList.remove('bg-green-500', 'bg-gray-300'); el.classList.add(presenceDotClass(id)); el.title = presenceTitle(id);
+            });
+            const byId = new Map((typeof localUsers !== 'undefined' ? localUsers : []).map(u => [String(u.id), u]));
+            document.querySelectorAll('[data-presence-state]').forEach(td => {
+                const u = byId.get(td.getAttribute('data-presence-state')); if (!u) return;
+                const tmp = document.createElement('tr'); tmp.innerHTML = presenceUserCells(u);
+                const cells = tmp.children;
+                td.innerHTML = cells[0].innerHTML;
+                const l = td.nextElementSibling; if (l && l.hasAttribute('data-presence-login')) { l.innerHTML = cells[1].innerHTML; const s = l.nextElementSibling; if (s && s.hasAttribute('data-presence-seen')) s.innerHTML = cells[2].innerHTML; }
+            });
+            const panel = document.getElementById('presence-panel');
+            if (panel && !panel.classList.contains('hidden')) renderPresencePanel();
+        }
+        function renderPresencePanel() {
+            const box = document.getElementById('presence-panel-list');
+            if (!box) return;
+            const list = presencePeople().map(u => Object.assign({ u }, presenceInfo(u)));
+            list.sort((a, b) => (b.online - a.online) || String(b.lastSeen || '').localeCompare(String(a.lastSeen || '')) || String(a.u.name).localeCompare(String(b.u.name), 'ko'));
+            const onCnt = list.filter(x => x.online).length;
+            const cnt = document.getElementById('presence-panel-count'); if (cnt) cnt.textContent = `${onCnt}명 접속 · 전체 ${list.length}명`;
+            box.innerHTML = list.map(x => `
+                <div class="flex items-center gap-2.5 px-4 py-2">
+                    ${orgAvatarHtml(x.u)}
+                    <div class="min-w-0 flex-1">
+                        <p class="text-sm font-medium text-gray-800 truncate">${escapeHtml(x.u.name || '')} <span class="text-[11px] font-normal text-gray-400">${escapeHtml(x.u.rank || '')}</span></p>
+                        <p class="text-[11px] text-gray-400 truncate">${escapeHtml(typeof orgDeptName === 'function' ? orgDeptName(x.u.dept) : (x.u.dept || ''))}${x.u.team ? ' · ' + escapeHtml(x.u.team) : ''}</p>
+                    </div>
+                    <span class="shrink-0 text-[11px] ${x.online ? 'text-green-600 font-semibold' : 'text-gray-400'}">${x.online ? '접속 중' : (x.lastSeen ? escapeHtml(presenceWhen(x.lastSeen)) : '기록 없음')}</span>
+                </div>`).join('') || '<p class="px-4 py-8 text-center text-sm text-gray-400">구성원이 없습니다.</p>';
+        }
+        function togglePresencePanel(force) {
+            const panel = document.getElementById('presence-panel');
+            if (!panel) return;
+            const open = typeof force === 'boolean' ? force : panel.classList.contains('hidden');
+            panel.classList.toggle('hidden', !open);
+            if (open) renderPresencePanel();
+        }
+        if (typeof window !== 'undefined' && window.addEventListener) {
+            window.addEventListener('kob-presence', () => renderPresenceUi());
+            setInterval(() => renderPresenceUi(), 60 * 1000);      // '3분 전' 같은 글자를 1분마다 새로
+            document.addEventListener('click', (e) => {            // 바깥을 누르면 목록을 닫습니다
+                const w = document.getElementById('presence-wrap');
+                const p = document.getElementById('presence-panel');
+                if (w && p && !p.classList.contains('hidden') && e.target && e.target.isConnected !== false && !w.contains(e.target)) p.classList.add('hidden');
+            });
         }
 
         function toggleNotiPanel() {
@@ -13193,6 +13324,7 @@ const QUOTE_TEMPLATES = [
         function renderUsers() {
             const tbody = document.getElementById('users-table-body');
             if (!tbody) return;
+            loadAuthLogins();          // 관리자 — 서버의 로그인 기록을 한 번 받아 둡니다 (2026-09-29)
             const groupName = id => (permissionGroups.find(g => g.id === id) || {}).name || '미지정';
             tbody.innerHTML = localUsers.map(user => {
                 const st = orgDeptStyle(user.dept);
@@ -13201,16 +13333,17 @@ const QUOTE_TEMPLATES = [
                 const duty = String(user.duty || '').trim();
                 return `
                     <tr class="border-b border-gray-100 hover:bg-gray-50 cursor-pointer" onclick="openOrgEdit('${escapeHtml(user.id)}')">
-                        <td class="p-4 font-medium">
+                        <td class="p-4 font-medium whitespace-nowrap">
                             <div class="flex items-center gap-2">${orgAvatarHtml(user)}<span>${escapeHtml(user.name)}</span>${user.hideInOrg === true ? '<span class="px-1.5 py-0.5 bg-gray-200 text-gray-600 rounded text-[11px] whitespace-nowrap" title="이 사람은 조직도에 나오지 않습니다"><i class="fas fa-eye-slash mr-0.5"></i>조직도 제외</span>' : ''}</div>
                         </td>
-                        <td class="p-4"><span class="px-2 py-1 ${st.chip} rounded-full text-xs">${escapeHtml(orgDeptName(user.dept))}</span></td>
+                        <td class="p-4 whitespace-nowrap"><span class="px-2 py-1 ${st.chip} rounded-full text-xs">${escapeHtml(orgDeptName(user.dept))}</span></td>
                         <td class="p-4 bg-rose-50/30 ${team ? '' : 'text-gray-300'}">${team ? escapeHtml(team) : '미지정'}</td>
                         <td class="p-4">${escapeHtml(user.rank || '')}</td>
                         <td class="p-4 bg-rose-50/30 max-w-[220px]"><span class="block truncate ${duty ? 'text-gray-700' : 'text-gray-300'}" title="${escapeHtml(duty)}">${duty ? escapeHtml(duty) : '미지정'}</span></td>
                         <td class="p-4"><span class="px-2 py-1 ${levelBadgeClass(lvl)} rounded-full text-xs">${escapeHtml(levelNames[lvl] || '매니저')}</span></td>
                         <td class="p-4"><span class="px-2 py-1 bg-purple-100 text-purple-700 rounded-full text-xs">${escapeHtml(groupName(user.groupId))}</span>${user.isAdmin === true ? ' <span class="px-2 py-1 bg-indigo-100 text-indigo-700 rounded-full text-xs" title="그룹웨어 관리자 권한 겸직"><i class="fas fa-user-shield mr-0.5"></i>관리자</span>' : ''}</td>
                         <td class="p-4">${escapeHtml(user.email)}</td>
+                        ${presenceUserCells(user)}
                         <td class="p-4 text-center whitespace-nowrap" onclick="event.stopPropagation()">
                             <button onclick="resetUserPassword('${escapeHtml(user.id)}')" title="임시 비밀번호를 새로 만들어 전달합니다" class="px-2 py-1 text-xs rounded border border-amber-300 text-amber-700 bg-amber-50 hover:bg-amber-100"><i class="fas fa-key mr-1"></i>초기화</button>
                         </td>
@@ -35507,6 +35640,12 @@ const QUOTE_TEMPLATES = [
         // 구성원 사진 — 올린 사진이 있으면 사진을, 없으면 이름 첫 글자를 씁니다.
         //   사진은 정사각형으로 잘라 담기 때문에(object-cover) 세로 사진도 얼굴이 가운데로 옵니다.
         function orgAvatarHtml(u, size) {
+            const img = orgAvatarCore(u, size);
+            if (!u || !u.id || !window.kobPresence || !kobPresence.enabled()) return img;
+            const dot = size === 'lg' ? 'w-3.5 h-3.5' : 'w-3 h-3';
+            return `<span class="relative inline-flex shrink-0">${img}<span data-presence-dot="${escapeHtml(String(u.id))}" class="${dot} absolute -bottom-0.5 -right-0.5 rounded-full border-2 border-white ${presenceDotClass(u.id)}" title="${escapeHtml(presenceTitle(u.id))}"></span></span>`;
+        }
+        function orgAvatarCore(u, size) {
             const st = orgDeptStyle(u.dept);
             const cls = size === 'lg' ? 'w-12 h-12 text-lg' : 'w-9 h-9 text-sm';
             const photo = (u && u.photo) || '';
