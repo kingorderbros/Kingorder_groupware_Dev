@@ -953,6 +953,11 @@
 
             <!-- 2단계: 탭 (운행일지 입력 / 차량 반납) -->
             <div id="m-form-wrap" class="hidden flex-1 p-5 pb-24">
+                <!-- 도착 입력이 필요한 운행이 있으면 맨 위에 알림 — 누르면 아래 '완료 대기' 로 내려가 입력칸에 바로 (2026-09-29) -->
+                <button type="button" id="m-pending-banner" onclick="mobileGoPending()"
+                        class="hidden w-full mb-4 px-4 py-3 rounded-lg bg-amber-50 border border-amber-300 text-amber-800 text-sm font-semibold text-left flex items-center gap-2">
+                    <i class="fas fa-hourglass-half text-amber-500"></i><span id="m-pending-banner-text" class="flex-1"></span><i class="fas fa-chevron-down text-amber-400"></i>
+                </button>
                 <!-- 탭 네비게이션 -->
                 <div class="flex mb-5 bg-gray-100 rounded-lg p-1">
                     <button type="button" id="m-tab-log-btn" onclick="mobileSwitchTab('log')" class="flex-1 py-2 rounded-md text-sm font-semibold bg-white text-indigo-600 shadow-sm">
@@ -3433,8 +3438,9 @@
                                 <p class="text-sm font-medium text-gray-500"><span id="vl-stat-count-label">전체</span> 운행 건수</p>
                                 <h3 id="vl-stat-count" class="text-2xl font-bold text-gray-800 mt-1">0건</h3>
                             </div>
-                            <div class="bg-white p-4 rounded-lg shadow-sm border-t-4 border-amber-500">
-                                <p class="text-sm font-medium text-gray-500">진행중 (도착 미입력)</p>
+                            <div id="vl-stat-progress-card" onclick="toggleVlProgressOnly()" title="누르면 도착 입력이 필요한 운행만 봅니다"
+                                 class="bg-white p-4 rounded-lg shadow-sm border-t-4 border-amber-500 cursor-pointer hover:bg-amber-50 transition-colors">
+                                <p class="text-sm font-medium text-gray-500">진행중 (도착 미입력) <span id="vl-progress-only-hint" class="text-[11px] text-amber-600"></span></p>
                                 <h3 id="vl-stat-progress" class="text-2xl font-bold text-gray-800 mt-1">0건</h3>
                             </div>
                             <div class="bg-white p-4 rounded-lg shadow-sm border-t-4 border-blue-500">
@@ -48442,6 +48448,75 @@ const QUOTE_TEMPLATES = [
             sel.value = labels.includes(prev) ? prev : '';
         }
 
+        // ---------- PC 에서 도착 입력 (2026-09-29) ----------
+        // 예전엔 PC 운행내역에서 진행중 건에 도착을 넣을 길이 없었습니다(수정은 차량 담당만). 폰의 '도착 완료 처리' 와 같은 서버 기능을 씁니다.
+        // 서버가 확인: 본인 운행이거나 차량 담당(예약관리 · 운행내역 · 관리업무센터 권한) · 관리자만.
+        let vlProgressOnly = false;
+        function toggleVlProgressOnly() { vlProgressOnly = !vlProgressOnly; renderVehicleLogs(); }
+        function openVlArrive(id) {
+            const l = vehicleLogs.find(x => x.id === id);
+            if (!l) return;
+            closeVlArrive();
+            const cls = 'w-full p-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500';
+            const box = document.createElement('div');
+            box.id = 'vl-arrive-modal';
+            box.className = 'fixed inset-0 z-[70] bg-black/40 flex items-center justify-center p-4';
+            box.innerHTML = `
+                <div class="bg-white rounded-lg shadow-xl w-full max-w-md" onclick="event.stopPropagation()">
+                    <div class="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
+                        <h3 class="font-bold text-gray-800"><i class="fas fa-flag-checkered text-indigo-500 mr-1"></i>도착 입력</h3>
+                        <button type="button" onclick="closeVlArrive()" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times"></i></button>
+                    </div>
+                    <div class="p-5 space-y-3 text-sm">
+                        <p class="text-gray-600">${escapeHtml(l.date || '')} · <b>${escapeHtml(l.vehicle || '')}</b> · ${escapeHtml(l.driver || '')}<br>
+                           <span class="text-xs text-gray-400">${escapeHtml(l.from || '-')} → ${escapeHtml(l.to || '-')} · 출발 ${(Number(l.startKm) || 0).toLocaleString()}km${l.departTime ? ' · ' + escapeHtml(l.departTime) : ''}</span></p>
+                        <div><label class="block text-xs font-medium text-gray-600 mb-1">도착 주행거리(km) <span class="text-red-500">*</span></label>
+                             <input type="number" inputmode="numeric" id="vla-end" class="${cls}" placeholder="출발 ${(Number(l.startKm) || 0).toLocaleString()} 보다 큰 값" /></div>
+                        <div class="grid grid-cols-2 gap-2">
+                            <div><label class="block text-xs font-medium text-gray-600 mb-1">도착시간</label><input type="time" id="vla-arrive" value="${escapeHtml(l.arriveTime || '')}" class="${cls}" /></div>
+                            <div><label class="block text-xs font-medium text-gray-600 mb-1">유류비(원)</label><input type="number" id="vla-fuel" value="${l.fuel ? Number(l.fuel) : ''}" class="${cls}" /></div>
+                            <div><label class="block text-xs font-medium text-gray-600 mb-1">통행료(원)</label><input type="number" id="vla-toll" value="${l.toll ? Number(l.toll) : ''}" class="${cls}" /></div>
+                            <div><label class="block text-xs font-medium text-gray-600 mb-1">동승자</label><input type="text" id="vla-pax" value="${escapeHtml(l.passengers || '')}" class="${cls}" /></div>
+                        </div>
+                        <div><label class="block text-xs font-medium text-gray-600 mb-1">운행 목적 / 메모</label><textarea id="vla-memo" rows="2" class="${cls}">${escapeHtml(l.memo || '')}</textarea></div>
+                        <p id="vla-msg" class="text-xs min-h-[1rem]"></p>
+                    </div>
+                    <div class="px-5 py-3 border-t border-gray-100 flex justify-end gap-2">
+                        <button type="button" onclick="closeVlArrive()" class="px-4 py-2 text-sm bg-gray-200 text-gray-700 rounded hover:bg-gray-300">닫기</button>
+                        <button type="button" id="vla-submit" onclick="submitVlArrive('${escapeHtml(l.id)}')" class="px-4 py-2 text-sm bg-indigo-600 text-white rounded hover:bg-indigo-700">도착 완료 처리</button>
+                    </div>
+                </div>`;
+            box.addEventListener('click', closeVlArrive);
+            document.body.appendChild(box);
+            setTimeout(() => { const e = document.getElementById('vla-end'); if (e) e.focus(); }, 50);
+        }
+        function closeVlArrive() { const m = document.getElementById('vl-arrive-modal'); if (m) m.remove(); }
+        async function submitVlArrive(id) {
+            const v = k => (document.getElementById('vla-' + k) || {}).value || '';
+            const msg = document.getElementById('vla-msg');
+            const btn = document.getElementById('vla-submit');
+            const endKm = Number(v('end')) || 0;
+            const l = vehicleLogs.find(x => x.id === id) || {};
+            if (!(endKm > 0)) { msg.className = 'text-xs min-h-[1rem] text-red-500'; msg.textContent = '도착 주행거리를 입력하세요.'; return; }
+            if (endKm < (Number(l.startKm) || 0)) { msg.className = 'text-xs min-h-[1rem] text-red-500'; msg.textContent = '도착 주행거리는 출발보다 작을 수 없습니다.'; return; }
+            btn.disabled = true; msg.className = 'text-xs min-h-[1rem] text-gray-400'; msg.textContent = '처리 중…';
+            try {
+                const res = await apiFetch(VEHICLE_LOG_API + '/complete', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id, endKm, arriveTime: v('arrive'), fuel: v('fuel') === '' ? '' : (Number(v('fuel')) || 0),
+                                           toll: v('toll') === '' ? '' : (Number(v('toll')) || 0), passengers: v('pax').trim(), memo: v('memo').trim() })
+                });
+                const j = await res.json().catch(() => ({}));
+                if (!res.ok || j.ok === false) throw new Error(j.error || ('HTTP ' + res.status));
+                closeVlArrive();
+                if (typeof showAppToast === 'function') showAppToast('도착을 입력해 운행을 완료했습니다.', 'green');
+                await reloadVehicleLogs();
+            } catch (e) {
+                btn.disabled = false;
+                msg.className = 'text-xs min-h-[1rem] text-red-500'; msg.textContent = '완료하지 못했습니다: ' + ((e && e.message) || '');
+            }
+        }
+
         function renderVehicleLogs() {
             const tbody = document.getElementById('vehicle-logs-table-body');
             // 차량 필터 드롭다운 최신화 후 선택값 읽기
@@ -48469,10 +48544,16 @@ const QUOTE_TEMPLATES = [
             setStat('vl-stat-count-label', vehicleFilter || '전체');
             if (!tbody) return;
 
+            // '진행중 (도착 미입력)' 칸을 누르면 그것만 (2026-09-29)
+            const onlyCard = document.getElementById('vl-stat-progress-card');
+            if (onlyCard) onlyCard.classList.toggle('ring-2', vlProgressOnly), onlyCard.classList.toggle('ring-amber-400', vlProgressOnly);
+            const onlyHint = document.getElementById('vl-progress-only-hint');
+            if (onlyHint) onlyHint.textContent = vlProgressOnly ? '· 이것만 보는 중 (다시 누르면 전체)' : '';
+            if (vlProgressOnly) list = list.filter(l => (l.status || (Number(l.endKm) > 0 ? '완료' : '진행중')) === '진행중');
             list = [...list].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
 
             if (list.length === 0) {
-                const emptyMsg = (vehicleFilter || term) ? '조건에 해당하는 운행내역이 없습니다.' : '운행내역이 없습니다.';
+                const emptyMsg = vlProgressOnly ? '도착 입력이 필요한 운행이 없습니다.' : (vehicleFilter || term) ? '조건에 해당하는 운행내역이 없습니다.' : '운행내역이 없습니다.';
                 tbody.innerHTML = `<tr><td colspan="17" class="p-4 text-center text-gray-500">${emptyMsg}</td></tr>`;
                 return;
             }
@@ -48483,7 +48564,8 @@ const QUOTE_TEMPLATES = [
                 const isDone = (l.status || (Number(l.endKm) > 0 ? '완료' : '진행중')) === '완료';
                 const statusBadge = isDone
                     ? '<span class="px-2 py-0.5 text-xs rounded-full font-medium bg-green-100 text-green-700">완료</span>'
-                    : '<span class="px-2 py-0.5 text-xs rounded-full font-medium bg-amber-100 text-amber-700"><i class="fas fa-hourglass-half mr-1"></i>진행중</span>';
+                    : `<button type="button" onclick="openVlArrive('${escapeHtml(l.id)}')" title="도착 주행거리를 입력해 완료합니다"
+                              class="px-2 py-0.5 text-xs rounded-full font-medium bg-amber-100 text-amber-700 hover:bg-amber-200 border border-amber-300"><i class="fas fa-hourglass-half mr-1"></i>진행중 · 도착 입력</button>`;
                 // 진행중(도착 미입력)은 도착·주행거리를 '-'로 표시
                 const endKmCell = isDone ? (Number(l.endKm) || 0).toLocaleString('en-US') : '<span class="text-gray-300">-</span>';
                 const distCell = isDone ? vlDistance(l).toLocaleString('en-US') : '<span class="text-gray-300">-</span>';
@@ -55468,9 +55550,23 @@ const QUOTE_TEMPLATES = [
             }
         }
 
+        // 맨 위 알림을 누르면 운행일지 탭으로 가서 첫 번째 도착 주행거리 칸으로 (2026-09-29)
+        function mobileGoPending() {
+            if (typeof mobileSwitchTab === 'function') mobileSwitchTab('log');
+            const first = document.querySelector('#m-pending-list input[id^="mp-end-"]');
+            const box = document.getElementById('m-pending-list');
+            (first || box || document.body).scrollIntoView({ behavior: 'smooth', block: 'center' });
+            if (first) setTimeout(() => first.focus(), 400);
+        }
         function renderMobilePending(list) {
             const el = document.getElementById('m-pending-list');
             if (!el) return;
+            const banner = document.getElementById('m-pending-banner');
+            if (banner) {
+                banner.classList.toggle('hidden', !list.length);
+                const bt = document.getElementById('m-pending-banner-text');
+                if (bt) bt.textContent = `도착 입력이 필요한 운행 ${list.length}건 — 눌러서 입력하기`;
+            }
             if (!list.length) {
                 el.innerHTML = '<p class="text-gray-400 text-xs">도착 입력이 필요한 운행일지가 없습니다.</p>';
                 return;
