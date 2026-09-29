@@ -49,6 +49,13 @@ global.fetch = async (url, opt = {}) => {
     delete store['gwHolidays.v1'];
     r = await call();
     ok(r.status === 502, '예전 것도 없고 구글도 안 되면 502');
+    ok(H.isStale({ days: {}, updatedAt: 'x' }), '저장 날짜가 깨졌으면 새로 받는다');
+    ok(H.recentlyFailed({ failedAt: new Date().toISOString() }) && !H.recentlyFailed({ failedAt: '2020-01-01' }) && !H.recentlyFailed({}), '1시간 안에 실패했으면 쉼');
+    icsStatus = 500; store['gwHolidays.v1'] = { updatedAt: '2020-01-01T00:00:00Z', days: { '2026-10-03': '개천절' } }; const before = icsCalls;
+    await call(); await call(); await call();
+    ok(icsCalls === before + 1 && store['gwHolidays.v1'].failedAt, '구글이 안 될 때 요청마다 다시 가지 않는다 (실패 뒤 1시간 쉼)');
+    r = await call('?refresh=1');
+    ok(r.status === 401, '억지로 새로 받기(refresh=1)는 로그인한 관리자만');
     const P = await import('../functions/api/_partner.js');
     ok(P.SHARED_KEYS.includes('gwHolidays.v1'), '파트너센터도 받는다 (설치 희망일 영업일 계산)');
     console.log(`\n=========== 통과 ${pass} · 실패 ${fail} ===========`);

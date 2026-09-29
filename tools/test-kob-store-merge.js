@@ -131,6 +131,38 @@ const flushNow = async (st) => { await st.flush(); await wait(); };
         ok(sv.rows.get('gwList.v1').length === 1 && sv.rows.get('gwList.v1')[0].n === 2, '원래 있던 항목을 둘 다 고친 것은 예전처럼 나중 것 (번호를 바꾸지 않음)');
     }
 
+    console.log('\n[8] 번호를 바꾼 뒤 — 검토에서 나온 것 (2026-09-29)');
+    {
+        const sv = makeServer({ 'gwList.v1': [{ id: 'CT-00001', who: 'x' }] });
+        const A = boot(sv); await wait();
+        sv.rows.set('gwList.v1', [{ id: 'CT-00001', who: 'x' }, { id: 'CT-00002', who: '남' }]);
+        A.store.setItem('gwList.v1', JSON.stringify([{ id: 'CT-00001', who: 'x' }, { id: 'CT-00002', who: '나' }]));
+        await flushNow(A.store);
+        // 화면 변수가 아직 옛 번호(CT-00002 = 내 것)로 한 번 더 저장
+        A.store.setItem('gwList.v1', JSON.stringify([{ id: 'CT-00001', who: 'x' }, { id: 'CT-00002', who: '나', memo: '고침' }]));
+        await flushNow(A.store);
+        const out = sv.rows.get('gwList.v1');
+        ok(out.find(x => x.id === 'CT-00002').who === '남' && out.find(x => x.id === 'CT-00003').memo === '고침' && out.length === 3, '화면이 옛 번호로 다시 저장해도 남의 항목을 덮지 않고 내 항목(새 번호)에 들어간다');
+    }
+    {
+        const sv = makeServer({ 'gwUserPresence.v1': [{ id: 'u1', lastSeen: 'a' }] });
+        const A = boot(sv); await wait();
+        sv.rows.set('gwUserPresence.v1', [{ id: 'u1', lastSeen: 'a' }, { id: 'u5', lastSeen: 'PC' }]);   // 같은 사람이 다른 창에서 먼저
+        A.store.setItem('gwUserPresence.v1', JSON.stringify([{ id: 'u1', lastSeen: 'a' }, { id: 'u5', lastSeen: '폰' }]));
+        await flushNow(A.store);
+        const out = sv.rows.get('gwUserPresence.v1');
+        ok(out.length === 2 && !out.find(x => x.id === 'u6') && out.find(x => x.id === 'u5').lastSeen === '폰', '접속 기록(사람 번호)은 번호를 바꾸지 않는다 — 남의 번호(u6)에 기록이 붙지 않음');
+    }
+    {
+        const sv = makeServer({ 'gwInboundRecords.v1': { seq: 14, records: [{ id: 'IN-0013' }] } });
+        const A = boot(sv); await wait();
+        sv.rows.set('gwInboundRecords.v1', { seq: 15, records: [{ id: 'IN-0013' }, { id: 'IN-0014', who: '남' }] });
+        A.store.setItem('gwInboundRecords.v1', JSON.stringify({ seq: 15, records: [{ id: 'IN-0013' }, { id: 'IN-0014', who: '나' }] }));
+        await flushNow(A.store);
+        const out = sv.rows.get('gwInboundRecords.v1');
+        ok(out.records.find(x => x.id === 'IN-0015' && x.who === '나') && out.seq >= 16, '인바운드 번호를 바꾸면 다음 번호(seq)도 그 뒤로 올린다');
+    }
+
     console.log(`\n=========== 통과 ${pass} · 실패 ${fail} ===========`);
     process.exit(fail ? 1 : 0);
 })().catch(e => { console.error(e); process.exit(1); });

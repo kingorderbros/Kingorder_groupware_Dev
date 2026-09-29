@@ -4,19 +4,19 @@ const srv=http.createServer((q,r)=>{let p=decodeURIComponent(q.url.split('?')[0]
  if(p.startsWith('/api/')){r.writeHead(404);return r.end('{}');}
  fs.readFile(path.join(ROOT,p),(e,b)=>{if(e){r.writeHead(404);return r.end();}r.writeHead(200,{'content-type':p.endsWith('.html')?'text/html; charset=utf-8':p.endsWith('.js')?'text/javascript':p.endsWith('.png')?'image/png':'application/octet-stream'});r.end(b);});});
 const out=[];const ok=(c,m)=>out.push((c?'  ✓ ':'  ✗ ')+m);
-srv.listen(8798,async()=>{const br=await pp.launch({executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',headless:'new'});const pg=await br.newPage();await pg.setViewport({width:1400,height:900});
+srv.listen(8797,async()=>{const br=await pp.launch({executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',headless:'new'});const pg=await br.newPage();await pg.setViewport({width:1400,height:900});
  const errs=[];pg.on('pageerror',e=>errs.push(String(e)));
- await pg.goto('http://localhost:8798/',{waitUntil:'networkidle0'});
+ await pg.goto('http://localhost:8797/',{waitUntil:'networkidle0'});
  // 구성원 3명을 넣고 들어갑니다
  await pg.evaluate(()=>{localUsers=[
    {id:'u1',name:'관리자',dept:'admin',email:'daniel@kingorder.co.kr',groupId:'admin',level:'admin'},
    {id:'u2',name:'김영업',dept:'sales',team:'1팀',rank:'대리',email:'kim@k.co',groupId:'sales',level:'manager'},
    {id:'u3',name:'박운영',dept:'ops',rank:'과장',email:'park@k.co',groupId:'sales',level:'manager'}]; saveLocalUsers();
    const two=new Date(Date.now()-2*3600e3).toISOString(); kobStorage.setItem('gwUserPresence.v1',JSON.stringify([{id:'u3',lastLogin:new Date(Date.now()-3*86400e3).toISOString(),lastSeen:two}]));
-   enterApp({email:'daniel@kingorder.co.kr',dept:'admin',name:'관리자'});});
+   enterApp({email:'kim@k.co',dept:'sales',name:'김영업'});});
  await new Promise(s=>setTimeout(s,500));
  let r=await pg.evaluate(()=>({enabled:kobPresence.enabled(),me:kobPresence.info('u2'),cnt:document.getElementById('presence-count').textContent,rec:JSON.parse(kobStorage.getItem('gwUserPresence.v1')).find(x=>x.id==='u2')}));
- ok(r.enabled&&r.me.online&&r.cnt==='1'&&r.rec&&r.rec.lastSeen&&r.rec.lastLogin,'들어오면 나는 접속 중 · 머리글 1명 · 마지막 로그인 · 접속이 기록된다 '+JSON.stringify({cnt:r.cnt}));
+ ok(r.enabled&&r.me.online&&r.cnt==='1'&&r.rec&&r.rec.lastSeen,'들어오면 나는 접속 중 · 머리글 1명 · 마지막 접속이 기록된다 (로컬 모드는 로그인 기록이 없어 마지막 로그인은 비움) '+JSON.stringify({cnt:r.cnt}));
  // 조직도 — 점
  r=await pg.evaluate(()=>{navigate('org-chart',document.getElementById('nav-org-chart'));const d=id=>{const e=document.querySelector(`#sec-org-chart [data-presence-dot="${id}"]`);return e?{c:e.className.includes('bg-green-500')?'green':'gray',t:e.title}:null;};return {me:d('u2'),park:d('u3')};});
  ok(r.me&&r.me.c==='green'&&r.park&&r.park.c==='gray'&&/마지막 접속 2시간 전/.test(r.park.t),'조직도: 나는 초록 점 · 박운영은 회색 점 + "마지막 접속 2시간 전" '+JSON.stringify(r));

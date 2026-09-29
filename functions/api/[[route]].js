@@ -88,6 +88,10 @@ function db(env) {
             const out = {}; (r || []).forEach(x => { out[x.key] = x.value; }); return out;
         },
         remove: (table, id) => call('DELETE', `${table}?id=eq.${encodeURIComponent(id)}`, undefined, { Prefer: 'return=minimal' }),
+        // 접두어로 시작하는 키 전부 — [{ key, value }] (2026-09-29 푸시 구독: 사람마다 키)
+        storeLike: async (prefix) => (await call('GET', `app_store?select=key,value&key=like.${encodeURIComponent(String(prefix).replace(/[*%]/g, '') + '*')}`)) || [],
+        // 표의 한 줄 그대로 — { id, data, rev, updated_by, updated_at } 또는 null
+        rowRaw: async (table, id) => { const r = await call('GET', `${table}?select=id,data,rev,updated_by,updated_at&id=eq.${encodeURIComponent(id)}`); return r && r[0] ? r[0] : null; },
         setStore: (key, value) => call('POST', 'app_store?on_conflict=key', [{ key, value, updated_at: new Date().toISOString() }], { Prefer: 'resolution=merge-duplicates,return=minimal' })
     };
 }
@@ -265,7 +269,14 @@ export async function onRequest(context) {
         // 공개 자료라 로그인 없이. 저장된 것이 하루 넘었으면 구글 공휴일 캘린더를 새로 받아 app_store 에 둡니다.
         if (path === '/api/holidays' && method === 'GET') {
             const cur = await store.storeValue(hol.KEY);
-            if (!hol.isStale(cur) && url.searchParams.get('refresh') !== '1') return json(200, { ok: true, cached: true, value: cur });
+            let force = false;
+            if (url.searchParams.get('refresh') === '1') {                  // 억지로 새로 받기는 관리자만 (2026-09-29 검토)
+                const ad = await requireAdmin(env, store, request);
+                if (ad.error) return ad.error;
+                force = true;
+            }
+            if (!force && !hol.isStale(cur)) return json(200, { ok: true, cached: true, value: cur });
+            if (!force && cur && hol.recentlyFailed(cur)) return json(200, { ok: true, cached: true, stale: true, value: cur });   // 방금 실패 — 1시간 쉼
             try {
                 const res = await fetch(hol.ICS_URL, { headers: { 'User-Agent': 'kingorder-groupware' } });
                 if (!res.ok) throw new Error('구글 공휴일 캘린더 ' + res.status);
@@ -275,7 +286,10 @@ export async function onRequest(context) {
                 await store.setStore(hol.KEY, value);
                 return json(200, { ok: true, cached: false, value });
             } catch (e) {
-                if (cur && cur.days) return json(200, { ok: true, cached: true, stale: true, value: cur, error: e.message });   // 받기 실패 — 예전 것으로
+                if (cur && cur.days) {                                        // 받기 실패 — 예전 것으로, 실패 시각을 남겨 1시간은 다시 안 감
+                    try { await store.setStore(hol.KEY, Object.assign({}, cur, { failedAt: new Date().toISOString() })); } catch (e2) { /* 무시 */ }
+                    return json(200, { ok: true, cached: true, stale: true, value: cur, error: e.message });
+                }
                 return json(502, { ok: false, error: '공휴일을 받지 못했습니다: ' + e.message });
             }
         }
@@ -289,48 +303,80 @@ export async function onRequest(context) {
             if (st.error) return st.error;
             if (!st.rec.id) return json(400, { ok: false, error: '구성원 번호가 없는 계정입니다.' });
             const input = method === 'POST' ? await body() : {};
-            const load = async () => { const v = await store.storeValue(push.KEY); return Array.isArray(v) ? v : []; };
+            const myKey = push.keyOf(st.rec.id);
+            const loadMine = async () => {
+                const v = await store.storeValue(myKey);
+                if (v) return push.normRec(v);
+                // 예전 모양(한 목록 'gwPushSubs.v1')에 내 기록이 있으면 옮겨 옵니다 (2026-09-29 오전에 켠 사람)
+                const old = await store.storeValue('gwPushSubs.v1');
+                const mine = Array.isArray(old) ? old.find(r => r && r.id === st.rec.id) : null;
+                if (!mine) return push.normRec(null);
+                const rec = push.normRec(mine);
+                await store.setStore(myKey, rec);
+                return rec;
+            };
             if (path === '/api/push/status' && method === 'GET') {
-                const rec = (await load()).find(r => r.id === st.rec.id) || {};
-                return json(200, { ok: true, ready: push.keysReady(env), devices: (rec.subs || []).map(x => ({ device: x.device, at: x.at, endpointTail: String(x.endpoint).slice(-12) })),
+                const rec = await loadMine();
+                const ep = url.searchParams.get('endpoint');
+                return json(200, { ok: true, ready: push.keysReady(env), thisDevice: ep ? push.hasSub(rec, ep) : undefined,
+                                   devices: rec.subs.map(x => ({ device: x.device, at: x.at, endpointTail: String(x.endpoint).slice(-12) })),
                                    prefs: Object.fromEntries(push.CATEGORIES.map(c => [c.id, push.wants(rec, c.id)])), categories: push.CATEGORIES });
             }
             if (path === '/api/push/subscribe' && method === 'POST') {
                 if (!push.validSubscription(input.subscription)) return bad('알림 받기 정보가 올바르지 않습니다.');
-                await store.setStore(push.KEY, push.addSub(await load(), st.rec.id, input.subscription, input.device));
+                const ep = input.subscription.endpoint;
+                // 같은 기기를 전에 다른 사람이 쓰고 있었으면 그 사람 기록에서 뺍니다 (그 사람 알림이 이 기기로 오지 않게)
+                for (const r of await store.storeLike(push.PREFIX)) {
+                    if (r.key !== myKey && push.hasSub(r.value, ep)) await store.setStore(r.key, push.removeSub(r.value, ep));
+                }
+                await store.setStore(myKey, push.addSub(await loadMine(), input.subscription, input.device));
                 return json(200, { ok: true });
             }
             if (path === '/api/push/unsubscribe' && method === 'POST') {
-                await store.setStore(push.KEY, push.removeSub(await load(), str(input.endpoint)));
+                await store.setStore(myKey, push.removeSub(await loadMine(), str(input.endpoint)));   // 내 기록에서만
                 return json(200, { ok: true });
             }
             if (path === '/api/push/prefs' && method === 'POST') {
-                await store.setStore(push.KEY, push.setPrefs(await load(), st.rec.id, input.prefs || {}));
+                await store.setStore(myKey, push.setPrefs(await loadMine(), input.prefs || {}));
                 return json(200, { ok: true });
             }
             if (path === '/api/push/send' && method === 'POST') {
-                const n = input.n && typeof input.n === 'object' ? input.n : null;
-                if (!n) return bad('보낼 알림이 없습니다.');
+                const nid = str(input.id || (input.n && input.n.id));
+                if (!nid) return bad('보낼 알림이 없습니다.');
                 if (!push.keysReady(env)) return json(200, { ok: true, sent: 0, skipped: 'VAPID 키가 설정되지 않았습니다.' });
+                // 요청 본문을 믿지 않고 저장된 알림을 다시 읽습니다 — 화면이 저장을 막 보내는 중일 수 있어 잠깐 기다려 가며
+                let row = null;
+                for (let i = 0; i < 5 && !row; i++) {
+                    row = await store.rowRaw('notifications', nid);
+                    if (!row) await new Promise(r => setTimeout(r, 600));
+                }
+                if (!row) return json(404, { ok: false, error: '알림을 찾지 못했습니다.' });
+                const age = Date.now() - new Date(row.updated_at).getTime();
+                if (row.rev !== 1 || str(row.updated_by).toLowerCase() !== str(st.me.email).toLowerCase() || !(age < 10 * 60 * 1000)) {
+                    return json(403, { ok: false, error: '방금 내가 만든 알림만 보낼 수 있습니다.' });
+                }
+                const n = Object.assign({}, row.data || {}, { id: row.id });
                 const users = (await store.storeValue('gwUsers.v1')) || [];
-                const list = await load();
                 const cat = push.categoryOf(n.type);
                 const payload = push.payloadOf(n, { [n.type]: str(input.label) });
-                const targets = push.recipientsOf(users, n, st.me.email)
-                    .map(u => list.find(r => r.id === u.id)).filter(r => r && push.wants(r, cat))
-                    .flatMap(r => (r.subs || []));
+                const recips = push.recipientsOf(users, n, st.me.email);
+                const recs = recips.length ? await store.storeValues(recips.map(u => push.keyOf(u.id))) : {};
+                let targets = recips.map(u => ({ key: push.keyOf(u.id), rec: push.normRec(recs[push.keyOf(u.id)]) }))
+                    .filter(x => push.wants(x.rec, cat)).flatMap(x => x.rec.subs.map(sub => ({ key: x.key, sub })));
+                const total = targets.length;
+                targets = targets.slice(0, push.MAX_TARGETS);
                 let sent = 0; const gone = [];
-                await Promise.all(targets.map(async (sub) => {
+                await Promise.all(targets.map(async ({ key, sub }) => {
                     try {
                         const q = await push.buildRequest(sub, payload, env);
                         const res = await fetch(q.url, q.init);
-                        if (res.status === 404 || res.status === 410) gone.push(sub.endpoint);      // 브라우저가 구독을 버림
+                        if (res.status === 404 || res.status === 410) gone.push({ key, ep: sub.endpoint });   // 브라우저가 구독을 버림
                         else if (res.ok) sent++;
                         else console.warn('[push] 보내기 실패', res.status, (await res.text()).slice(0, 200));
                     } catch (e) { console.warn('[push] 보내기 오류', e && e.message); }
                 }));
-                if (gone.length) { let l = await load(); gone.forEach(ep => { l = push.removeSub(l, ep); }); await store.setStore(push.KEY, l); }
-                return json(200, { ok: true, sent, targets: targets.length, removed: gone.length });
+                for (const g of gone) await store.setStore(g.key, push.removeSub(recs[g.key], g.ep));
+                return json(200, { ok: true, sent, targets: total, skipped: total - targets.length, removed: gone.length });
             }
             return json(404, { ok: false, error: '없는 주소입니다: ' + path });
         }
@@ -366,8 +412,18 @@ export async function onRequest(context) {
                     headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'Set-Cookie': fs.setCookieHeader(value, url.protocol === 'https:') }
                 });
             }
+            // 로그아웃 — 파일용 쿠키를 지웁니다 (같이 쓰는 PC 에서 다음 사람이 파일을 열지 못하게 · 2026-09-29 검토)
+            if (path === '/api/files/logout' && method === 'POST') {
+                return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store',
+                    'Set-Cookie': `${fs.COOKIE}=; Path=/api/files; HttpOnly; SameSite=Lax; Max-Age=0${url.protocol === 'https:' ? '; Secure' : ''}` } });
+            }
             const who = await fs.readCookieValue(secret, fs.cookieFrom(request));
             if (!who) return json(401, { ok: false, error: '다시 로그인해 주세요 (파일 확인 시간이 지났습니다).' });
+            // 직원도 그사이 직원 목록에서 빠졌는지 한 번 더 봅니다
+            if (who.k === 'staff') {
+                const users = (await store.storeValue('gwUsers.v1')) || [];
+                if (!(Array.isArray(users) ? users : []).some(u => str(u.email).toLowerCase() === who.id)) return json(401, { ok: false, error: '직원 목록에 없는 계정입니다.' });
+            }
             // 파트너는 그사이 중지 · 삭제되었는지 한 번 더 봅니다
             let pview = null;
             if (who.k === 'partner') {
@@ -392,7 +448,7 @@ export async function onRequest(context) {
             if (path === '/api/files/get' && method === 'GET') {
                 const p = str(url.searchParams.get('p'));
                 if (!fs.validPath(p)) return bad('파일 주소가 올바르지 않습니다.');
-                if (who.k === 'partner' && !fs.partnerMayRead(p, who, pview)) return json(403, { ok: false, error: '볼 수 없는 파일입니다.' });
+                if (who.k === 'partner' && !fs.partnerMayRead(p, who, pview, pc.SHARED_KEYS)) return json(403, { ok: false, error: '볼 수 없는 파일입니다.' });
                 const res = await fetch(objUrl(p), { headers: skey });
                 if (res.status === 404 || res.status === 400) return json(404, { ok: false, error: '파일이 없습니다 (지워졌을 수 있습니다).' });
                 if (!res.ok) return json(502, { ok: false, error: '파일 저장소에서 받지 못했습니다 (' + res.status + ').' });

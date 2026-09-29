@@ -72,7 +72,12 @@
         if (v && typeof v === 'object' && !Array.isArray(v) && isList(v.records)) return { list: v.records, wrap: v };
         return null;
     }
-    function mergeLists(baseStr, mineStr, serverStr) {
+    // 번호를 바꾸면 안 되는 목록 — id 가 사람 번호 같은 '뜻 있는 값' 인 것 (같은 사람이 두 창에서 처음 쓰면 남의 번호가 되어 버림)
+    const NO_RENAME_KEYS = ['gwUserPresence.v1'];
+    // 이 창에서 번호를 바꾼 기록 — 키 → Map(옛 번호 → 새 번호). 화면 변수가 아직 옛 번호로 저장하면 여기서 새 번호로 고쳐 보냅니다.
+    const renames = new Map();
+    // mergeLists → { str, renamed: { 옛 번호: 새 번호 } } (합칠 수 없으면 null)
+    function mergeLists(baseStr, mineStr, serverStr, keyName) {
         const mine = listShape(mineStr), server = listShape(serverStr);
         if (!mine || !server || (!!mine.wrap !== !!server.wrap)) return null;          // 목록이 아니면 합치지 않고 통째로
         const base = baseStr == null ? null : listShape(baseStr);
@@ -84,6 +89,7 @@
         const out = server.list.filter(x => !removed.includes(key(x)));
         // 둘이 같은 때 새 항목을 만들어 번호가 겹치면(둘 다 base 에 없던 번호) 내 것을 비어 있는 다음 번호로 — 남의 새 항목을 덮지 않게 (2026-09-29)
         const taken = new Set(out.map(key).concat(mine.list.map(key)));
+        const renamed = {};
         const freeId = (id) => {
             const m = /^(.*?)(\d+)$/.exec(String(id));
             if (!m) { let n = 2; while (taken.has(`${id}-${n}`)) n++; return `${id}-${n}`; }
@@ -94,10 +100,12 @@
         };
         changed.forEach(x => {
             const i = out.findIndex(y => key(y) === key(x));
-            if (i > -1 && base && !before.has(key(x)) && JSON.stringify(out[i]) !== JSON.stringify(x)) {
+            if (i > -1 && base && !before.has(key(x)) && JSON.stringify(out[i]) !== JSON.stringify(x) && !NO_RENAME_KEYS.includes(keyName)) {
                 const nid = freeId(x.id);
                 taken.add(nid);
-                out.push(Object.assign({}, x, { id: typeof x.id === 'number' ? Number(nid) || nid : nid }));
+                const newId = typeof x.id === 'number' ? Number(nid) || nid : nid;
+                renamed[key(x)] = newId;
+                out.push(Object.assign({}, x, { id: newId }));
                 return;
             }
             if (i > -1) out[i] = x; else out.push(x);
@@ -105,10 +113,35 @@
         // 순서는 내 목록 순서를 따르고, 내가 모르는(남이 더한) 항목은 그 자리 뒤에 둡니다
         const order = new Map(mine.list.map((x, i) => [key(x), i]));
         out.sort((a, b) => (order.has(key(a)) ? order.get(key(a)) : 1e9) - (order.has(key(b)) ? order.get(key(b)) : 1e9));
-        if (!mine.wrap) return JSON.stringify(out);
+        if (!mine.wrap) return { str: JSON.stringify(out), renamed };
         const w = Object.assign({}, server.wrap, mine.wrap, { records: out });
-        if (typeof server.wrap.seq === 'number' || typeof mine.wrap.seq === 'number') w.seq = Math.max(Number(server.wrap.seq) || 0, Number(mine.wrap.seq) || 0);
-        return JSON.stringify(w);
+        if (typeof server.wrap.seq === 'number' || typeof mine.wrap.seq === 'number') {
+            w.seq = Math.max(Number(server.wrap.seq) || 0, Number(mine.wrap.seq) || 0);
+            // 바꾼 번호보다 다음 번호(seq)가 작으면 다음에 만든 것이 또 겹칩니다 — 올려 둡니다 (2026-09-29 검토)
+            Object.values(renamed).forEach(nid => { const m = /(\d+)$/.exec(String(nid)); if (m) w.seq = Math.max(w.seq, Number(m[1]) + 1); });
+        }
+        return { str: JSON.stringify(w), renamed };
+    }
+    // 화면 값에 아직 옛 번호로 남은 '내 항목' 을 새 번호로 (새 번호가 이미 있으면 화면이 다시 읽은 것이라 그대로)
+    //   옛 번호 자리에는 남의 항목이 있으므로(화면은 그것을 모름) 마지막으로 맞춘 서버 값에서 다시 넣어 둡니다.
+    function applyRenames(k, v) {
+        const map = renames.get(k);
+        if (!map || !map.size) return v;
+        const sh = listShape(v);
+        if (!sh) return v;
+        const ids = new Set(sh.list.map(x => String(x.id)));
+        const syncedSh = synced.has(k) ? listShape(synced.get(k)) : null;
+        let hit = false;
+        sh.list.slice().forEach(x => {
+            const old = String(x.id);
+            const nid = map.get(old);
+            if (nid === undefined || ids.has(String(nid))) return;
+            x.id = nid; hit = true;
+            const theirs = syncedSh && syncedSh.list.find(y => String(y.id) === old);
+            if (theirs) sh.list.push(JSON.parse(JSON.stringify(theirs)));
+        });
+        if (!hit) return v;
+        return JSON.stringify(sh.wrap ? Object.assign({}, sh.wrap, { records: sh.list }) : sh.list);
     }
     let flushing = false;
     async function flush() {
@@ -122,25 +155,31 @@
         const dels = batch.filter(([, v]) => v === null).map(([key]) => key);
         try {
             const plain = [];
-            for (const [key, v] of batch) {
+            for (let [key, v] of batch) {         // v 는 applyRenames 로 바뀔 수 있어 let
                 if (v === null) continue;
                 if (!listShape(v)) { plain.push({ key, value: safeJson(v), updated_at: new Date().toISOString() }); continue; }
                 // 목록 — 서버 최신 값 위에 내 변경만 얹기
+                const orig = v;
+                v = applyRenames(key, v);                          // 화면이 옛 번호로 저장해도 남의 항목을 덮지 않게
                 const { data: row, error: e1 } = await client.from('app_store').select('value').eq('key', key).maybeSingle();
                 if (e1) throw e1;
                 const serverStr = row ? toStr(row.value) : null;
                 let out = v;
                 if (serverStr !== null && serverStr !== synced.get(key)) {
-                    const merged = mergeLists(synced.has(key) ? synced.get(key) : null, v, serverStr);
-                    if (merged !== null) out = merged;
+                    const merged = mergeLists(synced.has(key) ? synced.get(key) : null, v, serverStr, key);
+                    if (merged !== null) {
+                        out = merged.str;
+                        const ks = Object.keys(merged.renamed);
+                        if (ks.length) { const m = renames.get(key) || new Map(); ks.forEach(o => m.set(o, merged.renamed[o])); renames.set(key, m); }
+                    }
                 }
                 const { error: e2 } = await client.from('app_store').upsert([{ key, value: safeJson(out), updated_at: new Date().toISOString() }], { onConflict: 'key' });
                 if (e2) throw e2;
                 synced.set(key, out);
                 // 합친 결과가 내 화면 값과 다르면(남의 변경이 들어왔으면) 화면에 알립니다 — 그사이 새로 쓴 값은 건드리지 않음
-                if (out !== v && cache.get(key) === v && !pending.has(key)) {
+                if (out !== orig && cache.get(key) === orig && !pending.has(key)) {
                     cache.set(key, out); ls.set(key, out);
-                    try { window.dispatchEvent(new StorageEvent('storage', { key, oldValue: v, newValue: out, storageArea: window.localStorage })); } catch (e) { /* 새로고침으로 */ }
+                    try { window.dispatchEvent(new StorageEvent('storage', { key, oldValue: orig, newValue: out, storageArea: window.localStorage })); } catch (e) { /* 새로고침으로 */ }
                 }
             }
             if (plain.length) {

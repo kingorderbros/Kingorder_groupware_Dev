@@ -74,19 +74,44 @@ export function newPath(who, name, now) {
     const head = who.k === 'partner' ? `partner/${safeSeg(who.p || 'none')}` : 'staff';
     return `${head}/${ym}/${id}${ext ? '.' + ext : ''}`;
 }
-function safeSeg(v) { return s(v).replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 40) || 'none'; }
+// 파트너사 id → 폴더 이름. 영문 · 숫자 · _ · - 로만 된 id 는 그대로, 아니면 해시를 붙여 서로 다른 id 가 같은 폴더가 되지 않게 (2026-09-29 검토)
+export function safeSeg(v) {
+    const x = s(v);
+    if (/^[A-Za-z0-9_-]{1,40}$/.test(x)) return x;
+    let h = 0x811c9dc5;                                                   // FNV-1a 32비트
+    for (const b of new TextEncoder().encode(x)) { h ^= b; h = Math.imul(h, 0x01000193) >>> 0; }
+    return ('x_' + x.replace(/[^A-Za-z0-9_-]/g, '').slice(0, 20) + '_' + h.toString(16)).slice(0, 40);
+}
 // 경로 모양 확인 — 위에서 만든 모양만 받습니다 (../ 같은 것은 거절)
 export function validPath(p) {
     return /^(staff|partner\/[A-Za-z0-9_-]{1,40})\/\d{4}\/\d{2}\/[0-9a-f-]{36}(\.[a-z0-9]{1,8})?$/.test(s(p));
 }
 
-// 파트너가 이 파일을 볼 수 있나 — 자기 파트너사 폴더이거나, **직원이 올린 파일(staff/…)** 이 자기에게 보이는 자료(view)에 적혀 있을 때.
-//   다른 파트너사 폴더는 자기 자료에 그 경로를 적어 넣어도 못 봅니다 (파트너는 자기 접수 · 답글에 아무 글이나 쓸 수 있으므로).
-export function partnerMayRead(path, who, view) {
+// 파트너에게 보이는 자료 가운데 **직원만 쓰는 곳**에 적힌 직원 파일 경로 (2026-09-29 검토)
+//   파트너는 자기 접수 · 인바운드 · 개발의뢰 답글에 아무 글이나 쓸 수 있으므로 그곳은 보지 않습니다.
+//   · 공용 설정(SHARED_KEYS) · 공개 자료실 글 · 개발의뢰(파트너가 쓴 답글 · 기록 빼고)
+const STAFF_PATH_RE = /staff\/\d{4}\/\d{2}\/[0-9a-f-]{36}(?:\.[a-z0-9]{1,8})?/g;
+export function staffPathsIn(view, sharedKeys) {
+    const out = new Set();
+    const take = (v) => { try { (JSON.stringify(v) || '').replace(STAFF_PATH_RE, (m) => { out.add(m); return m; }); } catch (e) { /* 무시 */ } };
+    const v = view || {};
+    (sharedKeys || []).forEach(k => take(v[k]));
+    take(v['gwArchivePosts.v1']);
+    (Array.isArray(v['gwDevRequests.v1']) ? v['gwDevRequests.v1'] : []).forEach(d => {
+        if (!d || typeof d !== 'object') return;
+        const staffOnly = Object.assign({}, d);
+        staffOnly.thread = (Array.isArray(d.thread) ? d.thread : []).filter(e => !(e && e.side === 'partner'));
+        staffOnly.history = (Array.isArray(d.history) ? d.history : []).filter(e => !(e && e.side === 'partner'));
+        take(staffOnly);
+    });
+    return out;
+}
+// 파트너가 이 파일을 볼 수 있나 — 자기 파트너사 폴더이거나, 위의 '직원만 쓰는 곳' 에 적힌 직원 파일일 때.
+export function partnerMayRead(path, who, view, sharedKeys) {
     if (!validPath(path)) return false;
     if (path.startsWith(`partner/${safeSeg(who.p)}/`)) return true;
     if (!path.startsWith('staff/')) return false;
-    try { return JSON.stringify(view || {}).includes('"' + path + '"'); } catch (e) { return false; }
+    return staffPathsIn(view, sharedKeys).has(path);
 }
 
 // 내려받을 때 파일 이름 — 한글 이름도 깨지지 않게 (RFC 5987)

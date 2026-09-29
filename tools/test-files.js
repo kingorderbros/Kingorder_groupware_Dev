@@ -117,6 +117,17 @@ global.fetch = async (url, opt = {}) => {
     r = await go('GET', '/api/files/get?p=' + encodeURIComponent(html.path), { cookie: staffCookie });
     ok(/^attachment/.test(r.headers.get('Content-Disposition')) && r.headers.get('X-Content-Type-Options') === 'nosniff', 'html 파일은 화면에서 열지 않고 내려받기로 (스크립트 차단)');
 
+    console.log('\n[5] 검토 뒤 보강 (2026-09-29)');
+    const secretFile = F.newPath({ k: 'staff' }, 'secret.pdf');
+    const viewInj = { 'gwPartnerIntakes.v1': [{ id: 'I1', memo: secretFile }], 'gwDevRequests.v1': [{ id: 'D1', docs: [{ path: staffFile }], thread: [{ side: 'partner', files: [{ path: secretFile }] }] }] };
+    ok(!F.partnerMayRead(secretFile, { p: 'PA-1' }, viewInj, P.SHARED_KEYS), '파트너가 자기 접수 · 답글에 직원 파일 경로를 적어 넣어도 못 본다');
+    ok(F.partnerMayRead(staffFile, { p: 'PA-1' }, viewInj, P.SHARED_KEYS), '직원이 붙인 개발의뢰 문서는 본다');
+    ok(F.safeSeg('P.1') !== 'P_1' && F.safeSeg('P.1') !== F.safeSeg('P,1') && F.safeSeg('PA-1') === 'PA-1', '특수문자 파트너사 id 는 서로 다른 폴더 (영문 · 숫자 id 는 그대로)');
+    r = await go('POST', '/api/files/logout', { cookie: staffCookie });
+    ok(r.status === 200 && /kob_files=;.*Max-Age=0/.test(r.headers.get('Set-Cookie')), '로그아웃하면 파일 쿠키를 지운다');
+    const goneStaff = await F.makeCookieValue(SECRET, { k: 'staff', id: 'left@k.co' });
+    ok((await go('GET', '/api/files/get?p=' + encodeURIComponent(up.path), { cookie: goneStaff })).status === 401, '직원 목록에서 빠진 사람은 쿠키가 남아 있어도 못 받는다');
+
     console.log(`\n=========== 통과 ${pass} · 실패 ${fail} ===========`);
     process.exit(fail ? 1 : 0);
 })();

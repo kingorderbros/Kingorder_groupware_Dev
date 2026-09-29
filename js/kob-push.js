@@ -46,7 +46,13 @@
         const b = atob(String(s).replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((String(s).length + 3) % 4));
         return Uint8Array.from(b, c => c.charCodeAt(0));
     }
-    async function reg() { return navigator.serviceWorker.ready; }
+    // 서비스 워커가 끝내 준비되지 않아도 화면이 멈추지 않게 8초까지만 기다립니다 (2026-09-29 검토)
+    async function reg() {
+        const r = await Promise.race([navigator.serviceWorker.ready, new Promise(res => setTimeout(() => res(null), 8000))]);
+        if (!r) throw new Error('알림 준비(서비스 워커)가 되지 않았습니다. 새로고침한 뒤 다시 눌러 주세요.');
+        return r;
+    }
+    const isPartnerPage = () => { try { const q = new URLSearchParams(location.search); return q.get('mode') === 'partner' || location.hash === '#partner'; } catch (e) { return false; } };
     async function currentSub() {
         if (!supported()) return null;
         try { return await (await reg()).pushManager.getSubscription(); } catch (e) { return null; }
@@ -61,10 +67,13 @@
     async function state() {
         const k = supported() ? await key() : '';
         const sub = await currentSub();
+        // 브라우저에 구독이 있어도 서버에서 '내 것' 이 아니면(같은 기기를 앞사람이 켜 둔 경우) 아직 안 켠 것으로 봅니다
+        let mine = !!sub;
+        if (sub) { try { mine = !!(await api('GET', '/api/push/status?endpoint=' + encodeURIComponent(sub.endpoint))).thisDevice; } catch (e) { mine = true; } }
         return {
             supported: supported(), ready: !!k, ios: isIos(), standalone: standalone(),
             permission: ('Notification' in window) ? Notification.permission : 'unsupported',
-            subscribed: !!sub
+            subscribed: !!sub && mine
         };
     }
     async function enable() {
@@ -95,8 +104,10 @@
     const setPrefs = (prefs) => api('POST', '/api/push/prefs', { prefs });
     // 기다리지 않습니다 — 푸시가 안 가도 그룹웨어 알림함에는 이미 들어갔습니다
     function send(n, label) {
-        if (!remote || !n || !(n.toUser || n.toDept)) return;
-        api('POST', '/api/push/send', { n: { id: n.id, type: n.type, title: n.title, detail: n.detail, toUser: n.toUser, toDept: n.toDept, toTeam: n.toTeam }, label: label || '' })
+        if (!remote || !n || !(n.toUser || n.toDept) || isPartnerPage()) return;   // 파트너 화면은 그룹웨어가 옮겨 받을 때 보냅니다
+        if (!n.id) return;
+        // 서버는 저장된 알림(notifications 표)을 다시 읽어 보냅니다 — 여기서는 번호만 (2026-09-29 검토)
+        api('POST', '/api/push/send', { id: n.id, label: label || '' })
             .catch(e => console.warn('[푸시] 보내지 못했습니다', e && e.message));
     }
 

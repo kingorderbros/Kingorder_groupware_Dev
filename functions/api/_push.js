@@ -10,14 +10,20 @@
  * 받는 사람은 그룹웨어 알림함과 같은 규칙(notificationsFor)으로 정합니다 — toUser(이름) · toDept(본부) · toTeam(팀).
  * 보낸 사람 자신에게는 보내지 않습니다. 종류별로 끈 사람에게도 보내지 않습니다.
  *
- * 저장: app_store 'gwPushSubs.v1' = [{ id: 구성원 id, subs: [{ endpoint, keys: { p256dh, auth }, device, at }], prefs: { … } }]
+ * 저장: app_store 'gwPushSubs.v1/<구성원 id>' = { subs: [{ endpoint, keys: { p256dh, auth }, device, at }], prefs: { … } } — 사람마다 따로
+ *       (2026-09-29 검토: 한 목록을 통째로 읽고 쓰면 둘이 동시에 켤 때 한쪽 구독이 사라졌음)
+ * 보내기: 요청 본문을 믿지 않고, **방금 이 사람이 만든 알림(notifications 표, rev 1)** 을 다시 읽어 그 내용으로 보냅니다.
  * 암호: Web Push 표준(RFC 8291 aes128gcm + RFC 8292 VAPID) — 따로 라이브러리 없이 WebCrypto 로.
  * 환경변수: VAPID_PUBLIC_KEY(65바이트 base64url) · VAPID_PRIVATE_KEY(32바이트 base64url) · VAPID_SUBJECT(mailto:…)
  * 이 파일은 판단과 암호만 담고, 저장소 읽기/쓰기와 실제 발송(fetch)은 [[route]].js 가 합니다 — 가짜 자료로 시험합니다.
  */
 
-export const KEY = 'gwPushSubs.v1';
+export const PREFIX = 'gwPushSubs.v1/';
+export const keyOf = (userId) => PREFIX + String(userId);
 export const MAX_SUBS = 10;                    // 한 사람 기기 수 (넘치면 오래된 것부터 뺌)
+export const MAX_TARGETS = 40;                 // 한 번에 보낼 기기 수 — Workers 한 요청의 하위 요청 한도(무료 50) 안에서
+// 받는 곳으로 허용하는 푸시 서버 (아무 https 주소나 등록해 서버가 그리로 요청을 보내게 하지 못하게)
+const PUSH_HOSTS = [/^fcm\.googleapis\.com$/, /^android\.googleapis\.com$/, /(^|\.)push\.apple\.com$/, /(^|\.)push\.services\.mozilla\.com$/, /(^|\.)notify\.windows\.com$/];
 
 // 알림 종류 → 직원이 켜고 끄는 묶음
 export const CATEGORIES = [
@@ -67,40 +73,36 @@ export function wants(rec, category) {
     return p[category] !== false;                                                  // 처음에는 모두 켜짐
 }
 
-// ---------- 구독 기록 고치기 (목록 통째 → 새 목록) ----------
-export function addSub(list, userId, sub, device, now) {
-    const out = arr(list).map(r => Object.assign({}, r));
-    let rec = out.find(r => r.id === userId);
-    if (!rec) { rec = { id: userId, subs: [], prefs: {} }; out.push(rec); }
-    // 같은 기기(endpoint)는 한 번만 — 다른 사람 기록에 같은 기기가 있으면 거기서는 뺍니다 (기기를 넘겨받은 경우)
-    out.forEach(r => { r.subs = arr(r.subs).filter(x => x.endpoint !== sub.endpoint); });
-    rec.subs = rec.subs.concat([{ endpoint: sub.endpoint, keys: { p256dh: sub.keys.p256dh, auth: sub.keys.auth }, device: s(device).slice(0, 80), at: now || new Date().toISOString() }])
+// ---------- 구독 기록 (한 사람 것) ----------
+export function normRec(v) { return { subs: arr(v && v.subs), prefs: (v && v.prefs && typeof v.prefs === 'object') ? v.prefs : {} }; }
+export function addSub(rec, sub, device, now) {
+    const r = normRec(rec);
+    r.subs = r.subs.filter(x => x.endpoint !== sub.endpoint)
+        .concat([{ endpoint: sub.endpoint, keys: { p256dh: sub.keys.p256dh, auth: sub.keys.auth }, device: s(device).slice(0, 80), at: now || new Date().toISOString() }])
         .slice(-MAX_SUBS);
-    return out;
+    return r;
 }
-export function removeSub(list, endpoint) {
-    return arr(list).map(r => Object.assign({}, r, { subs: arr(r.subs).filter(x => x.endpoint !== endpoint) }));
-}
-export function setPrefs(list, userId, prefs) {
-    const out = arr(list).map(r => Object.assign({}, r));
-    let rec = out.find(r => r.id === userId);
-    if (!rec) { rec = { id: userId, subs: [], prefs: {} }; out.push(rec); }
+export function removeSub(rec, endpoint) { const r = normRec(rec); r.subs = r.subs.filter(x => x.endpoint !== endpoint); return r; }
+export function hasSub(rec, endpoint) { return normRec(rec).subs.some(x => x.endpoint === endpoint); }
+export function setPrefs(rec, prefs) {
+    const r = normRec(rec);
     const clean = {};
     CATEGORIES.forEach(c => { if (prefs && typeof prefs[c.id] === 'boolean') clean[c.id] = prefs[c.id]; });
-    rec.prefs = Object.assign({}, rec.prefs || {}, clean);
-    return out;
+    r.prefs = Object.assign({}, r.prefs, clean);
+    return r;
 }
 export function validSubscription(sub) {
     try {
         const u = new URL(s(sub && sub.endpoint));
-        return u.protocol === 'https:' && unb64u(sub.keys.p256dh).length === 65 && unb64u(sub.keys.auth).length === 16;
+        return u.protocol === 'https:' && PUSH_HOSTS.some(re => re.test(u.hostname))
+            && unb64u(sub.keys.p256dh).length === 65 && unb64u(sub.keys.auth).length === 16;
     } catch (e) { return false; }
 }
 
 // ---------- 알림 문구 ----------
 export function payloadOf(n, labels) {
-    const title = s(n.title) || '알림';
-    const label = (labels && labels[n.type]) || '';
+    const title = (s(n.title) || '알림').slice(0, 100);
+    const label = s((labels && labels[n.type]) || '').slice(0, 30);
     const detail = s(n.detail).replace(/<[^>]*>/g, '').slice(0, 140);
     return {
         title: label ? `[${label}] ${title}` : title,

@@ -38,12 +38,14 @@
                 document.documentElement.setAttribute('data-mode', m === 'partner' ? 'partner' : m === 'mobile' ? 'mobile' : 'groupware');
                 // 새로고침 때 로그인 화면이 잠깐 보이지 않게 (2026-09-29) — 이 브라우저에 로그인 기록(supabase-js 의 sb-…-auth-token)이
                 // 남아 있으면 로그인 화면 대신 '여는 중' 을 보여 줍니다. 본체가 들어가거나 로그인이 필요하다고 판단하면 이 표시를 뗍니다.
-                if (!m) {
+                if (!m || m === 'mobile') {                 // 운행일지도 로그인이 남아 있으면 로그인 칸 대신 '여는 중' (2026-09-29 검토)
                     try {
                         for (var i = 0; i < localStorage.length; i++) {
                             if (/^sb-.+-auth-token$/.test(localStorage.key(i) || '')) { document.documentElement.setAttribute('data-auth', 'session'); break; }
                         }
                     } catch (e2) { /* 저장소를 못 읽으면 예전처럼 */ }
+                    // 본체가 아예 돌지 못해도 20초 뒤에는 로그인 화면을 보여 줍니다
+                    setTimeout(function () { document.documentElement.removeAttribute('data-auth'); }, 20000);
                 }
                 app = m === 'partner'
                     ? { f: 'partner.webmanifest',   t: '킹오더브라더스 파트너센터',   s: '파트너센터',   c: '#4338ca' }
@@ -80,6 +82,9 @@
         #boot-splash { display: none; }
         html[data-mode="groupware"][data-auth="session"] #login-view { display: none; }
         html[data-mode="groupware"][data-auth="session"] #boot-splash { display: flex; }
+        #m-opening { display: none; }
+        html[data-mode="mobile"][data-auth="session"] #m-auth { display: none; }
+        html[data-mode="mobile"][data-auth="session"] #m-opening { display: block; }
         /* 본체가 아직 안 떴을 때는 로그인 버튼을 누르지 못하게 — 눌리면 처리 함수가 없어 주소창에 아이디가 실려 새로고침됩니다 */
         html:not([data-kob-ready]) #login-view button[type="submit"],
         html:not([data-kob-ready]) #partner-login button[type="submit"],
@@ -917,6 +922,7 @@
             <div id="m-login" class="flex-1 p-6 flex flex-col justify-center">
                 <!-- 그룹웨어 아이디로 로그인 (2026-09-28 · 4단계) — 서버가 있을 때. 로그인하면 운전자는 본인으로 정해집니다 -->
                 <!-- 처음부터 로그인 칸이 보이게 (2026-09-29 — 예전엔 운전자 고르기 '불러오는 중' 이 먼저 보였음). 로컬 모드만 아래 고르기로 바꿉니다 -->
+                <p id="m-opening" class="text-center text-sm text-gray-400"><i class="fas fa-spinner fa-spin mr-1"></i>운행일지를 여는 중…</p>
                 <div id="m-auth">
                     <p class="text-center text-gray-500 text-sm mb-4">그룹웨어 아이디로 로그인하세요.<br><span class="text-xs text-gray-400">한 번 로그인하면 이 폰에서는 계속 유지됩니다.</span></p>
                     <label class="block text-sm font-medium text-gray-700 mb-1">그룹웨어 ID(이메일)</label>
@@ -9892,10 +9898,11 @@ const QUOTE_TEMPLATES = [
             n = Number(n) || 0;
             return n >= 1048576 ? (n / 1048576).toFixed(1) + 'MB' : Math.max(1, Math.round(n / 1024)) + 'KB';
         }
+        let gwUploadBusyCount = 0;
         function gwUploadBusy(text) {
             if (typeof document === 'undefined' || !document.body) return;
             let el = document.getElementById('gw-upload-busy');
-            if (!text) { if (el) el.remove(); return; }
+            if (!text) { if (el && gwUploadBusyCount <= 0) el.remove(); return; }
             if (!el) {
                 el = document.createElement('div');
                 el.id = 'gw-upload-busy';
@@ -9909,6 +9916,8 @@ const QUOTE_TEMPLATES = [
             const list = Array.from(files || []);
             const max = o.max || (window.kobFiles ? kobFiles.MAX_BYTES : 20 * 1024 * 1024);
             const out = [], failed = [];
+            gwUploadBusyCount++;                      // 여러 곳에서 동시에 올려도 마지막 것이 끝날 때 안내를 지웁니다
+            try {
             for (let i = 0; i < list.length; i++) {
                 const f = list[i];
                 if ((f.size || 0) > max) { failed.push(`${f.name} (${gwFileSizeText(f.size)} — 한 파일 ${gwFileSizeText(max)} 까지)`); continue; }
@@ -9924,7 +9933,7 @@ const QUOTE_TEMPLATES = [
                     out.push(meta);
                 } catch (e) { failed.push(`${f.name} (${(e && e.message) || '올리지 못함'})`); }
             }
-            gwUploadBusy('');
+            } finally { gwUploadBusyCount--; gwUploadBusy(''); }
             return { files: out, failed };
         }
         function gwUploadFailedAlert(failed) {
@@ -9932,19 +9941,37 @@ const QUOTE_TEMPLATES = [
         }
         // 고르자마자 목록에 보이는 첨부(협업티켓 · WBS 산출물) — 화면에는 이 창의 blob: 주소로 바로 보여 주고,
         // 뒤에서 Storage 에 올린 뒤 entry.path · entry.url 을 실제 주소로 바꾸고 저장합니다 (afterSave).
-        function gwUploadEntryLater(entry, file, afterSave) {
+        //   rootsFn: 지금의 목록들을 돌려주는 함수 — 올리는 사이 목록을 다시 읽었거나(남의 변경) 항목이 복사되었어도(여러 부서 지시)
+        //            같은 올리기 번호(uploadKey)를 가진 항목을 **지금 목록에서** 모두 찾아 고칩니다 (2026-09-29 검토)
+        let gwUploadSeq = 0;
+        function gwUploadEntryLater(entry, file, afterSave, rootsFn) {
             if (!window.kobFiles || !file) return;
             entry.uploading = true;
+            entry.uploadKey = 'up' + Date.now().toString(36) + (++gwUploadSeq);
+            const key = entry.uploadKey;
+            const blobUrl = entry.url;
             gwUploadAttachments([file]).then(r => {
-                delete entry.uploading;
                 const m = r.files[0];
-                if (m) {
-                    const oldUrl = entry.url;
-                    if (m.path) entry.path = m.path;
-                    entry.url = m.path ? kobFiles.src(m) : (m.dataUrl || entry.url);
-                    if (/^blob:/.test(oldUrl || '') && oldUrl !== entry.url) { try { URL.revokeObjectURL(oldUrl); } catch (e) { /* 무시 */ } }
-                } else { entry.uploadFailed = true; gwUploadFailedAlert(r.failed); }
+                const newUrl = m ? (m.path ? kobFiles.src(m) : (m.dataUrl || blobUrl)) : '';
+                const fix = (o) => {
+                    delete o.uploading;
+                    if (m) { if (m.path) o.path = m.path; o.url = newUrl; delete o.uploadKey; }
+                    else o.uploadFailed = true;
+                };
+                fix(entry);
+                const seen = new Set([entry]);
+                const walk = (v) => {
+                    if (!v || typeof v !== 'object' || seen.has(v)) return;
+                    seen.add(v);
+                    if (Array.isArray(v)) { v.forEach(walk); return; }
+                    if (v.uploadKey === key) fix(v);
+                    Object.keys(v).forEach(k => { const c = v[k]; if (c && typeof c === 'object') walk(c); });
+                };
+                try { (typeof rootsFn === 'function' ? rootsFn() : []).forEach(walk); } catch (e) { console.warn('[첨부] 항목 찾기 실패', e); }
+                if (!m) gwUploadFailedAlert(r.failed);
                 if (typeof afterSave === 'function') afterSave();
+                // blob 주소는 모든 항목을 바꾼 뒤에 풉니다 (복사본이 같이 쓰고 있었음)
+                if (m && /^blob:/.test(blobUrl || '') && blobUrl !== newUrl) { try { URL.revokeObjectURL(blobUrl); } catch (e) { /* 무시 */ } }
             });
         }
         // 저장된 자료에 남은 blob: 주소(그 창에서만 살아 있던 것)는 비웁니다 — 깨진 그림 대신 '파일 없음' 으로 보이게 (2026-09-29)
@@ -9952,7 +9979,7 @@ const QUOTE_TEMPLATES = [
             const walk = (v) => {
                 if (Array.isArray(v)) { v.forEach(walk); return; }
                 if (!v || typeof v !== 'object') return;
-                if (typeof v.url === 'string' && /^blob:/.test(v.url) && !v.path) v.url = '';
+                if (typeof v.url === 'string' && /^blob:/.test(v.url) && !v.path) { v.url = ''; delete v.uploading; }
                 Object.keys(v).forEach(k => { if (v[k] && typeof v[k] === 'object') walk(v[k]); });
             };
             walk(rows);
@@ -11074,7 +11101,7 @@ const QUOTE_TEMPLATES = [
             // 접속 상태 — 나를 '접속 중' 으로 알리고 마지막 로그인 · 접속을 남깁니다 (2026-09-29)
             if (window.kobPresence) {
                 const acct = myAccount();
-                if (acct && acct.id) kobPresence.start({ id: acct.id, justLoggedIn: true });
+                if (acct && acct.id) kobPresence.start({ id: acct.id });
             }
             renderPresenceUi();
             setTimeout(() => maybeAskPush(), 2500);        // 폰 · PC 알림 켜기 안내 (2026-09-29)
@@ -12300,6 +12327,8 @@ const QUOTE_TEMPLATES = [
             // 화면 메모리에 남은 자료(앞사람이 본 것)를 모두 비웁니다 (2026-09-28)
             if (kobStorage.mode === 'supabase') {
                 try { if (kobStorage.flush) await kobStorage.flush(); } catch (e) { /* 저장 실패는 화면 아래 표시로 알립니다 */ }
+                // 이 기기의 폰 · PC 알림도 끕니다 — 같이 쓰는 기기에서 다음 사람에게 내 알림이 뜨지 않게 (2026-09-29 검토)
+                try { if (window.kobPush) await Promise.race([kobPush.disable(), new Promise(r => setTimeout(r, 3000))]); } catch (e) { /* 그래도 로그아웃 */ }
                 await kobAuth.signOut();
                 location.reload();
                 return;
@@ -12496,6 +12525,9 @@ const QUOTE_TEMPLATES = [
             // 헤더 타이틀 변경 — 다른 부서에서 들어온 화면은 '들어온 메뉴명' 으로 보여 줍니다
             document.getElementById('page-title').innerText = pageTitleFor(sectionId);
 
+            // 실시간 다시 그리기(gwRerenderCurrent)면 사이드바 강조 · 열림은 그대로 둡니다 (2026-09-29 검토)
+            if (window.__gwNavSilent) return;
+
             // 사이드바 하이라이트 처리
             const navItems = document.querySelectorAll('.nav-item');
             navItems.forEach(item => item.classList.remove('bg-blue-600/25'));
@@ -12556,7 +12588,7 @@ const QUOTE_TEMPLATES = [
             if (typeof document === 'undefined') return false;
             const a = document.activeElement;
             if (a && (/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) || a.isContentEditable) && a.closest && a.closest('#app-view')) return true;
-            return !!document.querySelector('[id$="-modal"]:not(.hidden)');
+            return !!document.querySelector('[id$="-modal"]:not(.hidden), [id$="-dialog"]:not(.hidden)');
         }
         // 지금 보이는 화면을 다시 그립니다 (메뉴 이동과 같은 경로 — 탭 · 필터 상태는 그대로)
         function gwRerenderCurrent() {
@@ -12565,7 +12597,9 @@ const QUOTE_TEMPLATES = [
             const id = sec.id.slice(4);
             const box = sec.closest('.overflow-y-auto') || document.scrollingElement;
             const y = box ? box.scrollTop : 0;
+            window.__gwNavSilent = true;
             try { navigate(id, document.getElementById('nav-' + id)); } catch (e) { console.warn('[실시간 반영] 다시 그리기 실패', e); }
+            finally { window.__gwNavSilent = false; }
             if (box) box.scrollTop = y;                                      // 보던 자리 그대로
         }
         function gwLiveFlush() {
@@ -12999,14 +13033,20 @@ const QUOTE_TEMPLATES = [
             const files = [...(input.files || [])];
             input.value = '';
             // 파일은 Storage 에 올리고 글에는 주소만 (2026-09-29 · 3단계). 그림은 긴 변 1600px 로 줄여서.
-            const r = await gwUploadAttachments(files, { max: ARCHIVE_FILE_MAX, shrinkPx: 1600 });
+            const target = archiveDraftFiles;          // 올리는 사이 창을 닫고 다른 글을 열면 그 글에 들어가지 않게
+            archiveUploading++;
+            let r;
+            try { r = await gwUploadAttachments(files, { max: ARCHIVE_FILE_MAX, shrinkPx: 1600 }); } finally { archiveUploading--; }
+            if (target !== archiveDraftFiles) return;
             r.files.forEach(m => archiveDraftFiles.push(m));
             renderArchiveDraftFiles();
             gwUploadFailedAlert(r.failed);
         }
 
+        let archiveUploading = 0;                     // 올리는 중인 첨부 수 (2026-09-29 검토)
         function saveArchivePost() {
             if (!canEditArchive()) { alert('자료를 올리려면 자료실 관리 권한이 필요합니다.'); return; }
+            if (typeof archiveUploading !== 'undefined' && archiveUploading > 0) { alert('첨부파일을 올리는 중입니다. 다 올라간 뒤 다시 눌러 주세요.'); return; }
             const title = String(document.getElementById('arc-title').value || '').trim();
             if (!title) { alert('제목을 입력해 주세요.'); document.getElementById('arc-title').focus(); return; }
             const dept = String(document.getElementById('arc-dept').value || '');
@@ -14540,7 +14580,8 @@ const QUOTE_TEMPLATES = [
         }
         function newCollabFileEntry(file) {
             const e = newCollabFileEntryLocal(file);
-            gwUploadEntryLater(e, file, () => saveCollabRequests());   // Storage 에 올리고 경로 저장 (2026-09-29 · 3단계)
+            gwUploadEntryLater(e, file, () => saveCollabRequests(),   // Storage 에 올리고 경로 저장 (2026-09-29 · 3단계)
+                () => [collabRequests, (typeof collabCompleteFiles !== 'undefined' ? collabCompleteFiles : []), (typeof collabRequestFiles !== 'undefined' ? collabRequestFiles : [])]);
             return e;
         }
 
@@ -18492,7 +18533,8 @@ const QUOTE_TEMPLATES = [
         }
         function newWbsFileEntry(file) {
             const e = newWbsFileEntryLocal(file);
-            gwUploadEntryLater(e, file, () => saveProjects());          // Storage 에 올리고 경로 저장 (2026-09-29 · 3단계)
+            gwUploadEntryLater(e, file, () => saveProjects(),          // Storage 에 올리고 경로 저장 (2026-09-29 · 3단계)
+                () => [projects, (typeof wbsDoneFiles !== 'undefined' ? wbsDoneFiles : [])]);
             return e;
         }
         // 고른 파일을 검사해 바구니에 담습니다. 반환값은 실제로 담긴 건수.
@@ -40729,6 +40771,7 @@ const QUOTE_TEMPLATES = [
         // 편집 중인 템플릿 (null 이면 창이 닫힌 상태)
         //   editingId — 내가 만든 템플릿을 수정 중이면 그 id, 새로 만드는 중이면 ''
         let quoteTplDraft = null;
+        let quoteTplUploading = 0;                    // 올리는 중인 그림 수 (2026-09-29 검토)
         let quoteTplEditingId = '';
 
         function blankQuoteTplDraft() {
@@ -40986,7 +41029,11 @@ const QUOTE_TEMPLATES = [
             input.value = '';
             if (!files.length) return;
             // 줄인 그림을 Storage 에 올리고 템플릿에는 주소만 (2026-09-29 · 3단계 — 예전엔 base64 가 템플릿 안에)
-            const r = await gwUploadAttachments(files, { shrinkPx: QUOTE_TPL_MAX_IMG_PX });
+            const draft = quoteTplDraft;                    // 올리는 사이 다른 템플릿으로 바뀌면 거기에 넣지 않게
+            quoteTplUploading++;
+            let r;
+            try { r = await gwUploadAttachments(files, { shrinkPx: QUOTE_TPL_MAX_IMG_PX }); } finally { quoteTplUploading--; }
+            if (!draft || draft !== quoteTplDraft) return;
             r.files.forEach(m => quoteTplDraft.images.push(kobFiles.src(m)));
             gwUploadFailedAlert(r.failed);
             renderQuoteTplImages();
@@ -41035,6 +41082,7 @@ const QUOTE_TEMPLATES = [
         // asNew=true 는 [다른 이름으로 저장]
         function saveQuoteTpl(asNew) {
             if (!quoteTplDraft) return;
+            if (quoteTplUploading > 0) { alert('그림을 올리는 중입니다. 다 올라간 뒤 다시 눌러 주세요.'); return; }
             const title = (quoteTplDraft.title || '').trim();
             if (!title) { alert('템플릿 이름을 입력해 주세요.'); document.getElementById('quote-tpl-title').focus(); return; }
 
@@ -44977,12 +45025,16 @@ const QUOTE_TEMPLATES = [
             const q = loadJsonStore(DEV_NOTI_KEY, []);
             if (!Array.isArray(q) || !q.length) return 0;
             let added = 0;
+            const fresh = [];
             q.forEach(n => {
                 if (!n || collabNotifications.some(x => String(x.id) === String(n.id))) return;
                 collabNotifications.push(n);
+                fresh.push(n);
                 added++;
             });
             if (added) refreshNotiBell();
+            // 파트너가 만든 알림(개발 진행 · 검수 요청)도 받는 사람의 폰 · PC 로 (2026-09-29 검토) — 옮겨 받은 이 창이 보낸 사람이 됩니다
+            if (window.kobPush) fresh.forEach(n => kobPush.send(n, (NOTI_STYLE[n.type] || {}).label || ''));
             return added;
         }
 
@@ -53158,6 +53210,7 @@ const QUOTE_TEMPLATES = [
                 if (file.size > PARTNER_FILE_MAX_SIZE) { over.push(`${file.name} (${collabFileSize(file.size)})`); continue; }
                 const up = await gwUploadAsDataUrlShape(file, PARTNER_IMG_MAX_PX);
                 if (up.error) { over.push(up.error); continue; }
+                if (partnerVanShots.length >= PARTNER_VAN_SHOT_MAX) { over.push(`${file.name} (최대 ${PARTNER_VAN_SHOT_MAX}장)`); continue; }   // 올리는 사이 더 고른 경우
                 partnerVanShots.push(up);
             }
             if (picked.length > room) alert(`스냅샷은 최대 ${PARTNER_VAN_SHOT_MAX}장까지입니다. ${room}장만 올렸습니다.`);
@@ -55031,13 +55084,14 @@ const QUOTE_TEMPLATES = [
                 const back = document.getElementById('m-back-btn');
                 if (back) { back.textContent = '로그아웃'; back.setAttribute('onclick', 'mobileLogout()'); }
                 const sess = await kobAuth.session();
-                if (!sess) { document.getElementById('m-auth').classList.remove('hidden'); return; }
+                if (!sess) { document.getElementById('m-auth').classList.remove('hidden'); endBootSplash(); return; }
                 const me = localUsers.find(u => String(u.email || '').toLowerCase() === sess.email);
                 const msg = document.getElementById('m-auth-msg');
                 if (!me) {
                     await kobAuth.signOut();
                     document.getElementById('m-auth').classList.remove('hidden');
                     msg.textContent = '직원 목록에 없는 계정입니다. 관리자에게 문의해 주세요.';
+                    endBootSplash();
                     return;
                 }
                 if (sess.mustChange) {
@@ -55045,6 +55099,7 @@ const QUOTE_TEMPLATES = [
                     await kobAuth.signOut();
                     document.getElementById('m-auth').classList.remove('hidden');
                     msg.innerHTML = '임시 비밀번호로 처음 로그인하셨습니다.<br>먼저 <a href="' + location.pathname + '" class="underline font-semibold">그룹웨어</a>에서 새 비밀번호를 정한 뒤 다시 열어 주세요.';
+                    endBootSplash();
                     return;
                 }
                 const sel = document.getElementById('m-driver-select');
@@ -55052,9 +55107,11 @@ const QUOTE_TEMPLATES = [
                 sel.value = me.name;
                 await loadMobileVehicles();
                 mobileEnterForm();
+                endBootSplash();
                 return;
             }
 
+            endBootSplash();
             // 로컬 모드(서버 없음) — 로그인 대신 운전자 고르기
             document.getElementById('m-auth').classList.add('hidden');
             document.getElementById('m-picker').classList.remove('hidden');
@@ -56130,10 +56187,12 @@ const QUOTE_TEMPLATES = [
         // file:// 로 열면 서비스 워커를 쓸 수 없습니다. http(s) 로 들어왔을 때만 등록합니다.
         // 화면(HTML)은 네트워크를 먼저 보므로 옛 화면이 남지 않습니다. (sw.js 참고)
         if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
-            window.addEventListener('load', function () {
+            // 본체는 자료를 다 받은 뒤에 돌아서 load 가 이미 지났을 수 있습니다 — 그때는 바로 등록 (2026-09-29 검토: 푸시 칸이 멈추던 원인)
+            const regSw = function () {
                 navigator.serviceWorker.register('sw.js')
                     .catch(function () { /* 등록이 막힌 환경(사설 인증서 등)에서는 그냥 넘어갑니다 */ });
-            });
+            };
+            if (document.readyState === 'complete') regSw(); else window.addEventListener('load', regSw);
         }
 
     </script>

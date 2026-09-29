@@ -42,5 +42,12 @@ export function parseIcs(text) {
 }
 export function isStale(value, nowMs) {
     if (!value || !value.days || !value.updatedAt) return true;
-    return (nowMs || Date.now()) - new Date(value.updatedAt).getTime() > MAX_AGE_MS;
+    const t = new Date(value.updatedAt).getTime();
+    if (isNaN(t)) return true;                                                  // 날짜가 깨졌으면 새로 (2026-09-29 검토)
+    return (nowMs || Date.now()) - t > MAX_AGE_MS;
+}
+// 구글 받기가 1시간 안에 실패했으면 다시 가지 않습니다 (요청마다 구글로 가지 않게)
+export function recentlyFailed(value, nowMs) {
+    const t = new Date((value && value.failedAt) || 0).getTime();
+    return !isNaN(t) && t > 0 && (nowMs || Date.now()) - t < 3600 * 1000;
 }
