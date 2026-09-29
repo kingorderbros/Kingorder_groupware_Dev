@@ -1073,11 +1073,18 @@
                     </div>
                 </div>
 
-                <!-- 방금 제출한 내역 (이 기기에서 입력한 최근 목록) -->
+                <!-- 내 운행일지 — 서버에서 본인 것을 불러옵니다 (2026-09-29 · 예전엔 이 폰 화면 메모리에만 있어 새로고침하면 사라졌음) -->
                 <div class="mt-6 border-t border-gray-100 pt-4">
-                    <p class="text-sm font-bold text-gray-600 mb-2">방금 제출한 운행일지</p>
+                    <div class="flex items-center justify-between gap-2 mb-2">
+                        <p class="text-sm font-bold text-gray-600"><i class="fas fa-list-ul text-indigo-500 mr-1"></i>내 운행일지</p>
+                        <div class="flex items-center gap-2">
+                            <select id="m-mine-month" onchange="renderMobileMine()" class="text-xs border border-gray-300 rounded px-2 py-1 bg-white"></select>
+                            <button type="button" onclick="loadMobileMine()" title="새로고침" aria-label="새로고침" class="w-8 h-8 flex items-center justify-center rounded border border-gray-200 text-gray-400 hover:text-indigo-600"><i class="fas fa-sync-alt"></i></button>
+                        </div>
+                    </div>
+                    <div id="m-mine-summary" class="hidden grid grid-cols-4 gap-1 mb-2 text-center"></div>
                     <div id="m-recent-list" class="space-y-2 text-sm text-gray-600">
-                        <p class="text-gray-400 text-xs">아직 제출한 내역이 없습니다.</p>
+                        <p class="text-gray-400 text-xs">불러오는 중...</p>
                     </div>
                 </div>
                 </div><!-- /m-tab-log -->
@@ -55252,6 +55259,7 @@ const QUOTE_TEMPLATES = [
             await mobilePreselectReservedVehicle(driver);
             // 도착 입력이 필요한(진행중) 운행일지 목록 로드
             loadMobilePending();
+            loadMobileMine();
             // 반납 탭 데이터 미리 로드
             mobileSwitchTab('log');
             loadMobileReturnable();
@@ -55525,8 +55533,8 @@ const QUOTE_TEMPLATES = [
                     ? '✔ 운행일지가 완료 등록되었습니다.'
                     : '✔ 출발 등록 완료 — 도착 후 아래 "완료 대기"에서 도착 주행거리를 입력하세요.';
                 mobileRecent.unshift(data.log);
-                renderMobileRecent();
                 loadMobilePending();   // 진행중 목록 갱신
+                loadMobileMine();      // 내 운행일지 갱신 (2026-09-29)
                 // 폼 일부 초기화 (다음 입력 편의: 운행일자·차량은 유지)
                 ['m-from', 'm-to', 'm-start-km', 'm-end-km', 'm-depart-time', 'm-arrive-time', 'm-passengers', 'm-fuel', 'm-toll', 'm-memo', 'm-distance'].forEach(id => { document.getElementById(id).value = ''; });
             } catch (e) {
@@ -55638,27 +55646,78 @@ const QUOTE_TEMPLATES = [
                 if (!res.ok || !data.ok) throw new Error(data.error || '완료 실패');
                 // 완료된 항목은 목록에서 제거되도록 재조회
                 loadMobilePending();
+                loadMobileMine();
             } catch (e) {
                 if (pmsg) { pmsg.className = 'text-xs mt-1 h-4 text-red-500'; pmsg.innerText = '완료 실패: ' + e.message; }
             }
         }
 
-        function renderMobileRecent() {
+        // ---------- 내 운행일지 (2026-09-29) ----------
+        // 서버(/api/vehicle-logs?driver=본인)에서 불러와 달별로 보여 줍니다. 제출 · 도착 완료 뒤 저절로 새로.
+        let mobileMine = [];
+        let mobileMineLoaded = false;
+        async function loadMobileMine() {
             const el = document.getElementById('m-recent-list');
             if (!el) return;
-            if (mobileRecent.length === 0) {
-                el.innerHTML = '<p class="text-gray-400 text-xs">아직 제출한 내역이 없습니다.</p>';
+            const driver = (document.getElementById('m-driver-name') || {}).innerText || '';
+            if (!driver) { el.innerHTML = ''; return; }
+            try {
+                const res = await apiFetch(VEHICLE_LOG_API + '?driver=' + encodeURIComponent(driver), { cache: 'no-store' });
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                const data = await res.json();
+                mobileMine = (data.logs || []).filter(l => l && l.driver === driver);
+                mobileMineLoaded = true;
+                renderMobileMine();
+            } catch (e) {
+                el.innerHTML = '<p class="text-red-500 text-xs">내 운행일지를 불러오지 못했습니다. [새로고침] 을 눌러 주세요.</p>';
+            }
+        }
+        function renderMobileRecent() { loadMobileMine(); }     // 예전 이름으로 부르는 곳이 있어 남겨 둡니다
+        function renderMobileMine() {
+            const el = document.getElementById('m-recent-list');
+            const sel = document.getElementById('m-mine-month');
+            const sum = document.getElementById('m-mine-summary');
+            if (!el) return;
+            // 달 고르기 — 이번 달부터 기록이 있는 달까지 + 전체
+            const now = new Date();
+            const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+            const months = Array.from(new Set([thisMonth].concat(mobileMine.map(l => String(l.date || '').slice(0, 7)).filter(Boolean)))).sort().reverse();
+            if (sel) {
+                const keep = sel.value || thisMonth;
+                sel.innerHTML = months.map(m => `<option value="${m}">${Number(m.slice(0, 4))}년 ${Number(m.slice(5, 7))}월</option>`).join('') + '<option value="all">전체</option>';
+                sel.value = months.includes(keep) || keep === 'all' ? keep : thisMonth;
+            }
+            const pick = sel ? sel.value : thisMonth;
+            const list = mobileMine.filter(l => pick === 'all' || String(l.date || '').slice(0, 7) === pick)
+                .sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')) || String(b.departTime || '').localeCompare(String(a.departTime || '')));
+            const done = l => (l.status || (Number(l.endKm) > 0 ? '완료' : '진행중')) === '완료';
+            const dist = l => done(l) ? Math.max(0, (Number(l.endKm) || 0) - (Number(l.startKm) || 0)) : 0;
+            if (sum) {
+                const tot = (f) => list.reduce((s, l) => s + f(l), 0);
+                const cell = (label, v) => `<div class="bg-indigo-50 rounded py-1.5"><p class="text-[10px] text-indigo-400">${label}</p><p class="text-xs font-bold text-indigo-700">${v}</p></div>`;
+                sum.innerHTML = cell('운행', list.length + '건') + cell('거리', tot(dist).toLocaleString() + 'km')
+                    + cell('유류비', tot(l => Number(l.fuel) || 0).toLocaleString() + '원') + cell('통행료', tot(l => Number(l.toll) || 0).toLocaleString() + '원');
+                sum.classList.toggle('hidden', !list.length);
+            }
+            if (!list.length) {
+                el.innerHTML = `<p class="text-gray-400 text-xs">${mobileMineLoaded ? (pick === 'all' ? '제출한 운행일지가 없습니다.' : '이 달에 제출한 운행일지가 없습니다.') : '불러오는 중...'}</p>`;
                 return;
             }
-            el.innerHTML = mobileRecent.map(l => {
-                const dist = Math.max(0, (Number(l.endKm) || 0) - (Number(l.startKm) || 0));
+            el.innerHTML = list.map(l => {
+                const isDone = done(l);
                 const timeStr = (l.departTime || l.arriveTime) ? `${escapeHtml(l.departTime || '-')}~${escapeHtml(l.arriveTime || '-')} · ` : '';
                 const tollStr = Number(l.toll) ? ` · 통행료 ${Number(l.toll).toLocaleString()}원` : '';
                 const paxStr = l.passengers ? ` · 동승 ${escapeHtml(l.passengers)}` : '';
+                const badge = isDone
+                    ? '<span class="px-2 py-0.5 text-[11px] rounded-full font-medium bg-green-100 text-green-700 whitespace-nowrap">완료</span>'
+                    : '<button type="button" onclick="mobileGoPending()" class="px-2 py-0.5 text-[11px] rounded-full font-medium bg-amber-100 text-amber-700 whitespace-nowrap">진행중 · 도착 입력</button>';
                 return `
                 <div class="bg-gray-50 border border-gray-100 rounded p-2">
-                    <p class="font-medium text-gray-700">${escapeHtml(l.date)} · ${escapeHtml(l.vehicle)}</p>
-                    <p class="text-xs text-gray-500">${timeStr}${escapeHtml(l.from || '-')} → ${escapeHtml(l.to || '-')} · ${dist.toLocaleString()}km · 유류비 ${Number(l.fuel || 0).toLocaleString()}원${tollStr}${paxStr}</p>
+                    <div class="flex items-center justify-between gap-2">
+                        <p class="font-medium text-gray-700 min-w-0 truncate">${escapeHtml(l.date || '')} · ${escapeHtml(l.vehicle || '')}</p>${badge}
+                    </div>
+                    <p class="text-xs text-gray-500">${timeStr}${escapeHtml(l.from || '-')} → ${escapeHtml(l.to || '-')}${isDone ? ` · ${dist(l).toLocaleString()}km` : ` · 출발 ${(Number(l.startKm) || 0).toLocaleString()}km`} · 유류비 ${Number(l.fuel || 0).toLocaleString()}원${tollStr}${paxStr}</p>
+                    ${l.memo ? `<p class="text-[11px] text-gray-400 truncate">${escapeHtml(l.memo)}</p>` : ''}
                 </div>`;
             }).join('');
         }
