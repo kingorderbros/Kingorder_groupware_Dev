@@ -69,7 +69,8 @@
         html[data-mode="mobile"] #mobile-view { display: block; }
         /* 본체가 아직 안 떴을 때는 로그인 버튼을 누르지 못하게 — 눌리면 처리 함수가 없어 주소창에 아이디가 실려 새로고침됩니다 */
         html:not([data-kob-ready]) #login-view button[type="submit"],
-        html:not([data-kob-ready]) #partner-login button[type="submit"] { opacity: .55; pointer-events: none; }
+        html:not([data-kob-ready]) #partner-login button[type="submit"],
+        html:not([data-kob-ready]) #m-auth-btn { opacity: .55; pointer-events: none; }
     </style>
     <!-- 저장된 테마를 첫 페인트 전에 적용 (색상 깜빡임 방지) -->
     <script>
@@ -902,7 +903,8 @@
             <!-- 1단계: 운전자 선택 -->
             <div id="m-login" class="flex-1 p-6 flex flex-col justify-center">
                 <!-- 그룹웨어 아이디로 로그인 (2026-09-28 · 4단계) — 서버가 있을 때. 로그인하면 운전자는 본인으로 정해집니다 -->
-                <div id="m-auth" class="hidden">
+                <!-- 처음부터 로그인 칸이 보이게 (2026-09-29 — 예전엔 운전자 고르기 '불러오는 중' 이 먼저 보였음). 로컬 모드만 아래 고르기로 바꿉니다 -->
+                <div id="m-auth">
                     <p class="text-center text-gray-500 text-sm mb-4">그룹웨어 아이디로 로그인하세요.<br><span class="text-xs text-gray-400">한 번 로그인하면 이 폰에서는 계속 유지됩니다.</span></p>
                     <label class="block text-sm font-medium text-gray-700 mb-1">그룹웨어 ID(이메일)</label>
                     <input type="text" id="m-auth-id" autocomplete="username" class="w-full p-3 border border-gray-300 rounded-lg text-base focus:outline-none focus:ring-2 focus:ring-indigo-500 mb-3" placeholder="예: sales.lee" />
@@ -915,7 +917,7 @@
                     <button type="button" id="m-auth-btn" onclick="mobileLogin()" class="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg shadow">로그인</button>
                     <p id="m-auth-msg" class="text-center text-xs text-red-500 mt-3 min-h-[1rem] whitespace-pre-line"></p>
                 </div>
-                <div id="m-picker">
+                <div id="m-picker" class="hidden">
                 <p class="text-center text-gray-500 text-sm mb-4">운행일지를 작성할 운전자를 선택하세요.</p>
                 <label class="block text-sm font-medium text-gray-700 mb-1">운전자(본인) 선택</label>
                 <select id="m-driver-select" class="w-full p-3 border border-gray-300 rounded-lg text-base focus:outline-none focus:ring-2 focus:ring-indigo-500 mb-4">
@@ -54643,6 +54645,9 @@ const QUOTE_TEMPLATES = [
                 return;
             }
 
+            // 로컬 모드(서버 없음) — 로그인 대신 운전자 고르기
+            document.getElementById('m-auth').classList.add('hidden');
+            document.getElementById('m-picker').classList.remove('hidden');
             // 운전자 목록 로드: 법인차량을 예약 신청한 사람만 선택 가능
             const driverSel = document.getElementById('m-driver-select');
             try {
