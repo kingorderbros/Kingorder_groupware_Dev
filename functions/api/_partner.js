@@ -92,7 +92,7 @@ export function publicAccount(a) {
 
 // ---------- 파트너센터가 받는 자료 ----------
 // 누구에게 보여도 되는 설정값 (양식 · 서류 목록 · 조직 이름 등)
-export const SHARED_KEYS = ['gwPartnerTypeDocs.v1', 'gwPartnerIntakeDocs.v1', 'gwAsOptions.v1', 'gwOrgDepts.v1', 'gwOrgDeptsRemoved.v1',
+export const SHARED_KEYS = ['gwHolidays.v1', 'gwPartnerTypeDocs.v1', 'gwPartnerIntakeDocs.v1', 'gwAsOptions.v1', 'gwOrgDepts.v1', 'gwOrgDeptsRemoved.v1',
                             'gwOrgTeams.v1', 'gwOrgNoTeamLabel.v1', 'gwInboundMaxContact.v1'];
 // 파트너사 몫만 거르는 자료
 export const OWN_KEYS = ['gwPartners.v1', 'gwPartnerAccounts.v1', 'gwPartnerDeptPerm.v1', 'gwPartnerIntakes.v1', 'gwDevRequests.v1',

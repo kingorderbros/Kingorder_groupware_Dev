@@ -36,6 +36,15 @@
                 // 본체는 자료를 다 받은 뒤에야 도는데, 그동안 파트너센터·운행일지 주소로 들어와도
                 // 그룹웨어 로그인 화면이 먼저 보였다가 바뀌었습니다. 아래 <style> 이 이 속성을 봅니다.
                 document.documentElement.setAttribute('data-mode', m === 'partner' ? 'partner' : m === 'mobile' ? 'mobile' : 'groupware');
+                // 새로고침 때 로그인 화면이 잠깐 보이지 않게 (2026-09-29) — 이 브라우저에 로그인 기록(supabase-js 의 sb-…-auth-token)이
+                // 남아 있으면 로그인 화면 대신 '여는 중' 을 보여 줍니다. 본체가 들어가거나 로그인이 필요하다고 판단하면 이 표시를 뗍니다.
+                if (!m) {
+                    try {
+                        for (var i = 0; i < localStorage.length; i++) {
+                            if (/^sb-.+-auth-token$/.test(localStorage.key(i) || '')) { document.documentElement.setAttribute('data-auth', 'session'); break; }
+                        }
+                    } catch (e2) { /* 저장소를 못 읽으면 예전처럼 */ }
+                }
                 app = m === 'partner'
                     ? { f: 'partner.webmanifest',   t: '킹오더브라더스 파트너센터',   s: '파트너센터',   c: '#4338ca' }
                     : m === 'mobile'
@@ -67,6 +76,10 @@
         html[data-mode="partner"] #login-view, html[data-mode="mobile"] #login-view { display: none; }
         html[data-mode="partner"] #partner-view { display: block; }
         html[data-mode="mobile"] #mobile-view { display: block; }
+        /* 로그인이 남아 있는 새로고침 — 로그인 화면 대신 '여는 중' (2026-09-29) */
+        #boot-splash { display: none; }
+        html[data-mode="groupware"][data-auth="session"] #login-view { display: none; }
+        html[data-mode="groupware"][data-auth="session"] #boot-splash { display: flex; }
         /* 본체가 아직 안 떴을 때는 로그인 버튼을 누르지 못하게 — 눌리면 처리 함수가 없어 주소창에 아이디가 실려 새로고침됩니다 */
         html:not([data-kob-ready]) #login-view button[type="submit"],
         html:not([data-kob-ready]) #partner-login button[type="submit"],
@@ -1539,6 +1552,13 @@
     </div>
 
     <!-- ==================== 로그인 화면 ==================== -->
+    <!-- 로그인이 남아 있을 때 새로고침하면 로그인 화면 대신 이것 (2026-09-29) -->
+    <div id="boot-splash" class="fixed inset-0 z-[60] items-center justify-center bg-gray-100">
+        <div class="text-center">
+            <img src="image/logo.png" alt="킹오더브라더스" class="h-14 mx-auto mb-3 opacity-90" />
+            <p class="text-sm text-gray-500"><i class="fas fa-spinner fa-spin mr-1"></i>그룹웨어를 여는 중…</p>
+        </div>
+    </div>
     <div id="login-view" class="flex items-center justify-center min-h-screen bg-gray-200">
         <div class="w-full max-w-md p-8 bg-white rounded-xl shadow-lg">
             <div class="text-center mb-8">
@@ -11038,6 +11058,7 @@ const QUOTE_TEMPLATES = [
 
             document.getElementById('login-view').classList.add('hidden');
             document.getElementById('app-view').classList.remove('hidden');
+            endBootSplash();
             
             // 로그인 후 접근 가능한 첫 번째 메뉴로 자동 이동
             const availableMenus = document.querySelectorAll('.nav-item:not(.hidden)');
@@ -11174,6 +11195,9 @@ const QUOTE_TEMPLATES = [
 
         // 이 브라우저에 로그인이 남아 있으면 로그인 창 없이 들어갑니다 (2026-09-28)
         // 자료는 kob-store.js 가 그 로그인 권한으로 이미 읽어 두었습니다.
+        // '여는 중' 을 떼고 원래대로 (로그인 화면이 필요하면 보이고, 들어갔으면 app-view 가 보임)
+        function endBootSplash() { try { document.documentElement.removeAttribute('data-auth'); } catch (e) { /* 무시 */ } }
+        setTimeout(endBootSplash, 20000);      // 무슨 일이 있어도 20초 뒤에는 로그인 화면을 보여 줍니다 (멈춘 채 두지 않게)
         async function enterFromSession(sess) {
             const user = localUsers.find(u => String(u.email || '').toLowerCase() === sess.email);
             if (!user) {
@@ -11195,6 +11219,7 @@ const QUOTE_TEMPLATES = [
             if (new URLSearchParams(location.search).get('mode') || location.hash === '#partner') return;   // 파트너센터 · 운행일지 화면은 해당 없음
             try {
                 if (await kobAuth.recovery()) {
+                    endBootSplash();
                     openPwChange({ force: true, title: '새 비밀번호 정하기', desc: '재설정 메일의 링크로 들어오셨습니다. 앞으로 쓸 새 비밀번호를 정해 주세요.',
                         onDone: async () => {
                             await kobAuth.signOut();
@@ -11205,13 +11230,14 @@ const QUOTE_TEMPLATES = [
                 }
                 if (kobStorage.mode === 'supabase') {
                     const sess = await kobAuth.session();
-                    if (sess) { await enterFromSession(sess); return; }
+                    if (sess) { await enterFromSession(sess); endBootSplash(); return; }
                 }
+                endBootSplash();                       // 로그인이 필요합니다 — 로그인 화면을 보여 줍니다
                 const st = await kobAuth.status();
                 const box = document.getElementById('login-bootstrap');
                 if (box) box.classList.toggle('hidden', !st.empty);
                 if (st.error) showLoginMsg(st.error);
-            } catch (e) { console.warn('[auth] 시작 확인 실패', e); }
+            } catch (e) { console.warn('[auth] 시작 확인 실패', e); endBootSplash(); }
         })();
 
         // ---------- 알림 표시 규칙 ----------
@@ -12520,7 +12546,8 @@ const QUOTE_TEMPLATES = [
                 [ARCHIVE_MGR_KEY]: { label: '자료실 관리자',   reload: re(() => { archiveManagers = loadJsonStore(ARCHIVE_MGR_KEY, []); }) },
                 [AS_OPTION_KEY]:   { label: 'A/S 항목',        reload: re(() => { reloadAsOptions(); }) },
                 [CALENDAR_EDITORS_KEY]: { label: '일정 대리수정자', reload: re(() => { calendarEditors = loadJsonStore(CALENDAR_EDITORS_KEY, []); }) },
-                [QUOTE_TPL_STORAGE_KEY]: { label: '견적 템플릿', reload: re(() => { userQuoteTemplates = loadUserQuoteTemplates(); }) }
+                [QUOTE_TPL_STORAGE_KEY]: { label: '견적 템플릿', reload: re(() => { userQuoteTemplates = loadUserQuoteTemplates(); }) },
+                [HOLIDAY_KEY]:     { label: '공휴일',          reload: re(() => { gwHolidayDays(); }) }
             };
             return gwLiveMap;
         }
@@ -17286,7 +17313,40 @@ const QUOTE_TEMPLATES = [
             openScheduleModal(date);
         }
 
+        // ---------- 대한민국 공휴일 (2026-09-29) ----------
+        // 서버(/api/holidays)가 하루 한 번 구글 공휴일 캘린더에서 받아 app_store 'gwHolidays.v1' 에 둡니다.
+        // 설 · 추석 · 부처님오신날 · 대체공휴일 · 선거일 · 임시공휴일까지 자동. 기념일(어버이날 등)은 넣지 않습니다.
+        const HOLIDAY_KEY = 'gwHolidays.v1';
+        let gwHolidayCache = { raw: null, days: {}, updatedAt: '' };
+        let gwHolidayFetched = null;            // 이 창에서 방금 받아 온 것 (저장소에 반영되기 전에도 쓰려고)
+        function gwHolidayDays() {
+            let raw = '';
+            try { raw = (window.kobStorage && kobStorage.getItem(HOLIDAY_KEY)) || ''; } catch (e) { raw = ''; }
+            if (raw !== gwHolidayCache.raw) {
+                let v = null; try { v = JSON.parse(raw); } catch (e) { v = null; }
+                gwHolidayCache = { raw, days: (v && v.days) || {}, updatedAt: (v && v.updatedAt) || '' };
+            }
+            if (gwHolidayFetched && String(gwHolidayFetched.updatedAt || '') > String(gwHolidayCache.updatedAt || '')) return gwHolidayFetched.days || {};
+            return gwHolidayCache.days;
+        }
+        function gwHolidayName(ds) { return gwHolidayDays()[ds] || ''; }
+        let gwHolidayAsked = false;
+        function refreshHolidays() {
+            if (gwHolidayAsked || typeof fetch === 'undefined' || !(window.kobStorage && kobStorage.mode === 'supabase')) return;
+            gwHolidayDays();
+            const upd = gwHolidayCache.updatedAt;
+            if (upd && Date.now() - new Date(upd).getTime() < 20 * 3600 * 1000 && Object.keys(gwHolidayCache.days).length) return;
+            gwHolidayAsked = true;
+            fetch(API_BASE + '/api/holidays', { cache: 'no-store' }).then(r => r.json()).then(j => {
+                if (!j || !j.value || !j.value.days) return;
+                gwHolidayFetched = j.value;
+                const sec = document.getElementById('sec-calendar-center');
+                if (sec && !sec.classList.contains('hidden')) renderCalendar();
+            }).catch(e => console.warn('[공휴일] 받지 못했습니다', e));
+        }
+
         function renderCalendar() {
+            refreshHolidays();
             const grid = document.getElementById('cal-grid');
             const monthYearText = document.getElementById('cal-month-year');
             const dayHeader = document.getElementById('cal-day-header');
@@ -17333,7 +17393,12 @@ const QUOTE_TEMPLATES = [
                 const dateString = `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
                 const today = new Date();
                 const isToday = d === today.getDate() && m === today.getMonth() && y === today.getFullYear();
-                const dayClass = isToday ? 'bg-blue-600 text-white w-6 h-6 flex items-center justify-center rounded-full' : 'text-gray-700';
+                // 공휴일 · 일요일은 빨강, 토요일은 파랑 (2026-09-29)
+                const hol = gwHolidayName(dateString);
+                const wd = cellDate.getDay();
+                const dayClass = isToday ? 'bg-blue-600 text-white w-6 h-6 flex items-center justify-center rounded-full'
+                    : (hol || wd === 0) ? 'text-red-500' : wd === 6 ? 'text-blue-500' : 'text-gray-700';
+                const holHtml = hol ? `<div class="text-[10px] leading-tight text-red-500 font-medium truncate mb-0.5 text-right" title="${escapeHtml(hol)}">${escapeHtml(hol)}</div>` : '';
 
                 // 종일 → 이른 시간 순으로 정렬해 하루 흐름대로 보이게 한다
                 const daySchedules = deptSchedules.filter(s => s.date === dateString).sort(compareScheduleTime);
@@ -17348,11 +17413,12 @@ const QUOTE_TEMPLATES = [
 
                 return `
                     <div onclick="openDaySummaryModal('${dateString}')" title="${dateString} 하루 일정 요약 보기"
-                         class="bg-white ${minHeight} p-1 border-gray-100 group cursor-pointer hover:bg-blue-50/50 transition-colors ${opacityClass}">
+                         class="${hol ? 'bg-red-50/40' : 'bg-white'} ${minHeight} p-1 border-gray-100 group cursor-pointer hover:bg-blue-50/50 transition-colors ${opacityClass}">
                         <div class="text-right mb-1">
                             ${cntBadge}
                             <span class="text-xs sm:text-sm font-medium inline-block ${dayClass}">${d}</span>
                         </div>
+                        ${holHtml}
                         <div class="space-y-1">${scheduleHtml}</div>
                     </div>
                 `;
@@ -17393,7 +17459,8 @@ const QUOTE_TEMPLATES = [
 
             } else if (currentCalendarView === 'day') {
                 const days = ['일', '월', '화', '수', '목', '금', '토'];
-                monthYearText.innerText = `${year}년 ${month + 1}월 ${date}일 (${days[dayOfWeek]})`;
+                const dayHol = gwHolidayName(`${year}-${String(month + 1).padStart(2, '0')}-${String(date).padStart(2, '0')}`);
+                monthYearText.innerText = `${year}년 ${month + 1}월 ${date}일 (${days[dayOfWeek]})` + (dayHol ? ` · ${dayHol}` : '');
                 grid.className = 'grid grid-cols-1 bg-white';
                 if (dayHeader) dayHeader.style.display = 'none';
 
@@ -49895,7 +49962,12 @@ const QUOTE_TEMPLATES = [
         ];
         function isBizDay(d) {
             const w = d.getDay();
-            return w !== 0 && w !== 6 && !INSTALL_HOLIDAYS.includes(ymd(d));
+            // 자동 공휴일(구글 · 2026-09-29)이 있는 해는 그것만 — 예전에 손으로 적은 목록에는 틀린 날(2026-09-28)이 있었습니다.
+            // 자동 자료가 아직 없을 때(로컬 모드 · 처음 받기 전)만 예전 목록을 씁니다.
+            const ds = ymd(d);
+            const auto = (typeof gwHolidayDays === 'function') ? gwHolidayDays() : {};
+            const hasYear = Object.keys(auto).some(k => k.slice(0, 4) === ds.slice(0, 4));
+            return w !== 0 && w !== 6 && !(hasYear ? !!auto[ds] : INSTALL_HOLIDAYS.includes(ds));
         }
         // from(Date) 에서 영업일 n 개를 더한 날짜 — 'YYYY-MM-DD'
         function addBizDays(from, n) {

@@ -46,6 +46,9 @@
  *   POST /api/files/upload?name=&type=  본문 = 파일 → { file: { path, name, type, size } }
  *   GET  /api/files/get?p=경로&n=이름[&dl=1]
  *
+ * 대한민국 공휴일 (2026-09-29)
+ *   GET /api/holidays[?refresh=1]  { updatedAt, days: { 'YYYY-MM-DD': '이름' } } — 하루 한 번 구글 공휴일 캘린더에서 새로
+ *
  * 폰 · PC 푸시 알림 (2026-09-29 · 9단계 — 판단 · 암호는 _push.js)
  *   GET /api/push/key · GET /api/push/status · POST /api/push/subscribe · unsubscribe · prefs · send
  */
@@ -54,6 +57,7 @@ import * as gcal from './_gcal.js';
 import * as pc from './_partner.js';
 import * as fs from './_files.js';
 import * as push from './_push.js';
+import * as hol from './_holidays.js';
 
 const ACTIVE_RESERVE_STATUSES = ['신청완료', '승인대기중', '승인완료', '반납요청'];
 const num = (v) => (v === '' || v === null || v === undefined ? 0 : Number(v) || 0);
@@ -257,6 +261,25 @@ export async function onRequest(context) {
     try { store = db(env); } catch (e) { return json(500, { ok: false, error: e.message }); }
 
     try {
+        // ---------- 대한민국 공휴일 (2026-09-29 · 판단은 _holidays.js) ----------
+        // 공개 자료라 로그인 없이. 저장된 것이 하루 넘었으면 구글 공휴일 캘린더를 새로 받아 app_store 에 둡니다.
+        if (path === '/api/holidays' && method === 'GET') {
+            const cur = await store.storeValue(hol.KEY);
+            if (!hol.isStale(cur) && url.searchParams.get('refresh') !== '1') return json(200, { ok: true, cached: true, value: cur });
+            try {
+                const res = await fetch(hol.ICS_URL, { headers: { 'User-Agent': 'kingorder-groupware' } });
+                if (!res.ok) throw new Error('구글 공휴일 캘린더 ' + res.status);
+                const days = hol.parseIcs(await res.text());
+                if (Object.keys(days).length < 10) throw new Error('공휴일이 너무 적게 읽혔습니다');
+                const value = { updatedAt: new Date().toISOString(), source: 'google-ko-holiday', days };
+                await store.setStore(hol.KEY, value);
+                return json(200, { ok: true, cached: false, value });
+            } catch (e) {
+                if (cur && cur.days) return json(200, { ok: true, cached: true, stale: true, value: cur, error: e.message });   // 받기 실패 — 예전 것으로
+                return json(502, { ok: false, error: '공휴일을 받지 못했습니다: ' + e.message });
+            }
+        }
+
         // ---------- 폰 · PC 푸시 알림 (2026-09-29 · 9단계 — 판단 · 암호는 _push.js) ----------
         if (path.startsWith('/api/push/')) {
             if (path === '/api/push/key' && method === 'GET') {
