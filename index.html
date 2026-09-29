@@ -5390,7 +5390,7 @@
                         <tbody id="wc-arrears-body" class="text-gray-700"></tbody>
                     </table>
                 </div>
-                <p class="mt-3 text-[11px] text-gray-400"><i class="fas fa-circle-info mr-1"></i>DEV환경이라 표시되는 납입 내역은 샘플입니다. 실제로는 결제본부 시스템과 연동해야 합니다.</p>
+                <p class="mt-3 text-[11px] text-gray-400"><i class="fas fa-circle-info mr-1"></i>납입 내역은 CMS 현황의 <b>출금 · 납입 내역 올리기(엑셀)</b>로 넣은 것이 보입니다.</p>
                 <div class="mt-4 flex justify-end">
                     <button type="button" onclick="closeArrearsModal()" class="px-4 py-2 text-sm bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition-colors">닫기</button>
                 </div>
@@ -5485,7 +5485,7 @@
                     <li>이름을 바꾸면 <b>이미 저장된 업무 건의 값도 함께</b> 바뀝니다.</li>
                     <li>삭제해도 <b>그 항목을 쓰던 기존 건은 그대로</b> 남고, 앞으로 새로 고를 수만 없게 됩니다. (기존 건에는 <b>목록 외</b>로 표시)</li>
                     <li>오른쪽 숫자는 이 항목을 쓰고 있는 업무 건수입니다.</li>
-                    <li>DEV환경이라 <b>새로고침하면 처음 목록으로 돌아갑니다.</b></li>
+                    <li>[저장] 을 누르면 모든 직원에게 같은 목록으로 저장됩니다.</li>
                 </ul>
 
                 <div class="mt-4 flex justify-end gap-2">
@@ -9772,6 +9772,15 @@ const QUOTE_TEMPLATES = [
         }
 
         // 저장된 번호 뒤로 이어지게 맞춥니다 — 다시 접속해도 번호가 겹치지 않도록.
+        // ---------- 번호 맞추기 공용 (2026-09-29) — 새로고침하면 번호가 처음으로 돌아가 앞 건과 겹치던 것 ----------
+        // 목록(들)에서 re 에 맞는 숫자의 가장 큰 값 + 1
+        function gwNextSeq(items, re, min) {
+            let max = (min || 1) - 1;
+            (items || []).forEach(v => { const m = re.exec(String(v == null ? '' : v)); if (m) max = Math.max(max, Number(m[1])); });
+            return max + 1;
+        }
+        // 화면에 안 보이는 속 번호(첨부 · 사진) — 시각 + 난수라 새로고침 · 다른 사람과도 겹치지 않음
+        function gwUid(prefix) { return prefix + Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
         function syncCollabRequestsIdCounter() {
             let max = 0;
             collabRequests.forEach(x => {
@@ -9779,6 +9788,7 @@ const QUOTE_TEMPLATES = [
                 if (m) max = Math.max(max, Number(m[1]));
             });
             try { if (collabIdCounter <= max) collabIdCounter = max + 1; } catch (e) { /* 아직 선언 전 */ }
+            try { directiveGroupCounter = Math.max(directiveGroupCounter, gwNextSeq(collabRequests.map(x => x && x.directiveGroupId), /^dir_(\d+)$/)); } catch (e) { /* 아직 선언 전 */ }
         }
         function reloadCollabRequestsFromDb() {
             if (!window.kobDb) return;
@@ -9796,6 +9806,7 @@ const QUOTE_TEMPLATES = [
         let collabIdCounter = 12;
         syncCollabRequestsIdCounter();   // 저장된 번호 뒤로 이어지게
         let directiveGroupCounter = 3;
+        try { syncCollabRequestsIdCounter(); } catch (e) { /* 협업 목록이 아직이면 불러올 때 맞춥니다 */ }
         // 협업 완료 통보 큐: 완료 처리 시 요청자에게 통보할 알림을 적재
         // ---------- 저장 (2026-09-17) ----------
         // 알림은 Supabase 'notifications' 표에 한 건 = 한 줄로 둡니다 (js/kob-db.js).
@@ -12577,7 +12588,7 @@ const QUOTE_TEMPLATES = [
             const re = (fn) => () => { try { fn(); } catch (e) { console.warn('[실시간 반영]', e); } };
             gwLiveMap = {
                 [CORP_CARD_KEY]:   { label: '법인카드',        reload: re(() => { corpCards = loadJsonStore(CORP_CARD_KEY, []); }) },
-                [CARD_TXN_KEY]:    { label: '카드 사용내역',   reload: re(() => { cardTxns = loadJsonStore(CARD_TXN_KEY, []); cardTxnCounter = Math.max(cardTxnCounter, cardTxns.length + 1); }) },
+                [CARD_TXN_KEY]:    { label: '카드 사용내역',   reload: re(() => { cardTxns = loadJsonStore(CARD_TXN_KEY, []); cardTxnCounter = Math.max(cardTxnCounter, gwNextSeq(cardTxns.map(x => x && x.id), /^CT-(\d+)$/)); }) },
                 [CARD_BATCH_KEY]:  { label: '카드 업로드 이력', reload: re(() => { cardBatches = loadJsonStore(CARD_BATCH_KEY, []); }) },
                 [CARD_ITEMS_KEY]:  { label: '카드 사용 항목',  reload: re(() => { cardUseItems = loadJsonStore(CARD_ITEMS_KEY, cardUseItems); }) },
                 [MEETING_KEY]:     { label: '영업 회의',       reload: re(() => { salesMeetings = loadJsonStore(MEETING_KEY, []); }) },
@@ -13990,6 +14001,13 @@ const QUOTE_TEMPLATES = [
         let collabLevelScope = { manager: 'self', leader: 'dept', head: 'cross', exec: 'all', admin: 'all' };
         // 개별 사용자 예외: { userId: { scope, enabled } }
         let collabUserOverrides = {};
+        // 저장된 설정 불러오기 (2026-09-29 — 예전엔 [저장] 을 눌러도 저장되지 않아 새로고침하면 처음으로 돌아갔음)
+        const COLLAB_PERM_KEY = 'gwCollabPerm.v1';
+        (function loadCollabPerm() {
+            const saved = loadJsonStore(COLLAB_PERM_KEY, null);
+            if (saved && saved.levelScope) collabLevelScope = Object.assign(collabLevelScope, saved.levelScope);
+            if (saved && saved.userOverrides && typeof saved.userOverrides === 'object') collabUserOverrides = saved.userOverrides;
+        })();
 
         let currentCollabTab = 'received';
 
@@ -14549,7 +14567,7 @@ const QUOTE_TEMPLATES = [
         // ==================== 완료 첨부자료 ====================
         // 처리한 사람이 완료 처리 시 근거 자료(이미지·문서)를 올리면, 요청한 사람이 티켓 상세에서
         // 내려받지 않고 그대로 열어 확인합니다. 요청자가 열람하면 처리자 화면에 '확인함' 으로 표시됩니다.
-        // 서버가 없는 DEV환경이라 파일은 브라우저 메모리(objectURL)에만 보관합니다.
+        // 첨부는 고르자마자 화면에 보이고(blob:) 뒤에서 파일 저장소(Storage)에 올라가 경로가 저장됩니다 (2026-09-29 · 3단계).
         const COLLAB_FILE_MAX_SIZE  = 20 * 1024 * 1024;   // 파일당 20MB
         const COLLAB_FILE_MAX_COUNT = 10;                 // 티켓당 10개
         let collabCompleteFiles = [];      // 완료 모달에서 고른 파일 (제출 전 임시 보관)
@@ -14583,7 +14601,7 @@ const QUOTE_TEMPLATES = [
         // 첨부 항목 한 건 만들기 — 요청 첨부(requestFiles)·완료 첨부(completeFiles)가 같은 구조를 씁니다.
         function newCollabFileEntryLocal(file) {
             return {
-                id: 'cfile_' + collabFileIdCounter++,
+                id: gwUid('cfile_'),
                 name: file.name,
                 type: file.type || '',
                 size: file.size || 0,
@@ -14752,7 +14770,7 @@ const QUOTE_TEMPLATES = [
             renderCollabRequestFileList();
             const copies = [];
             for (let i = 0; i < Math.max(1, copyCount || 1); i++) {
-                copies.push(src.map(f => (i === 0 ? f : Object.assign({}, f, { id: 'cfile_' + collabFileIdCounter++ }))));
+                copies.push(src.map(f => (i === 0 ? f : Object.assign({}, f, { id: gwUid('cfile_') }))));
             }
             return copies;
         }
@@ -16076,6 +16094,7 @@ const QUOTE_TEMPLATES = [
                 const uid = cb.getAttribute('data-collab-override-en');
                 if (collabUserOverrides[uid]) collabUserOverrides[uid].enabled = cb.checked;
             });
+            saveJsonStore(COLLAB_PERM_KEY, { levelScope: collabLevelScope, userOverrides: collabUserOverrides });
             alert('협업 조회 권한 설정이 저장되었습니다.');
             renderCollabPermissions();
             renderCollabCenter();
@@ -16233,6 +16252,7 @@ const QUOTE_TEMPLATES = [
                 const uid = cb.getAttribute('data-calendar-override-en');
                 if (calendarUserOverrides[uid]) calendarUserOverrides[uid].enabled = cb.checked;
             });
+            saveJsonStore(CALENDAR_PERM_KEY, { levelScope: calendarLevelScope, levelDepts: calendarLevelDepts, userOverrides: calendarUserOverrides });
             alert('일정 조회 권한 설정이 저장되었습니다.');
             renderCalendarPermissions();
             renderCalendar();
@@ -16752,6 +16772,14 @@ const QUOTE_TEMPLATES = [
         // custom 스코프에서 볼 수 있는 '추가 지정 부서' 목록 (자기 부서에 더해 보이는 부서들)
         let calendarLevelDepts = { manager: [], leader: [], head: [], exec: [], admin: [] };
         let calendarUserOverrides = {}; // { userId: { scope, enabled, depts:[...] } }
+        // 저장된 설정 불러오기 (2026-09-29 — 예전엔 [저장] 을 눌러도 저장되지 않았음)
+        const CALENDAR_PERM_KEY = 'gwCalendarPerm.v1';
+        (function loadCalendarPerm() {
+            const saved = loadJsonStore(CALENDAR_PERM_KEY, null);
+            if (saved && saved.levelScope) calendarLevelScope = Object.assign(calendarLevelScope, saved.levelScope);
+            if (saved && saved.levelDepts) calendarLevelDepts = Object.assign(calendarLevelDepts, saved.levelDepts);
+            if (saved && saved.userOverrides && typeof saved.userOverrides === 'object') calendarUserOverrides = saved.userOverrides;
+        })();
 
         // 조회 범위 라벨(협업 스코프 + custom 추가). custom은 별도 설명을 붙임.
         const calendarScopeNames = {
@@ -18268,7 +18296,7 @@ const QUOTE_TEMPLATES = [
         // 화면 마크업과 렌더 로직은 한 벌만 두고, 본부별 정의(WORK_CENTERS)만 바꿔 끼웁니다.
         //   key : 'ops' | 'sales'
         //   DOM : 모든 id 를 `wc-<key>-...` 로 네임스페이스 분리 (두 화면이 동시에 존재하므로)
-        // DEV환경이라 데이터는 메모리에만 있고 새로고침하면 초기화됩니다.
+        // 업무 건은 업무 표(works)에 저장되고, 장비 목록(gwDeviceLists.v1) · 출금 · 납입 내역(가맹점 기록)도 저장됩니다 (2026-09-29).
 
         // 업무 진행 상태 (라벨은 본부별로 다르게, 흐름은 동일)
         const WC_STATUS_FLOW = ['received', 'assigned', 'working', 'hold', 'done'];
@@ -18540,7 +18568,7 @@ const QUOTE_TEMPLATES = [
         // 산출물 파일 한 건 만들기 (구조는 협업티켓 첨부 newCollabFileEntry 와 같습니다)
         function newWbsFileEntryLocal(file) {
             return {
-                id: 'wfile_' + wbsFileSeq++,
+                id: gwUid('wfile_'),
                 name: file.name, type: file.type || '', size: file.size || 0,
                 url: (typeof URL !== 'undefined' && URL.createObjectURL) ? URL.createObjectURL(file) : '',
                 ref: file, textCache: '',
@@ -18621,6 +18649,12 @@ const QUOTE_TEMPLATES = [
                 if (m) max = Math.max(max, Number(m[1]));
             });
             try { if (projectSeq <= max) projectSeq = max + 1; } catch (e) { /* 아직 선언 전 */ }
+            try {
+                const wbsIds = [], issueIds = [];
+                projects.forEach(p => { (p && p.wbs || []).forEach(w => wbsIds.push(w && w.id)); (p && p.issues || []).forEach(i => issueIds.push(i && i.id)); });
+                wbsSeq = Math.max(wbsSeq, gwNextSeq(wbsIds, /^WB-(\d+)$/));
+                prjIssueSeq = Math.max(prjIssueSeq, gwNextSeq(issueIds, /^IS-(\d+)$/));
+            } catch (e) { /* 아직 선언 전 */ }
         }
         function reloadProjectsFromDb() {
             if (!window.kobDb) return;
@@ -21173,6 +21207,8 @@ const QUOTE_TEMPLATES = [
             wc.pg = c.pg || '';
             wc.settleCycle = c.settleCycle || '';
             wc.contract = wc.payMethod ? `${wc.payMethod}${c.monthlyFee ? ' · 월 ' + Number(c.monthlyFee).toLocaleString() + '원' : ''}` : (wc.contract || '-');
+            // 출금 · 납입 내역은 가맹점 기록에 저장된 것을 그대로 봅니다 (2026-09-29)
+            ['arrears', 'rentArrears', 'rentalArrears'].forEach(f => { if (Array.isArray(c[f])) wc[f] = c[f]; });
             return wc;
         }
 
@@ -21514,6 +21550,19 @@ const QUOTE_TEMPLATES = [
             delivery: { label: '택배장비', type: 'delivery', prop: 'dlvDevices',     get: () => DELIVERY_DEVICES, accent: 'orange' }
         };
         function deviceListOf(kind) { return DEVICE_LISTS[kind].get(); }
+        // 저장된 설치 · 택배 장비 목록 (2026-09-29 — 예전엔 고쳐도 새로고침하면 처음 목록으로 돌아갔음)
+        const DEVICE_LISTS_KEY = 'gwDeviceLists.v1';
+        (function loadDeviceLists() {
+            const saved = loadJsonStore(DEVICE_LISTS_KEY, null);
+            if (!saved || typeof saved !== 'object') return;
+            ['install', 'delivery'].forEach(k => {
+                if (!Array.isArray(saved[k])) return;
+                const list = deviceListOf(k);
+                list.length = 0;
+                saved[k].map(s => String(s || '').trim()).filter(Boolean).forEach(n => list.push(n));
+            });
+        })();
+        function saveDeviceLists() { saveJsonStore(DEVICE_LISTS_KEY, { install: INSTALL_DEVICES.slice(), delivery: DELIVERY_DEVICES.slice() }); }
         const deviceTokens = v => String(v || '').split(',').map(s => s.trim()).filter(Boolean);
 
         // 이 장비를 쓰고 있는 업무 건수 — 삭제·수정할 때 영향 범위를 알려 주려고 셉니다.
@@ -21630,6 +21679,7 @@ const QUOTE_TEMPLATES = [
             const list = deviceListOf(kind);
             list.length = 0;
             names.forEach(n => list.push(n));
+            saveDeviceLists();
 
             closeDeviceListManager();
             refreshIntakeDeviceBox(key, kind);
@@ -28735,7 +28785,7 @@ const QUOTE_TEMPLATES = [
             // 긴 변 1600px 로 줄여 Storage 에 올리고 주소만 (2026-09-29 · 3단계 — 예전엔 원본 base64 가 업무 건 안에)
             gwUploadAttachments(files, { shrinkPx: 1600 }).then(r => {
                 r.files.forEach(m => w.installPhotos.push(Object.assign({
-                    id: 'ph' + (installPhotoSeq++), at: ymd(new Date()), by: currentUserName || '담당자'
+                    id: gwUid('ph'), at: ymd(new Date()), by: currentUserName || '담당자'
                 }, m)));
                 gwUploadFailedAlert(r.failed);
                 refreshInstallPhotoHost(ctx); refreshWorkViews();
@@ -32601,6 +32651,14 @@ const QUOTE_TEMPLATES = [
                 discountThreshold: 10
             }
         };
+        // 저장된 계약서 승인 설정 (2026-09-29 — 예전엔 저장되지 않아 새로고침하면 처음으로 돌아갔음)
+        const CONTRACT_APPROVAL_KEY = 'gwContractApproval.v1';
+        (function loadContractApproval() {
+            const saved = loadJsonStore(CONTRACT_APPROVAL_KEY, null);
+            if (saved && Array.isArray(saved.specialTypes)) appSettings.contractApproval.specialTypes = saved.specialTypes;
+            if (saved && typeof saved.discountThreshold === 'number') appSettings.contractApproval.discountThreshold = saved.discountThreshold;
+        })();
+        function saveContractApprovalSettings() { saveJsonStore(CONTRACT_APPROVAL_KEY, appSettings.contractApproval); }
 
         // ==================== 설정: 승인권자 지정관리 ====================
         // 승인 절차가 있는 모든 기능을 여기에 등록하면 [설정 > 승인권자 지정관리]에 자동으로 카드가 나타남.
@@ -32900,6 +32958,23 @@ const QUOTE_TEMPLATES = [
                     .map(u => u.name);
             });
         })();
+        // 저장된 승인권자 · 구성원을 기본값 위에 얹습니다 (2026-09-29 — 예전엔 [저장] 이 알림 창만 띄우고 저장하지 않았음)
+        const APPROVERS_KEY = 'gwApprovers.v1';
+        (function loadApprovers() {
+            const saved = loadJsonStore(APPROVERS_KEY, null);
+            if (!saved || typeof saved !== 'object') return;
+            const ap = saved.approvers || {};
+            Object.keys(ap).forEach(fid => {
+                if (!appSettings.approvers[fid]) return;
+                Object.keys(ap[fid] || {}).forEach(sk => {
+                    const v = ap[fid][sk];
+                    if (appSettings.approvers[fid][sk] && v && typeof v === 'object') appSettings.approvers[fid][sk] = { enabled: !!v.enabled, approver: String(v.approver || '') };
+                });
+            });
+            const mem = saved.approverMembers || {};
+            Object.keys(mem).forEach(fid => { if (Array.isArray(mem[fid])) appSettings.approverMembers[fid] = mem[fid].slice(); });
+        })();
+        function saveApproverSettings() { saveJsonStore(APPROVERS_KEY, { approvers: appSettings.approvers, approverMembers: appSettings.approverMembers }); }
 
         function allUsersForApprover() { return (typeof localUsers !== 'undefined' ? localUsers : []); }
         function approverLabel(name) {
@@ -32937,6 +33012,7 @@ const QUOTE_TEMPLATES = [
             const members = appSettings.approverMembers[featureId] || (appSettings.approverMembers[featureId] = []);
             if (members.includes(name)) { alert('이미 구성원으로 등록되어 있습니다.'); return; }
             members.push(name);
+            saveApproverSettings();
             renderApproversSettings();
         }
 
@@ -32951,6 +33027,7 @@ const QUOTE_TEMPLATES = [
             if (!confirm(msg)) return;
             appSettings.approverMembers[featureId] = approverMembersOf(featureId).filter(n => n !== name);
             assigned.forEach(s => { cfg[s.key].approver = ''; });
+            saveApproverSettings();
             renderApproversSettings();
         }
 
@@ -33290,6 +33367,7 @@ const QUOTE_TEMPLATES = [
                 if (!confirm(`사용으로 설정된 단계 중 ${missing.length}개가 승인권자 미지정 상태입니다.\n미지정 단계는 결재선에서 담당자 없이 처리됩니다. 그래도 저장할까요?`)) return;
             }
             const f = APPROVAL_FEATURES.find(x => x.id === featureId);
+            saveApproverSettings();
             alert(`[${f ? f.name : featureId}] 승인권자 설정이 저장되었습니다.\n적용 결재선: ${line.length ? line.map((l, i) => (i + 1) + '. ' + l.role + (l.approver ? '(' + l.approver + ')' : '')).join(' → ') : '없음(승인 절차 미적용)'}`);
         }
 
@@ -33340,6 +33418,7 @@ const QUOTE_TEMPLATES = [
                 alert('이미 등록된 종류입니다.'); return;
             }
             appSettings.contractApproval.specialTypes.push(val);
+            saveContractApprovalSettings();
             input.value = '';
             renderContractApprovalSettings();
         }
@@ -33350,6 +33429,7 @@ const QUOTE_TEMPLATES = [
             if (name === undefined) return;
             if (!confirm(`특수계약 종류 "${name}"을(를) 삭제하시겠습니까?`)) return;
             types.splice(index, 1);
+            saveContractApprovalSettings();
             renderContractApprovalSettings();
         }
 
@@ -33360,6 +33440,7 @@ const QUOTE_TEMPLATES = [
                 alert('할인율 기준은 0~100 사이의 숫자여야 합니다.'); input.focus(); return;
             }
             appSettings.contractApproval.discountThreshold = val;
+            saveContractApprovalSettings();
             renderContractApprovalSettings();
             alert(`할인율 승인 기준이 ${val}% 초과로 저장되었습니다.`);
         }
@@ -36451,6 +36532,7 @@ const QUOTE_TEMPLATES = [
                     t.name = name; t.deptId = deptId;
                     // 이 팀에 속한 구성원의 팀 이름도 함께 고칩니다 (이름이 어긋나지 않게)
                     localUsers.forEach(u => { if (u.dept === beforeDept && String(u.team || '').trim() === before) u.team = name; });
+                    saveLocalUsers();              // 구성원의 팀 이름도 저장 (2026-09-29 — 예전엔 빠져 새로고침하면 옛 팀 이름으로 돌아갔음)
                 } else {
                     let n = 1;
                     while (orgFindTeam('team' + n)) n++;
@@ -36501,6 +36583,7 @@ const QUOTE_TEMPLATES = [
             const people = localUsers.filter(u => u.dept === t.deptId && String(u.team || '').trim() === t.name);
             if (!confirm(`'${t.name}' 팀을 지울까요?${people.length ? `\n이 팀 구성원 ${people.length}명은 '${orgNoTeamLabel}' 으로 옮겨집니다 (계정은 그대로).` : ''}`)) return;
             people.forEach(u => { u.team = ''; });
+            if (people.length) saveLocalUsers();   // 구성원의 팀 비움도 저장 (2026-09-29)
             orgTeams = orgTeams.filter(x => x.id !== id);
             saveOrgTeams();
             syncOrgAll();
@@ -38851,7 +38934,7 @@ const QUOTE_TEMPLATES = [
         function penaltyDefaults() { return JSON.parse(JSON.stringify(PENALTY_DEFAULTS)); }
         let penaltySettings = Object.assign(penaltyDefaults(), loadJsonStore(PENALTY_SETTINGS_KEY, null) || {});
         if (!Array.isArray(penaltySettings.extras)) penaltySettings.extras = penaltyDefaults().extras;
-        let penaltyExtraSeq = penaltySettings.extras.length + 1;
+        let penaltyExtraSeq = gwNextSeq(penaltySettings.extras.map(x => x && x.id), /^px-(\d+)$/);
 
         // ---------- 설정 화면 ----------
         function penaltyReadSettingsForm() {
@@ -38973,7 +39056,7 @@ const QUOTE_TEMPLATES = [
         function resetPenaltySettings() {
             if (!confirm('위약금 계산 설정을 기본값으로 되돌립니다. 계속할까요?')) return;
             penaltySettings = penaltyDefaults();
-            penaltyExtraSeq = penaltySettings.extras.length + 1;
+            penaltyExtraSeq = gwNextSeq(penaltySettings.extras.map(x => x && x.id), /^px-(\d+)$/);
             saveJsonStore(PENALTY_SETTINGS_KEY, penaltySettings);
             renderPenaltySettings();
         }
@@ -39777,6 +39860,8 @@ const QUOTE_TEMPLATES = [
                 input.value = ''; return;
             }
 
+            const touchedCust = new Set();          // 고친 가맹점 기록 (끝나면 한 번에 저장)
+
             const stat = { added: 0, updated: 0, notFound: 0, noName: 0, badKind: 0, noMonth: 0 };
             const missing = [];
             const badKinds = [];
@@ -39795,6 +39880,8 @@ const QUOTE_TEMPLATES = [
 
                 const target = cmsFindOpsCustomer(name, bizNo);
                 if (!target) { stat.notFound++; if (missing.length < 12) missing.push(name); return; }
+                // 실제 가맹점 기록에 넣고 저장합니다 — 예전엔 화면용 복사본에만 넣어 새로고침하면 사라졌음 (2026-09-29)
+                const realCust = (target.linkCustomerId && (typeof customers !== 'undefined') && customers.find(c => c.id === target.linkCustomerId)) || cmsFindCustomer(name, bizNo);
 
                 const statusRaw = cell(r, 'status');
                 const status = CMS_PAY_STATUSES.find(s => normHeadName(s) === normHeadName(statusRaw)) || kind.defaultStatus;
@@ -39808,8 +39895,11 @@ const QUOTE_TEMPLATES = [
                     reason: cell(r, 'reason')
                 };
 
-                if (!Array.isArray(target[kind.field])) target[kind.field] = [];
-                const list = target[kind.field];
+                const owner = realCust || target;
+                if (!Array.isArray(owner[kind.field])) owner[kind.field] = [];
+                const list = owner[kind.field];
+                target[kind.field] = list;                  // 화면용 복사본도 같은 목록을 봅니다
+                if (realCust) touchedCust.add(realCust);
                 const hit = list.find(a => String(a.month || '').trim() === month);
                 if (hit) { Object.assign(hit, entry); stat.updated++; }
                 else { list.push(entry); stat.added++; }
@@ -39817,6 +39907,7 @@ const QUOTE_TEMPLATES = [
                 if (preview.length < 5) preview.push(Object.assign({ name: name, bizNo: bizNo, kind: kind.label }, entry));
             });
 
+            if (touchedCust.size && typeof saveCustomers === 'function') saveCustomers();
             renderCmsStatus();
 
             box.innerHTML = importResultBox(
@@ -42488,7 +42579,7 @@ const QUOTE_TEMPLATES = [
         //   ② 영업본부 : 요청을 확인하고 고객사에서 받은 보완서류를 항목별로 업로드 → 제출
         //   ③ 결제본부 : 항목별로 확인/반려. 반려가 있으면 재요청(반려 항목만 다시 업로드),
         //                모든 항목이 확인되면 '취합 확인 완료' 로 종결
-        // DEV환경이라 파일은 실제로 저장하지 않고 파일명만 메모리에 보관합니다.
+        // 파일은 파일 저장소(Storage)에 올리고 경로(filePath)를 저장합니다 (2026-09-29 · 3단계).
 
         const PAY_WC_TABS = [
             {
@@ -42564,6 +42655,23 @@ const QUOTE_TEMPLATES = [
             { id: 'etc',       name: '기타 심사 요청자료',           regs: [],            active: true }
         ];
         let payDocCatalogSeq = 1;
+        // 저장된 항목 목록 (2026-09-29 — 예전엔 코드에 적힌 목록만 있어 항목을 고쳐도 새로고침하면 처음으로 돌아갔음)
+        const PAYDOC_CATALOG_KEY = 'gwPayDocCatalog.v1';
+        let payDocCatalogSavedStr = '';
+        (function loadPayDocCatalog() {
+            const saved = loadJsonStore(PAYDOC_CATALOG_KEY, null);
+            if (Array.isArray(saved) && saved.length) payDocCatalog = saved.filter(d => d && d.id && d.name);
+            payDocCatalogSavedStr = JSON.stringify(payDocCatalog);
+            // 새 항목 번호는 저장된 'doc-숫자' 의 가장 큰 값 다음부터 — 겹쳐서 앞 항목을 덮지 않게
+            payDocCatalogSeq = payDocCatalog.reduce((m, d) => { const x = /^doc-(\d+)$/.exec(d.id); return x ? Math.max(m, Number(x[1]) + 1) : m; }, 1);
+        })();
+        // 바뀌었을 때만 저장 (관리 화면을 그릴 때마다 부릅니다 — 추가 · 수정 · 삭제 · 사용중지 · 순서 모두 이 화면을 다시 그림)
+        function savePayDocCatalog() {
+            const s = JSON.stringify(payDocCatalog);
+            if (s === payDocCatalogSavedStr) return;
+            payDocCatalogSavedStr = s;
+            saveJsonStore(PAYDOC_CATALOG_KEY, payDocCatalog);
+        }
 
         function payDocCatalogItem(id) { return payDocCatalog.find(d => d.id === id) || null; }
         // 신규 요청에서 고를 수 있는 서류 (사용중지 제외)
@@ -42605,6 +42713,7 @@ const QUOTE_TEMPLATES = [
         //   filePath                   : Storage 경로 (2026-09-29 · 3단계)
         //   viewed/viewedBy/viewedAt   : 결제본부가 첨부를 열어 내용을 확인했는지 — 열람 전에는 '확인' 처리를 막습니다
         let payDocSeq = 5;
+        function syncPayDocSeq() { payDocSeq = Math.max(payDocSeq, gwNextSeq(payDocRequests.map(x => x && x.id), /-(\d+)$/)); }
         const payDocItem = (docId, reason, over) => Object.assign({
             docId, name: (payDocCatalogItem(docId) || {}).name || docId,
             reason: reason || '', status: 'pending',
@@ -42617,18 +42726,26 @@ const QUOTE_TEMPLATES = [
         // ---------- 저장 (2026-09-17) ----------
         // 보완서류 요청은 Supabase 'pay_doc_requests' 표에 한 건 = 한 줄로 둡니다 (js/kob-db.js).
         let payDocRequests = (window.kobDb ? kobDb.rows('pay_doc_requests') : []);
-        let payDocRequestsSaved = new Map(payDocRequests.map(x => [x.id, JSON.stringify(x)]));
+        let payDocRequestsSaved = new Map(payDocRequests.map(x => [x.id, JSON.stringify(typeof payDocForSave === 'function' ? payDocForSave(x) : x)]));
+        if (typeof syncPayDocSeq === 'function') syncPayDocSeq();                           // 저장된 요청 번호 다음부터 (2026-09-29 — 예전엔 5 부터라 앞 요청을 덮을 수 있었음)
 
+        // 저장할 때 화면용 칸(읽어 둔 글 내용 · File 참조)은 뺍니다 — 글 내용이 수백 KB 라 자료가 무거워졌음 (2026-09-29)
+        function payDocForSave(x) {
+            const o = Object.assign({}, x);
+            if (Array.isArray(x.items)) o.items = x.items.map(it => { const c = Object.assign({}, it); delete c.textCache; delete c.fileRef; return c; });
+            return o;
+        }
         function savePayDocs() {
             if (!window.kobDb) return;
             const alive = new Set();
             payDocRequests.forEach(x => {
                 if (!x || !x.id) return;
                 alive.add(x.id);
-                const now = JSON.stringify(x);
+                const clean = payDocForSave(x);
+                const now = JSON.stringify(clean);
                 if (payDocRequestsSaved.get(x.id) === now) return;
                 payDocRequestsSaved.set(x.id, now);
-                kobDb.save('pay_doc_requests', x).catch(e => console.error('[보완서류 요청] 저장 실패', e));
+                kobDb.save('pay_doc_requests', clean).catch(e => console.error('[보완서류 요청] 저장 실패', e));
             });
             Array.from(payDocRequestsSaved.keys()).forEach(id => {
                 if (alive.has(id)) return;
@@ -42640,7 +42757,8 @@ const QUOTE_TEMPLATES = [
         function reloadPayDocsFromDb() {
             if (!window.kobDb) return;
             payDocRequests = kobDb.rows('pay_doc_requests');
-            payDocRequestsSaved = new Map(payDocRequests.map(x => [x.id, JSON.stringify(x)]));
+            payDocRequestsSaved = new Map(payDocRequests.map(x => [x.id, JSON.stringify(payDocForSave(x))]));
+            if (typeof syncPayDocSeq === 'function') syncPayDocSeq();
             if (typeof markPayDocSamples === 'function') markPayDocSamples();
             if (typeof renderPayDocPanel === 'function') renderPayDocPanel();
         }
@@ -43036,6 +43154,7 @@ const QUOTE_TEMPLATES = [
         }
 
         function renderPayDocCatalogAdmin() {
+            savePayDocCatalog();
             const body = document.getElementById('paydoc-catalog-body');
             if (!body) return;
             if (!payDocCatalog.length) {
@@ -43315,6 +43434,9 @@ const QUOTE_TEMPLATES = [
             });
         }
         function renderPayDocDetail() {
+            // 상세 창에서 한 처리(항목 · 파일 · 착수 · 제출 · 확인 · 반려 · 재요청 · 취합완료 …)는 모두 이 화면을 다시 그리므로 여기서 저장합니다
+            // (2026-09-29 — 예전엔 창을 닫을 때까지 저장되지 않아, 그사이 새로고침 · 남의 변경이 오면 내 처리가 사라졌음)
+            savePayDocs();
             const r = payDocReq(payDocDetailId);
             const host = document.getElementById('paydoc-detail-body');
             if (!r || !host) return;
@@ -46698,7 +46820,7 @@ const QUOTE_TEMPLATES = [
         // dedupe 는 업로드 때 만드는 값과 같은 규칙(카드키|이용일|승인번호|승인금액)이라
         // 같은 내역을 실제로 올려도 중복으로 쌓이지 않고 덮어씁니다.
         let cardTxns = loadJsonStore(CARD_TXN_KEY, []);
-        let cardTxnCounter = cardTxns.length + 1;
+        let cardTxnCounter = gwNextSeq(cardTxns.map(x => x && x.id), /^CT-(\d+)$/);
         let cardBatches = loadJsonStore(CARD_BATCH_KEY, []);      // 업로드 이력
         let cardUseItems = loadJsonStore(CARD_ITEMS_KEY, CARD_USE_ITEM_DEFAULTS.slice());
 
@@ -47851,6 +47973,13 @@ const QUOTE_TEMPLATES = [
                     if (oldLabel !== newLabel) {
                         vehicleReserves.forEach(r => { if (r.vehicle === oldLabel) r.vehicle = newLabel; });
                         vehicleLogs.forEach(l => { if (l.vehicle === oldLabel) l.vehicle = newLabel; });
+                        // 서버의 예약 · 운행내역도 함께 (2026-09-29)
+                        if (kobStorage.mode === 'supabase') {
+                            apiFetch(API_BASE + '/api/vehicles/rename', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ from: oldLabel, to: newLabel }) })
+                                .then(r => r.json().then(j => { if (!r.ok || j.ok === false) throw new Error(j.error || ('HTTP ' + r.status)); }))
+                                .then(() => { reloadVehicleReserves(); reloadVehicleLogs(); })
+                                .catch(e => alert('기존 예약 · 운행내역의 차량 이름을 서버에서 바꾸지 못했습니다.\n' + ((e && e.message) || '')));
+                        }
                     }
                 }
                 alert('차량 정보가 수정되었습니다.');
@@ -48407,11 +48536,8 @@ const QUOTE_TEMPLATES = [
                     closeVehicleReserveModal();
                     alert('차량 예약이 신청되었습니다. (상태: 승인대기중)\n관리본부 승인 후 차키를 전달받게 됩니다.');
                 } catch (e) {
-                    // 서버 미연결 시 로컬 폴백
-                    vehicleReserves.unshift({ id: 'VR-' + String(vehicleReserveIdCounter++).padStart(4, '0'), ...data, status: '승인대기중' });
-                    renderVehicleReserves();
-                    closeVehicleReserveModal();
-                    alert('차량 예약이 등록되었습니다. (오프라인 · 상태: 승인대기중)\n' + (e.message ? '('+e.message+')' : ''));
+                    // 서버에 저장되지 않았으면 등록된 것처럼 보이지 않게 — 창은 그대로 두고 다시 누르게 합니다 (2026-09-29 — 예전엔 화면에만 넣고 '등록되었습니다(오프라인)' 라 새로고침하면 사라졌음)
+                    alert('차량 예약을 저장하지 못했습니다. 인터넷 연결을 확인한 뒤 다시 [신청] 을 눌러 주세요.\n' + (e.message ? '(' + e.message + ')' : ''));
                 }
             }
         }
@@ -48920,11 +49046,8 @@ const QUOTE_TEMPLATES = [
                     closeVehicleLogModal();
                     reloadVehicleLogs();
                 }).catch(err => {
-                    // 서버 미연결 시 로컬 폴백 등록
-                    vehicleLogs.unshift({ id: 'VL-' + String(vehicleLogIdCounter++).padStart(4, '0'), ...data });
-                    alert('운행내역이 등록되었습니다. (서버 미연결 - 로컬 임시 저장: ' + err.message + ')');
-                    closeVehicleLogModal();
-                    renderVehicleLogs();
+                    // 서버에 저장되지 않았으면 창을 닫지 않고 알립니다 (2026-09-29 — 예전엔 화면에만 넣고 '등록되었습니다' 라 새로고침하면 사라졌음)
+                    alert('운행내역을 저장하지 못했습니다. 인터넷 연결을 확인한 뒤 다시 [등록] 을 눌러 주세요.\n(' + err.message + ')');
                 });
             }
         }

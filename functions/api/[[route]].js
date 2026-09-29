@@ -823,6 +823,25 @@ export async function onRequest(context) {
         // 법인차량 예약 · 운행일지 고치기 · 지우기 (2026-09-28)
         //   예전에는 서버에 이 길이 없어 화면에서만 바뀌고 새로 불러오면 되돌아갔습니다.
         //   고치기: 관리자 · 전체 자료 권한 · 그 화면 권한(예약관리 / 운행내역). 지우기: 관리자 · 전체 자료 권한만.
+        // 차량번호 · 모델을 바꾸면 기존 예약 · 운행내역의 차량 이름도 한 번에 (2026-09-29 — 예전엔 화면에서만 바뀌어 새로고침하면 옛 이름으로 돌아가 차량과 끊겼음)
+        if (path === '/api/vehicles/rename' && method === 'POST') {
+            const gate = await requirePerm(env, store, request, ['data-admin', 'management-vehicle', 'management-vehicle-reserve']);
+            if (gate.error) return gate.error;
+            const input = await body();
+            const from = str(input.from), to = str(input.to);
+            if (!from || !to || from === to) return bad('바꿀 차량 이름이 필요합니다.');
+            let changed = 0;
+            for (const table of ['vehicle_reservations', 'vehicle_logs']) {
+                for (const row of await store.rows(table)) {
+                    if (row.vehicle !== from) continue;
+                    const { id, ...data } = row;
+                    data.vehicle = to;
+                    await store.upsert(table, id, data);
+                    changed++;
+                }
+            }
+            return json(200, { ok: true, changed });
+        }
         if ((path === '/api/reservations' || path === '/api/vehicle-logs') && (method === 'PATCH' || method === 'DELETE')) {
             const isRes = path === '/api/reservations';
             const perms = method === 'DELETE' ? ['data-admin'] : ['data-admin', isRes ? 'management-vehicle-reserve' : 'management-vehicle'];

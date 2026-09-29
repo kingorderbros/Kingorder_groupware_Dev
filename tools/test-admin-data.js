@@ -95,6 +95,14 @@ global.fetch = async (url, opt = {}) => {
     ok(await call('car@k.co', 'POST', '/api/vehicle-logs', { date: '2026-10-01', vehicle: '1가1', driver: '다른직원', from: 'a', to: 'b', startKm: 1 }) === 201
         && last.log.driver === '다른직원', '차량 담당은 다른 운전자 이름으로 대신 적을 수 있다');
 
+    console.log('\n[차량 이름 바꾸기 (2026-09-29)]');
+    tables.vehicle_reservations.set('VR-0100', { vehicle: '옛이름', applicant: '직원' });
+    tables.vehicle_logs.set('VL-0100', { vehicle: '옛이름', driver: '직원', startKm: 1 });
+    ok(await call('staff@k.co', 'POST', '/api/vehicles/rename', { from: '옛이름', to: '새이름' }) === 403, '일반 직원은 못 바꾼다');
+    ok(await call('car@k.co', 'POST', '/api/vehicles/rename', { from: '옛이름', to: '새이름' }) === 200 && last.changed === 2
+        && tables.vehicle_reservations.get('VR-0100').vehicle === '새이름' && tables.vehicle_logs.get('VL-0100').vehicle === '새이름'
+        && tables.vehicle_logs.get('VL-0100').driver === '직원', '차량 담당은 기존 예약 · 운행내역의 차량 이름을 한 번에 바꾼다 (다른 칸은 그대로)');
+
     console.log(`\n=========== 통과 ${pass} · 실패 ${fail} ===========`);
     process.exit(fail ? 1 : 0);
 })().catch(e => { console.error(e); process.exit(1); });
