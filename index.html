@@ -9637,6 +9637,7 @@ const QUOTE_TEMPLATES = [
     <script src="js/kob-store.js"></script>
     <script src="js/kob-files.js"></script>
     <script src="js/kob-presence.js"></script>
+    <script src="js/kob-push.js"></script>
     <script type="text/x-kob-main" id="kob-main">
         // ==================== 운행내역 백엔드 API 설정 ====================
         // 같은 서버(server.js)에서 HTML을 서빙하면 상대경로로 동작.
@@ -11055,6 +11056,11 @@ const QUOTE_TEMPLATES = [
                 if (acct && acct.id) kobPresence.start({ id: acct.id, justLoggedIn: true });
             }
             renderPresenceUi();
+            setTimeout(() => maybeAskPush(), 2500);        // 폰 · PC 알림 켜기 안내 (2026-09-29)
+            try {
+                const q = new URLSearchParams(location.search);
+                if (q.has('noti')) { q.delete('noti'); history.replaceState(null, '', location.pathname + (q.toString() ? '?' + q : '') + location.hash); setTimeout(openNotiFromPush, 300); }
+            } catch (e) { /* 주소를 손대지 못하면 그냥 둡니다 */ }
         }
 
         // ==================== 비밀번호 — 변경 · 재설정 · 임시 발급 (2026-09-16) ====================
@@ -11273,6 +11279,8 @@ const QUOTE_TEMPLATES = [
         function pushNotification(n) {
             collabNotifications.push(n);
             refreshNotiBell();
+            // 받는 사람의 폰 · PC 로도 (2026-09-29 · 9단계 — 끈 종류 · 보낸 사람 자신은 서버가 뺍니다)
+            if (window.kobPush) kobPush.send(n, (NOTI_STYLE[n.type] || {}).label || '');
             return n;
         }
 
@@ -11586,12 +11594,100 @@ const QUOTE_TEMPLATES = [
                 </div>`
                 : '<p class="mt-4 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded px-3 py-2"><i class="fas fa-circle-info mr-1"></i>조직도에 등록되지 않은 계정이라 사진·연락처를 저장할 수 없습니다. (데모 계정)</p>'}
 
+                <div id="my-push-box" class="mt-4 rounded border border-gray-200 p-3 text-sm text-gray-400">폰 · PC 알림 상태를 확인하는 중…</div>
+
                 <div class="mt-5 flex flex-wrap items-center justify-end gap-2">
                     <button type="button" onclick="openPwChange()" class="px-4 py-2 text-sm rounded border border-amber-300 text-amber-700 bg-amber-50 hover:bg-amber-100 transition-colors"><i class="fas fa-key mr-1"></i>비밀번호 변경</button>
                     <button type="button" onclick="handleLogout()" class="px-4 py-2 text-sm rounded border border-red-200 text-red-600 bg-white hover:bg-red-50 transition-colors mr-auto"><i class="fas fa-sign-out-alt mr-1"></i>로그아웃</button>
                     <button type="button" onclick="closeMyProfile()" class="px-4 py-2 text-sm bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition-colors">닫기</button>
                     ${me ? '<button type="button" onclick="submitMyProfile()" class="px-4 py-2 text-sm rounded bg-blue-600 text-white hover:bg-blue-700 transition-colors"><i class="fas fa-floppy-disk mr-1"></i>저장</button>' : ''}
                 </div>`;
+            renderMyPushBox();
+        }
+
+        // ==================== 폰 · PC 알림 켜기 (2026-09-29 · 9단계) ====================
+        async function renderMyPushBox() {
+            const box = document.getElementById('my-push-box');
+            if (!box) return;
+            if (!window.kobPush || !kobPush.remote) { box.innerHTML = '<p class="text-xs text-gray-400"><i class="fas fa-bell-slash mr-1"></i>폰 · PC 알림은 서버에 연결된 그룹웨어에서만 쓸 수 있습니다.</p>'; return; }
+            const st = await kobPush.state();
+            let info = null;
+            if (st.subscribed) { try { info = await kobPush.status(); } catch (e) { info = null; } }
+            const head = `<p class="text-sm font-bold text-gray-700 mb-1"><i class="fas fa-mobile-screen-button text-indigo-500 mr-1"></i>폰 · PC 알림</p>
+                <p class="text-xs text-gray-500 mb-2">켜 두면 그룹웨어를 닫아 두어도 새 업무 · 요청이 오면 이 기기에 알림이 뜹니다.</p>`;
+            let body;
+            if (!st.supported) {
+                body = st.ios && !st.standalone
+                    ? '<p class="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded px-3 py-2">아이폰 · 아이패드는 <b>사파리에서 [공유] › [홈 화면에 추가]</b> 한 뒤, 홈 화면의 그룹웨어 아이콘으로 열어야 알림을 받을 수 있습니다 (iOS 16.4 이상).</p>'
+                    : '<p class="text-xs text-gray-500">이 브라우저는 알림을 받을 수 없습니다. 크롬 · 엣지 · 사파리 최신판에서 열어 주세요.</p>';
+            } else if (!st.ready) {
+                body = '<p class="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded px-3 py-2">서버에 알림 키가 아직 설정되지 않았습니다. 관리자에게 문의해 주세요.</p>';
+            } else if (st.permission === 'denied') {
+                body = '<p class="text-xs text-red-700 bg-red-50 border border-red-200 rounded px-3 py-2">이 기기에서 알림이 <b>차단</b>되어 있습니다. 브라우저(또는 폰) 설정 › 사이트 설정 › 알림에서 허용한 뒤 다시 열어 주세요.</p>';
+            } else if (!st.subscribed) {
+                body = '<button type="button" onclick="myPushEnable()" class="px-3 py-1.5 text-xs font-medium rounded bg-indigo-600 text-white hover:bg-indigo-700"><i class="fas fa-bell mr-1"></i>이 기기에서 알림 받기</button>';
+            } else {
+                const prefs = (info && info.prefs) || {};
+                const cats = (info && info.categories) || [];
+                body = `<div class="flex flex-wrap items-center gap-2 mb-2">
+                        <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-green-50 text-green-700 border border-green-200"><span class="w-1.5 h-1.5 rounded-full bg-green-500"></span>이 기기에서 받는 중</span>
+                        <span class="text-[11px] text-gray-400">받는 기기 ${(info && info.devices ? info.devices.length : 1)}대</span>
+                        <button type="button" onclick="myPushDisable()" class="ml-auto px-2.5 py-1 text-[11px] rounded border border-gray-300 text-gray-600 bg-white hover:bg-gray-100">이 기기 끄기</button>
+                    </div>
+                    <p class="text-[11px] text-gray-500 mb-1">받을 알림 (모든 기기에 함께 적용)</p>
+                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-1.5">${cats.map(c => `
+                        <label class="flex items-center gap-1.5 text-xs text-gray-700 cursor-pointer"><input type="checkbox" ${prefs[c.id] !== false ? 'checked' : ''} onchange="myPushPref('${c.id}', this.checked)" class="rounded" />${escapeHtml(c.label)}</label>`).join('')}
+                    </div>`;
+            }
+            box.className = 'mt-4 rounded border border-gray-200 p-3';
+            box.innerHTML = head + body;
+        }
+        async function myPushEnable() {
+            try { await kobPush.enable(); showAppToast('이 기기에서 알림을 받습니다.', 'green'); }
+            catch (e) { alert((e && e.message) || '알림을 켜지 못했습니다.'); }
+            renderMyPushBox();
+            gwPushAskHide();
+        }
+        async function myPushDisable() {
+            if (!confirm('이 기기에서 알림을 그만 받을까요?')) return;
+            await kobPush.disable();
+            renderMyPushBox();
+        }
+        async function myPushPref(id, on) {
+            try { await kobPush.setPrefs({ [id]: !!on }); }
+            catch (e) { alert('저장하지 못했습니다: ' + ((e && e.message) || '')); renderMyPushBox(); }
+        }
+        // 로그인한 뒤 한 번 — 아직 켜지 않은 기기에 작은 안내 (나중에를 누르면 이 기기에서 7일간 안 물음)
+        const PUSH_ASK_KEY = 'gwPushAskLater.v1';
+        function gwPushAskHide() { const el = document.getElementById('gw-push-ask'); if (el) el.remove(); }
+        async function maybeAskPush() {
+            if (!window.kobPush || !kobPush.remote || typeof document === 'undefined') return;
+            try { const later = Number(localStorage.getItem(PUSH_ASK_KEY) || 0); if (later && Date.now() - later < 7 * 86400000) return; } catch (e) { /* 저장 막힘 */ }
+            const st = await kobPush.state();
+            if (st.subscribed || st.permission === 'denied' || !st.ready) return;
+            if (!st.supported && !(st.ios && !st.standalone)) return;
+            if (document.getElementById('gw-push-ask')) return;
+            const el = document.createElement('div');
+            el.id = 'gw-push-ask';
+            el.className = 'fixed bottom-4 right-4 z-[9998] max-w-sm bg-white border border-gray-200 rounded-xl shadow-xl p-4 text-sm';
+            el.innerHTML = st.supported
+                ? `<p class="font-bold text-gray-800 mb-1"><i class="fas fa-bell text-indigo-500 mr-1"></i>폰 · PC 알림을 켤까요?</p>
+                   <p class="text-xs text-gray-500 mb-3">그룹웨어를 닫아 두어도 새 업무 · 요청이 오면 바로 알려 드립니다. 받을 종류는 [내 정보]에서 고를 수 있습니다.</p>
+                   <div class="flex justify-end gap-2"><button type="button" onclick="gwPushAskLater()" class="px-3 py-1.5 text-xs rounded border border-gray-300 text-gray-600">나중에</button>
+                   <button type="button" onclick="myPushEnable()" class="px-3 py-1.5 text-xs rounded bg-indigo-600 text-white">켜기</button></div>`
+                : `<p class="font-bold text-gray-800 mb-1"><i class="fas fa-bell text-indigo-500 mr-1"></i>아이폰에서 알림을 받으려면</p>
+                   <p class="text-xs text-gray-500 mb-3">사파리 아래 <b>[공유]</b> › <b>[홈 화면에 추가]</b> 한 뒤, 홈 화면의 그룹웨어 아이콘으로 열고 [내 정보]에서 알림을 켜 주세요.</p>
+                   <div class="flex justify-end"><button type="button" onclick="gwPushAskLater()" class="px-3 py-1.5 text-xs rounded border border-gray-300 text-gray-600">알겠습니다</button></div>`;
+            document.body.appendChild(el);
+        }
+        function gwPushAskLater() { try { localStorage.setItem(PUSH_ASK_KEY, String(Date.now())); } catch (e) { /* 무시 */ } gwPushAskHide(); }
+        // 폰 알림을 눌러 들어오면 알림함을 펼칩니다 (?noti= · 이미 열린 창이면 서비스 워커가 알려 줌)
+        function openNotiFromPush() {
+            const panel = document.getElementById('noti-panel');
+            if (panel && panel.classList.contains('hidden') && typeof toggleNotiPanel === 'function') toggleNotiPanel();
+        }
+        if (typeof navigator !== 'undefined' && navigator.serviceWorker && navigator.serviceWorker.addEventListener) {
+            navigator.serviceWorker.addEventListener('message', (e) => { if (e.data && e.data.type === 'kob-open-noti') openNotiFromPush(); });
         }
 
         async function onMyPhotoPicked(input) {

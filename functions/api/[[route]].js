@@ -45,11 +45,15 @@
  *   POST /api/files/session             로그인 토큰 → 파일용 쿠키 (직원 · 파트너 모두)
  *   POST /api/files/upload?name=&type=  본문 = 파일 → { file: { path, name, type, size } }
  *   GET  /api/files/get?p=경로&n=이름[&dl=1]
+ *
+ * 폰 · PC 푸시 알림 (2026-09-29 · 9단계 — 판단 · 암호는 _push.js)
+ *   GET /api/push/key · GET /api/push/status · POST /api/push/subscribe · unsubscribe · prefs · send
  */
 
 import * as gcal from './_gcal.js';
 import * as pc from './_partner.js';
 import * as fs from './_files.js';
+import * as push from './_push.js';
 
 const ACTIVE_RESERVE_STATUSES = ['신청완료', '승인대기중', '승인완료', '반납요청'];
 const num = (v) => (v === '' || v === null || v === undefined ? 0 : Number(v) || 0);
@@ -253,6 +257,61 @@ export async function onRequest(context) {
     try { store = db(env); } catch (e) { return json(500, { ok: false, error: e.message }); }
 
     try {
+        // ---------- 폰 · PC 푸시 알림 (2026-09-29 · 9단계 — 판단 · 암호는 _push.js) ----------
+        if (path.startsWith('/api/push/')) {
+            if (path === '/api/push/key' && method === 'GET') {
+                return json(200, { ok: true, ready: push.keysReady(env), publicKey: push.keysReady(env) ? str(env.VAPID_PUBLIC_KEY) : '' });
+            }
+            const st = await requireStaff(env, store, request);
+            if (st.error) return st.error;
+            if (!st.rec.id) return json(400, { ok: false, error: '구성원 번호가 없는 계정입니다.' });
+            const input = method === 'POST' ? await body() : {};
+            const load = async () => { const v = await store.storeValue(push.KEY); return Array.isArray(v) ? v : []; };
+            if (path === '/api/push/status' && method === 'GET') {
+                const rec = (await load()).find(r => r.id === st.rec.id) || {};
+                return json(200, { ok: true, ready: push.keysReady(env), devices: (rec.subs || []).map(x => ({ device: x.device, at: x.at, endpointTail: String(x.endpoint).slice(-12) })),
+                                   prefs: Object.fromEntries(push.CATEGORIES.map(c => [c.id, push.wants(rec, c.id)])), categories: push.CATEGORIES });
+            }
+            if (path === '/api/push/subscribe' && method === 'POST') {
+                if (!push.validSubscription(input.subscription)) return bad('알림 받기 정보가 올바르지 않습니다.');
+                await store.setStore(push.KEY, push.addSub(await load(), st.rec.id, input.subscription, input.device));
+                return json(200, { ok: true });
+            }
+            if (path === '/api/push/unsubscribe' && method === 'POST') {
+                await store.setStore(push.KEY, push.removeSub(await load(), str(input.endpoint)));
+                return json(200, { ok: true });
+            }
+            if (path === '/api/push/prefs' && method === 'POST') {
+                await store.setStore(push.KEY, push.setPrefs(await load(), st.rec.id, input.prefs || {}));
+                return json(200, { ok: true });
+            }
+            if (path === '/api/push/send' && method === 'POST') {
+                const n = input.n && typeof input.n === 'object' ? input.n : null;
+                if (!n) return bad('보낼 알림이 없습니다.');
+                if (!push.keysReady(env)) return json(200, { ok: true, sent: 0, skipped: 'VAPID 키가 설정되지 않았습니다.' });
+                const users = (await store.storeValue('gwUsers.v1')) || [];
+                const list = await load();
+                const cat = push.categoryOf(n.type);
+                const payload = push.payloadOf(n, { [n.type]: str(input.label) });
+                const targets = push.recipientsOf(users, n, st.me.email)
+                    .map(u => list.find(r => r.id === u.id)).filter(r => r && push.wants(r, cat))
+                    .flatMap(r => (r.subs || []));
+                let sent = 0; const gone = [];
+                await Promise.all(targets.map(async (sub) => {
+                    try {
+                        const q = await push.buildRequest(sub, payload, env);
+                        const res = await fetch(q.url, q.init);
+                        if (res.status === 404 || res.status === 410) gone.push(sub.endpoint);      // 브라우저가 구독을 버림
+                        else if (res.ok) sent++;
+                        else console.warn('[push] 보내기 실패', res.status, (await res.text()).slice(0, 200));
+                    } catch (e) { console.warn('[push] 보내기 오류', e && e.message); }
+                }));
+                if (gone.length) { let l = await load(); gone.forEach(ep => { l = push.removeSub(l, ep); }); await store.setStore(push.KEY, l); }
+                return json(200, { ok: true, sent, targets: targets.length, removed: gone.length });
+            }
+            return json(404, { ok: false, error: '없는 주소입니다: ' + path });
+        }
+
         // ---------- 첨부파일 (2026-09-29 · 3단계 — 판단은 _files.js) ----------
         if (path.startsWith('/api/files/')) {
             const secret = str(env.SUPABASE_SERVICE_ROLE_KEY);

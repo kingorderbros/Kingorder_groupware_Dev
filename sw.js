@@ -8,7 +8,7 @@
 //   새 화면(index.html)과 옛 스크립트가 섞여 돌았습니다 — 파트너센터 로그인이 안 되던 원인.
 // 그림 · 글꼴처럼 잘 안 바뀌는 파일만 **캐시 먼저** 로 빠르게 띄웁니다.
 // 운행일지 등 /api/ 요청은 캐시하지 않습니다 — 지난 값이 남으면 안 되는 자료입니다.
-const CACHE = 'kob-dev-v3';   // 이름을 올리면 activate 에서 옛 캐시를 지웁니다 (2026-09-05 · v3 2026-09-28 옛 스크립트 정리)
+const CACHE = 'kob-dev-v4';   // 이름을 올리면 activate 에서 옛 캐시를 지웁니다 (2026-09-05 · v3 2026-09-28 옛 스크립트 정리 · v4 2026-09-29 푸시 알림)
 const OFFLINE_HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>연결 없음</title></head>
@@ -76,5 +76,30 @@ self.addEventListener('fetch', (e) => {
         } catch (err) {
             return new Response('', { status: 504, statusText: 'Offline' });
         }
+    })());
+});
+
+// ==================== 폰 · PC 푸시 알림 (2026-09-29 · 9단계) ====================
+// 서버(/api/push/send)가 보낸 알림을 띄우고, 누르면 그룹웨어를 열어 알림함을 펼칩니다.
+self.addEventListener('push', (e) => {
+    let d = {};
+    try { d = e.data ? e.data.json() : {}; } catch (err) { d = { title: '킹오더 그룹웨어', body: e.data ? e.data.text() : '' }; }
+    e.waitUntil(self.registration.showNotification(d.title || '킹오더 그룹웨어', {
+        body: d.body || '',
+        tag: d.tag || undefined,                     // 같은 알림이 두 번 오면 하나로
+        icon: 'assets/pwa/icon-192.png',
+        badge: 'assets/pwa/icon-192.png',
+        data: { url: d.url || '/' }
+    }));
+});
+self.addEventListener('notificationclick', (e) => {
+    e.notification.close();
+    const url = new URL((e.notification.data && e.notification.data.url) || '/', self.location.origin).href;
+    e.waitUntil((async () => {
+        const list = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+        // 이미 열린 그룹웨어 창이 있으면 그 창으로 (파트너센터 · 운행일지 창은 빼고)
+        const hit = list.find(c => c.url.startsWith(self.location.origin) && !/[?&]mode=(partner|mobile)/.test(c.url));
+        if (hit) { hit.postMessage({ type: 'kob-open-noti' }); return hit.focus(); }
+        return self.clients.openWindow(url);
     })());
 });
