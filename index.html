@@ -919,11 +919,15 @@
             </div>
 
             <!-- 1단계: 운전자 선택 -->
-            <div id="m-login" class="flex-1 p-6 flex flex-col justify-center">
+            <div id="m-login" class="relative overflow-hidden flex-1 p-6 flex flex-col justify-center bg-slate-100">
+                <!-- 배경 — 파트너센터 · 새로고침 화면과 같은 로고 워터마크 (2026-09-29) -->
+                <div aria-hidden="true" class="pointer-events-none absolute inset-0 flex items-center justify-center p-6">
+                    <img src="image/logo.png" alt="" class="max-h-[80%] max-w-[90%] object-contain opacity-[0.05]" />
+                </div>
                 <!-- 그룹웨어 아이디로 로그인 (2026-09-28 · 4단계) — 서버가 있을 때. 로그인하면 운전자는 본인으로 정해집니다 -->
                 <!-- 처음부터 로그인 칸이 보이게 (2026-09-29 — 예전엔 운전자 고르기 '불러오는 중' 이 먼저 보였음). 로컬 모드만 아래 고르기로 바꿉니다 -->
-                <p id="m-opening" class="text-center text-sm text-gray-400"><i class="fas fa-spinner fa-spin mr-1"></i>운행일지를 여는 중…</p>
-                <div id="m-auth">
+                <p id="m-opening" class="relative text-center text-sm text-gray-400"><i class="fas fa-spinner fa-spin mr-1"></i>운행일지를 여는 중…</p>
+                <div id="m-auth" class="relative">
                     <p class="text-center text-gray-500 text-sm mb-4">그룹웨어 아이디로 로그인하세요.<br><span class="text-xs text-gray-400">한 번 로그인하면 이 폰에서는 계속 유지됩니다.</span></p>
                     <label class="block text-sm font-medium text-gray-700 mb-1">그룹웨어 ID(이메일)</label>
                     <input type="text" id="m-auth-id" autocomplete="username" class="w-full p-3 border border-gray-300 rounded-lg text-base focus:outline-none focus:ring-2 focus:ring-indigo-500 mb-3" placeholder="예: sales.lee" />
@@ -936,7 +940,7 @@
                     <button type="button" id="m-auth-btn" onclick="mobileLogin()" class="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg shadow">로그인</button>
                     <p id="m-auth-msg" class="text-center text-xs text-red-500 mt-3 min-h-[1rem] whitespace-pre-line"></p>
                 </div>
-                <div id="m-picker" class="hidden">
+                <div id="m-picker" class="relative hidden">
                 <p class="text-center text-gray-500 text-sm mb-4">운행일지를 작성할 운전자를 선택하세요.</p>
                 <label class="block text-sm font-medium text-gray-700 mb-1">운전자(본인) 선택</label>
                 <select id="m-driver-select" class="w-full p-3 border border-gray-300 rounded-lg text-base focus:outline-none focus:ring-2 focus:ring-indigo-500 mb-4">
