@@ -12262,6 +12262,105 @@ const QUOTE_TEMPLATES = [
             }
         }
 
+        // ==================== 다른 사람의 변경을 지금 화면에 (2026-09-29 · 6단계) ====================
+        // 설정 · 목록 자료(app_store)는 다른 사람이 저장하면 Realtime 으로 'storage' 이벤트가 옵니다(js/kob-store.js).
+        // 예전엔 인바운드 · 파트너 접수 · 개발의뢰만 다시 그렸고, 나머지는 **새로고침해야** 보였습니다.
+        // 이제 아래 자료는 변수를 새로 읽고 지금 보고 있는 화면을 다시 그립니다.
+        //   · 창(팝업)이 열려 있거나 입력 중이면 기다렸다가 닫힌 뒤에 — 쓰던 내용이 날아가지 않게
+        //   · 저장할 때 남의 변경을 덮지 않는 것은 kob-store 의 '내가 바꾼 항목만 얹기'(2026-09-28)가 맡습니다
+        let gwLiveMap = null;                      // 키 → { label, reload } — 모든 변수가 만들어진 뒤에 처음 씁니다
+        const gwLivePending = new Set();
+        function gwLiveKeys() {
+            if (gwLiveMap) return gwLiveMap;
+            const re = (fn) => () => { try { fn(); } catch (e) { console.warn('[실시간 반영]', e); } };
+            gwLiveMap = {
+                [CORP_CARD_KEY]:   { label: '법인카드',        reload: re(() => { corpCards = loadJsonStore(CORP_CARD_KEY, []); }) },
+                [CARD_TXN_KEY]:    { label: '카드 사용내역',   reload: re(() => { cardTxns = loadJsonStore(CARD_TXN_KEY, []); cardTxnCounter = Math.max(cardTxnCounter, cardTxns.length + 1); }) },
+                [CARD_BATCH_KEY]:  { label: '카드 업로드 이력', reload: re(() => { cardBatches = loadJsonStore(CARD_BATCH_KEY, []); }) },
+                [CARD_ITEMS_KEY]:  { label: '카드 사용 항목',  reload: re(() => { cardUseItems = loadJsonStore(CARD_ITEMS_KEY, cardUseItems); }) },
+                [MEETING_KEY]:     { label: '영업 회의',       reload: re(() => { salesMeetings = loadJsonStore(MEETING_KEY, []); }) },
+                [ISSUE_KEY]:       { label: '영업 이슈',       reload: re(() => { salesIssues = loadJsonStore(ISSUE_KEY, []); }) },
+                [INSTALL_CHECK_KEY]: { label: '설치 체크',     reload: re(() => { installChecks = loadJsonStore(INSTALL_CHECK_KEY, []); }) },
+                [VEHICLES_KEY]:    { label: '법인차량',        reload: re(() => { vehicles = loadJsonStore(VEHICLES_KEY, []); }) },
+                [USERS_KEY]:       { label: '구성원',          reload: re(() => { localUsers = loadJsonStore(USERS_KEY, localUsers); applyMyProfileOverrides(); }) },
+                [MY_PROFILE_KEY]:  { label: '구성원 정보',     reload: re(() => { myProfileStore = loadJsonStore(MY_PROFILE_KEY, {}); applyMyProfileOverrides(); }) },
+                [ORG_DEPT_KEY]:    { label: '조직(본부)',      reload: re(() => { orgDepts = loadJsonStore(ORG_DEPT_KEY, orgDepts); }) },
+                [ORG_TEAM_KEY]:    { label: '조직(팀)',        reload: re(() => { orgTeams = loadJsonStore(ORG_TEAM_KEY, []); }) },
+                [PARTNERS_KEY]:    { label: '파트너사',        reload: re(() => { reloadPartners(); }) },
+                [PARTNER_ACCOUNT_KEY]: { label: '파트너 아이디', reload: re(() => { const s = loadJsonStore(PARTNER_ACCOUNT_KEY, null); if (Array.isArray(s)) partnerAccounts = s; }) },
+                [PARTNER_DEPT_PERM_KEY]: { label: '파트너 권한', reload: re(() => { reloadPartnerDeptPerm(); }) },
+                [ARCHIVE_POST_KEY]: { label: '자료실',         reload: re(() => { reloadArchivePosts(); }) },
+                [ARCHIVE_MGR_KEY]: { label: '자료실 관리자',   reload: re(() => { archiveManagers = loadJsonStore(ARCHIVE_MGR_KEY, []); }) },
+                [AS_OPTION_KEY]:   { label: 'A/S 항목',        reload: re(() => { reloadAsOptions(); }) },
+                [CALENDAR_EDITORS_KEY]: { label: '일정 대리수정자', reload: re(() => { calendarEditors = loadJsonStore(CALENDAR_EDITORS_KEY, []); }) },
+                [QUOTE_TPL_STORAGE_KEY]: { label: '견적 템플릿', reload: re(() => { userQuoteTemplates = loadUserQuoteTemplates(); }) }
+            };
+            return gwLiveMap;
+        }
+        // 지금 사용자가 무언가 하고 있나 — 창(…-modal)이 열려 있거나 입력칸에 있으면 기다립니다
+        function gwUserBusy() {
+            if (typeof document === 'undefined') return false;
+            const a = document.activeElement;
+            if (a && (/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) || a.isContentEditable) && a.closest && a.closest('#app-view')) return true;
+            return !!document.querySelector('[id$="-modal"]:not(.hidden)');
+        }
+        // 지금 보이는 화면을 다시 그립니다 (메뉴 이동과 같은 경로 — 탭 · 필터 상태는 그대로)
+        function gwRerenderCurrent() {
+            const sec = document.querySelector('#app-view .content-section:not(.hidden)');
+            if (!sec || !sec.id || sec.id.indexOf('sec-') !== 0) return;
+            const id = sec.id.slice(4);
+            const box = sec.closest('.overflow-y-auto') || document.scrollingElement;
+            const y = box ? box.scrollTop : 0;
+            try { navigate(id, document.getElementById('nav-' + id)); } catch (e) { console.warn('[실시간 반영] 다시 그리기 실패', e); }
+            if (box) box.scrollTop = y;                                      // 보던 자리 그대로
+        }
+        function gwLiveFlush() {
+            if (!gwLivePending.size || gwUserBusy()) return;
+            const map = gwLiveKeys();
+            gwLivePending.forEach(k => { if (map[k]) map[k].reload(); });
+            gwLivePending.clear();
+            gwRerenderCurrent();
+        }
+        function initLiveRefresh() {
+            if (window.__gwLiveOn) return;
+            window.__gwLiveOn = true;
+            window.addEventListener('storage', (e) => {
+                const app = document.getElementById('app-view');
+                if (!app || app.classList.contains('hidden')) return;          // 파트너 · 운행일지 화면은 각자 따로 합니다
+                if (!e.key || !gwLiveKeys()[e.key]) return;
+                gwLivePending.add(e.key);
+                clearTimeout(window.__gwLiveT);
+                window.__gwLiveT = setTimeout(gwLiveFlush, 400);              // 한꺼번에 여러 키가 와도 한 번만 그립니다
+            });
+            // 창을 닫거나 입력칸을 벗어나면 미뤄 둔 것을 반영합니다
+            ['click', 'focusout', 'keyup'].forEach(ev => document.addEventListener(ev, () => {
+                if (!gwLivePending.size) return;
+                clearTimeout(window.__gwLiveT);
+                window.__gwLiveT = setTimeout(gwLiveFlush, 600);
+            }, true));
+        }
+
+        // 업무 표(kob-db) — 남이 먼저 고쳐서 내 저장이 거절되었을 때 알림 (2026-09-29 · 6단계)
+        // 일정 · 업무 · 고객사 · 상담 · 계약 · 견적은 각자 알림이 있고, 나머지 표는 여기서 한 번에 알립니다.
+        //   (예전엔 이 표들은 말없이 남의 내용으로 바뀌어, 내가 고친 것이 사라진 줄 몰랐습니다)
+        const KOB_CONFLICT_OWN = ['schedules', 'works', 'customers', 'cases', 'contracts', 'quotes'];
+        const KOB_TABLE_LABEL = {
+            collab_requests: '협업티켓', notifications: '알림', local_tasks: '자부서 업무', todos: '할 일', projects: '프로젝트',
+            notices: '공지', supplies: '공급', price_book: '단가표', settlements: '정산', pay_doc_requests: '보완서류 요청',
+            install_checks: '설치 체크', pg_fees: 'PG 수수료', partner_intakes: '파트너 접수'
+        };
+        window.addEventListener('kob-db-conflict', (e) => {
+            const d = e.detail || {};
+            if (!d.table || KOB_CONFLICT_OWN.includes(d.table)) return;
+            const x = d.theirs || d.mine || {};
+            const name = x.title || x.name || x.subject || x.customerName || d.id || '';
+            const what = KOB_TABLE_LABEL[d.table] || '자료';
+            const text = d.theirs
+                ? `${what} '${name}' 은(는) 다른 사람이 먼저 고쳤습니다. 최신 내용으로 바꿔 두었으니 확인 후 다시 고쳐 주세요.`
+                : `${what} '${name}' 은(는) 다른 사람이 지웠습니다.`;
+            if (typeof showAppToast === 'function') showAppToast(text, 'orange');
+        });
+
         // ==================== 자료실 (넥스트클라우드 파일서버) ====================
         // 그룹웨어는 파일을 들고 있지 않습니다. **어디로 들어갈지**만 정해 주는 입구입니다.
         //   · 사내망 주소와 바깥 주소를 따로 들고 있다가, 지금 닿는 쪽으로 보냅니다
@@ -55713,6 +55812,7 @@ const QUOTE_TEMPLATES = [
             } catch (e) { /* 주소를 손대지 못하는 환경은 그냥 넘어갑니다 */ }
             initPartnerCenterSync();   // 그룹웨어: 파트너 접수 자료를 읽고 다른 창의 변화를 지켜봅니다
             initInboundSync();         // 그룹웨어: 다른 창에서 넣은 인입도 곧바로 받아 옵니다 (2026-09-07)
+            initLiveRefresh();         // 그룹웨어: 다른 사람이 바꾼 설정 · 목록 자료를 지금 화면에 (2026-09-29 · 6단계)
         }
 
         // ---------- 홈 화면에 담기 · 오프라인 (서비스 워커) ----------
