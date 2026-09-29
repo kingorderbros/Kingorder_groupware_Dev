@@ -82,7 +82,26 @@
         const changed = mine.list.filter(x => before.get(key(x)) !== JSON.stringify(x));      // 내가 더하거나 고친 것
         const removed = base ? Array.from(before.keys()).filter(id => !mineIds.has(id)) : []; // 내가 지운 것
         const out = server.list.filter(x => !removed.includes(key(x)));
-        changed.forEach(x => { const i = out.findIndex(y => key(y) === key(x)); if (i > -1) out[i] = x; else out.push(x); });
+        // 둘이 같은 때 새 항목을 만들어 번호가 겹치면(둘 다 base 에 없던 번호) 내 것을 비어 있는 다음 번호로 — 남의 새 항목을 덮지 않게 (2026-09-29)
+        const taken = new Set(out.map(key).concat(mine.list.map(key)));
+        const freeId = (id) => {
+            const m = /^(.*?)(\d+)$/.exec(String(id));
+            if (!m) { let n = 2; while (taken.has(`${id}-${n}`)) n++; return `${id}-${n}`; }
+            let n = Number(m[2]);
+            let cand;
+            do { n++; cand = m[1] + String(n).padStart(m[2].length, '0'); } while (taken.has(cand));
+            return cand;
+        };
+        changed.forEach(x => {
+            const i = out.findIndex(y => key(y) === key(x));
+            if (i > -1 && base && !before.has(key(x)) && JSON.stringify(out[i]) !== JSON.stringify(x)) {
+                const nid = freeId(x.id);
+                taken.add(nid);
+                out.push(Object.assign({}, x, { id: typeof x.id === 'number' ? Number(nid) || nid : nid }));
+                return;
+            }
+            if (i > -1) out[i] = x; else out.push(x);
+        });
         // 순서는 내 목록 순서를 따르고, 내가 모르는(남이 더한) 항목은 그 자리 뒤에 둡니다
         const order = new Map(mine.list.map((x, i) => [key(x), i]));
         out.sort((a, b) => (order.has(key(a)) ? order.get(key(a)) : 1e9) - (order.has(key(b)) ? order.get(key(b)) : 1e9));

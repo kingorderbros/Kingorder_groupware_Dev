@@ -110,6 +110,27 @@ const flushNow = async (st) => { await st.flush(); await wait(); };
         ok(sv.rows.get('gwList.v1').map(x => x.id).join() === 'a,z' && !A.events.some(e => e.key === 'gwList.v1'), '저장되고 화면 알림은 없음');
     }
 
+    console.log('\n[7] 둘이 같은 번호로 새 항목을 만들면 (2026-09-29)');
+    {
+        const sv = makeServer({ 'gwList.v1': [{ id: 'CT-00001', who: 'x' }] });
+        const A = boot(sv); await wait();
+        sv.rows.set('gwList.v1', [{ id: 'CT-00001', who: 'x' }, { id: 'CT-00002', who: '남' }]);          // 다른 사람이 CT-00002 를 먼저 만듦
+        A.store.setItem('gwList.v1', JSON.stringify([{ id: 'CT-00001', who: 'x' }, { id: 'CT-00002', who: '나' }]));   // 나도 CT-00002
+        await flushNow(A.store);
+        const out = sv.rows.get('gwList.v1');
+        ok(out.find(x => x.id === 'CT-00002').who === '남', '남이 먼저 만든 항목은 그대로');
+        ok(out.length === 3 && out.find(x => x.id === 'CT-00003' && x.who === '나'), '내 새 항목은 비어 있는 다음 번호(CT-00003)로 들어간다');
+        ok(JSON.parse(A.store.getItem('gwList.v1')).some(x => x.id === 'CT-00003') && A.events.some(e => e.key === 'gwList.v1'), '이 창에도 바뀐 번호가 들어오고 화면에 알린다');
+    }
+    {
+        const sv = makeServer({ 'gwList.v1': [{ id: 'a', n: 1 }] });
+        const A = boot(sv); await wait();
+        sv.rows.set('gwList.v1', [{ id: 'a', n: 5 }]);                                        // 남이 a 를 고침 (새 항목 아님)
+        A.store.setItem('gwList.v1', JSON.stringify([{ id: 'a', n: 2 }]));                    // 나도 a 를 고침
+        await flushNow(A.store);
+        ok(sv.rows.get('gwList.v1').length === 1 && sv.rows.get('gwList.v1')[0].n === 2, '원래 있던 항목을 둘 다 고친 것은 예전처럼 나중 것 (번호를 바꾸지 않음)');
+    }
+
     console.log(`\n=========== 통과 ${pass} · 실패 ${fail} ===========`);
     process.exit(fail ? 1 : 0);
 })().catch(e => { console.error(e); process.exit(1); });
