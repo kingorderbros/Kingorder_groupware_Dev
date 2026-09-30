@@ -426,9 +426,19 @@
                 mode = 'supabase';
                 // 다른 창 · 다른 사람의 변경 — Realtime (표에 REPLICA IDENTITY FULL 이 있어야 삭제도 옵니다)
                 try {
-                    client.channel('app_store').on('postgres_changes', { event: '*', schema: 'public', table: 'app_store' }, (p) => {
+                    // 한 번의 알림이 1,024KB 를 넘으면 Supabase 가 64바이트 넘는 칸(value)을 빼고 보냅니다.
+                    // 그대로 쓰면 목록이 통째로 비어 보이고, 그 상태로 저장하면 서버 자료까지 덮입니다 → 그 키만 다시 받아 옵니다 (2026-10-01)
+                    const refetch = async (key) => {
+                        try {
+                            const { data: row, error } = await client.from('app_store').select('value').eq('key', key).maybeSingle();
+                            if (error || !row) return;
+                            apply({ eventType: 'UPDATE', new: { key, value: row.value } });
+                        } catch (e) { console.warn('[kob-store] 큰 자료를 다시 받지 못했습니다 — 새로고침하면 보입니다', key, e); }
+                    };
+                    const apply = (p) => {
                         const key = (p.new && p.new.key) || (p.old && p.old.key);
                         if (!key) return;
+                        if (p.eventType !== 'DELETE' && !(p.new && Object.prototype.hasOwnProperty.call(p.new, 'value'))) { refetch(key); return; }
                         const oldValue = cache.get(key) ?? null;
                         if (p.eventType === 'DELETE') { cache.delete(key); synced.delete(key); }
                         else { synced.set(key, toStr(p.new.value)); if (!pending.has(key)) cache.set(key, toStr(p.new.value)); }
@@ -436,7 +446,8 @@
                         if (oldValue === newValue) return;                    // 내가 방금 쓴 값이 돌아온 것
                         try { window.dispatchEvent(new StorageEvent('storage', { key, oldValue, newValue, storageArea: window.localStorage })); }
                         catch (e) { /* 일부 브라우저는 StorageEvent 생성을 막습니다 — 그때는 새로고침으로 */ }
-                    }).subscribe();
+                    };
+                    client.channel('app_store').on('postgres_changes', { event: '*', schema: 'public', table: 'app_store' }, apply).subscribe();
                 } catch (e) { console.warn('[kob-store] Realtime 구독 실패 — 저장은 되지만 다른 창의 변경은 새로고침해야 보입니다', e); }
             } catch (e) {
                 console.error('[kob-store] Supabase 연결 실패 — 로컬 저장소로 갑니다', e);

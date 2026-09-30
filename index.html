@@ -13108,10 +13108,16 @@ const QUOTE_TEMPLATES = [
         }
         function deleteArchivePost(id) {
             if (!canEditArchive()) { alert('자료를 지우려면 자료실 관리 권한이 필요합니다.'); return; }
-            const x = archivePostById(id);
-            if (!x) return;
+            // 화면에 보이는 목록과 메모리 목록이 어긋났으면(다른 창 · 실시간 반영 도중) 저장된 것을 다시 읽고 찾습니다.
+            // 예전엔 여기서 말없이 끝나 '삭제를 눌러도 아무 반응이 없는' 것처럼 보였습니다 (2026-10-01)
+            let x = archivePostById(id);
+            if (!x) { reloadArchivePosts(); x = archivePostById(id); }
+            if (!x) { alert('이 자료를 찾지 못했습니다. 이미 지워졌거나 목록이 바뀌었습니다.\n목록을 새로 불러옵니다.'); renderArchive(); return; }
             if (!canEditArchivePost(x)) { alert('자기 본부 자료와 전사 공통 자료만 지울 수 있습니다.'); return; }
             if (!confirm(`'${x.title}' 자료를 지울까요?\n\n되돌릴 수 없습니다.`)) return;
+            // 저장처럼 — 다른 창에서 바뀐 것을 먼저 읽고 그 위에서 지웁니다 (읽은 목록에 이 글이 없으면 믿지 않고 지금 목록으로)
+            const fresh = loadArchivePosts();
+            if (fresh.some(y => y.id === id)) archivePosts = fresh;
             archivePosts = archivePosts.filter(y => y.id !== id);
             if (!saveArchivePosts()) return;
             renderArchive();
