@@ -40128,12 +40128,7 @@ const QUOTE_TEMPLATES = [
         let gcalWatch = null;          // 연결 창을 열어 둔 동안 상태를 다시 확인하는 타이머
 
         // 테스트 상태의 구글 연결은 7일이 지나면 풀립니다 (프로덕션으로 게시하면 없어집니다)
-        const GCAL_TEST_DAYS = 7;
-        function gcalDaysLeft(at) {
-            if (!at) return null;
-            const gone = (Date.now() - new Date(at).getTime()) / 86400000;
-            return Math.max(0, Math.ceil(GCAL_TEST_DAYS - gone));
-        }
+        // 구글 쪽 앱은 2026-09-30 '프로덕션' 으로 게시했습니다 — 테스트 때 있던 7일 기한이 없어 남은 날 셈은 뺐습니다.
 
         function renderGcalAdmin() {
             const box = document.getElementById('sec-gcal');
@@ -40167,14 +40162,12 @@ const QUOTE_TEMPLATES = [
                     Cloudflare › Settings › <b>Variables and Secrets</b> 의 <b>Runtime</b> 에
                     <b>GOOGLE_CLIENT_ID</b> · <b>GOOGLE_CLIENT_SECRET</b> 을 넣고 <b>Deploy</b> 를 누른 뒤 다시 확인해 주세요.</p>`;
             } else if (st.connected) {
-                const left = gcalDaysLeft(st.connectedAt);
-                const warn = left !== null && left <= 2;
                 conn = `<div class="flex flex-wrap items-center gap-3">
                         <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-sm font-medium bg-emerald-100 text-emerald-800"><i class="fas fa-circle-check"></i>연결됨</span>
                         <span class="text-sm text-gray-700 font-medium">${escapeHtml(st.googleEmail || '구글 계정')}</span>
-                        ${left === null ? '' : `<span class="text-xs ${warn ? 'text-red-600 font-semibold' : 'text-gray-500'}">남은 기간 약 ${left}일</span>`}
+                        ${st.connectedAt ? `<span class="text-xs text-gray-500">${escapeHtml(String(st.connectedAt).slice(0, 10))} 연결</span>` : ''}
                     </div>
-                    <p class="text-xs text-gray-500 mt-2">구글 쪽 앱이 아직 <b>테스트</b> 상태라 연결이 ${GCAL_TEST_DAYS}일마다 풀립니다. 풀리면 아래 [다시 연결]을 한 번 누르시면 됩니다. 그동안 밀린 변경은 다시 연결한 뒤 한꺼번에 맞춰집니다.</p>
+                    <p class="text-xs text-gray-500 mt-2">연결은 기한 없이 유지됩니다. 회사 구글 계정의 비밀번호를 바꾸거나 구글 계정에서 이 앱의 권한을 지우면 풀리니, 그때 아래 [다시 연결]을 한 번 누르시면 됩니다. 그동안 밀린 변경은 다시 연결한 뒤 한꺼번에 맞춰집니다.</p>
                     ${st.lastError ? `<p class="text-xs text-red-600 mt-2"><i class="fas fa-triangle-exclamation mr-1"></i>${escapeHtml(st.lastError)}</p>` : ''}
                     <div class="flex flex-wrap gap-2 mt-3">
                         <button onclick="gcalConnect()" ${gcalBusy ? 'disabled' : ''} class="px-3 py-2 text-sm bg-white border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50"><i class="fas fa-rotate mr-1"></i>다시 연결</button>
