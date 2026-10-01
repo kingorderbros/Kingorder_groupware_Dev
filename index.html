@@ -36135,7 +36135,7 @@ const QUOTE_TEMPLATES = [
             const rootBox = roots.length
                 ? `<div class="inline-flex items-stretch gap-3">
                         ${roots.map(u => orgNodeHtml(u, { size: 'lg', strong: true })).join('')}
-                   </div>${roots.length > 1 ? `<p class="text-[11px] text-gray-400 text-center mt-1">공동대표 ${roots.length}인</p>` : ''}`
+                   </div>`                                      // '공동대표 N인' 글자는 뺐습니다 (2026-10-01)
                 : `<div class="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg border-2 border-rose-400 bg-rose-50 text-rose-800 shadow-sm">
                         <i class="fas fa-building"></i><span class="text-sm font-bold">킹오더브라더스</span>
                    </div>`;
