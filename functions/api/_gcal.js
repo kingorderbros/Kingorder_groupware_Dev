@@ -288,20 +288,47 @@ export function calendarKeyOf(s, ctx) {
     return 'cal:' + kind;                       // company · sales-share · install-as
 }
 
+// ---------- 폰에서 주최자 · 참석자 이름이 보이게 (2026-10-01) ----------
+// 공용 캘린더(전사 · 팀 등)는 회사 구글 계정이 만든 캘린더라, 폰은 주최자를 그 캘린더의 고유 주소
+// (…@group.calendar.google.com, 긴 코드)로 보여 줍니다. 이건 구글 쪽 표시라 바꿀 수 없어서,
+// 참석자가 있는 일정은 설명 맨 아래에 그룹웨어의 주최자 · 참석자 이름을 적어 보냅니다. 구글 주소가 없는 직원도 여기선 이름으로 보입니다.
+// 받아 올 때는 이 부분을 떼어 내므로 그룹웨어의 설명은 그대로입니다.
+const PEOPLE_MARK = '──── 그룹웨어 참석 정보 ────';
+const RSVP_KO = { pending: '미응답', accepted: '수락', declined: '거부', tentative: '미정' };
+function peopleFooter(s) {
+    const host = str(s.salesperson);
+    const atts = (Array.isArray(s.attendees) ? s.attendees : []).filter(a => a && str(a.name));
+    if (!atts.length) return '';                       // 참석자가 없는 일정(개인 일정 등)은 붙이지 않습니다
+    const lines = [PEOPLE_MARK];
+    if (host) lines.push('주최: ' + host);
+    if (atts.length) lines.push('참석: ' + atts.map(a => `${str(a.name)}(${a.self ? '참가' : (RSVP_KO[str(a.status)] || '미응답')})`).join(', '));
+    return lines.join('\n');
+}
+function withPeople(desc, s) {
+    const foot = peopleFooter(s);
+    return foot ? (desc ? desc + '\n\n' + foot : foot) : desc;
+}
+// 받아 온 설명에서 우리가 붙인 부분을 뗍니다 (폰에서 그 아래를 고쳐도 무시)
+function stripPeople(desc) {
+    const d = str(desc);
+    const i = d.indexOf(PEOPLE_MARK);
+    return i < 0 ? d : d.slice(0, i).replace(/\s+$/, '');
+}
+
 // 그룹웨어 일정 → 구글 일정
 export function toGoogleEvent(s, ctx) {
     const date = str(s.date);
     const allDay = !!s.allDay || !str(s.startTime);
     const ev = {
         summary: str(s.title) || '(제목 없음)',
-        description: str(s.description),
+        description: withPeople(str(s.description), s),
         start: allDay ? { date } : { dateTime: `${date}T${str(s.startTime)}:00`, timeZone: 'Asia/Seoul' },
         end: allDay ? { date: addDay(date, 1) }
                     : { dateTime: `${date}T${str(s.endTime) || addHour(s.startTime, 1)}:00`, timeZone: 'Asia/Seoul' },
         extendedProperties: { private: { kobId: str(s.id), kobCal: str(s.calendar), kobDept: str(s.dept), kobType: str(s.type), kobProgress: str(s.progress) } }
     };
     const atts = (Array.isArray(s.attendees) ? s.attendees : [])
-        .map(a => ({ email: ctx.googleOf(a.name), responseStatus: TO_GOOGLE_RSVP[str(a.status)] || 'needsAction' }))
+        .map(a => ({ email: ctx.googleOf(a.name), displayName: str(a.name), responseStatus: TO_GOOGLE_RSVP[str(a.status)] || 'needsAction' }))
         .filter(a => a.email);
     if (atts.length) ev.attendees = atts;
     return ev;
@@ -311,7 +338,7 @@ export function toGoogleEvent(s, ctx) {
 export function fromGoogleEvent(ev, calRow, before, ctx) {
     const s = Object.assign({}, before || {});
     s.title = str(ev.summary) || '(제목 없음)';
-    s.description = str(ev.description);
+    s.description = stripPeople(ev.description);
 
     if (ev.start && ev.start.date) {                     // 종일
         s.allDay = true; s.date = str(ev.start.date); s.startTime = ''; s.endTime = '';

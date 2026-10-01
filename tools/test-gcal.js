@@ -56,6 +56,22 @@ const fakeStore = { storeValue: async () => USERS, calendars: async () => CALS }
     eq('수락 → accepted', withAtt.attendees[0].responseStatus, 'accepted');
     eq('미응답 → needsAction', withAtt.attendees[1].responseStatus, 'needsAction');
     ok('구글 주소가 없는 사람은 초대에서 빠진다', !withAtt.attendees.some(a => !a.email));
+    eq('참석자에 이름이 붙는다 (폰에서 주소 대신 이름)', withAtt.attendees[0].displayName, '홍길동');
+
+    // 폰에서 주최자 · 참석자 이름이 보이게 — 설명 맨 아래 (2026-10-01)
+    const meet = G.toGoogleEvent({ id: 's6', title: '전체 미팅', date: '2026-10-01', startTime: '14:00', calendar: 'company', salesperson: '서해융', description: '안건 공유',
+        attendees: [{ name: '송기진', status: 'pending' }, { name: '정장훈', status: 'accepted', self: true }, { name: '박철수', status: 'declined' }] }, ctx);
+    ok('설명 원문은 앞에 그대로', meet.description.startsWith('안건 공유\n\n'));
+    ok('주최자 이름이 설명에', meet.description.includes('주최: 서해융'));
+    ok('참석자 이름 · 응답 (구글 주소 없는 사람도)', meet.description.includes('참석: 송기진(미응답), 정장훈(참가), 박철수(거부)'));
+    eq('참석자가 없으면 설명에 아무것도 안 붙는다', timed.description, '설치 확인');
+    eq('담당자만 있는 일정(개인 일정 등)도 안 붙는다', noTime.description, '');
+    const fromPhone = G.fromGoogleEvent({ id: 'ev6', summary: '전체 미팅', description: meet.description, start: { dateTime: '2026-10-01T14:00:00+09:00' }, end: { dateTime: '2026-10-01T15:00:00+09:00' } },
+        CALS[0], { id: 's6', calendar: 'company', salesperson: '서해융' }, ctx);
+    eq('받아 올 때는 붙인 부분을 뗀다 (그룹웨어 설명 그대로)', fromPhone.description, '안건 공유');
+    const onlyFoot = G.fromGoogleEvent({ id: 'ev7', summary: 'x', description: G.toGoogleEvent({ id: 's7', title: 'x', date: '2026-10-01', calendar: 'company', salesperson: '서해융', attendees: [{ name: '송기진', status: 'pending' }] }, ctx).description, start: { date: '2026-10-01' } },
+        CALS[0], { id: 's7', calendar: 'company', salesperson: '서해융' }, ctx);
+    eq('설명이 비어 있던 일정은 다시 빈 설명으로', onlyFoot.description, '');
 
     console.log('\n[3] 구글 일정 → 그룹웨어 일정');
     const teamCal = CALS.find(c => c.key === 'cal:team:sales');
