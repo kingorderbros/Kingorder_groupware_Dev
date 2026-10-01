@@ -41190,6 +41190,23 @@ const QUOTE_TEMPLATES = [
         function saveQuoteTpl(asNew) {
             if (!quoteTplDraft) return;
             if (quoteTplUploading > 0) { alert('그림을 올리는 중입니다. 다 올라간 뒤 다시 눌러 주세요.'); return; }
+            // [다른 이름으로 저장] — 저장할 이름을 묻습니다. 예전엔 이름 칸 값('○○ (복사본)')으로 고정돼 저장됐습니다 (2026-10-01)
+            if (asNew) {
+                const cur = (quoteTplDraft.title || '').trim();
+                let suggest = cur.replace(/\s*\(복사본\)$/, '') || cur;
+                if (userQuoteTemplates.some(t => t.title === suggest) || builtinQuoteTemplates().some(t => t.title === suggest)) {
+                    let n = 2;
+                    while (userQuoteTemplates.some(t => t.title === `${suggest} (${n})`)) n++;
+                    suggest = `${suggest} (${n})`;
+                }
+                const typed = prompt('새 템플릿 이름을 입력해 주세요.', suggest);
+                if (typed === null) return;                       // 취소
+                const name = typed.trim();
+                if (!name) { alert('템플릿 이름을 입력해 주세요.'); return; }
+                quoteTplDraft.title = name;
+                const input = document.getElementById('quote-tpl-title');
+                if (input) input.value = name;
+            }
             const title = (quoteTplDraft.title || '').trim();
             if (!title) { alert('템플릿 이름을 입력해 주세요.'); document.getElementById('quote-tpl-title').focus(); return; }
 
