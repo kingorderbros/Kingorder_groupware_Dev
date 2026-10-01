@@ -368,11 +368,22 @@ export function fromGoogleEvent(ev, calRow, before, ctx) {
     // 참석 응답 — 구글에서 누른 것을 가져옵니다
     if (Array.isArray(ev.attendees) && ev.attendees.length) {
         const known = Array.isArray(s.attendees) ? s.attendees : [];
-        s.attendees = ev.attendees.map(a => {
+        const fromG = ev.attendees.map(a => {
             const name = ctx.nameOfGoogle(a.email);
             const old = known.find(k => k.name === name) || {};
             return Object.assign({}, old, { name: name || str(a.email), status: FROM_GOOGLE_RSVP[str(a.responseStatus)] || 'pending' });
         }).filter(a => a.name);
+        // 구글 주소가 없는 참석자는 구글 일정에 들어갈 수 없으니 구글 목록에 없는 게 당연합니다 — 그대로 남깁니다.
+        // 예전엔 구글 목록으로 통째로 덮어 그 사람들이 빠졌습니다 (2026-10-01).
+        const gByName = new Map(fromG.map(a => [a.name, a]));
+        const merged = [];
+        known.forEach(k => {
+            if (gByName.has(k.name)) { merged.push(gByName.get(k.name)); gByName.delete(k.name); }
+            else if (!ctx.googleOf(k.name)) merged.push(k);          // 구글로 못 가는 사람 — 유지
+            // 구글 주소가 있는데 구글 목록에 없으면 폰에서 뺀 것 → 뺍니다
+        });
+        gByName.forEach(a => merged.push(a));                         // 폰에서 새로 초대한 사람
+        s.attendees = merged;
     }
     return s;
 }

@@ -73,6 +73,19 @@ const fakeStore = { storeValue: async () => USERS, calendars: async () => CALS }
         CALS[0], { id: 's7', calendar: 'company', salesperson: '서해융' }, ctx);
     eq('설명이 비어 있던 일정은 다시 빈 설명으로', onlyFoot.description, '');
 
+    // 구글 주소 없는 참석자가 되받을 때 빠지던 문제 (2026-10-01 실제로 '전체 미팅' 4명 → 1명)
+    const mtg = { id: 's8', title: '전체 미팅', date: '2026-10-01', startTime: '14:00', calendar: 'company', salesperson: '서해융',
+        attendees: [{ name: '박철수', status: 'pending' }, { name: '홍길동', status: 'accepted', self: true }, { name: '김영희', status: 'pending' }] };
+    const mtgEv = G.toGoogleEvent(mtg, ctx);
+    const mtgBack = G.fromGoogleEvent(Object.assign({ id: 'ev8' }, mtgEv, { start: { dateTime: '2026-10-01T14:00:00+09:00' }, end: { dateTime: '2026-10-01T15:00:00+09:00' },
+        attendees: [{ email: 'hong.kob@gmail.com', responseStatus: 'accepted' }, { email: 'kim.kob@gmail.com', responseStatus: 'declined' }] }), CALS[0], mtg, ctx);
+    eq('구글 주소 없는 참석자(박철수)는 되받아도 남는다', mtgBack.attendees.map(a => a.name).join(','), '박철수,홍길동,김영희');
+    eq('구글에서 누른 응답은 들어온다', mtgBack.attendees[2].status, 'declined');
+    const mtgDrop = G.fromGoogleEvent(Object.assign({ id: 'ev8' }, mtgEv, { start: { dateTime: '2026-10-01T14:00:00+09:00' }, attendees: [{ email: 'hong.kob@gmail.com', responseStatus: 'accepted' }] }), CALS[0], mtg, ctx);
+    eq('구글 주소 있는 사람을 폰에서 빼면 빠진다 · 없는 사람은 남는다', mtgDrop.attendees.map(a => a.name).join(','), '박철수,홍길동');
+    const same = G.fromGoogleEvent(Object.assign({ id: 'ev8' }, mtgEv, { start: { dateTime: '2026-10-01T14:00:00+09:00' }, end: { dateTime: '2026-10-01T15:00:00+09:00' } }), CALS[0], mtg, ctx);
+    eq('보낸 그대로 되돌아오면 같은 일정 (다시 저장 안 함)', JSON.stringify(G.toGoogleEvent(same, ctx)), JSON.stringify(mtgEv));
+
     console.log('\n[3] 구글 일정 → 그룹웨어 일정');
     const teamCal = CALS.find(c => c.key === 'cal:team:sales');
     const fromTimed = G.fromGoogleEvent({
