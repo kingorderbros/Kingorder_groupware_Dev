@@ -5291,7 +5291,7 @@
     </div>
 
     <!-- ==================== 파트너 아이디 만들기 · 수정 모달 (사용자/권한관리 › 파트너 ID 관리 · 2026-09-16) ==================== -->
-    <div id="pacc-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onclick="if(event.target===this)closePartnerIdModal()">
+    <div id="pacc-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[70] p-4" onclick="if(event.target===this)closePartnerIdModal()">
         <div class="bg-white w-full max-w-3xl rounded-lg shadow-xl max-h-[92vh] overflow-y-auto">
             <div class="flex justify-between items-start gap-2 p-5 pb-3 border-b border-gray-100 sticky top-0 bg-white z-10">
                 <h3 id="pacc-modal-title" class="text-lg font-bold text-gray-800">파트너 아이디</h3>
@@ -6676,8 +6676,8 @@
         <div class="bg-white w-full max-w-3xl rounded-lg shadow-xl my-8">
             <div class="flex justify-between items-start gap-2 p-5 pb-3 border-b border-gray-100">
                 <div class="min-w-0">
-                    <h3 class="text-lg font-bold text-gray-800"><i class="fas fa-file-excel text-emerald-600 mr-1"></i>가맹점 엑셀 업로드</h3>
-                    <p class="text-sm text-gray-500 mt-0.5">가맹점 정보를 엑셀로 한 번에 올립니다. 이미 있는 곳은 갱신하고 없으면 새로 넣습니다.</p>
+                    <h3 class="text-lg font-bold text-gray-800"><i class="fas fa-file-excel text-emerald-600 mr-1"></i>업체 엑셀 업로드</h3>
+                    <p class="text-sm text-gray-500 mt-0.5">가맹점 · 파트너사 · 본사 · 유통을 <b>양식 하나</b>로 한 번에 올립니다. 이미 있는 곳은 갱신하고 없으면 새로 넣습니다.</p>
                 </div>
                 <button type="button" onclick="closeCommonCustomerImport()" class="text-gray-400 hover:text-gray-600 shrink-0"><i class="fas fa-times"></i></button>
             </div>
@@ -6689,11 +6689,13 @@
                     </div>
                     <p id="ccust-import-cols" class="text-xs text-gray-600"></p>
                     <ul class="mt-2 text-[11px] text-gray-500 list-disc list-inside space-y-0.5">
-                        <li><b>가맹점명</b> 열만 있으면 올라갑니다. 나머지는 있는 것만 반영하고, <b>비어 있는 칸은 기존 값을 지우지 않습니다.</b></li>
+                        <li><b>상호</b> 열만 있으면 올라갑니다. 나머지는 있는 것만 반영하고, <b>비어 있는 칸은 기존 값을 지우지 않습니다.</b></li>
+                        <li><b>업체유형</b> — 개인 가맹점 · 프랜차이즈 가맹점 · 파트너사 · 파트너사 가맹점 · 프랜차이즈 본사 · 하드웨어 유통. 비우면 상위업체가 있으면 그 소속 가맹점, 없으면 개인 가맹점으로 둡니다.</li>
+                        <li><b>상위업체</b> — 가맹점이 속한 본사 · 파트너사의 <b>상호 또는 사업자번호</b>. 같은 파일 안에 있어도 됩니다(본사 · 파트너사를 먼저 등록한 뒤 잇습니다). 못 찾은 줄은 등록하되 결과에 <b>상위업체 못 찾음</b>으로 알려 드립니다.</li>
                         <li>머리글은 <b>이름으로 찾으므로 열 순서가 달라도</b> 됩니다. 머리글 줄이 몇 번째 줄이든 스스로 찾습니다.</li>
-                        <li>같은 곳인지는 <b>사업자번호 → 거래처코드 → 가맹점명</b> 순으로 판단합니다.</li>
+                        <li>같은 곳인지는 <b>사업자번호 → 거래처코드 → 상호</b> 순으로 판단합니다.</li>
                         <li><b>계약방식</b>은 여러 개를 <b>쉼표로 이어</b> 적을 수 있습니다. (예: <i>임대, CMS(임대), CMS(관리비)</i>)</li>
-                        <li>가맹점명이 비어 있는 줄과 파일 안에서 중복된 줄은 건너뜁니다.</li>
+                        <li>상호가 비어 있는 줄과 파일 안에서 중복된 줄은 건너뜁니다.</li>
                     </ul>
                 </div>
                 <label data-drop-input="ccust-import-file" class="flex flex-col items-center justify-center gap-2 p-6 rounded border-2 border-dashed border-emerald-300 bg-emerald-50/50 cursor-pointer hover:bg-emerald-50 transition-colors">
@@ -7001,6 +7003,12 @@
                            class="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500" />
                 </div>
 
+                <!-- 파트너센터 아이디 (2026-10-05 — 예전 '파트너 ID 관리' 를 업체 창으로) -->
+                <div class="rounded border border-indigo-100 bg-indigo-50/40 p-3 mb-2">
+                    <p class="text-xs font-bold text-indigo-900 mb-1"><i class="fas fa-key mr-1"></i>파트너센터 아이디</p>
+                    <div id="customer-modal-ids"></div>
+                </div>
+
                 <!-- ② 운영 정보 — 운영업무센터 고객조회에 그대로 나오는 항목입니다 -->
                 <p class="text-xs font-semibold text-gray-500 mb-2 mt-5 pt-4 border-t border-gray-100">
                     <i class="fas fa-clipboard-list text-gray-400 mr-1"></i>운영 정보
@@ -7015,22 +7023,21 @@
                         <label class="block text-sm font-medium text-gray-700 mb-1">설치일</label>
                         <input type="date" id="customer-install-date" class="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500" />
                     </div>
+                    <!-- 업체 유형 · 상위업체 · 거래상태 (2026-10-05 업체 통합)
+                         예전 '구분(파트너사/직영)' · '담당 파트너사(이름 글자)' 를 대신합니다. 상위업체는 **업체 번호로** 이어져
+                         상호를 바꿔도 끊어지지 않고, 그 본사 · 파트너사만 파트너센터에서 이 가맹점을 봅니다. -->
                     <div class="mb-4">
-                        <label class="block text-sm font-medium text-gray-700 mb-1">구분</label>
-                        <select id="customer-channel-type" class="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500">
-                            <option value="">선택 안 함</option>
-                            <option value="파트너사">파트너사</option>
-                            <option value="직영">직영</option>
-                        </select>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">업체 유형</label>
+                        <select id="customer-kind" onchange="onCustomerKindChange()" class="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"></select>
                     </div>
-                    <!-- 담당 파트너사 (2026-09-14)
-                         이 가맹점을 맡고 있는 파트너사입니다. 넣어 두면 **그 파트너사만**
-                         파트너센터에서 이 가맹점을 찾을 수 있습니다. 비워 두면 아무 파트너사도 찾지 못합니다. -->
+                    <div class="mb-4" id="customer-parent-box">
+                        <label class="block text-sm font-medium text-gray-700 mb-1"><span id="customer-parent-label">상위업체</span>
+                            <span class="text-[11px] font-normal text-gray-400">· 파트너센터에서 이 가맹점을 볼 수 있는 곳</span></label>
+                        <select id="customer-parent" class="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"></select>
+                    </div>
                     <div class="mb-4">
-                        <label class="block text-sm font-medium text-gray-700 mb-1">담당 파트너사
-                            <span class="text-[11px] font-normal text-gray-400">· 파트너센터에서 이 가맹점을 찾을 수 있는 곳</span></label>
-                        <select id="customer-partner" class="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"></select>
-                        <p class="text-[11px] text-gray-400 mt-1">비워 두면 파트너사 접수 화면의 <b>가맹점 찾기</b> 에 나오지 않습니다.</p>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">거래상태</label>
+                        <select id="customer-status" class="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"></select>
                     </div>
                     <div class="mb-4">
                         <label class="block text-sm font-medium text-gray-700 mb-1">킹오더 담당자</label>
@@ -7671,8 +7678,8 @@
         <div class="bg-white w-full max-w-2xl rounded-lg shadow-xl max-h-[90vh] overflow-y-auto">
             <div class="flex justify-between items-start px-6 py-4 border-b border-gray-200">
                 <div>
-                    <h3 id="partner-modal-title" class="text-lg font-bold text-gray-800">신규 파트너사 등록</h3>
-                    <p class="text-sm text-gray-500 mt-0.5">파트너사 기본 정보입니다. 거래 조건은 <b>거래처 관리 › 파트너사</b> 탭에서 정합니다.</p>
+                    <h3 id="partner-modal-title" class="text-lg font-bold text-gray-800">업체 등록</h3>
+                    <p class="text-sm text-gray-500 mt-0.5">업체 기본 정보입니다. 거래 조건은 <b>거래처 관리 › 파트너사</b> 탭, 가맹점의 운영 · 결제 정보는 <b>[가맹점 상세]</b> 에서 정합니다.</p>
                 </div>
                 <button type="button" onclick="closePartnerModal()" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times"></i></button>
             </div>
@@ -7680,7 +7687,7 @@
                 <input type="hidden" id="edit-partner-id" value="" />
                 <div class="p-6 grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div class="sm:col-span-2">
-                        <label class="block text-xs font-medium text-gray-600 mb-1">파트너사명 <span class="text-red-500">*</span></label>
+                        <label class="block text-xs font-medium text-gray-600 mb-1">상호 (업체명) <span class="text-red-500">*</span></label>
                         <input type="text" id="partner-name" required class="w-full p-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-amber-500" placeholder="예: 모두다플랫폼" />
                     </div>
                     <div>
@@ -7717,9 +7724,14 @@
                          파트너가 접수할 때 고르게 두면 남의 단가 화면을 열어 볼 수 있으므로,
                          계정을 만드는 여기서 관리자가 지정합니다. (2026-09-15) -->
                     <div>
-                        <label class="block text-xs font-medium text-gray-600 mb-1">거래 유형 <span class="text-red-500">*</span></label>
+                        <label class="block text-xs font-medium text-gray-600 mb-1">업체 유형 <span class="text-red-500">*</span></label>
                         <select id="partner-cust-type" onchange="onPartnerCustTypeChange()" class="w-full p-2 text-sm border border-gray-300 rounded bg-white focus:outline-none focus:ring-2 focus:ring-amber-500"></select>
                         <p class="text-[11px] text-gray-400 mt-1" id="partner-cust-desc">파트너센터에서 보이는 단가·수수료가 이 값으로 정해집니다.</p>
+                    </div>
+                    <!-- 거래상태 — 가맹점 · 파트너사가 같은 목록을 씁니다 (2026-10-05 업체 통합) -->
+                    <div>
+                        <label class="block text-xs font-medium text-gray-600 mb-1">거래상태</label>
+                        <select id="partner-status" class="w-full p-2 text-sm border border-gray-300 rounded bg-white focus:outline-none focus:ring-2 focus:ring-amber-500"></select>
                     </div>
                     <!-- 프랜차이즈 계정은 **어느 본사인지**와 **금액을 어떻게 다루는지** 둘 다 필요합니다 (2026-09-15).
                          본사 이름은 거래처 관리 › 프랜차이즈 탭에서 끌어오되, 목록에 없으면 그냥 적을 수 있습니다. -->
@@ -7730,15 +7742,21 @@
                         <p class="text-[11px] text-gray-400 mt-1"><b>거래처 관리 › 프랜차이즈</b> 에 등록된 본사가 목록에 나옵니다. <b>없으면 그대로 적으세요</b> — 새 본사도 받습니다.</p>
                     </div>
                     <!-- 파트너사 가맹점은 **어느 파트너사에 속하는지**를 받습니다 (2026-09-16) -->
+                    <!-- 상위업체 (2026-10-05) — 프랜차이즈 가맹점은 본사, 파트너사 가맹점은 파트너사를 고릅니다. 이름이 아니라 업체 번호로 이어집니다 -->
                     <div id="partner-parent-box" class="hidden">
-                        <label class="block text-xs font-medium text-gray-600 mb-1">소속 파트너사 <span class="text-red-500">*</span></label>
-                        <select id="partner-parent" class="w-full p-2 text-sm border border-gray-300 rounded bg-white focus:outline-none focus:ring-2 focus:ring-amber-500"></select>
-                        <p class="text-[11px] text-gray-400 mt-1">거래 유형이 <b>파트너사</b>인 곳만 목록에 나옵니다. 단가·합계는 이 파트너사가 가맹점에 안내합니다.</p>
+                        <label class="block text-xs font-medium text-gray-600 mb-1"><span id="partner-parent-label">소속 파트너사</span> <span class="text-red-500">*</span></label>
+                        <select id="partner-parent" onchange="onPartnerParentChange()" class="w-full p-2 text-sm border border-gray-300 rounded bg-white focus:outline-none focus:ring-2 focus:ring-amber-500"></select>
+                        <p class="text-[11px] text-gray-400 mt-1" id="partner-parent-hint">업체 유형이 <b>파트너사</b>인 곳만 목록에 나옵니다.</p>
                     </div>
                     <div id="partner-hqpol-box" class="hidden">
                         <label class="block text-xs font-medium text-gray-600 mb-1">프랜차이즈 가격정책 <span class="text-red-500">*</span></label>
                         <select id="partner-hq" class="w-full p-2 text-sm border border-gray-300 rounded bg-white focus:outline-none focus:ring-2 focus:ring-amber-500"></select>
                         <p class="text-[11px] text-gray-400 mt-1">그 본사와 맺은 <b>금액 처리 방식</b>을 고릅니다 — 가격표시형 · 가격비공개형 · 페이백형.</p>
+                    </div>
+                    <!-- 파트너센터 아이디 (2026-10-05 — 예전 '파트너 ID 관리' 를 업체 창으로) -->
+                    <div class="sm:col-span-2 rounded border border-indigo-100 bg-indigo-50/40 p-3">
+                        <p class="text-xs font-bold text-indigo-900 mb-1"><i class="fas fa-key mr-1"></i>파트너센터 아이디</p>
+                        <div id="partner-modal-ids"></div>
                     </div>
                     <div class="sm:col-span-2">
                         <label class="block text-xs font-medium text-gray-600 mb-1">비고</label>
@@ -7749,6 +7767,7 @@
                     <div class="flex flex-wrap gap-2">
                         <button type="button" id="partner-delete-btn" onclick="deletePartnerFromModal()" class="hidden px-3 py-2 bg-red-50 text-red-600 border border-red-200 rounded hover:bg-red-100 transition-colors text-sm"><i class="fas fa-trash mr-1"></i>삭제</button>
                         <button type="button" id="partner-trade-link" onclick="openTradeFromPartnerModal()" class="hidden px-3 py-2 bg-white border border-amber-300 text-amber-800 rounded hover:bg-amber-50 transition-colors text-sm"><i class="fas fa-handshake mr-1"></i>거래 조건 보기</button>
+                        <button type="button" id="partner-shop-detail" onclick="openShopDetailFromPartnerModal()" class="hidden px-3 py-2 bg-white border border-cyan-300 text-cyan-800 rounded hover:bg-cyan-50 transition-colors text-sm"><i class="fas fa-store mr-1"></i>가맹점 상세 (운영 · 결제 정보)</button>
                     </div>
                     <div class="flex gap-2">
                         <button type="button" onclick="closePartnerModal()" class="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition-colors text-sm">닫기</button>
@@ -9720,7 +9739,7 @@ const QUOTE_TEMPLATES = [
             'settings-penalty': '위약금 계산 설정 (Termination Penalty Settings)',
             'settings-partner-perm': '파트너 접근 권한 (Partner Center Access)',
             'settings-archive': '자료실 관리 권한 (Archive Managers)',
-            'partner-ids': '파트너 ID 관리 (Partner Accounts)',
+            'partner-ids': '업체 관리 › 파트너센터 아이디 (Partner Accounts)',
             'data-admin': '전체 자료 수정 · 삭제 (Data Admin)',
             'collab-center': '협업티켓센터 (Collaboration Ticket Center)',
             'project-center': '프로젝트 관리 (Project Management)',
@@ -10582,7 +10601,7 @@ const QUOTE_TEMPLATES = [
                     { id: 'users', name: '사용자 관리' },
                     { id: 'management-org', name: '조직도 관리 (본부·팀 포함)' },
                     { id: 'permissions', name: '권한 관리' },
-                    { id: 'partner-ids', name: '파트너 ID 관리' },
+                    { id: 'partner-ids', name: '업체 관리 › 파트너센터 아이디' },
                     { id: 'card-perm', name: '법인카드 조회 권한' },
                     // 화면이 아니라 '권한' 하나입니다 — 켜진 그룹은 본부 · 작성자 · 처리 상태와 관계없이
                     // 모든 자료(티켓 · 일정 · 거래처 · 파트너 · 접수 …)를 수정 · 삭제합니다. 관리자는 늘 켜져 있습니다 (2026-09-28)
@@ -11106,6 +11125,8 @@ const QUOTE_TEMPLATES = [
 
             fillDeptSelects();         // 화면의 부서 선택칸을 조직 마스터로 채웁니다
             migratePartnerPasswords(); // 예전 평문 파트너 비밀번호가 남아 있으면 암호화 (2026-09-28)
+            // 예전 파트너사 목록을 업체 표로 한 번 옮깁니다 (2026-10-05 업체 통합 — 이미 옮겼으면 아무것도 안 함)
+            migrateCompaniesOnce().then(r => { if (r && (r.moved || r.fixed) && typeof renderCompanies === 'function') renderCompanies(); }).catch(() => {});
             syncDeptMenuNames();       // 사이드바 본부 이름도 조직 마스터를 따릅니다
             renderPersonalDashboard(userName, role);
             if (canViewTeam(level)) renderTeamOverview();
@@ -12475,6 +12496,13 @@ const QUOTE_TEMPLATES = [
             }
             // 공통관리 하위 3개는 이제 탭이므로, 예전 경로로 들어오면 해당 탭을 열어 준다
             // (대시보드 카드·고객 통합현황 등에서 navigate('common-contract') 로 호출하는 곳이 있음)
+            // 예전 '파트너 ID 관리' 경로 → 업체 관리의 [아이디] 보기 (2026-10-05)
+            if (sectionId === 'partner-ids' || sectionId === 'common-partner-ids') {
+                commonActiveTab = 'companies';
+                if (typeof companyFilter !== 'undefined') companyFilter.view = 'ids';
+                navigate('common', document.getElementById('nav-common'));
+                return;
+            }
             if (COMMON_TAB_ALIASES[sectionId]) {
                 commonActiveTab = COMMON_TAB_ALIASES[sectionId];
                 navigate('common', document.getElementById('nav-common'));
@@ -31203,14 +31231,188 @@ const QUOTE_TEMPLATES = [
         // 가맹점관리와 고객관리 두 화면이 같은 목록을 쓰는데 항목 이름이 조금 다릅니다
         // (사업자번호가 businessNo / bizNo). 화면 객체를 그대로 담으므로 둘 다 지금처럼 쓰면 됩니다.
         // 바꾼 뒤에는 saveCustomers() 만 부르면, 바뀐 곳만 골라 보냅니다.
+        //
+        // ---------- 업체 통합 (2026-10-05) ----------
+        // 가맹점관리와 파트너사 관리를 '업체 관리' 하나로 합쳤습니다. 이 customers 목록이 **모든 업체**입니다.
+        //   · 업체 유형 kind — direct(개인 가맹점) · franchise(프랜차이즈 가맹점) · partner(파트너사) ·
+        //                       partnerShop(파트너사 가맹점) · hq(프랜차이즈 본사) · dist(하드웨어 유통)
+        //   · 상위업체 parentId — 프랜차이즈 가맹점 → 본사, 파트너사 가맹점 → 파트너사. **id 로** 잇습니다(상호를 바꿔도 안 끊어짐).
+        //   · 예전 파트너사(app_store 'gwPartners.v1')는 id(p17 …)를 그대로 지닌 채 이 표로 옮깁니다 — migrateCompaniesOnce().
+        // 화면 곳곳이 예전 이름(custType · contact · channelType · partnerName · parentPartnerId …)으로 읽으므로,
+        // normalizeCompanies() 가 kind · parentId 에서 그 이름들을 다시 채웁니다. 기준은 kind · parentId · businessNo · contactName 입니다.
         let customers = (window.kobDb ? kobDb.rows('customers') : []);
-        let customerSaved = new Map(customers.map(c => [c.id, JSON.stringify(c)]));
+        customers = prepareCompanies(customers);
+        let customerSaved = new Map(customers.filter(c => !c.fromLegacy).map(c => [c.id, JSON.stringify(c)]));
+
+        // 업체 유형 — 파트너사 관리의 '거래 유형' 6가지를 그대로 씁니다 (이름 · 설명은 PARTNER_CUST_TYPES)
+        function companyKindIds() { return ['direct', 'franchise', 'partner', 'partnerShop', 'hq', 'dist']; }
+        // 상위업체를 두는 유형과 그 상위업체의 유형
+        function companyParentKind(kind) { return kind === 'franchise' ? 'hq' : (kind === 'partnerShop' ? 'partner' : ''); }
+        // 가맹점 3종 — 운영 · 결제 정보(계약방식 · CMS · VAN · TID …)가 붙는 업체
+        function isShopKind(kind) { return kind === 'direct' || kind === 'franchise' || kind === 'partnerShop'; }
+        // 거래상태 — 가맹점(잠재 · 관심 · 거래 · 휴면 · 거래중단)과 파트너사(거래중 · PG정산 · 미거래 · 보류 · 계약해지)를 하나로 (2026-10-05 결정)
+        function companyStatusList() {
+            return [
+                { id: '거래중',   chip: 'bg-green-100 text-green-700' },
+                { id: 'PG정산',   chip: 'bg-blue-100 text-blue-700' },
+                { id: '미거래',   chip: 'bg-gray-100 text-gray-600' },
+                { id: '보류',     chip: 'bg-amber-100 text-amber-700' },
+                { id: '휴면',     chip: 'bg-orange-100 text-orange-700' },
+                { id: '거래중단', chip: 'bg-red-100 text-red-700' }
+            ];
+        }
+        // 예전 값 → 새 값. 가맹점의 고객구분(type)은 영업 단계라 그대로 두고, 거래상태가 비었을 때 처음 한 번만 여기서 정합니다
+        function companyStatusOf(c) {
+            const ids = companyStatusList().map(x => x.id);
+            const st = String((c && c.status) || '').trim();
+            if (st === '계약해지') return '거래중단';
+            if (ids.indexOf(st) > -1) return st;
+            const t = String((c && c.type) || '');
+            if (t === '거래고객') return '거래중';
+            if (t === '휴면고객') return '휴면';
+            if (t === '거래중단고객') return '거래중단';
+            return '미거래';
+        }
+        // (맨 위 prepareCompanies 가 본체 시작 때 바로 부르므로 const 가 아니라 함수 선언으로 둡니다 — 선언 전 사용 오류 방지)
+        function companyNameOf(c) { return String((c && c.name) || '').replace(/\n/g, ' ').trim(); }
+        function companyNameKey(v) { return String(v || '').replace(/주식회사|㈜|\(주\)|[\s()（）]/g, '').toLowerCase(); }
+
+        // 예전 이름들을 kind · parentId 기준으로 맞춥니다. 화면에 들고 있는 객체를 그대로 고칩니다(같은 객체를 돌려줍니다).
+        function normalizeCompanies(list) {
+            const arr = Array.isArray(list) ? list.filter(c => c && c.id) : [];
+            const kinds = companyKindIds();
+            // ① 이름 맞추기 · 거래상태
+            arr.forEach(c => {
+                const k = c.kind || c.custType || '';
+                c.kind = kinds.indexOf(k) > -1 ? k : '';
+                const biz = String(c.businessNo || c.bizNo || '').trim();
+                c.businessNo = biz; c.bizNo = biz;                     // 표의 biz_no 칸(검색 색인)은 data.bizNo 에서 만들어집니다
+                const contact = String(c.contactName || c.contact || '').trim();
+                c.contactName = contact; c.contact = contact;
+                c.status = companyStatusOf(c);
+            });
+            const byId = new Map(arr.map(c => [String(c.id), c]));
+            const byName = (kind, name) => {
+                const key = companyNameKey(name);
+                return key ? arr.find(x => x.kind === kind && companyNameKey(x.name) === key) || null : null;
+            };
+            // ② 상위업체 — 예전 자료는 id(parentPartnerId) 또는 이름 글자(partnerName · franchiseName)로 이어져 있었습니다
+            arr.forEach(c => {
+                if (!c.parentId) {
+                    let p = null;
+                    if (c.parentPartnerId && byId.has(String(c.parentPartnerId))) p = byId.get(String(c.parentPartnerId));
+                    else if (c.kind === 'franchise' && c.franchiseName) p = byName('hq', c.franchiseName);
+                    else if ((!c.kind || c.kind === 'partnerShop') && c.partnerName) p = byName('partner', c.partnerName);
+                    else if (!c.kind && c.channelType === '파트너사' && c.partnerName) p = byName('partner', c.partnerName);
+                    if (p && p.id !== c.id) c.parentId = p.id;
+                }
+                if (!c.kind) {
+                    const p = c.parentId ? byId.get(String(c.parentId)) : null;
+                    c.kind = p ? (p.kind === 'hq' ? 'franchise' : 'partnerShop') : 'direct';
+                }
+                if (!companyParentKind(c.kind)) c.parentId = '';
+                c.custType = c.kind;
+            });
+            // ③ 상위업체에서 정해지는 예전 칸들 — 파트너센터 · 운영업무센터 · 엑셀이 지금도 이 이름으로 읽습니다
+            arr.forEach(c => {
+                const p = c.parentId ? byId.get(String(c.parentId)) : null;
+                const pName = p ? companyNameOf(p) : '';
+                if (c.kind === 'partnerShop') {
+                    c.parentPartnerId = c.parentId || '';
+                    c.parentPartnerName = pName || c.parentPartnerName || '';
+                    c.partnerName = pName || c.partnerName || '';
+                    c.channelType = '파트너사';
+                } else {
+                    c.parentPartnerId = ''; c.parentPartnerName = '';
+                    if (c.kind === 'franchise') { c.franchiseName = pName || c.franchiseName || ''; c.partnerName = ''; c.channelType = '프랜차이즈'; }
+                    else if (c.kind === 'hq') { c.franchiseName = companyNameOf(c); c.partnerName = ''; c.channelType = '프랜차이즈'; }
+                    else { c.partnerName = ''; c.channelType = '직영'; }
+                }
+            });
+            return arr;
+        }
+        // 엑셀 '업체유형' 칸 → kind. 이름(개인 가맹점 …) · 코드(direct …) · 예전 표기(직영 · 총판 · 대리점 …)를 받습니다. 모르면 ''
+        function parseCompanyKind(v) {
+            const raw = String(v || '').trim();
+            if (companyKindIds().indexOf(raw) > -1) return raw;
+            const t = raw.replace(/\s+/g, '');
+            if (!t) return '';
+            if (/본사/.test(t)) return 'hq';
+            if (/파트너사?가맹/.test(t)) return 'partnerShop';
+            if (/프랜차이즈/.test(t)) return 'franchise';
+            if (/파트너|총판|대리점/.test(t)) return 'partner';
+            if (/유통|하드웨어/.test(t)) return 'dist';
+            if (/개인|직영|일반가맹|개인사업자/.test(t)) return 'direct';
+            return '';
+        }
+        // 엑셀 '가격정책' 칸 → visible / hidden / payback. 모르면 ''
+        function parseFranchisePolicy(v) {
+            const t = String(v || '').replace(/\s+/g, '');
+            if (!t) return '';
+            if (/^(visible|hidden|payback)$/.test(t)) return t;
+            if (/페이백/.test(t)) return 'payback';
+            if (/비공개|숨김/.test(t)) return 'hidden';
+            if (/표시|공개/.test(t)) return 'visible';
+            return '';
+        }
+        // 이 업체 아래에 딸린 업체들 (본사 → 프랜차이즈 가맹점, 파트너사 → 파트너사 가맹점)
+        function companyChildren(id, list) {
+            const k = String(id || '');
+            return k ? (list || customers).filter(c => String(c.parentId || '') === k) : [];
+        }
+        // 아직 표로 옮기지 않은 예전 파트너사 — 직원 화면에서만 (파트너센터는 서버가 자기 업체만 내려 줍니다)
+        // 옮김 표시(gwPartnersMigrated.v1)가 있으면 예전 목록은 다시 읽지 않습니다 — 업체 관리에서 지운 것이 되살아나지 않게.
+        function legacyPartnersKey() { return 'gwPartners.v1'; }
+        function companyMigratedKey() { return 'gwPartnersMigrated.v1'; }
+        function legacyPartnersPending(list) {
+            try {
+                if (typeof isPartnerMode === 'function' && isPartnerMode()) return [];
+                if (typeof loadJsonStore !== 'function') return [];
+                if (loadJsonStore(companyMigratedKey(), null)) return [];
+                const old = loadJsonStore(legacyPartnersKey(), null);
+                if (!Array.isArray(old)) return [];
+                const have = new Set((list || []).map(c => String(c.id)));
+                return old.filter(p => p && p.id && !have.has(String(p.id)))
+                          .map(p => Object.assign(JSON.parse(JSON.stringify(p)), { kind: p.kind || p.custType || 'partner', fromLegacy: true }));
+            } catch (e) { return []; }
+        }
+        function prepareCompanies(list) {
+            const base = Array.isArray(list) ? list : [];
+            return normalizeCompanies(base.concat(legacyPartnersPending(base)));
+        }
+        // 로그인 뒤 한 번 — 예전 파트너사를 표로 옮기고, 유형 · 상위업체가 비어 있던 가맹점 줄도 채워 저장합니다.
+        // 모두 저장된 뒤에야 옮김 표시를 남깁니다 (중간에 실패하면 다음 로그인 때 다시 합니다).
+        async function migrateCompaniesOnce() {
+            if (!window.kobDb || (typeof kobStorage !== 'undefined' && !kobStorage.authed)) return { moved: 0, fixed: 0 };   // 로그인 전에는 쓰지 않습니다
+            if (loadJsonStore(companyMigratedKey(), null)) return { moved: 0, fixed: 0, done: true };
+            const pending = customers.filter(c => c.fromLegacy);
+            const fixed = customers.filter(c => {
+                if (c.fromLegacy) return false;
+                const raw = kobDb.get('customers', c.id);
+                return raw && (raw.kind !== c.kind || String(raw.parentId || '') !== String(c.parentId || '') || raw.status !== c.status || (raw.bizNo || '') !== (c.bizNo || ''));
+            });
+            if (!pending.length && !fixed.length && !Array.isArray(loadJsonStore(legacyPartnersKey(), null))) return { moved: 0, fixed: 0 };
+            try {
+                pending.forEach(c => { delete c.fromLegacy; });
+                await Promise.all(pending.concat(fixed).map(c => kobDb.save('customers', c)));
+                pending.concat(fixed).forEach(c => customerSaved.set(c.id, JSON.stringify(c)));
+            } catch (e) {
+                pending.forEach(c => { c.fromLegacy = true; });
+                console.warn('[업체] 예전 파트너사 옮기기를 다음에 다시 합니다', e);
+                return { moved: 0, fixed: 0, error: String((e && e.message) || e) };
+            }
+            saveJsonStore(companyMigratedKey(), { at: new Date().toISOString(), by: (typeof currentUserEmail !== 'undefined' && currentUserEmail) || '',
+                                                  moved: pending.map(c => c.id), fixed: fixed.length });
+            if (pending.length || fixed.length) console.info(`[업체] 예전 파트너사 ${pending.length}곳을 업체 목록으로 옮기고, 가맹점 ${fixed.length}곳의 유형·상위업체를 채웠습니다.`);
+            return { moved: pending.length, fixed: fixed.length };
+        }
 
         function saveCustomers() {
             if (!window.kobDb) return;
             const alive = new Set();
             customers.forEach(c => {
                 if (!c || !c.id) return;
+                if (c.fromLegacy) return;            // 아직 옮기지 않은 예전 파트너사 — migrateCompaniesOnce() 가 옮깁니다
                 alive.add(c.id);
                 const now = JSON.stringify(c);
                 if (customerSaved.get(c.id) === now) return;
@@ -31235,13 +31437,19 @@ const QUOTE_TEMPLATES = [
             catch (e) { /* 아직 선언 전 — 선언 직후 한 번 더 부릅니다 */ }
         }
 
+        // 업체 목록을 통째로 바꿀 때는 이것으로 — 파트너사 화면들이 보는 partners 도 같은 목록을 가리키게 합니다 (2026-10-05)
+        function setCompanyList(list) {
+            customers = list;
+            try { if (!isPartnerMode()) partners = customers; } catch (e) { /* partners 선언 전(본체 시작 중) */ }
+        }
         function reloadCustomersFromDb() {
             if (!window.kobDb) return;
-            customers = kobDb.rows('customers');
-            customerSaved = new Map(customers.map(c => [c.id, JSON.stringify(c)]));
+            setCompanyList(prepareCompanies(kobDb.rows('customers')));
+            customerSaved = new Map(customers.filter(c => !c.fromLegacy).map(c => [c.id, JSON.stringify(c)]));
             syncCustomerIdCounter();
             if (typeof renderCustomers === 'function') renderCustomers();
             if (typeof renderCommonCustomers === 'function') renderCommonCustomers();
+            if (typeof renderCompanies === 'function') renderCompanies();     // 업체 관리 (2026-10-05)
             // 업무센터 고객 목록은 이 목록에서 만들어지므로 함께 다시 그립니다.
             if (typeof refreshWorkViews === 'function') refreshWorkViews();
             // 로그인 직후처럼 고객이 늦게 도착한 경우, 지난번 고객으로 되돌리는 것을 한 번 더 시도합니다.
@@ -31487,7 +31695,14 @@ const QUOTE_TEMPLATES = [
         //   · 같은 곳 판단 — 사업자번호 → 거래처코드 → 가맹점명
         // aliases 에 기재된 이름은 모두 같은 열로 봅니다 (공백·대소문자 무시).
         const CUSTOMER_IMPORT_COLUMNS = [
-            { key: 'name',         label: '가맹점명',   aliases: ['가맹점명', '고객사명', '거래처명', '상호', '상호명', '회사명', '업체명', '고객명'], required: true },
+            { key: 'name',         label: '상호',       aliases: ['상호', '가맹점명', '고객사명', '거래처명', '상호명', '회사명', '업체명', '고객명', '파트너사명'], required: true },
+            // 업체 통합 (2026-10-05) — 업체 유형 · 상위업체 · 거래상태와 파트너사 쪽 등록 항목
+            { key: 'kind',         label: '업체유형',   aliases: ['업체유형', '업체 유형', '거래유형', '거래 유형', '업체구분'], parse: v => parseCompanyKind(v) },
+            { key: 'parentRef',    label: '상위업체',   aliases: ['상위업체', '상위 업체', '소속', '소속업체', '소속본사', '소속파트너사', '본사'] },
+            { key: 'status',       label: '거래상태',   aliases: ['거래상태', '거래 상태'], parse: v => { const t = String(v || '').trim(); const st = companyStatusOf({ status: t }); return (t === '계약해지' || companyStatusList().some(x => x.id === t)) ? st : ''; } },
+            { key: 'corp',         label: '계약법인',   aliases: ['계약법인', '계약 법인'], options: ['킹오더 브라더스', '매장친구', '킹오더&매장친구'] },
+            { key: 'bizType',      label: '사업자구분', aliases: ['사업자구분', '사업자 구분', '사업자형태'], parse: v => /법인/.test(String(v)) ? 'corp' : (/일반|개인/.test(String(v)) ? 'personal' : '') },
+            { key: 'franchiseHq',  label: '가격정책',   aliases: ['가격정책', '프랜차이즈가격정책', '프랜차이즈 가격정책'], parse: v => parseFranchisePolicy(v) },
             { key: 'businessNo',   label: '사업자번호', aliases: ['사업자번호', '사업자등록번호'] },
             { key: 'bizCode',      label: '거래처코드', aliases: ['거래처코드', '고객코드', '거래처 코드', '코드'] },
             { key: 'ceo',          label: '대표자',     aliases: ['대표자', '대표자명', '대표'] },
@@ -31504,8 +31719,8 @@ const QUOTE_TEMPLATES = [
             { key: 'type',         label: '고객구분',   aliases: ['고객구분', '구분', '고객유형'], options: ['잠재고객', '관심고객', '거래고객', '휴면고객', '거래중단고객'] },
             { key: 'grade',        label: '등급',       aliases: ['등급', '고객등급'],       options: ['일반', 'Silver', 'Gold', 'VIP'] },
             { key: 'manager',      label: '영업담당',   aliases: ['영업담당', '영업담당자', '담당영업', '관리자'] },
-            { key: 'channelType',  label: '채널구분',   aliases: ['채널구분', '채널'],       options: ['파트너사', '직영'] },
-            { key: 'partnerName',  label: '담당파트너사', aliases: ['담당파트너사', '담당 파트너사', '파트너사', '소속파트너사'] },
+            // 예전 양식의 '담당 파트너사' — 상위업체 칸이 비었을 때 상위업체로 읽습니다 (채널구분은 상위업체에서 정해지므로 받지 않습니다)
+            { key: 'partnerName',  label: '담당파트너사', aliases: ['담당파트너사', '담당 파트너사'] },
             { key: 'contractDate', label: '계약일',     aliases: ['계약일', '계약일자'],     date: true },
             { key: 'installDate',  label: '설치일',     aliases: ['설치일', '설치일자'],     date: true },
             // 계약방식은 여러 개를 함께 적을 수 있습니다 (예: "임대, CMS(임대), CMS(관리비)")
@@ -31592,19 +31807,23 @@ const QUOTE_TEMPLATES = [
                 name: '알파소프트', businessNo: '123-45-67890', bizCode: 'A-1001', ceo: '김대표', contactName: '이과장',
                 phone: '010-1111-2222', tel: '02-555-1234', mobile: '010-1111-2222', email: 'contact@alpha.com',
                 zipCode: '06234', address: '서울시 강남구 테헤란로 123', addressDetail: '2층', industry: 'IT/소프트웨어', size: '중소기업', type: '거래고객',
-                grade: 'VIP', manager: '김영업', channelType: '파트너사', partnerName: '오케팅홀딩스', contractDate: '2026-03-02', installDate: '2026-03-10',
+                grade: 'VIP', manager: '김영업', kind: '파트너사 가맹점', parentRef: '오케팅홀딩스', status: '거래중', contractDate: '2026-03-02', installDate: '2026-03-10',
                 van: 'KIS정보통신', pg: 'KG이니시스', tid: 'T1023004501, T1023004502', mid: 'M20251114-01', settleCycle: 'D+2 (영업일)',
                 payMethod: '임대, 현금, CMS(임대), CMS(관리비)', cashAmount: 3500000, cmsRentUse: 'Y', rentFee: 220000, cmsFeeUse: 'Y', monthlyFee: 330000,
                 useYn: 'YES', transferInfo: '국민은행 1234-**-5678',
                 memo: '연간 계약 갱신 예정'
             };
-            const sample2 = { name: '베타상사', businessNo: '128-86-33027', ceo: '박대표', phone: '010-3333-4444', type: '잠재고객', grade: '일반' };
+            const sample2 = { name: '베타상사', businessNo: '128-86-33027', ceo: '박대표', phone: '010-3333-4444', type: '잠재고객', grade: '일반', kind: '개인 가맹점' };
+            // 상위업체가 될 파트너사 줄 — 같은 파일 안에 있어도 먼저 등록한 뒤 가맹점과 잇습니다 (2026-10-05)
+            const sample0 = { name: '오케팅홀딩스', businessNo: '220-81-55555', kind: '파트너사', status: '거래중', corp: '킹오더 브라더스', bizType: '법인사업자',
+                              contactName: '최제성 상무', phone: '010-9974-2224', address: '서울시 강남구 테헤란로 200' };
             const rows = [
                 head,
+                CUSTOMER_IMPORT_COLUMNS.map(c => sample0[c.key] !== undefined ? sample0[c.key] : ''),
                 CUSTOMER_IMPORT_COLUMNS.map(c => sample[c.key] !== undefined ? sample[c.key] : ''),
                 CUSTOMER_IMPORT_COLUMNS.map(c => sample2[c.key] !== undefined ? sample2[c.key] : '')
             ];
-            downloadBlobAs(buildXlsxBlob(rows, '가맹점'), `가맹점_업로드양식_${ymd(new Date()).replace(/-/g, '')}.xlsx`);
+            downloadBlobAs(buildXlsxBlob(rows, '업체'), `업체_업로드양식_${ymd(new Date()).replace(/-/g, '')}.xlsx`);
         }
 
         async function runCommonCustomerImport(input) {
@@ -31633,9 +31852,10 @@ const QUOTE_TEMPLATES = [
                 .filter(x => x.v && !known.has(x.i)).map(x => x.v);
 
             const usedCols = CUSTOMER_IMPORT_COLUMNS.filter(c => col[c.key] >= 0);
-            const stat = { added: 0, updated: 0, noName: 0, dup: 0 };
+            const stat = { added: 0, updated: 0, noName: 0, dup: 0, linked: 0 };
             const seen = new Set();
             const preview = [];
+            const links = [];          // 상위업체는 모든 줄을 넣은 뒤에 잇습니다 — 같은 파일 안의 본사 · 파트너사도 찾을 수 있게 (2026-10-05)
             const cell = (r, k) => (col[k] >= 0 && r[col[k]] != null) ? String(r[col[k]]).trim() : '';
 
             rows.slice(found.row + 1).forEach(r => {
@@ -31667,6 +31887,11 @@ const QUOTE_TEMPLATES = [
                         if (uniq.length) { data[c.multiKey] = uniq; data[c.key] = uniq.join(' · '); }
                         return;
                     }
+                    if (c.parse) {
+                        const v = c.parse(raw);
+                        if (v) data[c.key] = v;          // 알아보지 못한 값은 무시합니다
+                        return;
+                    }
                     if (c.options) {
                         const hit = c.options.find(o => normHeadName(o) === normHeadName(raw));
                         if (hit) data[c.key] = hit;      // 목록에 없는 값은 무시합니다
@@ -31674,6 +31899,9 @@ const QUOTE_TEMPLATES = [
                     }
                     data[c.key] = raw;
                 });
+                // 상위업체 — 칸에 적힌 상호 · 사업자번호. 비었으면 예전 양식의 '담당 파트너사' 를 씁니다
+                const parentRef = String(data.parentRef || data.partnerName || '').trim();
+                delete data.parentRef;
                 // 화면 곳곳이 쓰는 항목 보충 — 파일에 없을 때만
                 if (!data.contactName && data.ceo) data.contactName = data.ceo;
                 // 계약방식에 CMS 를 적었으면 CMS 구분도 함께 켭니다 (같은 값이라서)
@@ -31701,9 +31929,11 @@ const QUOTE_TEMPLATES = [
                     (code && normKeyValue(c.bizCode) === normKeyValue(code)) ||
                     (!bizNo && !code && c.name === name));
 
+                let target;
                 if (existing) {
                     Object.assign(existing, data);
                     existing.cmsUse = cmsAnyOn(existing);   // 임대 · 관리비 중 하나라도 쓰면 CMS 사용
+                    target = existing;
                     stat.updated++;
                 } else {
                     const added = Object.assign({
@@ -31713,13 +31943,36 @@ const QUOTE_TEMPLATES = [
                     }, data);
                     added.cmsUse = cmsAnyOn(added);
                     customers.push(added);
+                    target = added;
                     stat.added++;
                 }
-                if (preview.length < 5) preview.push(Object.assign({ name }, data));
+                if (parentRef) links.push({ c: target, ref: parentRef, kindGiven: !!data.kind });
+                if (preview.length < 5) preview.push(Object.assign({ name, parentRef }, data));
             });
+
+            // 상위업체 잇기 — 사업자번호가 맞으면 그것으로, 아니면 상호로 찾습니다
+            const missingParent = [];
+            links.forEach(({ c, ref, kindGiven }) => {
+                const want = companyParentKind(c.kind);
+                if (c.kind && !want) {            // 개인 가맹점 · 본사 · 파트너사 · 유통 — 상위업체를 두지 않는 유형
+                    if (kindGiven) missingParent.push(`${companyNameOf(c)} (${partnerCustTypeName(c.kind)} 은(는) 상위업체를 두지 않습니다)`);
+                    return;
+                }
+                const kinds = want ? [want] : ['hq', 'partner'];
+                const refKey = normKeyValue(ref);
+                const cands = customers.filter(x => x.id !== c.id && kinds.indexOf(x.kind || parseCompanyKind(x.custType)) > -1);
+                const p = cands.find(x => x.businessNo && normKeyValue(x.businessNo) === refKey)
+                       || cands.find(x => companyNameKey(x.name) === companyNameKey(ref));
+                if (!p) { missingParent.push(`${companyNameOf(c)} → ${ref}`); return; }
+                c.parentId = p.id;
+                if (!c.kind) c.kind = (p.kind === 'hq' ? 'franchise' : 'partnerShop');
+                stat.linked++;
+            });
+            normalizeCompanies(customers);       // 유형이 빈 줄은 개인 가맹점으로 · 채널구분 같은 예전 칸도 여기서 맞춥니다
 
             saveCustomers();
             renderCommonCustomers();
+            if (typeof renderCompanies === 'function') renderCompanies();
             if (typeof renderCustomers === 'function') renderCustomers();
 
             const previewCols = usedCols.slice(0, 8);
@@ -31727,11 +31980,13 @@ const QUOTE_TEMPLATES = [
                 <div class="rounded border border-green-200 bg-green-50 p-3">
                     <p class="text-sm font-semibold text-green-800"><i class="fas fa-circle-check mr-1"></i>업로드 완료 — 신규 ${stat.added}건 · 갱신 ${stat.updated}건</p>
                     <p class="text-xs text-green-700/80 mt-1">
-                        건너뜀 ${stat.noName + stat.dup}건 (가맹점명 없음 ${stat.noName} · 파일 내 중복 ${stat.dup})
-                        · 현재 가맹점 <b>${customers.length}</b>건
+                        건너뜀 ${stat.noName + stat.dup}건 (상호 없음 ${stat.noName} · 파일 내 중복 ${stat.dup})
+                        · 상위업체 연결 ${stat.linked}건 · 현재 업체 <b>${customers.length}</b>곳
                     </p>
                     <p class="text-xs text-green-700/80 mt-1">읽은 열 ${usedCols.length}개 — ${usedCols.map(c => escapeHtml(c.label)).join(' · ')}</p>
                 </div>
+                ${missingParent.length ? `<div class="text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded px-2 py-1.5 mt-2"><p class="font-semibold"><i class="fas fa-link-slash mr-1"></i>상위업체 못 찾음 ${missingParent.length}건 — 업체는 등록했습니다. 상위업체를 먼저 올리거나 업체 관리에서 골라 주세요.</p>
+                    <p class="mt-1">${missingParent.slice(0, 20).map(escapeHtml).join(' · ')}${missingParent.length > 20 ? ` 외 ${missingParent.length - 20}건` : ''}</p></div>` : ''}
                 ${unknown.length ? `<p class="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5 mt-2"><i class="fas fa-circle-info mr-1"></i>알아보지 못한 머리글 ${unknown.length}개는 건너뛰었습니다 — ${unknown.map(escapeHtml).join(' · ')}</p>` : ''}
                 ${preview.length ? `
                 <p class="text-[11px] font-semibold text-gray-500 mt-3 mb-1">올린 내용 미리보기 (앞 ${preview.length}건)</p>
@@ -31896,6 +32151,8 @@ const QUOTE_TEMPLATES = [
             }
 
             let filteredCustomers = customers.filter(c => {
+                // 업체 통합(2026-10-05) 뒤 이 목록에는 본사 · 파트너사 · 유통도 들어 있습니다 — 영업 단계(고객구분)가 있는 곳만 보여 줍니다
+                if (!isShopKind(c.kind) && !c.type) return false;
                 if (customerFilterType !== 'all' && c.type !== customerFilterType) return false;
                 if (gradeFilter !== 'all' && (c.grade || '일반') !== gradeFilter) return false;
                 if (searchTerm) {
@@ -32209,23 +32466,44 @@ const QUOTE_TEMPLATES = [
         // 계약방식을 고치면 금액 칸을 다시 맞춥니다
         function onCustomerPayMethodChange() { updatePayMethodAmounts(); }
 
-        // 담당 파트너사 선택지 — 등록된 파트너사 목록을 그대로 씁니다 (2026-09-14).
-        // 예전 자료에 적혀 있던 이름이 목록에 없으면 그 이름도 함께 넣어 두어, 열었다 저장해도 지워지지 않게 합니다.
-        function fillCustomerPartnerSelect(cur) {
-            const el = document.getElementById('customer-partner');
-            if (!el) return;
-            const names = [];
-            try {
-                (typeof partners !== 'undefined' ? partners : []).forEach(p => {
-                    const nm = String(p.name || '').replace(/\n/g, ' ').trim();
-                    if (nm && names.indexOf(nm) < 0) names.push(nm);
-                });
-            } catch (e) { /* 파트너사 목록이 아직 없으면 비워 둡니다 */ }
-            const v = String(cur || '').trim();
-            if (v && names.indexOf(v) < 0) names.unshift(v);
-            el.innerHTML = '<option value="">지정 안 함</option>'
-                + names.map(n => `<option value="${escapeHtml(n)}"${n === v ? ' selected' : ''}>${escapeHtml(n)}</option>`).join('');
-            el.value = v;
+        // 업체 유형 · 상위업체 · 거래상태 칸 (2026-10-05 업체 통합 — 예전 '구분' · '담당 파트너사' 를 대신합니다)
+        // 이 창은 가맹점 상세라 가맹점 3종을 먼저 보여 주고, 다른 유형의 업체를 열었을 때는 그 유형도 함께 둡니다.
+        function fillCustomerCompanyFields(c) {
+            const kindEl = document.getElementById('customer-kind');
+            const stEl = document.getElementById('customer-status');
+            const kind = (c && c.kind) || 'direct';
+            if (kindEl) {
+                const shown = PARTNER_CUST_TYPES.filter(o => isShopKind(o.id) || o.id === kind);
+                kindEl.innerHTML = shown.map(o => `<option value="${escapeHtml(o.id)}">${escapeHtml(o.name)}</option>`).join('');
+                kindEl.value = kind;
+            }
+            if (stEl) {
+                stEl.innerHTML = PARTNER_STATUS.map(o => `<option value="${escapeHtml(o.id)}">${escapeHtml(o.id)}</option>`).join('');
+                stEl.value = (c && c.status) || '미거래';
+            }
+            onCustomerKindChange((c && c.parentId) || '');
+        }
+        // 유형이 바뀌면 상위업체 목록(본사 / 파트너사)을 다시 채우고, 가맹점이 아니면 가맹점용 필수칸을 풉니다
+        const CUSTOMER_SHOP_REQUIRED = ['customer-business-no', 'customer-ceo', 'customer-tel', 'customer-mobile', 'customer-contact-name',
+                                        'customer-phone', 'customer-email', 'customer-industry', 'customer-address'];
+        function onCustomerKindChange(keepParentId) {
+            const kind = (document.getElementById('customer-kind') || {}).value || 'direct';
+            const editId = (document.getElementById('edit-customer-id') || {}).value || '';
+            const parentKind = companyParentKind(kind);
+            const box = document.getElementById('customer-parent-box');
+            if (box) box.classList.toggle('hidden', !parentKind);
+            const label = document.getElementById('customer-parent-label');
+            if (label) label.textContent = parentKind === 'hq' ? '소속 프랜차이즈 본사' : '소속 파트너사';
+            const el = document.getElementById('customer-parent');
+            if (el) {
+                const cur = typeof keepParentId === 'string' ? keepParentId : el.value;
+                const opts = parentKind ? customers.filter(x => x.kind === parentKind && x.id !== editId)
+                    .sort((a, b) => companyNameOf(a).localeCompare(companyNameOf(b), 'ko')) : [];
+                el.innerHTML = '<option value="">선택해 주세요</option>' + opts.map(x => `<option value="${escapeHtml(x.id)}">${escapeHtml(companyNameOf(x))}</option>`).join('');
+                el.value = opts.some(x => x.id === cur) ? cur : '';
+            }
+            const shop = isShopKind(kind);
+            CUSTOMER_SHOP_REQUIRED.forEach(id => { const f = document.getElementById(id); if (f) f.required = shop; });
         }
 
         function openCustomerModal(customerId = null, onSaved = null, onCanceled = null) {
@@ -32277,9 +32555,10 @@ const QUOTE_TEMPLATES = [
                     // 운영업무센터 고객조회 항목
                     setCustField('customer-contract-date', customer.contractDate);
                     setCustField('customer-install-date', customer.installDate);
-                    setCustField('customer-channel-type', customer.channelType);
                     setCustField('customer-manager', customer.manager);
-                    fillCustomerPartnerSelect(customer.partnerName);
+                    fillCustomerCompanyFields(customer);
+                    const idsBox = document.getElementById('customer-modal-ids');
+                    if (idsBox) idsBox.innerHTML = companyIdsHtml(customer.id);
                     setCustField('customer-cash-amount', customer.cashAmount || '');
                     setCustField('customer-rent-fee', customer.rentFee || '');
                     setCustField('customer-monthly-fee', customer.monthlyFee || '');
@@ -32295,9 +32574,11 @@ const QUOTE_TEMPLATES = [
             } else {
                 title.innerText = '신규 고객 등록';
                 idInput.value = '';
-                fillCustomerPartnerSelect('');
+                fillCustomerCompanyFields(null);
                 setCustomerPayMethods([]);
                 updatePayMethodAmounts();
+                const idsNew = document.getElementById('customer-modal-ids');
+                if (idsNew) idsNew.innerHTML = companyIdsHtml('');
                 // form.reset() 은 **나중에 만든 줄**을 지우지 못하므로 여기서 다시 그립니다 (2026-09-07)
                 renderCustCodeList('tid', []);
                 renderCustCodeList('mid', []);
@@ -32321,6 +32602,15 @@ const QUOTE_TEMPLATES = [
         function submitCustomer(event) {
             event.preventDefault();
             const id = document.getElementById('edit-customer-id').value;
+            // 상위업체가 필요한 유형인데 고르지 않았으면 막습니다 (2026-10-05)
+            const kindPicked = getCustField('customer-kind') || 'direct';
+            if (companyParentKind(kindPicked) && !getCustField('customer-parent')) {
+                alert(companyParentKind(kindPicked) === 'hq'
+                    ? '프랜차이즈 가맹점은 소속 본사를 골라 주세요.\n목록에 없으면 업체 관리에서 본사를 먼저 등록해야 합니다.'
+                    : '파트너사 가맹점은 소속 파트너사를 골라 주세요.\n목록에 없으면 업체 관리에서 파트너사를 먼저 등록해야 합니다.');
+                const el = document.getElementById('customer-parent'); if (el) el.focus();
+                return;
+            }
             const tel = getCustField('customer-tel');
             const mobile = getCustField('customer-mobile');
             const ceo = getCustField('customer-ceo');
@@ -32360,9 +32650,10 @@ const QUOTE_TEMPLATES = [
                 // 운영업무센터 고객조회 항목
                 contractDate: getCustField('customer-contract-date'),
                 installDate: getCustField('customer-install-date'),
-                channelType: getCustField('customer-channel-type'),
-                // 담당 파트너사 — 파트너센터 '가맹점 찾기' 가 이 값으로 걸러 줍니다 (2026-09-14)
-                partnerName: getCustField('customer-partner'),
+                // 업체 유형 · 상위업체 · 거래상태 (2026-10-05) — 채널구분 · 담당 파트너사 이름은 normalizeCompanies() 가 여기서 다시 채웁니다
+                kind: getCustField('customer-kind') || 'direct',
+                parentId: companyParentKind(getCustField('customer-kind')) ? getCustField('customer-parent') : '',
+                status: getCustField('customer-status') || '미거래',
                 manager: getCustField('customer-manager'),
                 // CMS 구분 — 계약방식에서 고른 CMS 항목이 그대로 CMS 사용 여부입니다.
                 //   고르지 않은 쪽의 금액은 0 으로 넣습니다 (칸이 숨겨져 옛 값이 남아 있을 수 있어서).
@@ -32388,8 +32679,10 @@ const QUOTE_TEMPLATES = [
             let savedCustomer;
             if (id) { const index = customers.findIndex(c => c.id === id); if (index > -1) { customers[index] = { ...customers[index], ...customerData }; savedCustomer = customers[index]; } alert('고객 정보가 수정되었습니다.'); }
             else { savedCustomer = { id: 'c' + customerIdCounter++, ...customerData }; customers.push(savedCustomer); alert('신규 고객이 등록되었습니다.'); }
+            normalizeCompanies(customers);   // 채널구분 · 담당 파트너사 이름 같은 예전 칸을 상위업체에서 다시 맞춥니다
             saveCustomers();
             renderCustomers();
+            if (typeof renderCompanies === 'function') renderCompanies();
             // 가맹점관리(공통관리) 화면이 있으면 함께 갱신
             if (typeof renderCommonCustomers === 'function') renderCommonCustomers();
             // 저장 후 콜백 (예: 계약 모달 고객사 드롭다운에 방금 등록한 고객을 자동 선택)
@@ -32400,7 +32693,7 @@ const QUOTE_TEMPLATES = [
             if (cb && savedCustomer) cb(savedCustomer);
         }
 
-        function deleteCustomer(customerId) { if (confirm('정말 이 고객 정보를 삭제하시겠습니까?')) { customers = customers.filter(c => c.id !== customerId); saveCustomers(); renderCustomers(); } }
+        function deleteCustomer(customerId) { if (confirm('정말 이 고객 정보를 삭제하시겠습니까?')) { setCompanyList(customers.filter(c => c.id !== customerId)); saveCustomers(); renderCustomers(); } }
 
         // ==================== 상담관리 로직 (Salesforce Case Management 참고) ====================
         // ---------- 저장 (2026-09-17) ----------
@@ -33877,7 +34170,7 @@ const QUOTE_TEMPLATES = [
                 '<option value="__new__">+ 고객사 생성 바로가기</option>';
             // 파트너사 드롭다운: 파트너사 관리에 등록된 항목에서 선택
             partnerSelect.innerHTML = '<option value="">파트너사 선택 (선택)</option>' +
-                partners.map(p => `<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('');
+                partnerSideCompanies().map(p => `<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('');
             // 거래 구분 드롭다운 (2026-09-08)
             document.getElementById('contract-biz-type').innerHTML = CONTRACT_BIZ_TYPES
                 .map(t => `<option value="${t.id}">${escapeHtml(t.name)} — ${escapeHtml(t.desc)}</option>`).join('');
@@ -34326,7 +34619,7 @@ const QUOTE_TEMPLATES = [
                 desc: '파트너사와의 거래 조건입니다. 파트너사 등록(이름·사업자번호·담당자)은 공통관리 › 파트너사 관리에서 합니다.',
                 custom: true, fields: [],
                 render: host => renderPartnerTradeCenter(host),
-                count: () => partners.length
+                count: () => tradePartners().length
             },
             // 지급명세는 월별 지급보고서라 데이터·표가 완전히 달라 따로 그립니다
             payout: {
@@ -34529,7 +34822,7 @@ const QUOTE_TEMPLATES = [
 
             const tabs = supplyVisibleChannels().map(k => {
                 const c = SUPPLY_CHANNELS[k], on = k === ch;
-                const n = c.custom ? (c.count ? c.count() : partners.length) : supplyOf(k).length;
+                const n = c.custom ? (c.count ? c.count() : tradePartners().length) : supplyOf(k).length;
                 return `<button type="button" onclick="setSupplyChannel('${k}')" class="px-3 py-2 rounded-md text-sm font-medium transition-colors whitespace-nowrap ${on ? c.active + ' text-white shadow-sm' : 'text-gray-600 hover:bg-gray-100'}">
                             <i class="fas ${c.icon} mr-1"></i>${escapeHtml(c.name)}<span class="ml-1 px-1.5 rounded-full text-[10px] ${on ? 'bg-white/25' : 'bg-white text-gray-500'}">${n}</span>
                         </button>`;
@@ -34632,7 +34925,7 @@ const QUOTE_TEMPLATES = [
                 return `<div class="${f.wide || f.type === 'textarea' ? 'sm:col-span-2' : ''}">${label}${input}</div>`;
             };
             // 파트너사 마스터 연결 — 이름이 자유 텍스트라 어긋나는 것을 막으려고 id 로도 묶습니다
-            const partnerOpts = partners.slice().sort((a, b) => a.name.localeCompare(b.name))
+            const partnerOpts = partnerSideCompanies().sort((a, b) => a.name.localeCompare(b.name))
                 .map(p => `<option value="${escapeHtml(p.id)}" ${rec && rec.partnerId === p.id ? 'selected' : ''}>${escapeHtml(p.name)}</option>`).join('');
             document.getElementById('supply-form-body').innerHTML = `
                 <div class="border border-gray-200 rounded-lg overflow-hidden">
@@ -34896,7 +35189,7 @@ const QUOTE_TEMPLATES = [
                 </div>`).join('')
                 : '<p class="text-xs text-gray-400">따로 맺은 파트너사가 없습니다. 위에서 골라 추가해 주세요.</p>';
             if (pick) {
-                const list = (typeof partners !== 'undefined' ? partners : []).filter(p => ids.indexOf(p.id) < 0);
+                const list = partnerSideCompanies().filter(p => ids.indexOf(p.id) < 0);
                 pick.innerHTML = list.length
                     ? list.map(p => `<option value="${escapeHtml(p.id)}">${escapeHtml(String(p.name || '').replace(/\n/g, ' ').trim())}</option>`).join('')
                     : '<option value="">모두 추가됨</option>';
@@ -35279,39 +35572,37 @@ const QUOTE_TEMPLATES = [
         }
 
         let PARTNER_ITEMS = loadPartnerItems();
-        const PARTNER_STATUS = [
-            { id: '거래중',   chip: 'bg-green-100 text-green-700' },
-            { id: 'PG정산',   chip: 'bg-blue-100 text-blue-700' },
-            { id: '미거래',   chip: 'bg-gray-100 text-gray-600' },
-            { id: '보류',     chip: 'bg-amber-100 text-amber-700' },
-            { id: '계약해지', chip: 'bg-red-100 text-red-700' }
-        ];
+        // 거래상태 — 2026-10-05 업체 통합으로 가맹점 · 파트너사가 같은 목록을 씁니다 (companyStatusList)
+        const PARTNER_STATUS = companyStatusList();
         let PARTNER_FEE_GRADES = loadPartnerFeeGrades();
         function partnerStatusDef(id) { return PARTNER_STATUS.find(x => x.id === id) || PARTNER_STATUS[2]; }
 
-        let partners = [];
-        let partnerIdCounter = 17;
-        // ---------- 파트너사 자료 저장 (2026-09-16) ----------
-        // 예전에는 위 씨앗만 있고 저장하지 않아, 파트너사 관리에서 등록·수정한 것이 **새로고침하면 사라지고**
-        // 다른 창(파트너센터)에는 아예 보이지 않았습니다. 그래서 거래 유형을 지정해도 파트너센터 로그인 때 '미지정' 으로 떴습니다
-        // (계정은 저장되는데 파트너사는 저장되지 않아 짝을 못 찾음). 이제 localStorage 에 저장하고, 다른 창의 변경도 storage 이벤트로 받습니다.
+        // ---------- 파트너사 = 업체 목록 (2026-10-05 업체 통합) ----------
+        // 예전에는 파트너사를 app_store 'gwPartners.v1' 한 덩어리에 따로 두었습니다. 이제 모든 업체가 customers 표에 있고,
+        // partners 는 **같은 목록(customers)** 을 가리킵니다 — 파트너사 화면들이 고친 것도 saveCustomers() 로 그 줄만 저장됩니다.
+        // 파트너센터(?mode=partner)는 표를 읽지 못하므로 서버가 내려 준 자기 업체 한 줄('gwPartners.v1')을 그대로 씁니다.
         const PARTNERS_KEY = 'gwPartners.v1';
-        (function loadPartnersStore() {
-            const saved = loadJsonStore(PARTNERS_KEY, null);
-            if (Array.isArray(saved) && saved.length) partners = saved;
-            // 새 id 가 저장된 것과 겹치지 않게
-            partners.forEach(p => { const n = parseInt(String(p.id || '').replace(/\D/g, ''), 10); if (n >= partnerIdCounter) partnerIdCounter = n + 1; });
-        })();
-        function savePartners() { saveJsonStore(PARTNERS_KEY, partners); }
-        function reloadPartners() {
-            const saved = loadJsonStore(PARTNERS_KEY, null);
-            if (Array.isArray(saved) && saved.length) partners = saved;
+        let partners = isPartnerMode() ? (loadJsonStore(PARTNERS_KEY, null) || []) : customers;
+        function savePartners() {
+            if (isPartnerMode()) return;                 // 파트너센터는 업체 자료를 저장하지 않습니다
+            normalizeCompanies(customers);               // 상위업체 이름 · 예전 칸을 다시 맞춘 뒤
+            saveCustomers();                             // 바뀐 줄만 저장
         }
-        // 2026-09-15 — 위에 등록된 업체는 모두 **파트너사**입니다.
-        // 개인 가맹점 · 프랜차이즈 가맹점/본사 · 하드웨어 유통 계정이 생기면
-        // 공통관리 › 파트너사 등록·수정에서 그 계정의 **거래 유형**을 바꿔 주세요.
-        // 이 값으로 파트너센터에서 보이는 단가·수수료가 정해집니다.
-        partners.forEach(p => { if (!p.custType) p.custType = 'partner'; });
+        function reloadPartners() {
+            if (isPartnerMode()) { const saved = loadJsonStore(PARTNERS_KEY, null); if (Array.isArray(saved)) partners = saved; return; }
+            partners = customers;
+        }
+        // 새 업체 번호 — 가맹점과 같은 c 번호를 이어 씁니다 (예전 파트너사 p 번호는 그대로 둡니다)
+        function newCompanyId() { syncCustomerIdCounter(); return 'c' + customerIdCounter++; }
+        // 거래 조건(계약서 · 거래 품목 · PG 수수료 · 정산주기 …)을 다루는 업체 — 파트너사 · 하드웨어 유통, 그리고 거래 조건이 적혀 있는 곳
+        function isTradeCompany(c) {
+            if (!c) return false;
+            if (c.kind === 'partner' || c.kind === 'dist') return true;
+            return (Array.isArray(c.items) && c.items.length > 0) || Object.values(c.fee || {}).some(v => v !== '' && v !== null && v !== undefined);
+        }
+        function tradePartners() { return partners.filter(isTradeCompany); }
+        // 계약 · 공급 · 단가표에서 '파트너사' 로 고를 수 있는 업체 — 파트너사 · 하드웨어 유통 · 프랜차이즈 본사 (가맹점은 빼고)
+        function partnerSideCompanies() { return partners.filter(c => c.kind === 'partner' || c.kind === 'dist' || c.kind === 'hq' || isTradeCompany(c)); }
 
         // ---------- 월별 PG 실적 (시트 'PG수수료') ----------
         // 시트가 월별 블록으로 쌓여 있어(2024-10 ~ 2026-06) 한 줄 = 파트너사 한 달 실적입니다.
@@ -35377,7 +35668,7 @@ const QUOTE_TEMPLATES = [
             const f = tradeFilter;
             const norm = v => String(v || '').replace(/\s+/g, '').toLowerCase();
             const q = norm(f.q);
-            return partners.filter(p => {
+            return tradePartners().filter(p => {
                 if (f.corp && p.corp !== f.corp) return false;
                 if (f.status && p.status !== f.status) return false;
                 if (f.item && !(p.items || []).includes(f.item)) return false;
@@ -35396,8 +35687,8 @@ const QUOTE_TEMPLATES = [
         function renderPartnerTradeCenter(host) {
             const def = supplyDef('partner');
             const list = tradeFiltered();
-            const cnt = id => partners.filter(p => p.status === id).length;
-            const owners = Array.from(new Set(partners.flatMap(p => [p.owner, p.subOwner]).filter(Boolean))).sort((a, b) => a.localeCompare(b));
+            const cnt = id => tradePartners().filter(p => p.status === id).length;
+            const owners = Array.from(new Set(tradePartners().flatMap(p => [p.owner, p.subOwner]).filter(Boolean))).sort((a, b) => a.localeCompare(b));
             const selCls = 'p-2 text-sm border border-gray-300 rounded bg-white focus:outline-none focus:ring-2 focus:ring-amber-500';
             const opt = (arr, cur, label) => `<option value="">${label}</option>`
                 + arr.map(v => `<option value="${escapeHtml(v)}" ${v === cur ? 'selected' : ''}>${escapeHtml(v)}</option>`).join('');
@@ -35409,7 +35700,7 @@ const QUOTE_TEMPLATES = [
                 </button>`;
             const tabs = supplyVisibleChannels().map(k => {
                 const c = SUPPLY_CHANNELS[k], on = k === 'partner';
-                const n = c.custom ? (c.count ? c.count() : partners.length) : supplyOf(k).length;
+                const n = c.custom ? (c.count ? c.count() : tradePartners().length) : supplyOf(k).length;
                 return `<button type="button" onclick="setSupplyChannel('${k}')" class="px-3 py-2 rounded-md text-sm font-medium transition-colors whitespace-nowrap ${on ? c.active + ' text-white shadow-sm' : 'text-gray-600 hover:bg-gray-100'}">
                             <i class="fas ${c.icon} mr-1"></i>${escapeHtml(c.name)}<span class="ml-1 px-1.5 rounded-full text-[10px] ${on ? 'bg-white/25' : 'bg-white text-gray-500'}">${n}</span>
                         </button>`;
@@ -35422,7 +35713,8 @@ const QUOTE_TEMPLATES = [
                         <p class="text-gray-500 text-sm">영업본부 거래처 관리 시트를 채널로 묶었습니다. 지금 보는 채널은 <b>${escapeHtml(def.sheet)}</b> 입니다.</p>
                     </div>
                     <div class="flex flex-wrap gap-2">
-                        <button onclick="goPartnerRegistry()" class="bg-white border border-gray-300 text-gray-700 px-3 py-1.5 rounded text-sm hover:bg-gray-50 transition-colors whitespace-nowrap"><i class="fas fa-address-book mr-1"></i>파트너사 등록·수정</button>
+                        <button onclick="goPartnerRegistry()" class="bg-white border border-gray-300 text-gray-700 px-3 py-1.5 rounded text-sm hover:bg-gray-50 transition-colors whitespace-nowrap"><i class="fas fa-address-book mr-1"></i>업체 관리</button>
+                        <button onclick="openPartnerImport()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded text-sm transition-colors whitespace-nowrap" title="파트너사별 공급현황 시트(거래 품목 · PG 수수료 · 정산주기 …)를 올립니다"><i class="fas fa-file-arrow-up mr-1"></i>거래 조건 엑셀 업로드</button>
                         <button onclick="downloadPartnersXlsx()" class="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded text-sm transition-colors whitespace-nowrap"><i class="fas fa-file-excel mr-1"></i>엑셀 내려받기</button>
                     </div>
                 </div>
@@ -35435,7 +35727,7 @@ const QUOTE_TEMPLATES = [
                 <div class="grid grid-cols-2 lg:grid-cols-6 gap-3 mb-4">
                     <button type="button" onclick="setTradeFilter('status', '')"
                             class="bg-white p-3 rounded-lg shadow-sm border-t-4 border-gray-400 text-left hover:shadow-md transition-shadow ${tradeFilter.status === '' ? 'ring-2 ring-amber-400' : ''}">
-                        <p class="text-xs text-gray-500">전체</p><p class="text-xl font-bold text-gray-800 mt-1">${partners.length}개</p>
+                        <p class="text-xs text-gray-500">전체</p><p class="text-xl font-bold text-gray-800 mt-1">${tradePartners().length}개</p>
                     </button>
                     ${card('거래중', '거래중', cnt('거래중'), 'border-green-500')}
                     ${card('PG정산', 'PG정산', cnt('PG정산'), 'border-blue-500')}
@@ -35468,7 +35760,7 @@ const QUOTE_TEMPLATES = [
 
                 <div class="bg-white rounded-lg shadow-sm border border-gray-200">
                     <div class="px-4 py-2 border-b border-gray-100 flex flex-wrap items-center justify-between gap-2">
-                        <h4 class="text-sm font-bold text-gray-700"><i class="fas fa-handshake text-amber-500 mr-1"></i>파트너사 거래 <span class="text-xs font-normal text-gray-400 ml-1">· ${list.length}개 / 전체 ${partners.length}개</span></h4>
+                        <h4 class="text-sm font-bold text-gray-700"><i class="fas fa-handshake text-amber-500 mr-1"></i>파트너사 거래 <span class="text-xs font-normal text-gray-400 ml-1">· ${list.length}개 / 전체 ${tradePartners().length}개</span></h4>
                         <div class="flex flex-wrap items-center gap-2">
                             <span class="text-xs text-gray-400">줄을 누르면 거래 조건과 월별 PG 실적을 봅니다</span>
                             <button type="button" onclick="openPartnerMetaModal('items')" class="px-2 py-1 text-[11px] rounded border border-sky-300 text-sky-700 bg-white hover:bg-sky-50 transition-colors"><i class="fas fa-sliders mr-1"></i>거래 품목 관리</button>
@@ -35538,7 +35830,7 @@ const QUOTE_TEMPLATES = [
 
         // 공통관리 › 파트너사 관리로 건너뛰기
         function goPartnerRegistry() {
-            commonActiveTab = 'partners';
+            commonActiveTab = 'companies';
             navigate('common', document.getElementById('nav-common'));
         }
 
@@ -35564,7 +35856,7 @@ const QUOTE_TEMPLATES = [
             document.getElementById('trade-memo').value = p.memo || '';
             document.getElementById('trade-pg-alias').value = (p.pgAlias || []).join(', ');
 
-            const owners = Array.from(new Set(partners.flatMap(x => [x.owner, x.subOwner]).filter(Boolean))).sort((a, b) => a.localeCompare(b));
+            const owners = Array.from(new Set(tradePartners().flatMap(x => [x.owner, x.subOwner]).filter(Boolean))).sort((a, b) => a.localeCompare(b));
             document.getElementById('trade-owner-list').innerHTML = owners.map(v => `<option value="${escapeHtml(v)}"></option>`).join('');
 
             renderTradeItemChecks(p.items || []);
@@ -37180,7 +37472,7 @@ const QUOTE_TEMPLATES = [
 
             const tabs = supplyVisibleChannels().map(k => {
                 const c = SUPPLY_CHANNELS[k], on = k === 'payout';
-                const n = c.custom ? (c.count ? c.count() : partners.length) : supplyOf(k).length;
+                const n = c.custom ? (c.count ? c.count() : tradePartners().length) : supplyOf(k).length;
                 return `<button type="button" onclick="setSupplyChannel('${k}')" class="px-3 py-2 rounded-md text-sm font-medium transition-colors whitespace-nowrap ${on ? c.active + ' text-white shadow-sm' : 'text-gray-600 hover:bg-gray-100'}">
                             <i class="fas ${c.icon} mr-1"></i>${escapeHtml(c.name)}<span class="ml-1 px-1.5 rounded-full text-[10px] ${on ? 'bg-white/25' : 'bg-white text-gray-500'}">${n}</span>
                         </button>`;
@@ -38033,112 +38325,283 @@ const QUOTE_TEMPLATES = [
             alert(`${ym.replace('-', '년 ')}월 지급명세 ${d.rows.length}건을 반영했습니다.${had ? `\n(기존 ${had}건은 바뀌었습니다)` : ''}`);
         }
 
-        // ---------- 공통관리 › 파트너사 관리 (등록 항목만) ----------
-        // 파트너사를 '등록' 하는 자리입니다. 거래 조건(계약서·품목·수수료·거래상태 등)은
-        // 영업본부 › 거래처 관리 › 파트너사 탭에서 다룹니다.
-        let partnerFilter = { q: '', corp: '', custType: '' };
-        function partnerFiltered() {
-            const f = partnerFilter;
-            const norm = v => String(v || '').replace(/\s+/g, '').toLowerCase();
-            const q = norm(f.q);
-            return partners.filter(p => {
-                if (f.corp && p.corp !== f.corp) return false;
-                if (f.custType && (p.custType || '') !== f.custType) return false;     // 구분 (2026-09-16)
-                if (q && !norm([p.name, p.businessNo, p.contact, p.phone, p.address, p.note, partnerCustTypeName(p.custType), p.franchiseName, p.parentPartnerName].join(' ')).includes(q)) return false;
-                return true;
-            });
+        // ---------- 공통관리 › 업체 관리 (2026-10-05 · 가맹점관리 + 파트너사 관리 통합) ----------
+        // 모든 업체(customers)를 한 화면에서 봅니다. 유형 탭 · 거래상태 · 검색으로 거르고,
+        // [목록] 은 한 줄씩, [소속 트리] 는 본사 · 파트너사 아래에 소속 가맹점을 묶어 보여 줍니다.
+        // 줄을 누르면 — 가맹점 3종은 가맹점 상세(운영 · 결제 정보까지), 나머지는 업체 기본정보 창이 열립니다.
+        // 거래 조건(계약서 · 거래 품목 · PG 수수료 …)은 지금처럼 영업본부 › 거래처 관리 › 파트너사 탭에서 다룹니다.
+        let companyFilter = { q: '', kind: '', status: '', view: 'list', limit: 300 };
+        const COMPANY_PAGE = 300;          // 한 번에 그리는 줄 수 — 엑셀로 수천 곳이 올라와도 화면이 굳지 않게
+        function companyAccountCount(id) {
+            try { return partnerAccounts.filter(a => a.partnerId === id).length; } catch (e) { return 0; }
         }
-        function setPartnerFilter(field, value) { partnerFilter[field] = value; renderPartners(); }
-        function resetPartnerFilter() { partnerFilter = { q: '', corp: '', custType: '' }; renderPartners(); }
+        function companyParentName(c) {
+            const p = c && c.parentId ? customers.find(x => x.id === c.parentId) : null;
+            return p ? companyNameOf(p) : (c.parentPartnerName || c.franchiseName || '');
+        }
+        function companyMatches(c, q) {
+            if (!q) return true;
+            const norm = v => String(v || '').replace(/\s+/g, '').toLowerCase();
+            return norm([c.name, c.businessNo, c.contactName, c.phone, c.address, c.note, c.memo, partnerCustTypeName(c.kind), companyParentName(c)].join(' ')).includes(q);
+        }
+        function companyFiltered() {
+            const f = companyFilter;
+            const q = String(f.q || '').replace(/\s+/g, '').toLowerCase();
+            return customers.filter(c => {
+                if (f.kind && c.kind !== f.kind) return false;
+                if (f.status && c.status !== f.status) return false;
+                return companyMatches(c, q);
+            }).sort((a, b) => companyNameOf(a).localeCompare(companyNameOf(b), 'ko'));
+        }
+        function setCompanyFilter(field, value) {
+            companyFilter[field] = value;
+            if (field !== 'limit') companyFilter.limit = COMPANY_PAGE;
+            renderCompanies();
+        }
+        function resetCompanyFilter() { companyFilter = { q: '', kind: '', status: '', view: companyFilter.view, limit: COMPANY_PAGE }; renderCompanies(); }
+        // 예전 화면 이름으로 부르는 곳이 남아 있어 그대로 이어 줍니다
+        function renderPartners() { renderCompanies(); }
 
-        function renderPartners() {
+        function renderCompanies() {
             const host = document.getElementById('sec-common-partners');
             if (!host) return;
-            savePartners();   // 파트너사를 고친 뒤에는 늘 이 화면을 다시 그리므로 여기서도 한 번 더 저장합니다 (2026-09-16)
-            const list = partnerFiltered();
-            const selCls = 'p-2 text-sm border border-gray-300 rounded bg-white focus:outline-none focus:ring-2 focus:ring-amber-500';
-            const opt = (arr, cur, label) => `<option value="">${label}</option>`
-                + arr.map(v => `<option value="${escapeHtml(v)}" ${v === cur ? 'selected' : ''}>${escapeHtml(v)}</option>`).join('');
+            if (host.classList.contains('hidden') && commonActiveTab !== 'companies') return;
+            const f = companyFilter;
+            const list = companyFiltered();
+            const selCls = 'p-2 text-sm border border-gray-300 rounded bg-white focus:outline-none focus:ring-2 focus:ring-cyan-500';
+            const pending = customers.filter(c => c.fromLegacy).length;
+            const orphan = customers.filter(c => companyParentKind(c.kind) && !(c.parentId && customers.some(x => x.id === c.parentId))).length;
+            const kindTab = (id, label, n) => {
+                const on = f.kind === id;
+                return `<button type="button" onclick="setCompanyFilter('kind', '${id}')" class="px-3 py-1.5 rounded-md text-sm font-medium whitespace-nowrap transition-colors ${on ? 'bg-cyan-600 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-100'}">
+                            ${escapeHtml(label)}<span class="ml-1 px-1.5 rounded-full text-[10px] ${on ? 'bg-white/25' : 'bg-gray-100 text-gray-500'}">${n}</span></button>`;
+            };
+            const tabs = kindTab('', '전체', customers.length)
+                + PARTNER_CUST_TYPES.map(o => kindTab(o.id, o.name, customers.filter(c => c.kind === o.id).length)).join('');
+            const viewBtn = (id, icon, label) => `<button type="button" onclick="setCompanyFilter('view', '${id}')" class="px-3 py-1.5 text-sm ${f.view === id ? 'bg-gray-800 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}"><i class="fas ${icon} mr-1"></i>${label}</button>`;
 
             host.innerHTML = `
                 <div class="mb-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
                     <div>
-                        <h3 class="text-lg font-bold text-gray-800">파트너사 관리</h3>
-                        <p class="text-gray-500 text-sm">파트너사를 등록합니다. 계약 작성 시 고르는 파트너사 목록도 여기를 씁니다.
-                            거래 조건(계약서·거래 품목·PG 수수료·거래상태)은 <b>영업본부 › 거래처 관리 › 파트너사</b> 탭에서 관리합니다.</p>
+                        <h3 class="text-lg font-bold text-gray-800">업체 관리</h3>
+                        <p class="text-gray-500 text-sm">가맹점 · 파트너사 · 프랜차이즈 본사 · 하드웨어 유통을 한 목록에서 관리합니다. 소속은 <b>상위업체</b>로 이어집니다.</p>
+                        <p class="text-gray-400 text-xs mt-1"><i class="fas fa-hand-pointer mr-1"></i>줄을 누르면 업체 정보가 열립니다. 거래 조건(계약서 · 품목 · PG 수수료)은 <b>영업본부 › 거래처 관리 › 파트너사</b> 탭에서 정합니다.</p>
                     </div>
                     <div class="flex flex-wrap gap-2">
-                        <button onclick="openPartnerImport()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded text-sm transition-colors whitespace-nowrap"><i class="fas fa-file-excel mr-1"></i>엑셀 업로드</button>
-                        <button onclick="openPartnerModal()" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded text-sm transition-colors whitespace-nowrap"><i class="fas fa-plus mr-1"></i>파트너사 등록</button>
-                        <button onclick="goPartnerTrade()" class="bg-white border border-gray-300 text-gray-700 px-3 py-1.5 rounded text-sm hover:bg-gray-50 transition-colors whitespace-nowrap"><i class="fas fa-arrow-up-right-from-square mr-1"></i>거래 조건 보기</button>
+                        <button onclick="openCommonCustomerImport()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded text-sm transition-colors whitespace-nowrap"><i class="fas fa-file-excel mr-1"></i>엑셀 업로드</button>
+                        <button onclick="openPartnerModal()" class="bg-cyan-600 hover:bg-cyan-700 text-white px-3 py-1.5 rounded text-sm transition-colors whitespace-nowrap"><i class="fas fa-plus mr-1"></i>업체 등록</button>
                     </div>
+                </div>
+                ${pending ? `<div class="mb-4 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 flex flex-wrap items-center gap-2">
+                    <i class="fas fa-circle-info"></i><span>예전 파트너사 목록의 <b>${pending}곳</b>을 아직 업체 표로 옮기지 않았습니다. 로그인하면 저절로 옮겨지고, 지금 옮길 수도 있습니다.</span>
+                    <button type="button" onclick="runCompanyMigrationNow()" class="ml-auto px-2.5 py-1 rounded bg-white border border-amber-300 text-amber-800 hover:bg-amber-100 text-xs">지금 옮기기</button></div>` : ''}
+
+                <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-2 mb-4">
+                    <div class="flex flex-wrap items-center gap-1">${tabs}</div>
                 </div>
 
                 <div class="bg-white rounded-lg shadow-sm border border-gray-200 mb-4">
                     <div class="px-4 py-3 flex flex-wrap items-end gap-2">
-                        <div class="min-w-[200px] flex-1">
+                        <div class="min-w-[220px] flex-1">
                             <label class="block text-xs font-medium text-gray-600 mb-1">검색</label>
-                            <input type="text" value="${escapeHtml(partnerFilter.q)}" oninput="setPartnerFilter('q', this.value)" placeholder="파트너사 · 사업자번호 · 담당자 · 연락처" class="w-full ${selCls}" />
+                            <input type="text" id="company-search" value="${escapeHtml(f.q)}" oninput="companyFilter.q = this.value; companyFilter.limit = COMPANY_PAGE; drawCompanyRows()" placeholder="상호 · 사업자번호 · 담당자 · 연락처 · 상위업체" class="w-full ${selCls}" />
                         </div>
-                        <div><label class="block text-xs font-medium text-gray-600 mb-1">구분</label>
-                            <select onchange="setPartnerFilter('custType', this.value)" class="${selCls}"><option value="">전체</option>${PARTNER_CUST_TYPES.map(o => `<option value="${o.id}"${partnerFilter.custType === o.id ? ' selected' : ''}>${escapeHtml(o.name)}</option>`).join('')}</select></div>
-                        <div><label class="block text-xs font-medium text-gray-600 mb-1">계약 법인</label>
-                            <select onchange="setPartnerFilter('corp', this.value)" class="${selCls}">${opt(PARTNER_CORPS, partnerFilter.corp, '전체')}</select></div>
-                        <button type="button" onclick="resetPartnerFilter()" class="px-3 py-2 text-sm rounded bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors">초기화</button>
+                        <div><label class="block text-xs font-medium text-gray-600 mb-1">거래상태</label>
+                            <select onchange="setCompanyFilter('status', this.value)" class="${selCls}"><option value="">전체</option>${PARTNER_STATUS.map(o => `<option value="${o.id}"${f.status === o.id ? ' selected' : ''}>${escapeHtml(o.id)}</option>`).join('')}</select></div>
+                        <button type="button" onclick="resetCompanyFilter()" class="px-3 py-2 text-sm rounded bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors">초기화</button>
+                        <div class="ml-auto inline-flex rounded border border-gray-300 overflow-hidden">${viewBtn('list', 'fa-list', '목록')}${viewBtn('tree', 'fa-sitemap', '소속 트리')}${canManagePartnerIds() ? viewBtn('ids', 'fa-key', '아이디') : ''}</div>
                     </div>
+                    ${orphan ? `<p class="px-4 pb-3 text-xs text-rose-700"><i class="fas fa-link-slash mr-1"></i>상위업체가 연결되지 않은 가맹점이 <b>${orphan}곳</b> 있습니다 — 소속 트리 맨 아래 '상위업체 없음' 에서 확인할 수 있습니다.</p>` : ''}
                 </div>
 
-                <div class="bg-white rounded-lg shadow-sm border border-gray-200">
+                <div id="company-rows"></div>`;
+            drawCompanyRows();
+        }
+
+        // 표 부분만 다시 그립니다 (검색칸에서 글자를 칠 때 칸이 다시 만들어져 커서가 튀지 않게)
+        function drawCompanyRows() {
+            const box = document.getElementById('company-rows');
+            if (!box) return;
+            if (companyFilter.view === 'ids' && canManagePartnerIds()) {
+                // [아이디] 보기 — 예전 '사용자/권한관리 › 파트너 ID 관리' 화면을 여기로 옮겼습니다 (2026-10-05)
+                if (!document.getElementById('company-ids-host')) box.innerHTML = '<div id="company-ids-host"></div>';
+                renderPartnerIdAdmin();
+                return;
+            }
+            if (companyFilter.view === 'ids') companyFilter.view = 'list';
+            const list = companyFiltered();
+            box.innerHTML = companyFilter.view === 'tree' ? companyTreeHtml(list) : companyListHtml(list);
+        }
+        // 파트너센터 아이디를 다룰 수 있는지 — 예전 '파트너 ID 관리' 권한을 그대로 씁니다
+        function canManagePartnerIds() { try { return canSeePage('partner-ids'); } catch (e) { return false; } }
+
+        // ---------- 업체 창의 '파트너센터 아이디' 칸 (2026-10-05) ----------
+        // 그 업체에 붙은 아이디를 보여 주고, 만들기 · 수정(비밀번호 · 권한) · 사용/중지 · 삭제를 여기서 합니다.
+        function companyIdsHtml(companyId) {
+            if (!companyId) return '<p class="text-xs text-gray-400">업체를 저장하면 아이디를 만들 수 있습니다.</p>';
+            if (!canManagePartnerIds()) return '<p class="text-xs text-gray-400">파트너센터 아이디를 다룰 권한이 없습니다.</p>';
+            let list = [];
+            try { list = partnerAccounts.filter(a => a.partnerId === companyId).sort((a, b) => String(a.loginId).localeCompare(String(b.loginId))); } catch (e) { list = []; }
+            const id = escapeHtml(companyId);
+            const btn = 'px-2 py-1 text-[11px] rounded border';
+            const rows = list.map(a => {
+                const lid = escapeHtml(a.loginId);
+                const on = a.active !== false;
+                const pwSet = !!(a.pwHash || a.pw);
+                return `<div class="flex flex-wrap items-center gap-2 py-1.5 border-b border-gray-100 last:border-0">
+                    <span class="font-mono text-sm font-semibold text-gray-800">${lid}</span>
+                    <span class="px-1.5 py-0.5 rounded text-[11px] font-semibold ${on ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}">${on ? '사용' : '중지'}</span>
+                    ${pwSet ? '' : '<span class="px-1.5 py-0.5 rounded text-[11px] bg-amber-100 text-amber-800" title="비밀번호를 정해야 로그인할 수 있습니다">비밀번호 없음</span>'}
+                    <span class="text-xs text-gray-500">${escapeHtml(a.manager || '')}${a.phone ? ' · ' + escapeHtml(a.phone) : ''}</span>
+                    <span class="ml-auto flex gap-1">
+                        <button type="button" onclick="openPartnerIdModal('${lid}')" class="${btn} border-indigo-300 text-indigo-700 bg-white hover:bg-indigo-50">수정 · 권한</button>
+                        <button type="button" onclick="togglePartnerIdActive('${lid}')" class="${btn} ${on ? 'border-amber-300 text-amber-700' : 'border-green-300 text-green-700'} bg-white hover:bg-gray-50">${on ? '중지' : '사용'}</button>
+                        <button type="button" onclick="deletePartnerId('${lid}')" class="${btn} border-red-200 text-red-600 bg-white hover:bg-red-50">삭제</button>
+                    </span></div>`;
+            }).join('');
+            return `${rows || '<p class="text-xs text-gray-400 py-1">아직 아이디가 없습니다.</p>'}
+                <button type="button" onclick="openCompanyIdCreate('${id}')" class="mt-2 px-3 py-1.5 text-xs rounded border border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100"><i class="fas fa-user-plus mr-1"></i>아이디 만들기</button>`;
+        }
+        function refreshCompanyIdBoxes() {
+            const pm = document.getElementById('partner-modal-ids');
+            if (pm && !document.getElementById('partner-modal').classList.contains('hidden')) pm.innerHTML = companyIdsHtml(document.getElementById('edit-partner-id').value);
+            const cm = document.getElementById('customer-modal-ids');
+            if (cm && !document.getElementById('customer-modal').classList.contains('hidden')) cm.innerHTML = companyIdsHtml(document.getElementById('edit-customer-id').value);
+        }
+        function companyStatusChip(c) {
+            const st = partnerStatusDef(c.status);
+            return `<span class="px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${st.chip}">${escapeHtml(c.status || st.id)}</span>`;
+        }
+        function companyContractCell(c, map) {
+            if (!isShopKind(c.kind)) return '<span class="text-gray-300">-</span>';
+            const stat = map[c.id] || { count: 0, value: 0, hasActive: false, hasExpired: false, hasPending: false };
+            return `<span class="text-gray-700">${stat.count}건</span> ${getCustomerStatusBadge(stat)}`;
+        }
+        function companyRowHtml(c, map, indent) {
+            const id = escapeHtml(c.id);
+            const n = companyAccountCount(c.id);
+            const parent = companyParentName(c);
+            const shop = isShopKind(c.kind);
+            return `
+                <tr class="border-b border-gray-50 last:border-0 hover:bg-cyan-50/50 cursor-pointer" onclick="openCompanyModal('${id}')">
+                    <td class="px-3 py-2 whitespace-nowrap">${indent ? '<span class="text-gray-300 mr-1">└</span>' : ''}${partnerCustTypeChip(Object.assign({}, c, { franchiseName: '', parentPartnerName: '' }))}</td>
+                    <td class="px-3 py-2 whitespace-nowrap font-medium text-gray-800">${escapeHtml(companyNameOf(c))}</td>
+                    <td class="px-3 py-2 whitespace-nowrap text-gray-600">${parent ? escapeHtml(parent) : (companyParentKind(c.kind) ? '<span class="text-rose-500 text-xs">연결 안 됨</span>' : '<span class="text-gray-300">-</span>')}</td>
+                    <td class="px-3 py-2 whitespace-nowrap text-gray-600">${escapeHtml(c.businessNo || '-')}</td>
+                    <td class="px-3 py-2 whitespace-nowrap">${escapeHtml(c.contactName || '-')}</td>
+                    <td class="px-3 py-2 whitespace-nowrap text-gray-600">${escapeHtml(c.phone || '-')}</td>
+                    <td class="px-3 py-2 text-center">${companyStatusChip(c)}</td>
+                    <td class="px-3 py-2 whitespace-nowrap text-center text-xs">${companyContractCell(c, map)}</td>
+                    <td class="px-3 py-2 text-center whitespace-nowrap">${n ? `<span class="px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-800 text-xs font-semibold">${n}개</span>` : '<span class="text-gray-300">-</span>'}</td>
+                    <td class="px-3 py-2 text-center whitespace-nowrap" onclick="event.stopPropagation()">
+                        <button onclick="openCompanyModal('${id}')" class="text-blue-500 hover:text-blue-700 mx-1" title="수정"><i class="fas fa-edit"></i></button>
+                        ${shop ? `<button onclick="openCustomer360Modal('${id}')" class="text-indigo-500 hover:text-indigo-700 mx-1" title="360도 리뷰 (견적·계약·상담·활동이력)"><i class="fas fa-id-card"></i></button>` : ''}
+                        ${canManagePartnerIds() ? `<button onclick="openCompanyIdCreate('${id}')" class="text-emerald-600 hover:text-emerald-800 mx-1" title="파트너센터 아이디 만들기"><i class="fas fa-user-plus"></i></button>` : ''}
+                        <button onclick="deleteCompany('${id}')" class="text-red-500 hover:text-red-700 mx-1" title="삭제"><i class="fas fa-trash"></i></button>
+                    </td>
+                </tr>`;
+        }
+        function companyTableHtml(title, rowsHtml, note) {
+            return `<div class="bg-white rounded-lg shadow-sm border border-gray-200">
                     <div class="px-4 py-2 border-b border-gray-100 flex flex-wrap items-center justify-between gap-2">
-                        <h4 class="text-sm font-bold text-gray-700"><i class="fas fa-address-book text-amber-500 mr-1"></i>파트너사 목록 <span class="text-xs font-normal text-gray-400 ml-1">· ${list.length}개 / 전체 ${partners.length}개</span></h4>
-                        <span class="text-xs text-gray-400">줄을 누르면 등록 정보를 고칠 수 있습니다</span>
+                        <h4 class="text-sm font-bold text-gray-700"><i class="fas fa-building text-cyan-600 mr-1"></i>${title}</h4>
+                        ${note ? `<span class="text-xs text-gray-400">${note}</span>` : ''}
                     </div>
-                    <div class="overflow-x-auto max-h-[560px] overflow-y-auto">
-                        <table class="w-full text-left border-collapse text-sm min-w-[900px]">
-                            <thead class="sticky top-0 bg-gray-50 z-10">
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left border-collapse text-sm min-w-[1000px]">
+                            <thead class="bg-gray-50">
                                 <tr class="text-gray-500 text-xs border-b border-gray-200">
-                                    <th class="px-3 py-2 font-medium whitespace-nowrap">구분</th>
-                                    <th class="px-3 py-2 font-medium whitespace-nowrap">파트너사명</th>
-                                    <th class="px-3 py-2 font-medium whitespace-nowrap">계약 법인</th>
-                                    <th class="px-3 py-2 font-medium whitespace-nowrap">사업자 구분</th>
-                                    <th class="px-3 py-2 font-medium whitespace-nowrap">사업자등록번호</th>
+                                    <th class="px-3 py-2 font-medium whitespace-nowrap">업체 유형</th>
+                                    <th class="px-3 py-2 font-medium whitespace-nowrap">상호</th>
+                                    <th class="px-3 py-2 font-medium whitespace-nowrap">상위업체</th>
+                                    <th class="px-3 py-2 font-medium whitespace-nowrap">사업자번호</th>
                                     <th class="px-3 py-2 font-medium whitespace-nowrap">담당자</th>
                                     <th class="px-3 py-2 font-medium whitespace-nowrap">연락처</th>
-                                    <th class="px-3 py-2 font-medium">주소</th>
-                                    <th class="px-3 py-2 font-medium">비고</th>
+                                    <th class="px-3 py-2 font-medium text-center whitespace-nowrap">거래상태</th>
+                                    <th class="px-3 py-2 font-medium text-center whitespace-nowrap">계약</th>
+                                    <th class="px-3 py-2 font-medium text-center whitespace-nowrap">아이디</th>
                                     <th class="px-3 py-2 font-medium text-center whitespace-nowrap">관리</th>
                                 </tr>
                             </thead>
-                            <tbody id="partners-table-body" class="text-gray-700"></tbody>
+                            <tbody class="text-gray-700">${rowsHtml}</tbody>
                         </table>
                     </div>
                 </div>`;
-            renderPartnerRows(list);
+        }
+        const companyEmptyRow = (msg) => `<tr><td colspan="10" class="px-3 py-10 text-center text-sm text-gray-400"><i class="fas fa-building text-2xl block mb-2 text-gray-300"></i>${msg}</td></tr>`;
+        function companyListHtml(list) {
+            const map = getContractedCustomers();
+            const shown = list.slice(0, companyFilter.limit);
+            const more = list.length > shown.length
+                ? `<tr><td colspan="10" class="px-3 py-3 text-center"><button type="button" onclick="setCompanyFilter('limit', companyFilter.limit + COMPANY_PAGE)" class="px-3 py-1.5 text-sm rounded border border-gray-300 bg-white hover:bg-gray-50">${list.length - shown.length}곳 더 보기</button></td></tr>` : '';
+            return companyTableHtml(`업체 목록 <span class="text-xs font-normal text-gray-400 ml-1">· ${list.length}곳 / 전체 ${customers.length}곳</span>`,
+                shown.length ? shown.map(c => companyRowHtml(c, map, false)).join('') + more : companyEmptyRow('조건에 맞는 업체가 없습니다.'),
+                '줄을 누르면 업체 정보를 고칠 수 있습니다');
+        }
+        // 소속 트리 — 본사 · 파트너사를 위에, 그 아래에 소속 가맹점을 들여 씁니다.
+        // 검색 · 거르기에 맞는 가맹점이 있으면 그 상위업체도 함께 보여 줍니다 (어디 소속인지 보이게).
+        function companyTreeHtml(list) {
+            const map = getContractedCustomers();
+            const hit = new Set(list.map(c => c.id));
+            const tops = customers.filter(c => c.kind === 'hq' || c.kind === 'partner')
+                .filter(p => hit.has(p.id) || companyChildren(p.id).some(ch => hit.has(ch.id)))
+                .sort((a, b) => companyNameOf(a).localeCompare(companyNameOf(b), 'ko'));
+            const blocks = tops.map(p => {
+                const kids = companyChildren(p.id).filter(ch => hit.has(ch.id) || hit.has(p.id))
+                    .sort((a, b) => companyNameOf(a).localeCompare(companyNameOf(b), 'ko'));
+                return companyRowHtml(p, map, false)
+                    + `<tr class="bg-gray-50/60"><td colspan="10" class="px-3 py-1 text-[11px] text-gray-500">↳ 소속 ${p.kind === 'hq' ? '프랜차이즈 가맹점' : '파트너사 가맹점'} <b>${companyChildren(p.id).length}곳</b></td></tr>`
+                    + kids.slice(0, 200).map(ch => companyRowHtml(ch, map, true)).join('')
+                    + (kids.length > 200 ? `<tr><td colspan="10" class="px-3 py-1 text-[11px] text-gray-400">외 ${kids.length - 200}곳 — 검색으로 좁혀 주세요</td></tr>` : '');
+            }).join('');
+            const orphans = list.filter(c => companyParentKind(c.kind) && !(c.parentId && customers.some(x => x.id === c.parentId)));
+            const orphanHtml = orphans.length
+                ? `<tr class="bg-rose-50"><td colspan="10" class="px-3 py-1.5 text-xs font-semibold text-rose-700"><i class="fas fa-link-slash mr-1"></i>상위업체 없음 — ${orphans.length}곳 (줄을 눌러 상위업체를 골라 주세요)</td></tr>`
+                  + orphans.slice(0, 200).map(c => companyRowHtml(c, map, true)).join('') : '';
+            return companyTableHtml(`소속 트리 <span class="text-xs font-normal text-gray-400 ml-1">· 본사 · 파트너사 ${tops.length}곳</span>`,
+                (blocks + orphanHtml) || companyEmptyRow('본사 · 파트너사가 아직 없습니다. 개인 가맹점 · 하드웨어 유통은 [목록] 에서 봅니다.'),
+                '개인 가맹점 · 하드웨어 유통은 상위업체가 없어 [목록] 에만 나옵니다');
         }
 
-        function renderPartnerRows(list) {
-            const tbody = document.getElementById('partners-table-body');
-            if (!tbody) return;
-            if (!list.length) {
-                tbody.innerHTML = `<tr><td colspan="10" class="px-3 py-10 text-center text-sm text-gray-400"><i class="fas fa-address-book text-2xl block mb-2 text-gray-300"></i>조건에 맞는 파트너사가 없습니다.</td></tr>`;
-                return;
-            }
-            tbody.innerHTML = list.map(p => `
-                <tr class="border-b border-gray-50 last:border-0 hover:bg-amber-50/40 cursor-pointer" onclick="openPartnerModal('${escapeHtml(p.id)}')">
-                    <td class="px-3 py-2 whitespace-nowrap">${partnerCustTypeChip(p)}</td>
-                    <td class="px-3 py-2 whitespace-nowrap font-medium">${escapeHtml(p.name)}</td>
-                    <td class="px-3 py-2 whitespace-nowrap text-gray-500">${escapeHtml(p.corp || '-')}</td>
-                    <td class="px-3 py-2 whitespace-nowrap">${p.bizType ? `<span class="px-1.5 py-0.5 rounded text-[11px] font-semibold ${p.bizType === 'corp' ? 'bg-indigo-100 text-indigo-800' : 'bg-emerald-100 text-emerald-800'}">${escapeHtml(partnerBizTypeName(p.bizType))}</span>` : '<span class="text-gray-300">-</span>'}</td>
-                    <td class="px-3 py-2 whitespace-nowrap text-gray-600">${escapeHtml(p.businessNo || '-')}</td>
-                    <td class="px-3 py-2 whitespace-nowrap">${escapeHtml(p.contact || '-')}</td>
-                    <td class="px-3 py-2 whitespace-nowrap text-gray-600">${escapeHtml(p.phone || '-')}</td>
-                    <td class="px-3 py-2 max-w-[240px] truncate text-gray-500" title="${escapeHtml(p.address || '')}">${escapeHtml(p.address || '') || '<span class="text-gray-300">-</span>'}</td>
-                    <td class="px-3 py-2 max-w-[200px] truncate text-gray-500" title="${escapeHtml(p.note || '')}">${escapeHtml(p.note || '') || '<span class="text-gray-300">-</span>'}</td>
-                    <td class="px-3 py-2 text-center whitespace-nowrap" onclick="event.stopPropagation()">
-                        <button onclick="openPartnerModal('${escapeHtml(p.id)}')" class="text-blue-500 hover:text-blue-700 mx-1" title="수정"><i class="fas fa-edit"></i></button>
-                        <button onclick="deletePartner('${escapeHtml(p.id)}')" class="text-red-500 hover:text-red-700 mx-1" title="삭제"><i class="fas fa-trash"></i></button>
-                    </td>
-                </tr>`).join('');
+        // 줄을 눌렀을 때 — 가맹점 3종은 가맹점 상세(운영 · 결제 정보까지), 나머지는 업체 기본정보
+        function openCompanyModal(id) {
+            const c = customers.find(x => x.id === id);
+            if (!c) return;
+            if (isShopKind(c.kind)) openCustomerModal(id);
+            else openPartnerModal(id);
+        }
+        // [아이디 만들기] — 업체가 골라진 채로 파트너 ID 만들기 창을 엽니다
+        function openCompanyIdCreate(id) {
+            if (typeof openPartnerIdModal !== 'function') return;
+            openPartnerIdModal('', id);
+        }
+        async function runCompanyMigrationNow() {
+            const r = await migrateCompaniesOnce();
+            if (r.error) alert('옮기지 못했습니다 — ' + r.error + '\n잠시 뒤 다시 시도해 주세요.');
+            else showAppToast(`예전 파트너사 ${r.moved || 0}곳을 업체 표로 옮겼습니다.`, 'green');
+            renderCompanies();
+        }
+        // 업체 지우기 — 소속 업체가 있으면 막고, 계약 · 아이디가 걸려 있으면 한 번 더 묻습니다
+        function deleteCompany(id) {
+            const c = customers.find(x => x.id === id);
+            if (!c) return;
+            const kids = companyChildren(id);
+            if (kids.length) { alert(`'${companyNameOf(c)}' 아래에 소속 업체가 ${kids.length}곳 있습니다.\n소속 업체의 상위업체를 먼저 바꾸거나 지운 뒤 삭제해 주세요.`); return; }
+            const asCustomer = contracts.filter(k => k.customerId === id).length;
+            const asPartner = contracts.filter(k => k.partnerId === id).length;
+            const accts = companyAccountCount(id);
+            const warn = [];
+            if (asCustomer) warn.push(`이 업체가 고객사인 계약 ${asCustomer}건`);
+            if (asPartner) warn.push(`이 업체가 파트너사로 지정된 계약 ${asPartner}건 (파트너사 연결이 풀립니다)`);
+            if (accts) warn.push(`파트너센터 아이디 ${accts}개 (로그인이 막힙니다)`);
+            if (!confirm(`'${companyNameOf(c)}' 업체를 삭제할까요?` + (warn.length ? `\n\n걸려 있는 것:\n· ${warn.join('\n· ')}` : ''))) return;
+            contracts.forEach(k => { if (k.partnerId === id) k.partnerId = ''; });
+            setCompanyList(customers.filter(x => x.id !== id));
+            saveCustomers();
+            if (asPartner && typeof saveContracts === 'function') saveContracts();
+            renderCompanies();
+            if (typeof renderContracts === 'function' && document.getElementById('contracts-table-body')) renderContracts();
+            if (document.getElementById('trade-rows')) renderSupplyCenter();
         }
 
         // 영업본부 › 거래처 관리 › 파트너사 탭으로 건너뛰기
@@ -38147,15 +38610,18 @@ const QUOTE_TEMPLATES = [
             navigate('sales-supply', document.getElementById('nav-sales-supply'));
         }
 
+        // ---------- 업체 기본정보 창 (2026-10-05 · 예전 '파트너사 등록' 창을 모든 업체용으로) ----------
+        // 상호 · 업체 유형 · 상위업체 · 거래상태 · 사업자 · 담당자처럼 **모든 업체에 공통인 것**을 다룹니다.
+        // 가맹점의 운영 · 결제 정보는 [가맹점 상세](고객 등록 창), 거래 조건은 거래처 관리 › 파트너사 탭에서 다룹니다.
         function openPartnerModal(partnerId = null) {
             const p = partnerId ? partners.find(x => x.id === partnerId) : null;
             if (partnerId && !p) return;
             const form = document.getElementById('partner-form');
             form.reset();
             document.getElementById('edit-partner-id').value = p ? p.id : '';
-            document.getElementById('partner-modal-title').innerText = p ? '파트너사 수정' : '신규 파트너사 등록';
+            document.getElementById('partner-modal-title').innerText = p ? '업체 수정' : '업체 등록';
             document.getElementById('partner-delete-btn').classList.toggle('hidden', !p);
-            document.getElementById('partner-trade-link').classList.toggle('hidden', !p);
+            document.getElementById('partner-trade-link').classList.toggle('hidden', !(p && isTradeCompany(p)));
 
             const sel = document.getElementById('partner-corp');
             sel.innerHTML = PARTNER_CORPS.map(v => `<option value="${escapeHtml(v)}" ${p && p.corp === v ? 'selected' : ''}>${escapeHtml(v)}</option>`).join('');
@@ -38164,33 +38630,20 @@ const QUOTE_TEMPLATES = [
             set('partner-business-no', p && p.businessNo);
             set('partner-biz-type', p && p.bizType);      // 사업자 구분 (2026-09-16)
             set('partner-address', p && p.address);
-            set('partner-contact', p && p.contact);
+            set('partner-contact', p && p.contactName);
             set('partner-phone', p && p.phone);
             set('partner-note', p && p.note);
-            // 거래 유형 · 프랜차이즈 본사 (2026-09-15)
+            const st = document.getElementById('partner-status');
+            if (st) {
+                st.innerHTML = PARTNER_STATUS.map(o => `<option value="${escapeHtml(o.id)}">${escapeHtml(o.id)}</option>`).join('');
+                st.value = (p && p.status) || '미거래';
+            }
+            // 업체 유형 — 기본값을 두면 아무 생각 없이 저장돼 단가가 새어 나갑니다. 비워 두고 반드시 고르게 합니다.
             const ct = document.getElementById('partner-cust-type');
             if (ct) {
-                // 기본값을 '파트너사' 로 두면 아무 생각 없이 저장돼 단가가 새어 나갑니다.
-                // 비워 두고 반드시 고르게 합니다.
                 ct.innerHTML = '<option value="">선택해 주세요</option>' + PARTNER_CUST_TYPES.map(o =>
                     `<option value="${escapeHtml(o.id)}" title="${escapeHtml(o.desc || '')}">${escapeHtml(o.name)}</option>`).join('');
-                ct.value = (p && p.custType) || '';
-                onPartnerCustTypeDesc();
-            }
-            // 본사 이름 — 거래처 관리 › 프랜차이즈 탭에 등록된 본사를 고를 거리로 내려 줍니다.
-            // 고르는 상자가 아니라 **적는 칸 + 고를 거리** 라, 목록에 없는 본사도 그대로 적힙니다.
-            set('partner-hq-name', p && p.franchiseName);
-            // 소속 파트너사 — 거래 유형이 '파트너사' 인 곳만 (2026-09-16)
-            const par = document.getElementById('partner-parent');
-            if (par) {
-                par.innerHTML = '<option value="">선택해 주세요</option>' + partners
-                    .filter(x => x.custType === 'partner' && (!p || x.id !== p.id))
-                    .map(x => `<option value="${escapeHtml(x.id)}"${p && p.parentPartnerId === x.id ? ' selected' : ''}>${escapeHtml(String(x.name).replace(/\n/g, ' '))}</option>`).join('');
-            }
-            const hqList = document.getElementById('partner-hq-list');
-            if (hqList) {
-                hqList.innerHTML = partnerFranchiseHqNames().map(n =>
-                    `<option value="${escapeHtml(n)}"></option>`).join('');
+                ct.value = (p && p.kind) || '';
             }
             const hq = document.getElementById('partner-hq');
             if (hq) {
@@ -38198,12 +38651,13 @@ const QUOTE_TEMPLATES = [
                     `<option value="${escapeHtml(o.id)}" title="${escapeHtml(o.desc)}">${escapeHtml(o.name)}</option>`).join('');
                 hq.value = (p && p.franchiseHq) || '';
             }
-            onPartnerCustTypeChange();
+            onPartnerCustTypeChange(p ? p.parentId : '');
+            const idsBox = document.getElementById('partner-modal-ids');
+            if (idsBox) idsBox.innerHTML = companyIdsHtml(p ? p.id : '');
             document.getElementById('partner-modal').classList.remove('hidden');
         }
 
-        // 프랜차이즈 관련 계정일 때만 본사 칸을 보여 줍니다
-        // 고른 거래 유형의 설명을 칸 아래에 그대로 보여 줍니다 — 고르고 나서도 헷갈리지 않게
+        // 고른 업체 유형의 설명을 칸 아래에 그대로 보여 줍니다 — 고르고 나서도 헷갈리지 않게
         function onPartnerCustTypeDesc() {
             const ct = document.getElementById('partner-cust-type');
             const el = document.getElementById('partner-cust-desc');
@@ -38213,32 +38667,48 @@ const QUOTE_TEMPLATES = [
             el.className = 'text-[11px] mt-1 ' + (d ? 'text-gray-600' : 'text-gray-400');
         }
 
-        function onPartnerCustTypeChange() {
+        // 업체 유형에 따라 — 상위업체 칸(본사 / 파트너사) · 가격정책 칸 · [가맹점 상세] 버튼을 맞춥니다
+        function onPartnerCustTypeChange(keepParentId) {
             onPartnerCustTypeDesc();
             const ct = document.getElementById('partner-cust-type');
             if (!ct) return;
-            const on = ct.value === 'franchise' || ct.value === 'hq';
+            const kind = ct.value;
+            const editId = document.getElementById('edit-partner-id').value;
+            const parentKind = companyParentKind(kind);
             const pb = document.getElementById('partner-parent-box');
-            if (pb) pb.classList.toggle('hidden', ct.value !== 'partnerShop');
-            ['partner-hq-box', 'partner-hqpol-box'].forEach(id => {
-                const el = document.getElementById(id);
-                if (el) el.classList.toggle('hidden', !on);
-            });
+            if (pb) pb.classList.toggle('hidden', !parentKind);
+            const par = document.getElementById('partner-parent');
+            if (par) {
+                const cur = keepParentId !== undefined && keepParentId !== null && typeof keepParentId === 'string' ? keepParentId : par.value;
+                const opts = parentKind ? customers.filter(x => x.kind === parentKind && x.id !== editId)
+                    .sort((a, b) => companyNameOf(a).localeCompare(companyNameOf(b), 'ko')) : [];
+                par.innerHTML = '<option value="">선택해 주세요</option>' + opts.map(x =>
+                    `<option value="${escapeHtml(x.id)}">${escapeHtml(companyNameOf(x))}${x.businessNo ? ' · ' + escapeHtml(x.businessNo) : ''}</option>`).join('');
+                par.value = opts.some(x => x.id === cur) ? cur : '';
+            }
+            const label = document.getElementById('partner-parent-label');
+            if (label) label.textContent = parentKind === 'hq' ? '소속 프랜차이즈 본사' : '소속 파트너사';
+            const hint = document.getElementById('partner-parent-hint');
+            if (hint) hint.innerHTML = parentKind === 'hq'
+                ? '업체 유형이 <b>프랜차이즈 본사</b>인 곳만 나옵니다. 없으면 본사를 먼저 등록해 주세요.'
+                : '업체 유형이 <b>파트너사</b>인 곳만 나옵니다. 단가·합계는 이 파트너사가 가맹점에 안내합니다.';
+            // 본사 이름 칸은 상위업체 고르기로 바뀌었습니다 — 늘 숨깁니다
+            const hqBox = document.getElementById('partner-hq-box');
+            if (hqBox) hqBox.classList.add('hidden');
+            const pol = document.getElementById('partner-hqpol-box');
+            if (pol) pol.classList.toggle('hidden', !(kind === 'franchise' || kind === 'hq'));
+            const shopBtn = document.getElementById('partner-shop-detail');
+            if (shopBtn) shopBtn.classList.toggle('hidden', !isShopKind(kind));
+            onPartnerParentChange();
         }
-
-        // 거래처 관리 › 프랜차이즈 탭에 등록된 **본사 이름**들 (2026-09-15).
-        // 본사는 그 탭에서 늘어나므로, 여기서 목록을 따로 들고 있지 않고 그때그때 읽습니다.
-        function partnerFranchiseHqNames() {
-            const rows = (typeof supplyRecords !== 'undefined' ? supplyRecords : [])
-                .filter(r => r.channel === 'franchise');
-            const out = [];
-            rows.forEach(r => {
-                [r.hq, r.name].forEach(v => {
-                    const t = String(v || '').replace(/\n/g, ' ').trim();
-                    if (t && out.indexOf(t) < 0) out.push(t);
-                });
-            });
-            return out.sort((a, b) => a.localeCompare(b, 'ko'));
+        // 프랜차이즈 가맹점은 본사를 고르면 본사의 가격정책을 그대로 따라갑니다 (비어 있을 때만 채움)
+        function onPartnerParentChange() {
+            const kind = (document.getElementById('partner-cust-type') || {}).value;
+            const pid = (document.getElementById('partner-parent') || {}).value;
+            const hq = document.getElementById('partner-hq');
+            if (kind !== 'franchise' || !pid || !hq || hq.value) return;
+            const parent = customers.find(x => x.id === pid);
+            if (parent && parent.franchiseHq) hq.value = parent.franchiseHq;
         }
 
         function closePartnerModal() {
@@ -38246,71 +38716,92 @@ const QUOTE_TEMPLATES = [
             document.getElementById('partner-form').reset();
         }
 
-        function submitPartner(event) {
-            event.preventDefault();
+        // 저장 — 성공하면 저장한 업체 id, 아니면 ''
+        function savePartnerModal() {
             const id = document.getElementById('edit-partner-id').value;
-            const val = elId => (document.getElementById(elId).value || '').trim();
+            const val = elId => ((document.getElementById(elId) || {}).value || '').trim();
             const name = val('partner-name');
-            if (!name) { alert('파트너사명을 입력해 주세요.'); return; }
-            const custType = val('partner-cust-type');
+            if (!name) { alert('상호(업체명)를 입력해 주세요.'); return ''; }
+            const kind = val('partner-cust-type');
             const franchiseHq = val('partner-hq');           // 가격정책
-            const franchiseName = val('partner-hq-name');    // 본사 이름
-            if (!custType) {
-                alert('거래 유형을 골라 주세요.\n이 값으로 파트너센터에서 보이는 단가·수수료가 정해집니다.');
+            if (!kind) {
+                alert('업체 유형을 골라 주세요.\n이 값으로 파트너센터에서 보이는 단가·수수료가 정해집니다.');
                 const el = document.getElementById('partner-cust-type'); if (el) el.focus();
-                return;
+                return '';
             }
-            const parentPartnerId = val('partner-parent');
-            const parentP = parentPartnerId ? partners.find(x => x.id === parentPartnerId) : null;
-            if (custType === 'partnerShop' && !parentP) {
-                alert('파트너사 가맹점은 소속 파트너사를 골라 주세요.\n목록에 없으면 그 파트너사를 먼저 등록해야 합니다.');
+            const parentKind = companyParentKind(kind);
+            const parentId = parentKind ? val('partner-parent') : '';
+            const parent = parentId ? customers.find(x => x.id === parentId && x.kind === parentKind) : null;
+            if (parentKind && !parent) {
+                alert(parentKind === 'hq'
+                    ? '프랜차이즈 가맹점은 소속 본사를 골라 주세요.\n목록에 없으면 그 본사를 먼저 업체로 등록해야 합니다.'
+                    : '파트너사 가맹점은 소속 파트너사를 골라 주세요.\n목록에 없으면 그 파트너사를 먼저 업체로 등록해야 합니다.');
                 const el = document.getElementById('partner-parent'); if (el) el.focus();
-                return;
+                return '';
             }
-            if (custType === 'franchise' || custType === 'hq') {
-                if (!franchiseName) {
-                    alert('프랜차이즈 계정은 본사명을 적어 주세요.\n거래처 관리에 없는 본사도 그대로 적으시면 됩니다.');
-                    const el = document.getElementById('partner-hq-name'); if (el) el.focus();
-                    return;
-                }
-                if (!franchiseHq) {
-                    alert('프랜차이즈 계정은 가격정책을 골라 주세요.\n정책에 따라 금액이 보이는 방식과 계약서가 달라집니다.');
-                    const el = document.getElementById('partner-hq'); if (el) el.focus();
-                    return;
-                }
+            if ((kind === 'franchise' || kind === 'hq') && !franchiseHq) {
+                alert('프랜차이즈 업체는 가격정책을 골라 주세요.\n정책에 따라 금액이 보이는 방식과 계약서가 달라집니다.');
+                const el = document.getElementById('partner-hq'); if (el) el.focus();
+                return '';
+            }
+            const bizNo = val('partner-business-no');
+            if (bizNo) {
+                const dup = customers.find(x => x.id !== id && x.businessNo && normKeyValue(x.businessNo) === normKeyValue(bizNo));
+                if (dup && !confirm(`사업자번호가 같은 업체가 이미 있습니다 — ${companyNameOf(dup)} (${partnerCustTypeName(dup.kind)})\n같은 곳이면 [취소] 를 누르고 그 업체를 고쳐 주세요. 그래도 따로 등록할까요?`)) return '';
             }
             const data = {
                 corp: val('partner-corp'), name,
                 bizType: val('partner-biz-type'),          // 일반(personal) / 법인(corp) 사업자 (2026-09-16)
-                businessNo: val('partner-business-no'), address: val('partner-address'),
-                contact: val('partner-contact'), phone: val('partner-phone'),
+                businessNo: bizNo, address: val('partner-address'),
+                contactName: val('partner-contact'), phone: val('partner-phone'),
                 note: val('partner-note'),
-                custType, franchiseHq, franchiseName,      // 2026-09-15 — 파트너센터 단가 노출을 정합니다
-                parentPartnerId: custType === 'partnerShop' ? parentPartnerId : '',
-                parentPartnerName: custType === 'partnerShop' && parentP ? String(parentP.name).replace(/\n/g, ' ').trim() : ''
+                status: val('partner-status') || '미거래',
+                kind, parentId: parent ? parent.id : '',
+                franchiseHq: (kind === 'franchise' || kind === 'hq') ? franchiseHq : ''
             };
+            data.contact = data.contactName; data.custType = kind;
+            let saved;
             if (id) {
-                const p = partners.find(x => x.id === id);
-                if (p) Object.assign(p, data);   // 거래 조건(items·fee·status 등)은 건드리지 않습니다
+                saved = customers.find(x => x.id === id);
+                if (!saved) return '';
+                // 주소를 여기서 고치면 가맹점 상세의 도로명 · 상세 칸과 어긋나므로, 바뀌었을 때만 한 줄 주소로 다시 둡니다
+                if (data.address !== (saved.address || '')) { saved.roadAddress = data.address; saved.addressDetail = ''; }
+                Object.assign(saved, data);   // 거래 조건(items · fee …) · 가맹점 운영 정보는 건드리지 않습니다
             } else {
-                // 새로 등록하면 거래 조건은 비어 있는 상태로 시작합니다
-                partners.push({ id: 'p' + (partnerIdCounter++), ...data,
+                saved = Object.assign({ id: newCompanyId(),
                     contractDoc: '', items: [], fee: { small: '', sme1: '', sme2: '', sme3: '', normal: '' },
-                    cycle: '', owner: '', subOwner: '', status: '미거래', pgAlias: [], memo: '' });
+                    cycle: '', owner: '', subOwner: '', pgAlias: [], memo: '', roadAddress: data.address },
+                    // 가맹점은 잠재고객관리 · 운영업무센터에도 나오므로 그쪽 기본값을 함께 둡니다
+                    isShopKind(kind) ? { type: '잠재고객', grade: '일반', size: '중소기업', useYn: 'YES' } : {}, data);
+                customers.push(saved);
             }
-            const savedId = id || partners[partners.length - 1].id;
             savePartners();
+            return saved.id;
+        }
+        function submitPartner(event) {
+            event.preventDefault();
+            const savedId = savePartnerModal();
+            if (!savedId) return;
             closePartnerModal();
-            renderPartners();
+            renderCompanies();
+            if (typeof renderCustomers === 'function' && document.getElementById('customers-table-body')) renderCustomers();
             if (document.getElementById('sec-partner-ids')) renderPartnerIdAdmin();
             afterPartnerRegisteredForId(savedId);   // 파트너 ID 관리에서 넘어온 길이면 그 팝업으로 돌아갑니다 (2026-09-16)
+        }
+        // 가맹점이면 기본정보를 저장한 뒤 가맹점 상세(운영 · 결제 정보) 창으로 넘어갑니다
+        function openShopDetailFromPartnerModal() {
+            const savedId = savePartnerModal();
+            if (!savedId) return;
+            closePartnerModal();
+            renderCompanies();
+            openCustomerModal(savedId);
         }
 
         function deletePartnerFromModal() {
             const id = document.getElementById('edit-partner-id').value;
             if (!id) return;
             closePartnerModal();
-            deletePartner(id);
+            deleteCompany(id);
         }
         // 팝업에서 이 파트너사의 거래 조건으로 바로 가기
         function openTradeFromPartnerModal() {
@@ -38324,7 +38815,7 @@ const QUOTE_TEMPLATES = [
 
         // ---------- 엑셀 (시트와 같은 순서 — 등록 정보 + 거래 조건을 함께) ----------
         function downloadPartnersXlsx() {
-            const list = (supplyChannel === 'partner' && document.getElementById('trade-rows')) ? tradeFiltered() : partnerFiltered();
+            const list = (supplyChannel === 'partner' && document.getElementById('trade-rows')) ? tradeFiltered() : tradePartners();
             if (!list.length) { alert('내려받을 파트너사가 없습니다.'); return; }
             const today = ymd(new Date());
             const head = ['구분', '계약 법인', '파트너사', '사업자 구분', '계약서 작성 여부', '거래 품목']
@@ -38343,17 +38834,8 @@ const QUOTE_TEMPLATES = [
             downloadBlobAs(buildXlsxBlob(rows, '파트너사별공급현황'), `파트너사별_공급현황_${today.replace(/-/g, '')}.xlsx`);
         }
 
-        function deletePartner(partnerId) {
-            const used = contracts.some(c => c.partnerId === partnerId);
-            if (used && !confirm('이 파트너사가 지정된 계약이 있습니다. 삭제하면 해당 계약의 파트너사 연결이 해제됩니다. 계속할까요?')) return;
-            if (!used && !confirm('정말 이 파트너사를 삭제하시겠습니까?')) return;
-            contracts.forEach(c => { if (c.partnerId === partnerId) c.partnerId = ''; });
-            partners = partners.filter(p => p.id !== partnerId);
-            savePartners();
-            renderPartners();
-            renderContracts();
-            if (document.getElementById('trade-rows')) renderSupplyCenter();
-        }
+        // 예전 이름 — 업체 지우기로 이어 줍니다 (2026-10-05)
+        function deletePartner(partnerId) { deleteCompany(partnerId); }
 
         // ==================== 계약관리 엑셀 업로드 ====================
         // 초기 데이터를 한 번에 넣기 위한 기능입니다. 가맹점·CMS 업로드와 같은 방식으로
@@ -38596,17 +39078,21 @@ const QUOTE_TEMPLATES = [
                 }
                 data.name = name;
                 if (bizNo) data.businessNo = bizNo;
+                // 업체 통합 (2026-10-05) — 이 시트의 '구분' 은 업체 유형, '담당자' 는 업체 담당자입니다
+                if (data.custType) data.kind = data.custType;
+                if (data.contact) data.contactName = data.contact;
 
+                // 같은 곳 — 사업자번호가 맞는 업체, 아니면 상호가 같은 파트너사 쪽 업체 (상호만 같은 가맹점과 섞이지 않게)
                 const existing = (bizNo ? partners.find(p => p.businessNo && normKeyValue(p.businessNo) === normKeyValue(bizNo)) : null)
-                    || partners.find(p => String(p.name || '').replace(/\s+/g, '') === name.replace(/\s+/g, ''));
+                    || partnerSideCompanies().find(p => String(p.name || '').replace(/\s+/g, '') === name.replace(/\s+/g, ''));
 
                 if (existing) {
                     Object.assign(existing, data);
                     if (Object.keys(fee).length) existing.fee = Object.assign({}, existing.fee, fee);
                     stat.updated++;
                 } else {
-                    partners.push(Object.assign({
-                        id: 'p' + partnerIdCounter++,
+                    customers.push(Object.assign({
+                        id: newCompanyId(), kind: 'partner',
                         corp: PARTNER_CORPS[0], pgAlias: [], businessNo: '', contractDoc: '', items: [],
                         cycle: '', contact: '', phone: '', owner: '', subOwner: '', status: '미거래', address: '', memo: ''
                     }, data, { fee: Object.assign({ small: '', sme1: '', sme2: '', sme3: '', normal: '' }, fee) }));
@@ -38619,14 +39105,14 @@ const QUOTE_TEMPLATES = [
             });
 
             savePartners();
-            renderPartners();
+            renderCompanies();
             if (typeof renderContracts === 'function' && document.getElementById('contracts-table-body')) renderContracts();
             if (typeof renderSupplyCenter === 'function' && document.getElementById('trade-rows')) renderSupplyCenter();
 
             box.innerHTML = importResultBox(
                 `파트너사 올리기 완료 — 신규 ${stat.added}건 · 갱신 ${stat.updated}건`,
                 [`건너뜀 ${stat.noName + stat.dup}건 (파트너사명 없음 ${stat.noName} · 파일 내 중복 ${stat.dup})`,
-                 `현재 파트너사 <b>${partners.length}</b>곳`],
+                 `현재 파트너사 쪽 업체 <b>${tradePartners().length}</b>곳`],
                 usedCols, unknownHeads(rows, found, COLS), preview, usedCols.slice(0, 8));
             input.value = '';
         }
@@ -40094,19 +40580,15 @@ const QUOTE_TEMPLATES = [
         // 여기서 보이기/숨기기와 데이터 렌더만 제어합니다.
         const COMMON_TABS = [
             {
-                id: 'customers', name: '가맹점관리', icon: 'fa-building', panel: 'sec-common-customers', perm: 'common-customers',
-                desc: '등록된 모든 가맹점을 계약 상태와 함께 조회하고 관리합니다.',
-                render: () => renderCommonCustomers()
+                // 2026-10-05 — 가맹점관리 + 파트너사 관리를 하나로. 예전 두 권한 중 하나만 있어도 보입니다.
+                id: 'companies', name: '업체 관리', icon: 'fa-building', panel: 'sec-common-partners', perm: 'common-customers', perms: ['common-customers', 'common-partners', 'partner-ids'],
+                desc: '가맹점 · 파트너사 · 프랜차이즈 본사 · 하드웨어 유통을 한 목록에서 관리합니다. 업체 유형과 상위업체(소속)로 관계를 표시합니다.',
+                render: () => renderCompanies()
             },
             {
                 id: 'contract', name: '계약관리', icon: 'fa-file-signature', panel: 'sec-common-contract', perm: 'common-contract',
                 desc: '고객사 계약을 등록하고 승인·만료 상태를 관리합니다.',
                 render: () => renderContracts()
-            },
-            {
-                id: 'partners', name: '파트너사 관리', icon: 'fa-handshake', panel: 'sec-common-partners', perm: 'common-partners',
-                desc: '계약 작성 시 선택할 수 있는 파트너사(협력사)를 관리합니다.',
-                render: () => renderPartners()
             },
             {
                 id: 'price', name: '공급 단가표', icon: 'fa-tags', panel: 'sec-common-price', perm: 'common-price',
@@ -40120,8 +40602,8 @@ const QUOTE_TEMPLATES = [
             }
         ];
         // 예전 메뉴 경로 → 탭 id (대시보드 카드 등에서 아직 옛 경로로 호출함)
-        const COMMON_TAB_ALIASES = { 'common-customers': 'customers', 'common-contract': 'contract', 'common-partners': 'partners' };
-        let commonActiveTab = 'customers';
+        const COMMON_TAB_ALIASES = { 'common-customers': 'companies', 'common-contract': 'contract', 'common-partners': 'companies', 'customers': 'companies', 'partners': 'companies' };
+        let commonActiveTab = 'companies';
 
         // ==================== 사용자/권한관리 — 탭 2종 ====================
         // 예전엔 사이드바 메뉴 2개였습니다. 한 메뉴로 합치고 탭으로 전환합니다.
@@ -40313,12 +40795,7 @@ const QUOTE_TEMPLATES = [
                 desc: '권한 그룹별로 접근할 수 있는 페이지를 설정합니다.',
                 render: () => renderPermissions()
             },
-            {
-                // 2026-09-16 — 공통관리에 있던 것을 사용자/권한관리로 옮김 (사내 계정과 같은 자리에서 사외 계정을 다룹니다)
-                id: 'partner-ids', name: '파트너 ID 관리', icon: 'fa-id-card', panel: 'sec-partner-ids', perm: 'partner-ids',
-                desc: '파트너센터 로그인 아이디를 만들고 사용/중지하며, 아이디마다 메뉴별 접근 권한을 정합니다. 아이디는 등록된 파트너사(개인 가맹점 · 프랜차이즈 본사/가맹점 포함)에 붙습니다.',
-                render: () => renderPartnerIdAdmin()
-            },
+            // 2026-10-05 — '파트너 ID 관리' 탭은 공통관리 › 업체 관리로 합쳤습니다 (업체 창의 '파트너센터 아이디' 칸 · 업체 관리 [아이디] 보기)
             {
                 // 2026-09-23 — 폰 캘린더 연동. 사람(구글 주소)을 다루므로 사용자 관리 권한을 따릅니다.
                 id: 'gcal', name: '구글 캘린더 연동', icon: 'fa-calendar-check', panel: 'sec-gcal', perm: 'users',
@@ -40332,7 +40809,7 @@ const QUOTE_TEMPLATES = [
             }
         ];
         // 옛 경로 호환 — 관리본부 하위였던 'management-org' 로 들어와도 이 탭이 열립니다
-        const ADMIN_TAB_ALIASES = { 'users': 'users', 'permissions': 'permissions', 'management-org': 'org', 'partner-ids': 'partner-ids', 'common-partner-ids': 'partner-ids' };
+        const ADMIN_TAB_ALIASES = { 'users': 'users', 'permissions': 'permissions', 'management-org': 'org' };
         let adminActiveTab = 'users';
 
         // ==================== 설정 — 탭 4종 ====================
@@ -40466,8 +40943,10 @@ const QUOTE_TEMPLATES = [
             renderSettingsCenter();
         }
 
+        // 탭 하나에 권한이 여럿 걸릴 수 있습니다(perms) — 그중 하나만 있어도 보입니다 (2026-10-05 업체 관리)
+        function canSeeCommonTab(t) { return (t.perms || [t.perm]).some(id => canSeePage(id)); }
         function renderCommonCenter() {
-            const tabs = COMMON_TABS.filter(t => canSeePage(t.perm));
+            const tabs = COMMON_TABS.filter(canSeeCommonTab);
             if (!tabs.some(t => t.id === commonActiveTab)) commonActiveTab = tabs.length ? tabs[0].id : '';
 
             const bar = document.getElementById('common-tabs');
@@ -40493,7 +40972,7 @@ const QUOTE_TEMPLATES = [
 
         function setCommonTab(tabId) {
             const def = COMMON_TABS.find(t => t.id === tabId);
-            if (!def || !canSeePage(def.perm)) return;   // 권한 없는 탭 우회 차단
+            if (!def || !canSeeCommonTab(def)) return;   // 권한 없는 탭 우회 차단
             if (!COMMON_TABS.some(t => t.id === tabId)) return;
             commonActiveTab = tabId;
             renderCommonCenter();
@@ -45470,7 +45949,7 @@ const QUOTE_TEMPLATES = [
             const accs = partnerAccountList();
             const acc = accs.find(a => a.partnerId && a.partnerId === x.partnerId)
                      || accs.find(a => !x.partnerId && a.partnerName === x.partnerName);
-            if (!acc) return { ok: false, why: `'${x.partnerName || '(미지정)'}' 은(는) 파트너센터 아이디가 없습니다 — 사용자/권한관리 › 파트너 ID 관리에서 아이디를 먼저 만들어 주세요.` };
+            if (!acc) return { ok: false, why: `'${x.partnerName || '(미지정)'}' 은(는) 파트너센터 아이디가 없습니다 — 공통관리 › 업체 관리에서 그 업체를 열어 아이디를 먼저 만들어 주세요.` };
             const menus = partnerAllowedMenus(acc.loginId);
             if (menus.indexOf('it') < 0 || menus.indexOf('it:dev') < 0) {
                 return { ok: false, acc, why: `파트너센터 계정 ${acc.loginId} 에 <b>IT본부 › 개발요청</b> 권한이 꺼져 있습니다 — 설정 › 파트너 접근 권한에서 켜 주세요.` };
@@ -46820,7 +47299,7 @@ const QUOTE_TEMPLATES = [
                 <p class="mt-3 text-xs text-gray-400">
                     <i class="fas fa-circle-info mr-1"></i>모든 업무를 해제하면 로그인은 가능하나 <b>이용 가능한 업무가 없다</b>는 안내만 표시됩니다.
                     인바운드 상담 대행 업체에는 <b>영업본부 · 인바운드 접수</b> 만 선택해 주세요.
-                    파트너 계정(아이디 만들기 · 비밀번호 · 사용/중지)은 <b>사용자/권한관리 › 파트너 ID 관리</b>에서 다룹니다.<br>
+                    파트너 계정(아이디 만들기 · 비밀번호 · 사용/중지)은 <b>공통관리 › 업체 관리</b>(업체 창의 파트너센터 아이디 칸 · [아이디] 보기)에서 다룹니다.<br>
                     여기서 정하는 <b>업무 묶음</b>은 <b>어떤 업무를 쓸 수 있는지</b>입니다.
                     단가·수수료가 어떻게 보이는지를 정하는 <b>거래 유형</b>(개인 가맹점 · 프랜차이즈 · 파트너사 · 하드웨어 유통)은
                     <b>공통관리 › 파트너사 등록·수정</b>에서 계정마다 지정합니다.
@@ -50842,7 +51321,10 @@ const QUOTE_TEMPLATES = [
         //     등록되지 않은 곳의 아이디를 만들려 하면 등록을 먼저 하도록 안내하고 등록 화면을 엽니다.
         //   · 처음 켤 때 저장된 자료가 없으면 예전 규칙(partner1~8 · pcLogin)대로 씨앗을 만들어 예전과 같게 시작합니다.
         const PARTNER_ACCOUNT_KEY = 'gwPartnerAccounts.v1';
-        function partnerAccountSeed() {
+        // 2026-10-05 — 업체 통합으로 partners 가 모든 업체(가맹점 포함)가 되어, 앞 8곳에 partner1~8 을 저절로 내주면
+        // 아무 가맹점에나 아이디가 생깁니다. 이제 씨앗을 만들지 않습니다 — 아이디는 업체 관리 · 파트너 ID 관리에서만 만듭니다.
+        function partnerAccountSeed() { return []; }
+        function partnerAccountSeedOld() {
             const ps = (typeof partners !== 'undefined' ? partners : []);
             const stamp = ymd(new Date());
             // 비밀번호는 넣지 않습니다 — 파트너 ID 관리에서 정해 줘야 로그인됩니다 (2026-09-28, 예전엔 모두 '1234')
@@ -50905,7 +51387,11 @@ const QUOTE_TEMPLATES = [
         // ---------- 화면 ----------
         let partnerIdSearch = '';
         function renderPartnerIdAdmin() {
-            const host = document.getElementById('sec-partner-ids');
+            // 2026-10-05 — 업체 관리 [아이디] 보기 안에 그립니다. 아이디가 바뀔 때마다 이 함수가 불리므로
+            // 업체 창의 '파트너센터 아이디' 칸 · 업체 목록의 아이디 수도 여기서 함께 맞춥니다.
+            refreshCompanyIdBoxes();
+            if (typeof companyFilter !== 'undefined' && companyFilter.view !== 'ids' && document.getElementById('company-rows')) drawCompanyRows();
+            const host = document.getElementById('company-ids-host');
             if (!host) return;
             const q = String(partnerIdSearch || '').trim().toLowerCase();
             const ps = (typeof partners !== 'undefined' ? partners : []);
@@ -50916,9 +51402,9 @@ const QUOTE_TEMPLATES = [
             host.innerHTML = `
                 <div class="mb-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
                     <div>
-                        <h3 class="text-lg font-bold text-gray-800">파트너 ID 관리</h3>
+                        <h3 class="text-base font-bold text-gray-800">파트너센터 아이디 전체</h3>
                         <p class="text-gray-500 text-sm">파트너센터(사외 페이지)에 로그인하는 아이디를 만들고, 사용/중지하고, <b>메뉴별 접근 권한</b>을 정합니다.
-                            아이디는 <b>등록된 파트너사</b>에 붙습니다 — 개인 가맹점 · 프랜차이즈 가맹점/본사도 파트너사 관리에서 <b>거래 유형(구분)</b>으로 등록합니다.</p>
+                            아이디는 <b>등록된 업체</b>에 붙습니다. 업체 하나의 아이디만 볼 때는 업체 줄을 눌러 <b>파트너센터 아이디</b> 칸에서 다뤄도 됩니다.</p>
                     </div>
                     <div class="flex flex-wrap gap-2 shrink-0">
                         <button type="button" onclick="openPartnerIdModal()" class="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 text-sm font-semibold"><i class="fas fa-user-plus mr-1"></i>아이디 만들기</button>
@@ -50927,7 +51413,7 @@ const QUOTE_TEMPLATES = [
                 <div class="grid grid-cols-2 md:grid-cols-4 gap-2 mb-3">
                     ${[['전체 아이디', all.length + '개', 'text-gray-800'], ['사용 중', all.filter(a => a.active).length + '개', 'text-green-600'],
                        ['중지', all.filter(a => !a.active).length + '개', all.some(a => !a.active) ? 'text-red-600' : 'text-gray-400'],
-                       ['아이디 없는 파트너사', noAcct.length + '곳', noAcct.length ? 'text-amber-600' : 'text-gray-400']].map(([l, v, c]) =>
+                       ['아이디 없는 업체', noAcct.length + '곳', noAcct.length ? 'text-amber-600' : 'text-gray-400']].map(([l, v, c]) =>
                         `<div class="bg-white border border-gray-200 rounded-lg p-3"><p class="text-xs font-medium text-gray-500">${l}</p><p class="text-xl font-bold ${c} mt-0.5">${v}</p></div>`).join('')}
                 </div>
                 <div class="relative mb-3 max-w-sm">
@@ -50974,11 +51460,20 @@ const QUOTE_TEMPLATES = [
         // ---------- 만들기 · 수정 팝업 ----------
         let partnerIdModalState = null;   // { loginId, partnerId, menus:[] }
         let partnerIdReturnAfterRegister = false;   // 파트너사 등록 화면에서 돌아올 때 이 팝업을 다시 엽니다
+        // 새 아이디 자동 번호 — ptn + 5자리 (2026-10-05 결정). 업체 유형과 상관없이 하나로 이어 붙입니다.
+        // 지금까지 쓴 가장 큰 번호 + 1 이라, 지운 아이디의 번호는 다시 쓰지 않습니다(중간 번호가 비어도 그대로 둡니다).
+        const PARTNER_LOGIN_PREFIX = 'ptn';
+        function nextPartnerLoginId() {
+            const re = new RegExp('^' + PARTNER_LOGIN_PREFIX + '(\\d{5})$');
+            const max = partnerAccounts.reduce((m, a) => { const r = re.exec(String(a.loginId || '')); return r ? Math.max(m, Number(r[1])) : m; }, 0);
+            return PARTNER_LOGIN_PREFIX + String(max + 1).padStart(5, '0');
+        }
         function openPartnerIdModal(loginId, partnerId) {
             const ps = (typeof partners !== 'undefined' ? partners : []);
             const a = loginId ? partnerAccounts.find(x => x.loginId === String(loginId).toLowerCase()) : null;
             partnerIdModalState = {
                 loginId: a ? a.loginId : '',
+                suggestId: a ? '' : nextPartnerLoginId(),
                 partnerId: a ? a.partnerId : (partnerId || ''),
                 menus: a ? partnerAllowedMenus(a.loginId).slice() : partnerDefaultMenus()
             };
@@ -51019,7 +51514,7 @@ const QUOTE_TEMPLATES = [
 
                 <!-- ② 계정 -->
                 <div class="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>${lbl('아이디 <span class="text-red-500">*</span>')}<input type="text" id="pacc-login" value="${escapeHtml(st.loginId)}" ${a ? 'disabled' : ''} placeholder="영문 소문자 · 숫자 (예: happy01)" autocomplete="off" class="${cls} font-mono disabled:bg-gray-100" /></div>
+                    <div>${lbl('아이디 <span class="text-red-500">*</span>')}<input type="text" id="pacc-login" value="${escapeHtml(st.loginId || st.suggestId || '')}" ${a ? 'disabled' : ''} oninput="if (partnerIdModalState && !partnerIdModalState.loginId) partnerIdModalState.suggestId = this.value" placeholder="영문 소문자 · 숫자 (예: ptn00001)" autocomplete="off" class="${cls} font-mono disabled:bg-gray-100" />${a ? '' : '<p class="text-[11px] text-gray-400 mt-1">ptn + 5자리 번호를 저절로 채웠습니다. 필요하면 고쳐도 됩니다.</p>'}</div>
                     <div>${lbl(a ? '비밀번호 <span class="font-normal text-gray-400">— 비우면 그대로</span>' : '비밀번호 <span class="text-red-500">*</span>')}<input type="password" id="pacc-pw" placeholder="${a ? '바꿀 때만 입력' : '4자 이상'}" autocomplete="new-password" class="${cls}" /></div>
                     <div>${lbl('담당자 <span class="font-normal text-gray-400">— 비우면 파트너사 담당자</span>')}<input type="text" id="pacc-manager" value="${escapeHtml((a && a.manager) || '')}" placeholder="${escapeHtml((p && p.contact) || '')}" class="${cls}" /></div>
                     <div>${lbl('연락처')}<input type="text" id="pacc-phone" value="${escapeHtml((a && a.phone) || '')}" placeholder="${escapeHtml((p && p.phone) || '010-0000-0000')}" class="${cls}" /></div>
@@ -51769,17 +52264,13 @@ const QUOTE_TEMPLATES = [
         const PARTNER_SHOP_MIN = 2;          // 최소 글자수
         const PARTNER_SHOP_MAX = 8;          // 한 번에 보여 줄 건수
 
-        // 로그인한 파트너사가 찾을 수 있는 가맹점 —
-        // 가맹점 기본정보의 **담당 파트너사**가 이 파트너사인 곳만입니다. (2026-09-14)
-        // 담당 파트너사를 지정하지 않은 가맹점은 어느 파트너사에도 보이지 않습니다 —
-        // 다른 파트너사의 거래처가 상호만으로 노출되는 일을 막기 위해서입니다.
+        // 로그인한 파트너사가 찾을 수 있는 가맹점 — **상위업체가 이 업체인 곳(소속 가맹점)** 만입니다.
+        // 2026-10-05 업체 통합: 9/28 자료 보호 뒤로 파트너센터는 가맹점 목록을 받지 못해 이 칸이 늘 비어 있었습니다.
+        // 이제 서버가 소속 가맹점만 골라 'gwPartnerShops.v1' 로 내려 줍니다 (상호 · 주소 · 거래상태만 — 담당자 · 연락처는 없음).
+        // 상위업체가 지정되지 않은 가맹점은 어느 파트너사에도 보이지 않습니다 — 다른 업체의 거래처가 노출되지 않게.
         function partnerShopList() {
             try {
-                const list = (typeof wcDef === 'function' ? (wcDef('ops') || {}).customers : null) || [];
-                const mine = String((partnerUser || {}).partnerName || '').trim();
-                if (!mine) return [];
-                return list.filter(c => c && c.name
-                    && String(c.partnerName || '').trim() === mine);
+                return (loadJsonStore('gwPartnerShops.v1', []) || []).filter(c => c && c.name);
             } catch (e) { return []; }
         }
         // 이 파트너사로 등록된 가맹점이 하나도 없는지 — 안내 문구를 가르는 데 씁니다
@@ -51954,9 +52445,9 @@ const QUOTE_TEMPLATES = [
             if (!hit.length) {
                 box.innerHTML = partnerShopNone()
                     ? `<p class="text-xs text-gray-500 bg-gray-50 border border-gray-200 rounded px-2.5 py-2">
-                        아직 <b>우리 파트너사 담당으로 등록된 가맹점</b>이 없습니다 —
+                        아직 <b>우리 업체 소속으로 등록된 가맹점</b>이 없습니다 —
                         상호를 적으시면 <b>적으신 그대로</b> 접수됩니다.
-                        <br><span class="text-gray-400">담당 가맹점 등록은 담당 영업사원에게 문의해 주세요.</span></p>`
+                        <br><span class="text-gray-400">소속 가맹점 등록은 담당 영업사원에게 문의해 주세요.</span></p>`
                     : `<p class="text-xs text-gray-500 bg-gray-50 border border-gray-200 rounded px-2.5 py-2">
                         담당 가맹점에서 <b>${escapeHtml(q)}</b> 을(를) 찾지 못했습니다 —
                         새로 여는 가맹점이면 <b>적으신 그대로</b> 접수됩니다.</p>`;
@@ -51969,7 +52460,7 @@ const QUOTE_TEMPLATES = [
                 <button type="button" onclick="pickPartnerShop('${escapeHtml(key)}', '${escapeHtml(prefix || 'pcf-')}', '${escapeHtml(c.name)}')"
                     class="w-full text-left px-3 py-2 hover:bg-indigo-50 transition">
                     <p class="text-sm font-semibold text-gray-800">${escapeHtml(c.name)}</p>
-                    <p class="text-[11px] text-gray-500">${[c.ceo, String(c.address || '').split(' ').slice(0, 2).join(' ')]
+                    <p class="text-[11px] text-gray-500">${[String(c.address || '').split(' ').slice(0, 2).join(' ')]
                         .filter(Boolean).map(escapeHtml).join(' · ') || '&nbsp;'}</p>
                 </button>`).join('')}
             </div>`;
@@ -52455,7 +52946,53 @@ const QUOTE_TEMPLATES = [
                     <i class="fas fa-lock text-2xl text-gray-300"></i>
                     <p class="font-bold text-gray-700 mt-3">이용 가능한 업무가 없습니다</p>
                     <p class="text-sm text-gray-500 mt-1">해당 계정에 부여된 업무 권한이 없습니다.<br>담당 영업사원에게 문의해 주세요.</p>
-                </div>`}`;
+                </div>`}
+                ${partnerShopsPanelHtml()}`;
+        }
+
+        // ---------- 소속 가맹점 현황 (2026-10-05 업체 통합 · 읽기 전용) ----------
+        // 본사 · 파트너사 아이디에만 나옵니다. 서버가 소속 가맹점(상위업체가 이 업체인 곳)과 그 가맹점들이 낸 접수의
+        // 진행 상태만 골라 내려 줍니다 — 담당자 이름 · 연락처 · 금액은 없습니다. 가맹점 대신 접수할 때는 지금처럼 업무 카드에서 [가맹점 찾기].
+        function partnerShopsPanelHtml() {
+            const shops = partnerShopList();
+            if (!shops.length) return '';
+            const intakes = (loadJsonStore('gwPartnerShopIntakes.v1', []) || []);
+            const open = intakes.filter(x => PARTNER_OPEN_STATUSES.includes(x.status));
+            const openOf = (id) => open.filter(x => x.partnerId === id).length;
+            const statusChip = (st) => {
+                const d = partnerIntakeStatusDef(st);
+                return `<span class="px-1.5 py-0.5 rounded text-[11px] font-semibold ${d.chip || 'bg-gray-100 text-gray-700'}">${escapeHtml(d.name || st)}</span>`;
+            };
+            const rows = shops.slice().sort((a, b) => openOf(b.id) - openOf(a.id) || String(a.name).localeCompare(String(b.name), 'ko')).slice(0, 100);
+            const recent = open.slice().sort((a, b) => String(b.at).localeCompare(String(a.at))).slice(0, 20);
+            return `
+                <div class="bg-white rounded-lg border border-gray-200 overflow-hidden mt-4">
+                    <div class="bg-gray-50 border-b border-gray-200 px-4 py-2.5">
+                        <h3 class="text-sm font-bold text-gray-700"><i class="fas fa-sitemap mr-1 text-indigo-500"></i>소속 가맹점 현황 <span class="font-normal text-gray-400">· ${shops.length}곳 · 진행 중 접수 ${open.length}건</span></h3>
+                        <p class="text-[11px] text-gray-500 mt-0.5">우리 업체 소속으로 등록된 가맹점과 그 가맹점이 낸 접수의 진행 상태입니다 (보기 전용).</p>
+                    </div>
+                    ${recent.length ? `<div class="p-3 border-b border-gray-100 space-y-1.5">
+                        ${recent.map(x => `<div class="flex flex-wrap items-center gap-2 text-xs">
+                            ${statusChip(x.status)}<b class="text-gray-800">${escapeHtml(x.partnerName || '')}</b>
+                            <span class="text-gray-600 min-w-0 truncate">${escapeHtml(x.title || '')}</span>
+                            <span class="ml-auto text-gray-400">${escapeHtml(String(x.at || '').slice(0, 10))}</span></div>`).join('')}
+                    </div>` : ''}
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left border-collapse text-xs min-w-[520px]">
+                            <thead class="bg-gray-50"><tr class="text-gray-500 border-b border-gray-200">
+                                <th class="px-3 py-2 font-medium">상호</th><th class="px-3 py-2 font-medium">지역</th>
+                                <th class="px-3 py-2 font-medium text-center">거래상태</th><th class="px-3 py-2 font-medium text-center">진행 중 접수</th>
+                                <th class="px-3 py-2 font-medium text-center">설치일</th></tr></thead>
+                            <tbody>${rows.map(c => `<tr class="border-b border-gray-50 last:border-0">
+                                <td class="px-3 py-2 font-medium text-gray-800">${escapeHtml(c.name)}</td>
+                                <td class="px-3 py-2 text-gray-500">${escapeHtml(String(c.address || '').split(' ').slice(0, 2).join(' ') || '-')}</td>
+                                <td class="px-3 py-2 text-center text-gray-600">${escapeHtml(c.status || '-')}</td>
+                                <td class="px-3 py-2 text-center">${openOf(c.id) ? `<b class="text-indigo-700">${openOf(c.id)}건</b>` : '<span class="text-gray-300">-</span>'}</td>
+                                <td class="px-3 py-2 text-center text-gray-500">${escapeHtml(c.installDate || '-')}</td></tr>`).join('')}</tbody>
+                        </table>
+                    </div>
+                    ${shops.length > rows.length ? `<p class="px-3 py-2 text-[11px] text-gray-400">외 ${shops.length - rows.length}곳</p>` : ''}
+                </div>`;
         }
 
         // ---------- 요청하기 (업무 카탈로그) ----------

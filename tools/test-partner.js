@@ -117,6 +117,64 @@ const ok = (c, m) => { if (c) { pass++; console.log('  ✓', m); } else { fail++
         ok(n.kob.result === '' && n.vendor === '가나 상사' && n.secret === undefined, '새 인입: 사내 처리 칸은 비우고 업체 칸만');
     }
 
+    console.log('\n[업체 통합 2026-10-05] customers 표에서 업체 찾기 · 소속 가맹점');
+    {
+        // 가짜 Supabase — app_store 키와 customers 표
+        const mkIo = (storeObj, rows) => ({
+            calls: [],
+            storeValues: async (keys) => { const o = {}; keys.forEach(k => { if (storeObj[k] !== undefined) o[k] = storeObj[k]; }); return o; },
+            companies: async (ids) => rows.filter(r => ids.includes(r.id)),
+            children: async (id) => rows.filter(r => r.parentId === id)
+        });
+        const rows = [
+            { id: 'p17', name: '오케팅홀딩스', kind: 'partner', memo: '사내 메모', note: '비고', fee: { small: 1.1 } },
+            { id: 'c5', name: '역삼점', kind: 'partnerShop', parentId: 'p17', roadAddress: '서울 강남구 역삼로 1', contactName: '김점주', phone: '010-1', businessNo: '111', rentFee: 220000, status: '거래중' },
+            { id: 'c6', name: '선릉점', kind: 'partnerShop', parentId: 'p17', address: '서울 강남구 선릉로 2' },
+            { id: 'c7', name: '남의가게', kind: 'partnerShop', parentId: 'p99' },
+            { id: 'h1', name: '치킨본사', kind: 'hq' },
+            { id: 'c8', name: '본사가맹1', kind: 'franchise', parentId: 'h1' }
+        ];
+        const accts = [{ loginId: 'ptn00001', partnerId: 'p17', pwHash: 'h', pwSalt: 's' }, { loginId: 'ptn00002', partnerId: 'c5' },
+                       { loginId: 'ptn00003', partnerId: 'gone' }, { loginId: 'old1', partnerId: 'p50' }];
+        const st = { 'gwPartnerAccounts.v1': accts, 'gwPartners.v1': [{ id: 'p50', name: '예전업체', custType: 'partner' }, { id: 'p17', name: '예전이름' }] };
+
+        let r = await P.resolvePartner(mkIo(st, rows), 'PTN00001', { withShops: true });
+        ok(r && !r.missing && r.company.id === 'p17' && r.me.partnerName === '오케팅홀딩스', '표에 있는 업체를 찾는다 (예전 목록의 같은 id 보다 표가 먼저)');
+        ok(r.me.kind === 'partner' && r.me.shops.map(x => x.id).join(',') === 'c5,c6', '파트너사는 소속 가맹점(상위업체 = 자기)만 받는다');
+        r = await P.resolvePartner(mkIo(st, rows), 'ptn00001');
+        ok(r.me.shops.length === 0, '소속 가맹점은 withShops 일 때만 읽는다 (저장 · 파일 확인 때는 안 읽음)');
+        r = await P.resolvePartner(mkIo(st, rows), 'ptn00002', { withShops: true });
+        ok(r.me.kind === 'partnerShop' && r.me.shops.length === 0, '가맹점 아이디는 소속 가맹점을 받지 않는다');
+        r = await P.resolvePartner(mkIo(st, rows), 'ptn00003');
+        ok(r && r.missing, '업체가 없어진 아이디는 missing (로그인 · 자료 받기 막음)');
+        ok((await P.resolvePartner(mkIo(st, rows), 'nobody')) === null, '없는 아이디는 null');
+        r = await P.resolvePartner(mkIo(st, rows), 'old1');
+        ok(r && !r.missing && r.me.partnerName === '예전업체', '옮기기 전에는 예전 목록(gwPartners.v1)에서도 찾는다');
+        r = await P.resolvePartner(mkIo(Object.assign({}, st, { 'gwPartnersMigrated.v1': { at: 'x' } }), rows), 'old1');
+        ok(r && r.missing, '옮김 표시가 있으면 예전 목록은 보지 않는다 (지운 업체가 되살아나지 않게)');
+
+        const full = await P.resolvePartner(mkIo(st, rows), 'ptn00001', { withShops: true });
+        const store2 = { 'gwPartnerIntakes.v1': [{ id: 'PI-1', partnerId: 'p17', title: '내 것' }, { id: 'PI-2', partnerId: 'c5', title: '역삼 접수', status: 'working', content: '내용', byPhone: '010', docs: [1] },
+                                                 { id: 'PI-3', partnerId: 'c7', title: '남의 것' }] };
+        const v2 = P.partnerView(store2, full.me);
+        ok(v2['gwPartners.v1'].length === 1 && v2['gwPartners.v1'][0].id === 'p17' && v2['gwPartners.v1'][0].memo === undefined && v2['gwPartners.v1'][0].note === undefined,
+           '자기 업체는 표에서 · 사내 메모(memo · note)는 뺀다');
+        ok(v2['gwPartnerIntakes.v1'].map(x => x.id).join(',') === 'PI-1', '내 접수 목록에는 내 것만 (소속 가맹점 접수가 섞이지 않음)');
+        const shop = v2['gwPartnerShops.v1'].find(x => x.id === 'c5');
+        ok(v2['gwPartnerShops.v1'].length === 2 && shop.name === '역삼점' && shop.address === '서울 강남구 역삼로 1' && shop.status === '거래중', '소속 가맹점: 상호 · 주소 · 거래상태');
+        ok(!('contactName' in shop) && !('phone' in shop) && !('businessNo' in shop) && !('rentFee' in shop), '소속 가맹점: 담당자 · 연락처 · 사업자번호 · 금액은 내려가지 않는다');
+        const si = v2['gwPartnerShopIntakes.v1'];
+        ok(si.length === 1 && si[0].id === 'PI-2' && si[0].status === 'working' && si[0].content === undefined && si[0].byPhone === undefined && si[0].docs === undefined,
+           '소속 가맹점 접수: 그 가맹점 것만 · 진행 상태만 (내용 · 연락처 · 서류 없음)');
+        ok(!P.WRITE_KEYS.includes('gwPartnerShops.v1') && !P.WRITE_KEYS.includes('gwPartnerShopIntakes.v1'), '소속 가맹점 자료는 파트너가 저장할 수 없다');
+        const hq = await P.resolvePartner(mkIo({ 'gwPartnerAccounts.v1': [{ loginId: 'h', partnerId: 'h1' }] }, rows), 'h', { withShops: true });
+        ok(hq.me.shops.map(x => x.id).join(',') === 'c8', '본사는 소속 프랜차이즈 가맹점을 받는다');
+        const plain = P.partnerView(store2, { loginId: 'x', partnerId: 'c5', partnerName: '역삼점' });
+        ok(plain['gwPartnerShops.v1'].length === 0 && plain['gwPartnerShopIntakes.v1'].length === 0, '소속이 없으면 빈 목록');
+        ok(P.companyList([{ id: 'a' }], [{ id: 'a' }, { id: 'b' }], false).map(x => x.id).join(',') === 'a,b' && P.companyList([{ id: 'a' }], [{ id: 'b' }], true).length === 1,
+           'companyList: 옮기기 전엔 표 + 예전 목록(겹치는 id 는 표), 옮긴 뒤엔 표만');
+    }
+
     console.log(`\n=========== 통과 ${pass} · 실패 ${fail} ===========`);
     process.exit(fail ? 1 : 0);
 })().catch(e => { console.error(e); process.exit(1); });

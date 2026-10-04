@@ -79,6 +79,8 @@ function db(env) {
     };
     return {
         rows: async (table) => (await call('GET', `${table}?select=id,data&order=id.asc`)).map(r => Object.assign({ id: r.id }, r.data)),
+        // 조건으로 골라 읽기 — q 는 PostgREST 거르기 그대로 (예: 'id=in.("c1","p17")' · 'data->>parentId=eq.p17') · 2026-10-05 업체 통합
+        rowsWhere: async (table, q) => (await call('GET', `${table}?select=id,data&${q}`) || []).map(r => Object.assign({}, r.data, { id: r.id })),
         upsert: (table, id, data) => call('POST', table, [{ id, data }], { Prefer: 'resolution=merge-duplicates,return=minimal' }),
         storeValue: async (key) => { const r = await call('GET', `app_store?select=value&key=eq.${encodeURIComponent(key)}`); return r && r[0] ? r[0].value : null; },
         // 여러 키를 한 번에 — { key → 값 } (2026-09-28 파트너센터)
@@ -93,6 +95,15 @@ function db(env) {
         // 표의 한 줄 그대로 — { id, data, rev, updated_by, updated_at } 또는 null
         rowRaw: async (table, id) => { const r = await call('GET', `${table}?select=id,data,rev,updated_by,updated_at&id=eq.${encodeURIComponent(id)}`); return r && r[0] ? r[0] : null; },
         setStore: (key, value) => call('POST', 'app_store?on_conflict=key', [{ key, value, updated_at: new Date().toISOString() }], { Prefer: 'resolution=merge-duplicates,return=minimal' })
+    };
+}
+// ---------- 파트너센터가 업체를 찾는 통로 (2026-10-05 업체 통합) — _partner.js 의 resolvePartner 에 넘깁니다 ----------
+function partnerIo(store) {
+    const q = (v) => '"' + String(v).replace(/["\\]/g, '') + '"';
+    return {
+        storeValues: (keys) => store.storeValues(keys),
+        companies: (ids) => (ids && ids.length ? store.rowsWhere('customers', `id=in.(${encodeURIComponent(ids.map(q).join(','))})`) : []),
+        children: (id) => store.rowsWhere('customers', `data->>parentId=eq.${encodeURIComponent(String(id))}&limit=5000`)
     };
 }
 // ---------- Supabase Auth 관리자 API (GoTrue /auth/v1/admin) ----------
@@ -391,10 +402,9 @@ export async function onRequest(context) {
             const partnerWho = async (token) => {
                 const t = await pc.readToken(secret, token);
                 if (!t) return null;
-                const v = await store.storeValues(['gwPartnerAccounts.v1', 'gwPartners.v1']);
-                const f = pc.findAccount(v['gwPartnerAccounts.v1'], v['gwPartners.v1'], t.loginId);
-                if (!f || f.acct.active === false || f.acct.partnerId !== t.partnerId) return null;
-                return { loginId: f.acct.loginId, partnerId: f.acct.partnerId, partnerName: f.partnerName };
+                const r = await pc.resolvePartner(partnerIo(store), t.loginId);
+                if (!r || r.missing || r.acct.active === false || r.acct.partnerId !== t.partnerId) return null;
+                return r.me;
             };
             if (path === '/api/files/session' && method === 'POST') {
                 const token = str(request.headers.get('Authorization')).replace(/^Bearer\s+/i, '');
@@ -427,10 +437,9 @@ export async function onRequest(context) {
             // 파트너는 그사이 중지 · 삭제되었는지 한 번 더 봅니다
             let pview = null;
             if (who.k === 'partner') {
-                const v = await store.storeValues(pc.ALL_KEYS);
-                const f = pc.findAccount(v['gwPartnerAccounts.v1'], v['gwPartners.v1'], who.id);
-                if (!f || f.acct.active === false || f.acct.partnerId !== who.p) return json(401, { ok: false, error: '다시 로그인해 주세요.' });
-                pview = pc.partnerView(v, { loginId: f.acct.loginId, partnerId: f.acct.partnerId, partnerName: f.partnerName });
+                const r = await pc.resolvePartner(partnerIo(store), who.id);
+                if (!r || r.missing || r.acct.active === false || r.acct.partnerId !== who.p) return json(401, { ok: false, error: '다시 로그인해 주세요.' });
+                pview = pc.partnerView(await store.storeValues(pc.ALL_KEYS), r.me);
             }
             if (path === '/api/files/upload' && method === 'POST') {
                 const name = str(url.searchParams.get('name')).slice(0, 200) || 'file';
@@ -471,24 +480,23 @@ export async function onRequest(context) {
         if (path.startsWith('/api/partner/')) {
             const secret = str(env.SUPABASE_SERVICE_ROLE_KEY);
             // 토큰 → 지금 계정 (중지 · 삭제되었으면 null)
-            const who = async () => {
+            const who = async (withShops) => {
                 const t = await pc.readToken(secret, str(request.headers.get('Authorization')).replace(/^Bearer\s+/i, ''));
                 if (!t) return null;
-                const v = await store.storeValues(['gwPartnerAccounts.v1', 'gwPartners.v1']);
-                const f = pc.findAccount(v['gwPartnerAccounts.v1'], v['gwPartners.v1'], t.loginId);
-                if (!f || f.acct.active === false || f.acct.partnerId !== t.partnerId) return null;
-                return { loginId: f.acct.loginId, partnerId: f.acct.partnerId, partnerName: f.partnerName };
+                const r = await pc.resolvePartner(partnerIo(store), t.loginId, { withShops });
+                if (!r || r.missing || r.acct.active === false || r.acct.partnerId !== t.partnerId) return null;
+                return r.me;
             };
             if (path === '/api/partner/login' && method === 'POST') {
                 const input = await body();
                 const loginId = str(input.loginId).toLowerCase();
                 const pw = input.pw === undefined || input.pw === null ? '' : String(input.pw);
-                const v = await store.storeValues(['gwPartnerAccounts.v1', 'gwPartners.v1']);
-                const accounts = Array.isArray(v['gwPartnerAccounts.v1']) ? v['gwPartnerAccounts.v1'] : [];
-                const f = loginId && pw ? pc.findAccount(accounts, v['gwPartners.v1'], loginId) : null;
+                const f = loginId && pw ? await pc.resolvePartner(partnerIo(store), loginId) : null;
                 const chk = f ? await pc.checkPassword(f.acct, pw) : { ok: false };
                 if (!chk.ok) return json(200, { ok: false, error: '아이디 또는 비밀번호가 맞지 않습니다.' });
                 if (f.acct.active === false) return json(200, { ok: false, error: '사용이 중지된 아이디입니다. 킹오더브라더스 담당자에게 문의해 주세요.' });
+                // 업체 통합 (2026-10-05) — 업체 관리에서 업체가 지워졌으면 아이디도 쓸 수 없습니다
+                if (f.missing) return json(200, { ok: false, error: '이 아이디의 업체가 등록되어 있지 않습니다. 킹오더브라더스 담당자에게 문의해 주세요.' });
                 if (chk.needUpgrade) {
                     // 예전 평문 비밀번호 — 이번에 암호화로 바꿔 둡니다 (그사이 바뀐 목록 위에 그 계정만 고칩니다)
                     try {
@@ -499,13 +507,15 @@ export async function onRequest(context) {
                     } catch (e) { console.error('[partner] 비밀번호 암호화 저장 실패', e && e.message); }
                 }
                 const token = await pc.makeToken(secret, f.acct.loginId, f.acct.partnerId);
-                return json(200, { ok: true, token, session: { loginId: f.acct.loginId, partnerId: f.acct.partnerId, partnerName: f.partnerName } });
+                return json(200, { ok: true, token, session: { loginId: f.acct.loginId, partnerId: f.acct.partnerId, partnerName: f.me.partnerName } });
             }
-            const me = await who();
+            const isBoot = path === '/api/partner/boot' && method === 'GET';
+            const me = await who(isBoot);          // 소속 가맹점은 자료 받기(boot) 때만 읽습니다
             if (!me) return json(401, { ok: false, error: '다시 로그인해 주세요.' });
-            if (path === '/api/partner/boot' && method === 'GET') {
+            const session = { loginId: me.loginId, partnerId: me.partnerId, partnerName: me.partnerName };
+            if (isBoot) {
                 const v = await store.storeValues(pc.ALL_KEYS);
-                return json(200, { ok: true, session: me, store: pc.partnerView(v, me) });
+                return json(200, { ok: true, session, store: pc.partnerView(v, me) });
             }
             if (path === '/api/partner/save' && method === 'POST') {
                 const input = await body();

@@ -13,6 +13,13 @@
  * 비밀번호: PBKDF2-SHA256 (소금 16바이트 · 10,000회). 화면(그룹웨어 › 파트너 ID 관리)도 같은 방식으로 만들어 저장합니다.
  *   예전 평문(pw)은 첫 로그인 때 서버가 암호화로 바꿔 둡니다.
  * 토큰: 서명한 { l: 아이디, p: 파트너사 id, exp } — 서명 열쇠는 service_role 키에서 뽑아 따로 설정할 것이 없습니다.
+ *
+ * 업체 통합 (2026-10-05): 업체(가맹점 · 파트너사 · 본사 · 유통)는 이제 **customers 표**에 있습니다.
+ *   · 아이디의 업체는 customers 표에서 찾습니다. 예전 목록(app_store 'gwPartners.v1')은 직원 화면이 옮기기를 마치기 전
+ *     (옮김 표시 'gwPartnersMigrated.v1' 이 없을 때)에만 함께 봅니다 — 옮긴 뒤에 지운 업체가 예전 목록으로 되살아나지 않게.
+ *   · 업체가 없어진 아이디는 로그인 · 자료 받기가 막힙니다.
+ *   · 본사 · 파트너사 아이디는 소속 가맹점(customers 의 parentId 가 그 업체인 곳) 목록과 그 가맹점들의 접수 진행 상태를
+ *     **읽기 전용**으로 받습니다 — 서버가 골라서 내려 주고, 담당자 이름 · 연락처 · 금액은 내려 주지 않습니다.
  */
 
 export const PBKDF2_ITER = 10000;
@@ -76,6 +83,34 @@ export async function readToken(secret, token, nowMs) {
 
 // ---------- 계정 ----------
 const partnerName = (p) => (p ? s(String(p.name || '').replace(/\n/g, ' ')) : '');
+// 소속 가맹점을 볼 수 있는 업체 유형
+export const PARENT_KINDS = ['hq', 'partner'];
+export const COMPANY_KEYS = ['gwPartnerAccounts.v1', 'gwPartners.v1', 'gwPartnersMigrated.v1'];
+const kindOf = (c) => s((c && (c.kind || c.custType)) || '');
+// 아이디의 업체를 찾을 목록 — customers 표의 줄 + (옮기기 전이면) 예전 목록에서 표에 없는 것
+export function companyList(customerRows, legacyPartners, migrated) {
+    const rows = arr(customerRows).filter(c => c && c.id);
+    if (migrated) return rows;
+    const have = new Set(rows.map(c => String(c.id)));
+    return rows.concat(arr(legacyPartners).filter(p => p && p.id && !have.has(String(p.id))));
+}
+// 로그인 · 토큰 확인 공용 — io: { storeValues(keys), companies(ids), children(id) } (Supabase 읽기는 [[route]].js 가 넘겨 줍니다)
+// 돌려주는 것: null(아이디 없음) 또는 { acct, accounts, company, missing, me }. me 에는 소속 가맹점(shops)까지 담습니다(withShops 일 때).
+export async function resolvePartner(io, loginId, opts) {
+    const o = opts || {};
+    const v = await io.storeValues(COMPANY_KEYS);
+    const accounts = arr(v['gwPartnerAccounts.v1']);
+    const acct = accounts.find(x => s(x.loginId).toLowerCase() === s(loginId).toLowerCase());
+    if (!acct) return null;
+    const rows = acct.partnerId ? await io.companies([acct.partnerId]) : [];
+    const list = companyList(rows, v['gwPartners.v1'], !!v['gwPartnersMigrated.v1']);
+    const f = findAccount(accounts, list, acct.loginId);
+    const company = f && f.partner ? f.partner : null;
+    const me = { loginId: acct.loginId, partnerId: acct.partnerId, partnerName: company ? partnerName(company) : s(acct.partnerName),
+                 kind: kindOf(company), company, shops: [] };
+    if (company && o.withShops && PARENT_KINDS.includes(me.kind)) me.shops = arr(await io.children(company.id));
+    return { acct, accounts, company, missing: !company, me };
+}
 // 토큰의 아이디로 지금 계정을 다시 찾습니다 — 중지 · 삭제 · 파트너사 변경을 매번 반영합니다
 export function findAccount(accounts, partners, loginId) {
     const a = (Array.isArray(accounts) ? accounts : []).find(x => s(x.loginId).toLowerCase() === s(loginId).toLowerCase());
@@ -89,6 +124,23 @@ export function publicAccount(a) {
     delete o.pw; delete o.pwHash; delete o.pwSalt; delete o.pwIter;
     return o;
 }
+// 자기 업체 한 줄 — 사내 메모(memo · note)는 뺍니다
+export function publicCompany(c) {
+    const o = Object.assign({}, c);
+    delete o.memo; delete o.note; delete o.fromLegacy;
+    return o;
+}
+// 소속 가맹점 한 곳 — 상호 · 유형 · 주소 · 거래상태 · 계약일 · 설치일만.
+// 담당자 이름 · 연락처 · 사업자번호 · 금액은 내려 주지 않습니다 (제3자 제공 동의 없이 상위업체에 넘기지 않음 · 제안서 v2 5절)
+export function shopSummary(c) {
+    return { id: s(c.id), name: partnerName(c), kind: kindOf(c), address: s(c.roadAddress || c.address), status: s(c.status),
+             contractDate: s(c.contractDate), installDate: s(c.installDate) };
+}
+// 소속 가맹점의 접수 한 건 — 진행 상태를 보는 데 필요한 것만 (내용 · 첨부 · 담당자 연락처는 빼고)
+export function shopIntakeSummary(x) {
+    return { id: s(x.id), partnerId: s(x.partnerId), partnerName: s(x.partnerName), dept: s(x.dept), type: s(x.type), title: s(x.title),
+             status: s(x.status), at: s(x.at), wantDate: s(x.wantDate) };
+}
 
 // ---------- 파트너센터가 받는 자료 ----------
 // 누구에게 보여도 되는 설정값 (양식 · 서류 목록 · 조직 이름 등)
@@ -97,6 +149,8 @@ export const SHARED_KEYS = ['gwHolidays.v1', 'gwPartnerTypeDocs.v1', 'gwPartnerI
 // 파트너사 몫만 거르는 자료
 export const OWN_KEYS = ['gwPartners.v1', 'gwPartnerAccounts.v1', 'gwPartnerDeptPerm.v1', 'gwPartnerIntakes.v1', 'gwDevRequests.v1',
                          'gwInboundRecords.v1', 'gwArchivePosts.v1', 'gwDevNotiQueue.v1'];
+// 서버가 만들어 내려 주는 읽기 전용 자료 (app_store 에 없는 키) — 본사 · 파트너사의 소속 가맹점 (2026-10-05)
+export const SHOP_KEYS = ['gwPartnerShops.v1', 'gwPartnerShopIntakes.v1'];
 export const ALL_KEYS = SHARED_KEYS.concat(OWN_KEYS);
 // 파트너가 저장할 수 있는 자료
 export const WRITE_KEYS = ['gwPartnerIntakes.v1', 'gwDevRequests.v1', 'gwDevNotiQueue.v1', 'gwInboundRecords.v1'];
@@ -118,7 +172,8 @@ export function owns(key, item, me) {
 export function partnerView(store, me) {
     const out = {};
     SHARED_KEYS.forEach(k => { if (store[k] !== undefined && store[k] !== null) out[k] = store[k]; });
-    out['gwPartners.v1'] = arr(store['gwPartners.v1']).filter(p => p && p.id === me.partnerId);
+    // 자기 업체 — customers 표에서 찾은 것(me.company)이 있으면 그것, 없으면 예전 목록에서
+    out['gwPartners.v1'] = me.company ? [publicCompany(me.company)] : arr(store['gwPartners.v1']).filter(p => p && p.id === me.partnerId).map(publicCompany);
     out['gwPartnerAccounts.v1'] = arr(store['gwPartnerAccounts.v1']).filter(a => a && s(a.loginId).toLowerCase() === s(me.loginId).toLowerCase()).map(publicAccount);
     const perm = store['gwPartnerDeptPerm.v1'] && typeof store['gwPartnerDeptPerm.v1'] === 'object' ? store['gwPartnerDeptPerm.v1'] : {};
     out['gwPartnerDeptPerm.v1'] = perm[me.loginId] ? { [me.loginId]: perm[me.loginId] } : {};
@@ -128,6 +183,12 @@ export function partnerView(store, me) {
     out['gwInboundRecords.v1'] = { seq: Number(ib && ib.seq) || 0, records: listOf('gwInboundRecords.v1', ib).filter(x => owns('gwInboundRecords.v1', x, me)) };
     out['gwArchivePosts.v1'] = arr(store['gwArchivePosts.v1']).filter(x => x && x.open);
     out['gwDevNotiQueue.v1'] = [];     // 사내 알림 대기열 — 파트너는 넣기만 합니다
+    // 소속 가맹점 (본사 · 파트너사만) — 목록과 그 가맹점들이 낸 접수의 진행 상태. 읽기 전용이라 WRITE_KEYS 에 없습니다
+    const shops = arr(me.shops).filter(c => c && c.id && String(c.id) !== String(me.partnerId));
+    const shopIds = new Set(shops.map(c => String(c.id)));
+    out['gwPartnerShops.v1'] = shops.map(shopSummary);
+    out['gwPartnerShopIntakes.v1'] = shopIds.size
+        ? arr(store['gwPartnerIntakes.v1']).filter(x => x && shopIds.has(String(x.partnerId))).map(shopIntakeSummary) : [];
     return out;
 }
 
