@@ -2244,6 +2244,8 @@
                     <section id="sec-partner-ids" class="admin-tab-panel hidden"></section>
                     <!-- 구글 캘린더 연동 (2026-09-23) — renderGcalAdmin() 이 그립니다 -->
                     <section id="sec-gcal" class="admin-tab-panel hidden"></section>
+                    <!-- 파트너센터 권한 (2026-10-05) — renderPartnerAdminPerm() 이 그립니다 -->
+                    <section id="sec-partner-perm" class="admin-tab-panel hidden"></section>
                     <section id="sec-card-perm" class="admin-tab-panel hidden">
                         <div class="mb-4 flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-3 sm:space-y-0">
                             <div>
@@ -7737,7 +7739,8 @@
                     <!-- 소속 가맹점 가입 승인 (2026-10-05) — 본사 · 파트너사만. 전체 스위치(업체 관리 › 가입 승인)가 켜져 있어야 의미가 있습니다 -->
                     <div id="partner-approve-box" class="hidden sm:col-span-2">
                         <label class="flex items-start gap-2 text-sm text-gray-700"><input type="checkbox" id="partner-allow-approve" class="mt-0.5 w-4 h-4 rounded border-gray-300 text-cyan-600" />
-                            <span>소속 가맹점 가입을 <b>이 업체가 승인</b> <span class="block text-[11px] text-gray-400">업체 관리 › 가입 승인의 전체 스위치가 켜져 있을 때, 이 업체의 <b>업체관리자</b> 아이디가 파트너센터에서 승인합니다.</span></span></label>
+                            <span>소속 가맹점 가입을 <b>이 업체가 승인</b> <span class="block text-[11px] text-gray-400">업체 관리 › 가입 승인의 전체 스위치가 켜져 있을 때, 이 업체의 <b>업체관리자</b> 아이디가 파트너센터에서 승인합니다.</span>
+                                <span id="partner-allow-approve-note" class="hidden block text-[11px] text-rose-600"><i class="fas fa-lock mr-1"></i>그룹웨어 관리자만 바꿀 수 있습니다.</span></span></label>
                     </div>
                     <!-- 거래상태 — 가맹점 · 파트너사가 같은 목록을 씁니다 (2026-10-05 업체 통합) -->
                     <div>
@@ -10612,7 +10615,7 @@ const QUOTE_TEMPLATES = [
                     { id: 'users', name: '사용자 관리' },
                     { id: 'management-org', name: '조직도 관리 (본부·팀 포함)' },
                     { id: 'permissions', name: '권한 관리' },
-                    { id: 'partner-ids', name: '업체 관리 › 파트너센터 아이디' },
+                    { id: 'partner-ids', name: '업체 관리 보기 (아이디 · 가입 승인은 파트너센터 권한에서)' },
                     { id: 'card-perm', name: '법인카드 조회 권한' },
                     // 화면이 아니라 '권한' 하나입니다 — 켜진 그룹은 본부 · 작성자 · 처리 상태와 관계없이
                     // 모든 자료(티켓 · 일정 · 거래처 · 파트너 · 접수 …)를 수정 · 삭제합니다. 관리자는 늘 켜져 있습니다 (2026-09-28)
@@ -38429,7 +38432,7 @@ const QUOTE_TEMPLATES = [
                         <div><label class="block text-xs font-medium text-gray-600 mb-1">거래상태</label>
                             <select onchange="setCompanyFilter('status', this.value)" class="${selCls}"><option value="">전체</option>${PARTNER_STATUS.map(o => `<option value="${o.id}"${f.status === o.id ? ' selected' : ''}>${escapeHtml(o.id)}</option>`).join('')}</select></div>
                         <button type="button" onclick="resetCompanyFilter()" class="px-3 py-2 text-sm rounded bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors">초기화</button>
-                        <div class="ml-auto inline-flex rounded border border-gray-300 overflow-hidden">${viewBtn('list', 'fa-list', '목록')}${viewBtn('tree', 'fa-sitemap', '소속 트리')}${canManagePartnerIds() ? viewBtn('ids', 'fa-key', '아이디') + viewBtn('signups', 'fa-user-check', '가입 승인' + (companySignupPending().length ? ` <span class="ml-0.5 px-1.5 rounded-full text-[10px] bg-red-500 text-white">${companySignupPending().length}</span>` : '')) : ''}</div>
+                        <div class="ml-auto inline-flex rounded border border-gray-300 overflow-hidden">${viewBtn('list', 'fa-list', '목록')}${viewBtn('tree', 'fa-sitemap', '소속 트리')}${canManagePartnerIds() ? viewBtn('ids', 'fa-key', '아이디') : ''}${canApproveSignups() ? viewBtn('signups', 'fa-user-check', '가입 승인' + (companySignupPending().length ? ` <span class="ml-0.5 px-1.5 rounded-full text-[10px] bg-red-500 text-white">${companySignupPending().length}</span>` : '')) : ''}</div>
                     </div>
                     ${orphan ? `<p class="px-4 pb-3 text-xs text-rose-700"><i class="fas fa-link-slash mr-1"></i>상위업체가 연결되지 않은 가맹점이 <b>${orphan}곳</b> 있습니다 — 소속 트리 맨 아래 '상위업체 없음' 에서 확인할 수 있습니다.</p>` : ''}
                 </div>
@@ -38448,13 +38451,71 @@ const QUOTE_TEMPLATES = [
                 renderPartnerIdAdmin();
                 return;
             }
-            if (companyFilter.view === 'signups' && canManagePartnerIds()) { box.innerHTML = companySignupsHtml(); return; }
+            if (companyFilter.view === 'signups' && canApproveSignups()) { box.innerHTML = companySignupsHtml(); return; }
             if (companyFilter.view === 'ids' || companyFilter.view === 'signups') companyFilter.view = 'list';
             const list = companyFiltered();
             box.innerHTML = companyFilter.view === 'tree' ? companyTreeHtml(list) : companyListHtml(list);
         }
         // 파트너센터 아이디를 다룰 수 있는지 — 예전 '파트너 ID 관리' 권한을 그대로 씁니다
-        function canManagePartnerIds() { try { return canSeePage('partner-ids'); } catch (e) { return false; } }
+        // ---------- 파트너센터 권한 (2026-10-05) ----------
+        // 아이디 관리 · 가입 승인은 그룹웨어 관리자와 '사용자/권한관리 › 파트너센터 권한' 에서 고른 직원만. 서버도 같은 목록으로 확인합니다.
+        // 저장: app_store 'gwPartnerAdminPerm.v1' = { users: { 이메일: { ids: true, signups: true } }, updatedBy, updatedByEmail, updatedAt }
+        const PARTNER_ADMIN_PERM_KEY = 'gwPartnerAdminPerm.v1';
+        function partnerAdminPerm() { const v = loadJsonStore(PARTNER_ADMIN_PERM_KEY, null); return v && typeof v === 'object' ? v : { users: {} }; }
+        function myPartnerAdminPerm() {
+            try { const e = String(currentUserEmail || '').toLowerCase(); return (partnerAdminPerm().users || {})[e] || {}; } catch (e) { return {}; }
+        }
+        function canManagePartnerIds() { return isGroupwareAdmin() || myPartnerAdminPerm().ids === true; }
+        function canApproveSignups() { return isGroupwareAdmin() || myPartnerAdminPerm().signups === true; }
+        function partnerPermDenied(what) { alert(`${what} 권한이 없습니다.\n그룹웨어 관리자에게 '사용자/권한관리 › 파트너센터 권한' 에서 권한을 받아 주세요.`); }
+        let partnerAdminPermDraft = null;
+        function renderPartnerAdminPerm() {
+            const host = document.getElementById('sec-partner-perm');
+            if (!host) return;
+            const admin = isGroupwareAdmin();
+            if (!partnerAdminPermDraft) partnerAdminPermDraft = JSON.parse(JSON.stringify(partnerAdminPerm().users || {}));
+            const d = partnerAdminPermDraft;
+            const isAdm = (u) => u.groupId === 'admin' || u.dept === 'admin' || u.level === 'admin' || u.isAdmin === true;
+            const staff = (localUsers || []).filter(u => u && u.email && u.dept !== 'vendor')
+                .sort((a, b) => (isAdm(b) - isAdm(a)) || String(a.name || '').localeCompare(String(b.name || ''), 'ko'));
+            const saved = partnerAdminPerm();
+            const cell = (u, key) => {
+                const e = String(u.email).toLowerCase();
+                if (isAdm(u)) return '<span class="text-xs text-gray-400" title="그룹웨어 관리자는 늘 할 수 있습니다"><i class="fas fa-check text-green-600 mr-1"></i>관리자</span>';
+                return `<input type="checkbox" ${(d[e] || {})[key] ? 'checked' : ''} ${admin ? '' : 'disabled'} onchange="partnerAdminPermDraft['${escapeHtml(e)}'] = Object.assign({}, partnerAdminPermDraft['${escapeHtml(e)}'] || {}, { ${key}: this.checked })" class="w-4 h-4 rounded border-gray-300 text-indigo-600" />`;
+            };
+            host.innerHTML = `
+                <div class="mb-4">
+                    <h3 class="text-lg font-bold text-gray-800">파트너센터 권한</h3>
+                    <p class="text-gray-500 text-sm">파트너센터 <b>아이디 관리</b>(만들기 · 일괄 만들기 · 임시 비밀번호 · 잠금 해제 · 중지 · 삭제 · 권한)와 <b>회원가입 승인</b>을 할 수 있는 직원을 고릅니다.
+                        그룹웨어 관리자는 늘 할 수 있고, 이 표를 바꾸는 것도 관리자만 합니다. 서버도 이 표로 다시 확인합니다.</p>
+                    ${admin ? '' : '<p class="text-xs text-rose-600 mt-1"><i class="fas fa-lock mr-1"></i>그룹웨어 관리자만 바꿀 수 있습니다 — 보기만 됩니다.</p>'}
+                </div>
+                <div class="bg-white border border-gray-200 rounded-lg overflow-x-auto">
+                    <table class="w-full text-sm"><thead class="bg-gray-50 border-b border-gray-200 text-xs text-gray-600"><tr>
+                        <th class="p-3 text-left">직원</th><th class="p-3 text-left">소속 · 직급</th><th class="p-3 text-left">이메일</th>
+                        <th class="p-3 text-center">아이디 관리</th><th class="p-3 text-center">가입 승인</th></tr></thead>
+                    <tbody>${staff.map(u => `<tr class="border-b border-gray-100">
+                        <td class="p-3 font-medium text-gray-800">${escapeHtml(u.name || '')}</td>
+                        <td class="p-3 text-xs text-gray-500">${escapeHtml(deptNames[u.dept] || u.dept || '')} · ${escapeHtml(u.rank || levelNames[u.level] || '')}</td>
+                        <td class="p-3 text-xs text-gray-500">${escapeHtml(u.email)}</td>
+                        <td class="p-3 text-center">${cell(u, 'ids')}</td><td class="p-3 text-center">${cell(u, 'signups')}</td></tr>`).join('')}</tbody></table>
+                </div>
+                <div class="mt-3 flex flex-wrap items-center gap-2">
+                    ${admin ? `<button type="button" onclick="savePartnerAdminPerm()" class="px-4 py-2 text-sm rounded bg-indigo-600 text-white hover:bg-indigo-700"><i class="fas fa-floppy-disk mr-1"></i>저장</button>
+                    <button type="button" onclick="partnerAdminPermDraft = null; renderPartnerAdminPerm()" class="px-4 py-2 text-sm rounded bg-gray-200 text-gray-700 hover:bg-gray-300">되돌리기</button>` : ''}
+                    ${saved.updatedBy ? `<span class="text-xs text-gray-400">마지막 변경 ${escapeHtml(saved.updatedBy)} · ${escapeHtml(new Date(saved.updatedAt).toLocaleString('ko-KR'))}</span>` : ''}
+                </div>`;
+        }
+        function savePartnerAdminPerm() {
+            if (!isGroupwareAdmin()) { alert('그룹웨어 관리자만 바꿀 수 있습니다.'); return; }
+            const users = {};
+            Object.entries(partnerAdminPermDraft || {}).forEach(([e, v]) => { if (v && (v.ids || v.signups)) users[e] = { ids: !!v.ids, signups: !!v.signups }; });
+            saveJsonStore(PARTNER_ADMIN_PERM_KEY, { users, updatedBy: currentUserName || '', updatedByEmail: currentUserEmail || '', updatedAt: new Date().toISOString() });
+            partnerAdminPermDraft = null;
+            showAppToast('파트너센터 권한을 저장했습니다.', 'green');
+            renderPartnerAdminPerm();
+        }
 
         // ---------- 업체 창의 '파트너센터 아이디' 칸 (2026-10-05) ----------
         // 그 업체에 붙은 아이디를 보여 주고, 만들기 · 수정(비밀번호 · 권한) · 사용/중지 · 삭제를 여기서 합니다.
@@ -38492,8 +38553,13 @@ const QUOTE_TEMPLATES = [
         function companySignupList() { return (loadJsonStore('gwPartnerSignups.v1', []) || []).filter(x => x && x.id); }
         function companySignupPending() { try { return companySignupList().filter(x => x.status === 'pending'); } catch (e) { return []; } }
         function companySignupPolicy() { return loadJsonStore('gwPartnerSignupPolicy.v1', {}) || {}; }
+        // 상위업체 승인을 켜고 끄는 것은 그룹웨어 관리자만 (2026-10-05). 서버도 켠 사람이 관리자인지 다시 봅니다(updatedByEmail · allowShopApprovalBy).
+        function isGroupwareAdmin() {
+            try { return currentUserRole === 'admin' || currentUserGroupId === 'admin' || currentUserIsAdmin === true; } catch (e) { return false; }
+        }
         function setCompanySignupPolicy(on) {
-            saveJsonStore('gwPartnerSignupPolicy.v1', Object.assign({}, companySignupPolicy(), { parentApprove: !!on, updatedAt: new Date().toISOString(), updatedBy: currentUserName || '' }));
+            if (!isGroupwareAdmin()) { alert('이 설정은 그룹웨어 관리자만 바꿀 수 있습니다.'); drawCompanyRows(); return; }
+            saveJsonStore('gwPartnerSignupPolicy.v1', Object.assign({}, companySignupPolicy(), { parentApprove: !!on, updatedAt: new Date().toISOString(), updatedBy: currentUserName || '', updatedByEmail: currentUserEmail || '' }));
             showAppToast(on ? '본사 · 파트너사의 소속 가맹점 가입 승인을 켰습니다.' : '가입 승인은 이제 관리자만 합니다.', 'blue');
             drawCompanyRows();
         }
@@ -38523,7 +38589,13 @@ const QUOTE_TEMPLATES = [
                         ${x.parentId ? row('소속', escapeHtml(x.parentName || (parent ? companyNameOf(parent) : x.parentId)) + (parent ? '' : ' <span class="text-rose-600">(지금 목록에 없음)</span>')) : ''}
                         ${row('동의', '개인정보 수집 · 이용' + (x.parentId ? (x.consents && x.consents.parentShare ? ' · <b>소속 업체 제공 동의</b>' : ' · 소속 업체 제공 <span class="text-gray-400">동의 안 함</span>') : ''))}
                         ${x.status === 'rejected' ? row('반려 사유', escapeHtml(x.reason || '')) : ''}
-                        ${x.status !== 'pending' ? row('처리', escapeHtml([x.decidedBy, x.decidedAt ? new Date(x.decidedAt).toLocaleString('ko-KR') : ''].filter(Boolean).join(' · ')) + (x.companyId ? ` · 업체 <button type="button" onclick="openCompanyModal('${escapeHtml(x.companyId)}')" class="underline text-cyan-700">${escapeHtml(x.companyId)}</button>` : '')) : ''}
+                        ${x.status !== 'pending' ? row('처리', escapeHtml([x.decidedBy, x.decidedAt ? new Date(x.decidedAt).toLocaleString('ko-KR') : ''].filter(Boolean).join(' · '))) : ''}
+                    </div>
+                    ${x.status === 'approved' && x.companyId ? `<div class="mt-3 pt-3 border-t border-gray-100 flex flex-wrap items-center gap-2 text-xs">
+                        ${customers.some(c => c.id === x.companyId) ? '<span class="text-green-700"><i class="fas fa-circle-check mr-1"></i>업체 관리에 등록됨</span>' : '<span class="text-amber-700">업체 목록을 받아 오는 중입니다 — 잠시 뒤 다시 보세요</span>'}
+                        <button type="button" onclick="showCompanyInList('${escapeHtml(x.companyId)}')" class="ml-auto px-2.5 py-1 rounded border border-cyan-300 bg-white text-cyan-800 hover:bg-cyan-50"><i class="fas fa-list mr-1"></i>업체 관리에서 보기</button>
+                        <button type="button" onclick="openCompanyModal('${escapeHtml(x.companyId)}')" class="px-2.5 py-1 rounded border border-gray-300 bg-white text-gray-700 hover:bg-gray-50">업체 정보 열기</button></div>` : ''}
+                    <div class="hidden">
                     </div>
                     ${x.status === 'pending' ? `
                     <div class="mt-3 pt-3 border-t border-gray-100 flex flex-wrap items-center gap-2">
@@ -38541,16 +38613,24 @@ const QUOTE_TEMPLATES = [
             };
             return `<div class="space-y-3">
                 <div class="bg-white border border-gray-200 rounded-lg p-4">
-                    <label class="flex items-start gap-2 text-sm text-gray-800"><input type="checkbox" ${pol.parentApprove ? 'checked' : ''} onchange="setCompanySignupPolicy(this.checked)" class="mt-0.5 w-4 h-4 rounded border-gray-300 text-cyan-600" />
+                    <label class="flex items-start gap-2 text-sm text-gray-800"><input type="checkbox" ${pol.parentApprove ? 'checked' : ''} ${isGroupwareAdmin() ? '' : 'disabled'} onchange="setCompanySignupPolicy(this.checked)" class="mt-0.5 w-4 h-4 rounded border-gray-300 text-cyan-600 disabled:opacity-50" />
                         <span><b>본사 · 파트너사도 소속 가맹점 가입을 승인할 수 있게</b> <span class="text-xs text-gray-500">(전체 스위치 · 기본 꺼짐)</span>
-                        <span class="block text-xs text-gray-500 mt-0.5">켜면 업체 창에서 <b>'소속 가맹점 가입을 이 업체가 승인'</b> 을 켠 본사 · 파트너사의 <b>업체관리자</b> 아이디가 파트너센터 홈에서 자기 소속 가맹점 신청을 승인 · 반려합니다. 그룹웨어 관리자는 늘 승인할 수 있습니다.</span></span></label>
+                        <span class="block text-xs text-gray-500 mt-0.5">켜면 업체 창에서 <b>'소속 가맹점 가입을 이 업체가 승인'</b> 을 켠 본사 · 파트너사의 <b>업체관리자</b> 아이디가 파트너센터 홈에서 자기 소속 가맹점 신청을 승인 · 반려합니다. 그룹웨어 관리자는 늘 승인할 수 있습니다.</span>
+                        <span class="block text-[11px] mt-0.5 ${isGroupwareAdmin() ? 'text-gray-400' : 'text-rose-600'}"><i class="fas fa-lock mr-1"></i>이 스위치와 업체별 체크는 <b>그룹웨어 관리자만</b> 바꿀 수 있습니다.${pol.updatedBy ? ` · 마지막 변경 ${escapeHtml(pol.updatedBy)}` : ''}</span></span></label>
                 </div>
                 ${server ? '' : '<p class="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded px-3 py-2">로컬 저장소 모드입니다 — 승인 · 반려는 서버가 있는 곳(dev 주소)에서만 됩니다.</p>'}
                 <div class="flex gap-2">${tab('pending', '승인대기', pend.length)}${tab('done', '처리됨', done.length)}</div>
                 ${list.length ? list.map(card).join('') : `<div class="text-sm text-gray-400 text-center py-12 bg-gray-50 rounded-lg border border-dashed border-gray-200">${companySignupTab === 'pending' ? '승인을 기다리는 가입 신청이 없습니다.' : '처리한 가입 신청이 없습니다.'}<br><span class="text-xs">업체는 파트너센터 로그인 화면의 <b>[회원가입]</b> 으로 신청합니다.</span></div>`}
             </div>`;
         }
+        // 가입 승인으로 생긴 업체를 업체 관리 [목록] 에서 찾아 보여 줍니다
+        function showCompanyInList(id) {
+            const c = customers.find(x => x.id === id);
+            companyFilter = { q: c ? companyNameOf(c) : '', kind: '', status: '', view: 'list', limit: COMPANY_PAGE };
+            renderCompanies();
+        }
         async function decideCompanySignup(id, decision) {
+            if (!canApproveSignups()) { partnerPermDenied('가입 승인'); return; }   // 2026-10-05 파트너센터 권한
             const x = companySignupList().find(s => s.id === id);
             if (!x) return;
             const body = { id, decision };
@@ -38566,13 +38646,15 @@ const QUOTE_TEMPLATES = [
             try { await kobAuth.call('/api/partner-admin/signup-decide', body); }
             catch (e) { alert('처리하지 못했습니다.\n' + String((e && e.message) || e)); return; }
             showAppToast(decision === 'approve' ? `${x.loginId} 가입을 승인했습니다.` : `${x.loginId} 가입을 반려했습니다.`, decision === 'approve' ? 'green' : 'blue');
-            // 서버가 만든 업체 · 아이디를 바로 받아 옵니다 (실시간으로도 들어옵니다)
+            // 서버가 만든 업체 · 아이디를 바로 받아 와 업체 관리 목록에 넣습니다 (실시간으로도 들어오지만 기다리지 않게 · 2026-10-05)
             try { if (window.kobDb) await kobDb.load('customers', true); } catch (e) { /* 실시간으로 들어옵니다 */ }
-            setTimeout(() => { if (companyFilter.view === 'signups') drawCompanyRows(); }, 800);
+            reloadCustomersFromDb();
+            if (decision === 'approve') companySignupTab = 'done';
+            renderCompanies();
         }
         // 서버가 바꾼 가입 신청 · 아이디 · 잠금 · 기록이 실시간으로 들어오면 열려 있는 화면을 다시 그립니다
         window.addEventListener('storage', (e) => {
-            if (!['gwPartnerSignups.v1', 'gwPartnerAccounts.v1', 'gwPartnerLoginGuard.v1', 'gwPartnerAudit.v1', 'gwPartnerSignupPolicy.v1'].includes(e.key)) return;
+            if (!['gwPartnerSignups.v1', 'gwPartnerAccounts.v1', 'gwPartnerLoginGuard.v1', 'gwPartnerAudit.v1', 'gwPartnerSignupPolicy.v1', 'gwPartnerAdminPerm.v1'].includes(e.key)) return;
             try { if (isPartnerMode()) return; } catch (err) { return; }
             if (e.key === 'gwPartnerAccounts.v1') { const fresh = loadJsonStore('gwPartnerAccounts.v1', null); if (Array.isArray(fresh)) { partnerAccounts = fresh; partnerAccounts.forEach(a => { if (a && a.loginId && !a.id) a.id = a.loginId; }); } }
             if (document.getElementById('company-rows') && commonActiveTab === 'companies') renderCompanies();
@@ -38601,7 +38683,7 @@ const QUOTE_TEMPLATES = [
             return `
                 <tr class="border-b border-gray-50 last:border-0 hover:bg-cyan-50/50 cursor-pointer" onclick="openCompanyModal('${id}')">
                     <td class="px-3 py-2 whitespace-nowrap">${indent ? '<span class="text-gray-300 mr-1">└</span>' : ''}${partnerCustTypeChip(Object.assign({}, c, { franchiseName: '', parentPartnerName: '' }))}</td>
-                    <td class="px-3 py-2 whitespace-nowrap font-medium text-gray-800">${escapeHtml(companyNameOf(c))}</td>
+                    <td class="px-3 py-2 whitespace-nowrap font-medium text-gray-800">${escapeHtml(companyNameOf(c))}${c.signupId ? ` <span class="ml-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-indigo-100 text-indigo-700" title="파트너센터 회원가입으로 등록 (${escapeHtml(c.signupId)})">회원가입</span>` : ''}</td>
                     <td class="px-3 py-2 whitespace-nowrap text-gray-600">${parent ? escapeHtml(parent) : (companyParentKind(c.kind) ? '<span class="text-rose-500 text-xs">연결 안 됨</span>' : '<span class="text-gray-300">-</span>')}</td>
                     <td class="px-3 py-2 whitespace-nowrap text-gray-600">${escapeHtml(c.businessNo || '-')}</td>
                     <td class="px-3 py-2 whitespace-nowrap">${escapeHtml(c.contactName || '-')}</td>
@@ -38771,7 +38853,9 @@ const QUOTE_TEMPLATES = [
             const idsBox = document.getElementById('partner-modal-ids');
             if (idsBox) idsBox.innerHTML = companyIdsHtml(p ? p.id : '');
             const ap = document.getElementById('partner-allow-approve');
-            if (ap) ap.checked = !!(p && p.allowShopApproval === true);
+            if (ap) { ap.checked = !!(p && p.allowShopApproval === true); ap.disabled = !isGroupwareAdmin(); }
+            const apNote = document.getElementById('partner-allow-approve-note');
+            if (apNote) apNote.classList.toggle('hidden', isGroupwareAdmin());
             document.getElementById('partner-modal').classList.remove('hidden');
         }
 
@@ -38878,8 +38962,14 @@ const QUOTE_TEMPLATES = [
                 status: val('partner-status') || '미거래',
                 kind, parentId: parent ? parent.id : '',
                 franchiseHq: (kind === 'franchise' || kind === 'hq') ? franchiseHq : '',
-                allowShopApproval: (kind === 'hq' || kind === 'partner') && !!(document.getElementById('partner-allow-approve') || {}).checked
             };
+            // 소속 가맹점 가입 승인 — 관리자만 바꿉니다. 관리자가 아니면 지금 값을 그대로 둡니다 (2026-10-05)
+            const prevCo = id ? customers.find(x => x.id === id) : null;
+            if (isGroupwareAdmin()) {
+                const on = (kind === 'hq' || kind === 'partner') && !!(document.getElementById('partner-allow-approve') || {}).checked;
+                data.allowShopApproval = on;
+                if (on !== !!(prevCo && prevCo.allowShopApproval)) { data.allowShopApprovalBy = on ? (currentUserEmail || '') : ''; data.allowShopApprovalAt = new Date().toISOString(); }
+            } else if (!(kind === 'hq' || kind === 'partner')) data.allowShopApproval = false;
             data.contact = data.contactName; data.custType = kind;
             let saved;
             if (id) {
@@ -40924,6 +41014,12 @@ const QUOTE_TEMPLATES = [
                 render: () => renderGcalAdmin()
             },
             {
+                // 2026-10-05 — 파트너센터 아이디 관리 · 가입 승인은 관리자와 여기서 고른 직원만
+                id: 'partner-perm', name: '파트너센터 권한', icon: 'fa-user-shield', panel: 'sec-partner-perm', perm: 'permissions',
+                desc: '파트너센터 아이디(만들기 · 임시 비밀번호 · 잠금 해제 · 중지 · 삭제)와 회원가입 승인을 할 수 있는 직원을 정합니다. 그룹웨어 관리자는 늘 할 수 있고, 바꾸는 것도 관리자만 합니다.',
+                render: () => renderPartnerAdminPerm()
+            },
+            {
                 id: 'card-perm', name: '법인카드 조회 권한', icon: 'fa-credit-card', panel: 'sec-card-perm', perm: 'card-perm',
                 desc: '법인카드 사용내역을 누구 것까지 볼 수 있는지 정합니다. 기본은 본인 카드만이며, 필요한 사람에게만 부서·전사 범위를 부여합니다.',
                 render: () => renderCardPermissions()
@@ -41065,7 +41161,10 @@ const QUOTE_TEMPLATES = [
         }
 
         // 탭 하나에 권한이 여럿 걸릴 수 있습니다(perms) — 그중 하나만 있어도 보입니다 (2026-10-05 업체 관리)
-        function canSeeCommonTab(t) { return (t.perms || [t.perm]).some(id => canSeePage(id)); }
+        function canSeeCommonTab(t) {
+            if (t.id === 'companies' && (canManagePartnerIds() || canApproveSignups())) return true;   // 파트너센터 권한만 받은 직원도 (2026-10-05)
+            return (t.perms || [t.perm]).some(id => canSeePage(id));
+        }
         function renderCommonCenter() {
             const tabs = COMMON_TABS.filter(canSeeCommonTab);
             if (!tabs.some(t => t.id === commonActiveTab)) commonActiveTab = tabs.length ? tabs[0].id : '';
@@ -51511,6 +51610,7 @@ const QUOTE_TEMPLATES = [
         }
         // 임시 비밀번호 발급 — 서버가 12자를 만들어 바로 암호화하고, 화면에는 이번 한 번만 보여 줍니다
         async function issuePartnerTempPassword(loginId, ask) {
+            if (!canManagePartnerIds()) { partnerPermDenied('아이디 관리'); return; }   // 2026-10-05 파트너센터 권한
             const a = partnerAccounts.find(x => x.loginId === loginId);
             if (!a) return;
             if (ask && (a.pwHash || a.pw) && !confirm(`'${loginId}' 에 임시 비밀번호를 새로 발급할까요?\n지금 비밀번호는 더 이상 쓸 수 없고, 첫 로그인 때 새 비밀번호로 바꾸게 됩니다.`)) return;
@@ -51546,6 +51646,7 @@ const QUOTE_TEMPLATES = [
                 <div class="mt-4 text-right"><button type="button" onclick="document.getElementById('pc-temp-pw-box').remove()" class="px-4 py-2 text-sm rounded bg-gray-200 text-gray-700 hover:bg-gray-300">확인 · 닫기</button></div></div>`;
         }
         async function unlockPartnerId(loginId) {
+            if (!canManagePartnerIds()) { partnerPermDenied('아이디 관리'); return; }   // 2026-10-05 파트너센터 권한
             try {
                 if (partnerUsesServer()) await kobAuth.call('/api/partner-admin/unlock', { loginId });
                 // 서버 모드는 서버가 지우고 실시간으로 이 화면에 들어옵니다. 로컬 모드만 여기서 지웁니다.
@@ -51713,6 +51814,7 @@ const QUOTE_TEMPLATES = [
         // 아이디 일괄 만들기 (2026-10-05 · 제안서 4.2 C) — 아이디가 없는 업체마다 하나씩, '비밀번호 미설정' 으로.
         // 실제로 쓰기 시작할 때 [임시 비밀번호] 를 누릅니다. 비밀번호가 담긴 엑셀은 만들지 않습니다.
         function bulkCreatePartnerIds(companyIds) {
+            if (!canManagePartnerIds()) { partnerPermDenied('아이디 관리'); return; }   // 2026-10-05 파트너센터 권한
             const have = new Set(partnerAccounts.map(a => a.partnerId));
             const targets = (companyIds || []).map(id => customers.find(c => c.id === id)).filter(c => c && !have.has(c.id));
             if (!targets.length) { alert('아이디를 만들 업체가 없습니다 (모두 아이디가 있습니다).'); return 0; }
@@ -51732,6 +51834,7 @@ const QUOTE_TEMPLATES = [
             return targets.length;
         }
         function openPartnerIdModal(loginId, partnerId) {
+            if (!canManagePartnerIds()) { partnerPermDenied('아이디 관리'); return; }   // 2026-10-05 파트너센터 권한
             const ps = (typeof partners !== 'undefined' ? partners : []);
             const a = loginId ? partnerAccounts.find(x => x.loginId === String(loginId).toLowerCase()) : null;
             partnerIdModalState = {
@@ -51923,6 +52026,7 @@ const QUOTE_TEMPLATES = [
         }
         async function savePartnerId() {
             const st = partnerIdModalState; if (!st) return;
+            if (!canManagePartnerIds()) { partnerPermDenied('아이디 관리'); return; }
             const f = partnerIdCollect();
             const ps = (typeof partners !== 'undefined' ? partners : []);
             const editing = st.loginId ? partnerAccounts.find(x => x.loginId === st.loginId) : null;
@@ -51959,6 +52063,7 @@ const QUOTE_TEMPLATES = [
             if (document.getElementById('sec-settings-partner-perm')) renderPartnerPermSettings();
         }
         function togglePartnerIdActive(loginId) {
+            if (!canManagePartnerIds()) { partnerPermDenied('아이디 관리'); return; }   // 2026-10-05 파트너센터 권한
             const a = partnerAccounts.find(x => x.loginId === loginId); if (!a) return;
             const to = a.active === false;
             if (!to && !confirm(`'${loginId}' 아이디를 중지할까요? 파트너센터 로그인이 막힙니다. (자료는 남습니다)`)) return;
@@ -51966,6 +52071,7 @@ const QUOTE_TEMPLATES = [
             savePartnerAccounts(); renderPartnerIdAdmin();
         }
         function deletePartnerId(loginId, fromModal) {
+            if (!canManagePartnerIds()) { partnerPermDenied('아이디 관리'); return; }   // 2026-10-05 파트너센터 권한
             const a = partnerAccounts.find(x => x.loginId === loginId); if (!a) return;
             if (!confirm(`'${loginId}' 아이디를 지울까요?\n이 아이디로 낸 접수 · 개발요청 자료는 남지만 다시 로그인할 수 없습니다. 잠시 막으려면 '중지'를 쓰세요.`)) return;
             partnerAccounts = partnerAccounts.filter(x => x.loginId !== loginId);
@@ -53784,7 +53890,15 @@ const QUOTE_TEMPLATES = [
                     <div><label class="block text-xs font-medium text-gray-600 mb-1">사업자 구분</label>
                         <select id="pcs-bizType" onchange="pcSignup.values.bizType=this.value" class="w-full p-2.5 text-sm border border-gray-300 rounded-lg bg-white">
                             <option value="">선택</option><option value="personal"${pcSignup.values.bizType === 'personal' ? ' selected' : ''}>일반사업자 (개인)</option><option value="corp"${pcSignup.values.bizType === 'corp' ? ' selected' : ''}>법인사업자</option></select></div>
-                    ${pcSignupInput('address', '사업장 주소', { wide: true, max: 200 })}
+                    <!-- 주소 — [주소 검색] 으로 우편번호 · 도로명주소를 찾아 채웁니다 (2026-10-05). 검색이 안 되는 곳에서도 직접 넣을 수 있게 칸은 열어 둡니다 -->
+                    <div class="sm:col-span-2"><label class="block text-xs font-medium text-gray-600 mb-1">사업장 주소</label>
+                        <div class="flex items-center gap-2 mb-2">
+                            <input type="text" id="pcs-zipCode" readonly tabindex="-1" placeholder="우편번호" value="${escapeHtml(pcSignup.values.zipCode || '')}" class="w-28 p-2.5 text-sm border border-gray-200 rounded-lg bg-gray-100 text-gray-600" />
+                            <button type="button" onclick="pcSignupAddressSearch()" class="px-3 py-2.5 text-sm rounded-lg border border-indigo-300 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 whitespace-nowrap"><i class="fas fa-magnifying-glass mr-1"></i>주소 검색</button>
+                        </div>
+                        <input type="text" id="pcs-roadAddress" maxlength="150" placeholder="도로명 또는 지번 주소" value="${escapeHtml(pcSignup.values.roadAddress || '')}" oninput="pcSignup.values.roadAddress = this.value" class="w-full p-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 mb-2" />
+                        <input type="text" id="pcs-addressDetail" maxlength="50" placeholder="상세주소 (동 · 호수 등)" value="${escapeHtml(pcSignup.values.addressDetail || '')}" oninput="pcSignup.values.addressDetail = this.value" class="w-full p-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                    </div>
                 </div>
                 <p class="text-xs font-bold text-gray-700 mb-2">③ 담당자 · 아이디</p>
                 <div class="grid sm:grid-cols-2 gap-3 mb-4">
@@ -53846,6 +53960,16 @@ const QUOTE_TEMPLATES = [
                 const sc = document.createElement('script'); sc.id = 'pcs-turnstile-js'; sc.async = true;
                 sc.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit'; sc.onload = go; document.head.appendChild(sc);
             }
+        }
+        // 주소 검색 — 고객 등록 창과 같은 검색 창(openAddressSearch)을 씁니다
+        function pcSignupAddressSearch() {
+            openAddressSearch(function (data) {
+                pcSignup.values.zipCode = data.zonecode || '';
+                pcSignup.values.roadAddress = data.roadAddress || data.jibunAddress || '';
+                const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
+                set('pcs-zipCode', pcSignup.values.zipCode); set('pcs-roadAddress', pcSignup.values.roadAddress);
+                const d = document.getElementById('pcs-addressDetail'); if (d) d.focus();
+            });
         }
         function pcSignupPickKind(kind) {
             if (PC_SIGNUP_PARENT[kind] !== PC_SIGNUP_PARENT[pcSignup.kind]) pcSignup.parent = null;
@@ -53915,7 +54039,9 @@ const QUOTE_TEMPLATES = [
             const val = (id) => String((document.getElementById('pcs-' + id) || {}).value || '').trim();
             const pw = String((document.getElementById('pcs-pw') || {}).value || ''), pw2 = String((document.getElementById('pcs-pw2') || {}).value || '');
             const body = { kind: pcSignup.kind, parentId: pcSignup.parent ? pcSignup.parent.id : '', name: val('name'), businessNo: val('businessNo'), ceo: val('ceo'),
-                           bizType: val('bizType'), address: val('address'), contactName: val('contactName'), phone: val('phone'), email: val('email'),
+                           bizType: val('bizType'), zipCode: val('zipCode'), roadAddress: val('roadAddress'), addressDetail: val('addressDetail'),
+                           address: [val('roadAddress'), val('addressDetail')].filter(Boolean).join(' '),
+                           contactName: val('contactName'), phone: val('phone'), email: val('email'),
                            loginId: val('loginId').toLowerCase(), pw, pw2,
                            consents: { privacy: !!(document.getElementById('pcs-c-privacy') || {}).checked, parentShare: !!(document.getElementById('pcs-c-share') || {}).checked } };
             const bad = pcSignupProblem(body, pw2);

@@ -97,8 +97,8 @@ export function bizNoFormat(v) { const d = digits(v); return d.length === 10 ? `
 // ---------- 회원가입 ----------
 export const SIGNUP_KINDS = ['direct', 'franchise', 'partnerShop', 'partner', 'hq', 'dist'];
 export const PARENT_KIND = { franchise: 'hq', partnerShop: 'partner' };
-const LIMITS = { name: 100, ceo: 50, address: 200, contactName: 50, phone: 20, email: 100 };
-const LIMIT_LABELS = { name: '상호', ceo: '대표자명', address: '주소', contactName: '담당자 이름', phone: '연락처', email: '이메일' };
+const LIMITS = { name: 100, ceo: 50, address: 200, zipCode: 10, roadAddress: 150, addressDetail: 50, contactName: 50, phone: 20, email: 100 };
+const LIMIT_LABELS = { name: '상호', ceo: '대표자명', address: '주소', zipCode: '우편번호', roadAddress: '도로명주소', addressDetail: '상세주소', contactName: '담당자 이름', phone: '연락처', email: '이메일' };
 // 업체 유형별 처음 열어 줄 파트너센터 메뉴 — 화면의 PARTNER_PERM_PRESETS 와 같은 묶음입니다 (고칠 때 함께)
 export const PRESET_MENUS = {
     full: ['sales', 'sales:newshop', 'sales:buyhw', 'sales:donate', 'sales:general',
@@ -131,6 +131,9 @@ export function validateSignup(input, ctx) {
         if (v.length > LIMITS[k]) return { error: `${LIMIT_LABELS[k]}이(가) 너무 길어요 (${LIMITS[k]}자까지).` };
         co[k] = v;
     }
+    // 주소 — 검색으로 찾은 도로명 · 상세를 나눠 받고, 한 줄 주소(address)도 함께 둡니다 (2026-10-05)
+    if (!co.address && (co.roadAddress || co.addressDetail)) co.address = [co.roadAddress, co.addressDetail].filter(Boolean).join(' ').slice(0, 200);
+    if (!co.roadAddress && co.address) co.roadAddress = co.address.slice(0, 150);
     if (!co.name) return { error: '상호(업체명)를 넣어 주세요.' };
     if (digits(i.businessNo).length !== 10) return { error: '사업자등록번호 10자리를 넣어 주세요.' };
     co.businessNo = bizNoFormat(i.businessNo);
@@ -192,7 +195,7 @@ export function approveSignup(su, opts) {
         company = {
             id: s(o.companyId), name: co.name, kind: su.kind, custType: su.kind, parentId: su.parentId || '',
             businessNo: co.businessNo, bizNo: co.businessNo, bizType: co.bizType, ceo: co.ceo,
-            address: co.address, roadAddress: co.address, addressDetail: '',
+            address: co.address, roadAddress: co.roadAddress || co.address, addressDetail: co.addressDetail || '', zipCode: co.zipCode || '',
             contactName: co.contactName, contact: co.contactName, phone: co.phone, email: co.email,
             status: '미거래', consentParentShare: share, consentAt: share ? now : '', signupId: su.id, createdBy: '회원가입',
             contractDoc: '', items: [], fee: { small: '', sme1: '', sme2: '', sme3: '', normal: '' }, pgAlias: [], memo: '', note: ''
@@ -219,10 +222,14 @@ export function publicSignup(su) {
     delete o.pwHash; delete o.pwSalt; delete o.pwIter;
     return o;
 }
-// 상위업체가 승인할 수 있는가 — 전체 스위치 · 그 업체의 '소속 가맹점 가입 승인' · 업체관리자 아이디 세 가지가 모두 켜져 있어야
-export function parentMayApprove(policy, company, acct) {
-    return !!(obj(policy).parentApprove && company && company.allowShopApproval === true && acct && acct.role === 'admin'
-              && ['hq', 'partner'].includes(s(company.kind || company.custType)));
+// 상위업체가 승인할 수 있는가 — 전체 스위치 · 그 업체의 '소속 가맹점 가입 승인' · 업체관리자 아이디 세 가지가 모두 켜져 있어야.
+// isAdminEmail 을 주면 스위치와 업체 체크를 **켠 사람이 그룹웨어 관리자인지**도 봅니다 (2026-10-05 — 관리자만 켤 수 있게)
+export function parentMayApprove(policy, company, acct, isAdminEmail) {
+    const pol = obj(policy);
+    if (!(pol.parentApprove && company && company.allowShopApproval === true && acct && acct.role === 'admin'
+          && ['hq', 'partner'].includes(s(company.kind || company.custType)))) return false;
+    if (typeof isAdminEmail === 'function' && !(isAdminEmail(pol.updatedByEmail) && isAdminEmail(company.allowShopApprovalBy))) return false;
+    return true;
 }
 // 상위업체에게 보여 줄 신청서 — 그 업체 소속으로 낸 가맹점 신청만, 연락처는 제공 동의가 있을 때만
 export function parentSignupView(signups, parentId) {

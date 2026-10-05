@@ -53,6 +53,9 @@ const ok = (c, m) => { if (c) { pass++; console.log('  ✓', m); } else { fail++
     bad({ consents: { privacy: false } }, /동의/, '필수 동의 없음');
     bad({ phone: '12' }, /연락처/, '연락처');
     bad({ name: 'x'.repeat(101) }, /길/, '너무 긴 상호');
+    r = S.validateSignup(Object.assign({}, base, { zipCode: '06234', roadAddress: '서울 강남구 테헤란로 1', addressDetail: '2층' }), ctx);
+    ok(r.rec.company.address === '서울 강남구 테헤란로 1 2층' && r.rec.company.zipCode === '06234' && r.rec.company.addressDetail === '2층', '주소 검색 값(우편번호 · 도로명 · 상세) → 한 줄 주소도 만듦');
+    ok(S.approveSignup(Object.assign({}, r.rec), { companyId: 'c1' }).company.roadAddress === '서울 강남구 테헤란로 1', '승인하면 업체에도 도로명 · 상세 · 우편번호');
     r = S.validateSignup(Object.assign({}, base, { kind: 'direct', parentId: 'p17' }), ctx);
     ok(r.rec && r.rec.parentId === '' && r.rec.consents.parentShare === false, '개인 가맹점은 소속 · 제공 동의를 두지 않음');
     let rate = {};
@@ -74,6 +77,10 @@ const ok = (c, m) => { if (c) { pass++; console.log('  ✓', m); } else { fail++
     ok(rj.status === 'rejected' && rj.reason === '사업자번호 확인 필요' && !('pwHash' in rj), '반려: 사유 · 비밀번호 지움');
     const co = { id: 'p17', kind: 'partner', allowShopApproval: true };
     ok(S.parentMayApprove({ parentApprove: true }, co, { role: 'admin' }), '전체 스위치 · 업체 설정 · 업체관리자 → 승인 가능');
+    const adm = (e) => e === 'boss@k.co';
+    ok(S.parentMayApprove({ parentApprove: true, updatedByEmail: 'boss@k.co' }, Object.assign({}, co, { allowShopApprovalBy: 'boss@k.co' }), { role: 'admin' }, adm)
+       && !S.parentMayApprove({ parentApprove: true, updatedByEmail: 'staff@k.co' }, Object.assign({}, co, { allowShopApprovalBy: 'boss@k.co' }), { role: 'admin' }, adm)
+       && !S.parentMayApprove({ parentApprove: true, updatedByEmail: 'boss@k.co' }, Object.assign({}, co, { allowShopApprovalBy: 'staff@k.co' }), { role: 'admin' }, adm), '스위치 · 업체 체크를 켠 사람이 관리자여야');
     ok(!S.parentMayApprove({}, co, { role: 'admin' }) && !S.parentMayApprove({ parentApprove: true }, Object.assign({}, co, { allowShopApproval: false }), { role: 'admin' })
        && !S.parentMayApprove({ parentApprove: true }, co, { role: 'staff' }) && !S.parentMayApprove({ parentApprove: true }, Object.assign({}, co, { kind: 'direct' }), { role: 'admin' }), '셋 중 하나라도 빠지면 불가');
     const pv = S.parentSignupView([su, Object.assign({}, su, { id: 'SU-2', parentId: 'p99' }), Object.assign({}, su, { id: 'SU-3', consents: { parentShare: false } })], 'p17');
@@ -120,7 +127,16 @@ const ok = (c, m) => { if (c) { pass++; console.log('  ✓', m); } else { fail++
     x = await call('POST', '/api/partner/login', { loginId: 'newshop1', pw: 'Wrong1234!x' });
     ok(!x.ok && !x.pending, '비밀번호가 틀리면 승인 대기 여부를 알려 주지 않음');
     x = await call('POST', '/api/partner-admin/signup-decide', { id: 'SU-0001', decision: 'approve' }, 'tok-sales');
-    ok(x.status === 403, "'partner-ids' 권한이 없는 직원은 승인 불가");
+    ok(x.status === 403 && /가입 승인 권한/.test(x.error), '파트너센터 권한이 없는 직원은 승인 불가');
+    mock.store.set('gwPartnerAdminPerm.v1', { users: { 'sales@kingorder.co.kr': { ids: true } } });
+    x = await call('POST', '/api/partner-admin/signup-decide', { id: 'SU-0001', decision: 'approve' }, 'tok-sales');
+    ok(x.status === 403, '아이디 관리 권한만 있으면 가입 승인은 불가');
+    x = await call('POST', '/api/partner-admin/unlock', { loginId: 'okt01' }, 'tok-sales');
+    ok(x.ok, '아이디 관리 권한을 받은 직원은 잠금 해제 가능');
+    mock.store.set('gwPartnerAdminPerm.v1', { users: { 'sales@kingorder.co.kr': { signups: true } } });
+    x = await call('POST', '/api/partner-admin/temp-password', { loginId: 'okt01' }, 'tok-sales');
+    ok(x.status === 403 && /아이디 관리 권한/.test(x.error), '가입 승인 권한만 있으면 임시 비밀번호는 불가');
+    mock.store.set('gwPartnerAdminPerm.v1', { users: {} });
     x = await call('POST', '/api/partner-admin/signup-decide', { id: 'SU-0001', decision: 'approve' });
     ok(x.status === 401, '로그인 안 한 사람도 불가');
     x = await call('POST', '/api/partner-admin/signup-decide', { id: 'SU-0001', decision: 'approve' }, 'tok-admin');
@@ -209,8 +225,16 @@ const ok = (c, m) => { if (c) { pass++; console.log('  ✓', m); } else { fail++
     ok(x.ok && !('gwPartnerShopSignups.v1' in x.store) && x.store['gwPartnerMe.v1'].canApproveShops === false, '스위치가 꺼져 있으면 상위업체에 신청 목록이 안 감');
     x = await call('POST', '/api/partner/signup-decide', { id: sidP, decision: 'approve' }, tokP);
     ok(x.status === 403, '꺼져 있으면 상위업체 승인 불가');
-    mock.store.set('gwPartnerSignupPolicy.v1', { parentApprove: true });
-    const p17 = mock.tables.get('customers').get('p17'); p17.data.allowShopApproval = true;
+    // 관리자가 아닌 직원이 켠 것은 무시 (2026-10-05)
+    mock.store.set('gwPartnerSignupPolicy.v1', { parentApprove: true, updatedByEmail: 'sales@kingorder.co.kr' });
+    const p17 = mock.tables.get('customers').get('p17'); p17.data.allowShopApproval = true; p17.data.allowShopApprovalBy = 'daniel@kingorder.co.kr';
+    x = await call('GET', '/api/partner/boot', undefined, tokP);
+    ok(!('gwPartnerShopSignups.v1' in x.store), '스위치를 관리자가 아닌 직원이 켰으면 무시');
+    mock.store.set('gwPartnerSignupPolicy.v1', { parentApprove: true, updatedByEmail: 'daniel@kingorder.co.kr' });
+    p17.data.allowShopApprovalBy = '';
+    x = await call('GET', '/api/partner/boot', undefined, tokP);
+    ok(!('gwPartnerShopSignups.v1' in x.store), '업체 체크를 누가 켰는지 없으면 무시');
+    p17.data.allowShopApprovalBy = 'daniel@kingorder.co.kr';
     x = await call('GET', '/api/partner/boot', undefined, tokP);
     const ss = x.store['gwPartnerShopSignups.v1'];
     ok(Array.isArray(ss) && ss.length === 1 && ss[0].id === sidP && ss[0].phone === '010-1111-0003' && !('pwHash' in ss[0]), '켜면 업체관리자에게 자기 소속 신청만 (제공 동의 → 연락처)');

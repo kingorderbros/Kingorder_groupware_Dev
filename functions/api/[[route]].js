@@ -44,7 +44,7 @@
  *   GET  /api/partner/signup/parents?kind=hq|partner&q=   가입 화면의 상위업체 찾기 (상호만)
  *   POST /api/partner/signup          가입 신청 → 승인대기
  *   POST /api/partner/signup-decide   { id, decision, reason }  상위업체(본사 · 파트너사) 승인 — 켜져 있을 때만
- *   POST /api/partner-admin/temp-password · unlock · signup-decide   직원('partner-ids' 권한)만
+ *   POST /api/partner-admin/temp-password · unlock · signup-decide   관리자 또는 파트너센터 권한(gwPartnerAdminPerm.v1 의 ids · signups)을 받은 직원만
  *   POST /api/auth/lookup     { id }                          로그인 창 아이디 → 이메일 (1단계)
  *   GET  /api/auth/logins     모든 직원의 마지막 로그인 시각 (관리자만 · 2026-09-29)
  *
@@ -565,9 +565,14 @@ export async function onRequest(context) {
 
             // ===== 직원(그룹웨어)만 — 업체 관리 › 파트너센터 아이디 · 가입 승인 =====
             if (path.startsWith('/api/partner-admin/')) {
-                const st = await requirePerm(env, store, request, ['partner-ids']);
+                // 그룹웨어 관리자 또는 '사용자/권한관리 › 파트너센터 권한' 에서 고른 직원만 (2026-10-05)
+                const st = await requireStaff(env, store, request);
                 if (st.error) return st.error;
                 const by = str(st.me.email).toLowerCase();
+                const permAll = (await store.storeValue('gwPartnerAdminPerm.v1')) || {};
+                const myPerm = ((permAll && permAll.users) || {})[by] || {};
+                const need = path === '/api/partner-admin/signup-decide' ? 'signups' : 'ids';
+                if (!st.admin && myPerm[need] !== true) return json(403, { ok: false, error: need === 'signups' ? '가입 승인 권한이 없습니다. 그룹웨어 관리자에게 파트너센터 권한을 받아 주세요.' : '파트너센터 아이디 관리 권한이 없습니다. 그룹웨어 관리자에게 파트너센터 권한을 받아 주세요.' });
                 const input = method === 'POST' ? await body() : {};
                 // 임시 비밀번호 — 서버가 만들어 바로 암호화하고, 화면에는 이번 한 번만 돌려줍니다 (72시간 · 첫 로그인 때 바꾸게)
                 if (path === '/api/partner-admin/temp-password' && method === 'POST') {
@@ -727,8 +732,12 @@ export async function onRequest(context) {
             // 임시 비밀번호로 들어왔으면 바꾸기 전에는 다른 일을 못 합니다 (S4)
             if (me.mustChangePw) return json(403, { ok: false, mustChange: true, session, error: '임시 비밀번호입니다. 먼저 새 비밀번호로 바꿔 주세요.' });
             // 상위업체 승인 — 전체 스위치 · 업체 설정 · 업체관리자 아이디가 모두 켜져 있을 때만
-            const policy = await store.storeValue(su.POLICY_KEY);
-            const canApprove = su.parentMayApprove(policy, me.company, rp.acct);
+            const pv = await store.storeValues([su.POLICY_KEY, 'gwUsers.v1']);
+            const staff = Array.isArray(pv['gwUsers.v1']) ? pv['gwUsers.v1'] : [];
+            // 스위치 · 업체 체크를 켠 사람이 지금도 그룹웨어 관리자인가 (requireAdmin 과 같은 기준)
+            const isAdminEmail = (email) => { const e = str(email).toLowerCase(); const u = e && staff.find(x => str(x.email).toLowerCase() === e);
+                                              return !!(u && (u.groupId === 'admin' || u.dept === 'admin' || u.level === 'admin' || u.isAdmin === true)); };
+            const canApprove = su.parentMayApprove(pv[su.POLICY_KEY], me.company, rp.acct, isAdminEmail);
             if (isBoot) {
                 const v = await store.storeValues(pc.ALL_KEYS.concat([su.SIGNUP_KEY]));
                 if (canApprove) me.shopSignups = su.parentSignupView(v[su.SIGNUP_KEY], me.partnerId);
