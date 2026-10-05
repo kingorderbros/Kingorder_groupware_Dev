@@ -73,7 +73,7 @@
         return null;
     }
     // 번호를 바꾸면 안 되는 목록 — id 가 사람 번호 같은 '뜻 있는 값' 인 것 (같은 사람이 두 창에서 처음 쓰면 남의 번호가 되어 버림)
-    const NO_RENAME_KEYS = ['gwUserPresence.v1'];
+    const NO_RENAME_KEYS = ['gwUserPresence.v1', 'gwPartnerAccounts.v1'];   // 파트너 아이디는 id = 로그인 아이디 (2026-10-05)
     // 이 창에서 번호를 바꾼 기록 — 키 → Map(옛 번호 → 새 번호). 화면 변수가 아직 옛 번호로 저장하면 여기서 새 번호로 고쳐 보냅니다.
     const renames = new Map();
     // mergeLists → { str, renamed: { 옛 번호: 새 번호 } } (합칠 수 없으면 null)
@@ -255,6 +255,7 @@
     const PC_TOKEN_KEY = 'pcToken.v1';
     const PC_WRITE_KEYS = ['gwPartnerIntakes.v1', 'gwDevRequests.v1', 'gwDevNotiQueue.v1', 'gwInboundRecords.v1'];
     let pcSession = null;             // { loginId, partnerId, partnerName }
+    let pcMustChange = false;         // 임시 비밀번호 — 바꾸기 전에는 자료를 받지 않습니다 (2026-10-05)
     const pcChain = new Map();        // 키 → 진행 중인 저장 (같은 키는 차례대로)
     const pcBusy = new Map();         // 키 → 보내는 중인 저장 수 (그동안 받아 온 옛 값으로 덮지 않게)
     const pcWrites = new Map();       // 키 → 이 화면에서 쓴 횟수 — 받아 오는 사이에 쓴 키는 받은 (옛) 값으로 덮지 않습니다
@@ -333,6 +334,7 @@
         let r;
         try { r = await pcFetch('GET', '/api/partner/boot'); } catch (e) { return; }
         if (r.status === 401) { pcExpired(); return; }
+        if (r.status === 403) return;
         if (!r.j || !r.j.ok) return;
         Object.keys(r.j.store || {}).forEach(k => {
             if (pcBusy.get(k) > 0) return;
@@ -350,19 +352,27 @@
             try {
                 const r = await pcFetch('GET', '/api/partner/boot');
                 if (r.status === 401) ls.del(PC_TOKEN_KEY);
+                // 임시 비밀번호로 들어온 아이디 — 자료는 받지 않고 비밀번호 바꾸기 화면만 엽니다 (2026-10-05 S4)
+                else if (r.status === 403 && r.j && r.j.mustChange) { pcSession = r.j.session; pcMustChange = true; }
                 else if (r.j && r.j.ok) {
                     pcSession = r.j.session;
                     Object.keys(r.j.store || {}).forEach(k => cache.set(k, JSON.stringify(r.j.store[k])));
                 }
             } catch (e) { console.error('[kob-store] 파트너 자료를 받지 못했습니다', e); }
         }
-        if (pcSession) {
+        if (pcSession && !pcMustChange) {
             setInterval(pcPull, 30000);
             window.addEventListener('focus', pcPull);
         }
     }
     window.kobPartner = {
         get session() { return pcSession; },
+        get mustChange() { return pcMustChange; },
+        // 서버 부르기 (회원가입 · 비밀번호 바꾸기 · 가입 승인 — 2026-10-05). 돌려주는 것: { ok, status, ...서버 응답 }
+        async call(method, path, bodyObj) {
+            try { const r = await pcFetch(method, path, bodyObj); return Object.assign({ status: r.status }, r.j || {}, { ok: !!(r.j && r.j.ok) }); }
+            catch (e) { return { ok: false, status: 0, error: '서버에 연결하지 못했습니다. 잠시 뒤 다시 시도해 주세요.' }; }
+        },
         // 성공하면 토큰을 남기고 { ok: true } — 화면은 새로 불러 들어갑니다
         async login(loginId, pw) {
             let r;

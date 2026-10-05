@@ -221,7 +221,7 @@
     // ---------- 파트너 계정 비밀번호 (2026-09-28) ----------
     // 서버(functions/api/_partner.js)와 같은 방식 — PBKDF2-SHA256 · 소금 16바이트 · 10,000회.
     // 그룹웨어 › 파트너 ID 관리에서 비밀번호를 정할 때 평문 대신 이것을 저장합니다.
-    const PC_ITER = 10000;
+    const PC_ITER = 100000;      // 2026-10-05 S5 — 서버와 같게 10만 회 (예전 1만 회 저장분은 그대로 확인됩니다)
     const hexOf = (buf) => Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
     async function pcHash(pw, saltHex, iter) {
         if (!(window.crypto && window.crypto.subtle)) throw new Error('이 브라우저에서는 비밀번호를 암호화할 수 없습니다 (https 주소로 열어 주세요).');

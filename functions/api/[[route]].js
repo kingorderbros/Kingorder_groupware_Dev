@@ -35,9 +35,16 @@
  *   환경변수 GOOGLE_CLIENT_ID · GOOGLE_CLIENT_SECRET 이 더 필요합니다.
  *
  * 파트너센터 (2026-09-28 · 자료 보호 2단계 — 판단은 _partner.js)
- *   POST /api/partner/login   { loginId, pw }                → { token, session }   (예전 평문 비밀번호는 이때 암호화로 바꿈)
+ *   POST /api/partner/login   { loginId, pw }                → { token, session }   (예전 평문 · 1만 회 비밀번호는 이때 10만 회로 바꿈)
  *   GET  /api/partner/boot    그 파트너사 몫의 자료만         (Authorization: Bearer 토큰)
  *   POST /api/partner/save    { key, upserts, removes }       그 파트너사 것만 반영 → 반영된 목록
+ *   2026-10-05 보안 · 회원가입 (판단은 _signup.js)
+ *   POST /api/partner/password        { current, next }       본인 비밀번호 바꾸기 (임시 비밀번호여도 됨)
+ *   GET  /api/partner/signup/config   봇 확인 사이트 키 (환경변수 TURNSTILE_SITE_KEY · 비밀 키 TURNSTILE_SECRET_KEY)
+ *   GET  /api/partner/signup/parents?kind=hq|partner&q=   가입 화면의 상위업체 찾기 (상호만)
+ *   POST /api/partner/signup          가입 신청 → 승인대기
+ *   POST /api/partner/signup-decide   { id, decision, reason }  상위업체(본사 · 파트너사) 승인 — 켜져 있을 때만
+ *   POST /api/partner-admin/temp-password · unlock · signup-decide   직원('partner-ids' 권한)만
  *   POST /api/auth/lookup     { id }                          로그인 창 아이디 → 이메일 (1단계)
  *   GET  /api/auth/logins     모든 직원의 마지막 로그인 시각 (관리자만 · 2026-09-29)
  *
@@ -55,6 +62,7 @@
 
 import * as gcal from './_gcal.js';
 import * as pc from './_partner.js';
+import * as su from './_signup.js';
 import * as fs from './_files.js';
 import * as push from './_push.js';
 import * as hol from './_holidays.js';
@@ -94,6 +102,14 @@ function db(env) {
         storeLike: async (prefix) => (await call('GET', `app_store?select=key,value&key=like.${encodeURIComponent(String(prefix).replace(/[*%]/g, '') + '*')}`)) || [],
         // 표의 한 줄 그대로 — { id, data, rev, updated_by, updated_at } 또는 null
         rowRaw: async (table, id) => { const r = await call('GET', `${table}?select=id,data,rev,updated_by,updated_at&id=eq.${encodeURIComponent(id)}`); return r && r[0] ? r[0] : null; },
+        // 2026-10-05 회원가입 승인 — 번호 목록 · 새 줄 넣기 · 판 번호를 맞춰 고치기 (화면 kobDb 와 같은 rev 규칙)
+        ids: async (table) => ((await call('GET', `${table}?select=id`)) || []).map(r => r.id),
+        insertRow: (table, id, data, by) => call('POST', table, [{ id, data, rev: 1, updated_at: new Date().toISOString(), updated_by: by || null }], { Prefer: 'return=minimal' }),
+        patchRow: async (table, id, data, rev, by) => {
+            const r = await call('PATCH', `${table}?id=eq.${encodeURIComponent(id)}&rev=eq.${Number(rev) || 0}`, { data, rev: (Number(rev) || 0) + 1, updated_at: new Date().toISOString(), updated_by: by || null }, { Prefer: 'return=representation' });
+            if (!r || !r.length) throw new Error('그사이 다른 사람이 이 업체를 고쳤습니다. 다시 시도해 주세요.');
+            return r[0];
+        },
         setStore: (key, value) => call('POST', 'app_store?on_conflict=key', [{ key, value, updated_at: new Date().toISOString() }], { Prefer: 'resolution=merge-duplicates,return=minimal' })
     };
 }
@@ -476,46 +492,252 @@ export async function onRequest(context) {
             return json(404, { ok: false, error: '없는 주소입니다: ' + path });
         }
 
-        // ---------- 파트너센터 (2026-09-28 · 자료 보호 2단계 — 판단은 _partner.js) ----------
-        if (path.startsWith('/api/partner/')) {
+        // ---------- 파트너센터 (2026-09-28 · 자료 보호 2단계 — 판단은 _partner.js · 2026-10-05 보안 · 회원가입 — 판단은 _signup.js) ----------
+        if (path.startsWith('/api/partner/') || path.startsWith('/api/partner-admin/')) {
             const secret = str(env.SUPABASE_SERVICE_ROLE_KEY);
-            // 토큰 → 지금 계정 (중지 · 삭제되었으면 null)
-            const who = async (withShops) => {
-                const t = await pc.readToken(secret, str(request.headers.get('Authorization')).replace(/^Bearer\s+/i, ''));
-                if (!t) return null;
-                const r = await pc.resolvePartner(partnerIo(store), t.loginId, { withShops });
-                if (!r || r.missing || r.acct.active === false || r.acct.partnerId !== t.partnerId) return null;
-                return r.me;
+            const ip = str(request.headers.get('CF-Connecting-IP') || request.headers.get('X-Forwarded-For') || '').split(',')[0].trim() || 'unknown';
+            const nowMs = Date.now();
+            // 기록 한 줄 (실패해도 본 일은 막지 않습니다)
+            const logAudit = async (e) => {
+                try { await store.setStore(su.AUDIT_KEY, su.auditAppend(await store.storeValue(su.AUDIT_KEY), Object.assign({ ip }, e), nowMs)); }
+                catch (err) { console.error('[partner] 기록 실패', err && err.message); }
             };
+            // 아이디 한 개만 고쳐 저장 — 그사이 바뀐 목록 위에 그 아이디만 (직원 화면과 서로 덮지 않게)
+            const updateAccount = async (loginId, fn) => {
+                const list = (await store.storeValue('gwPartnerAccounts.v1')) || [];
+                const all = Array.isArray(list) ? list : [];
+                const a = all.find(x => str(x.loginId).toLowerCase() === str(loginId).toLowerCase());
+                if (!a) return null;
+                fn(a);
+                all.forEach(x => { if (x && x.loginId && !x.id) x.id = x.loginId; });    // 저장 계층이 id 로 합칠 수 있게
+                await store.setStore('gwPartnerAccounts.v1', all);
+                return a;
+            };
+            // 새 업체 번호 — 지금 표에 있는 c 번호 중 가장 큰 것 + 1 (화면의 newCompanyId 와 같은 규칙)
+            const newCompanyId = async () => {
+                const ids = await store.ids('customers');
+                const max = ids.reduce((m, id) => { const r = /^c(\d+)$/.exec(String(id)); return r ? Math.max(m, Number(r[1])) : m; }, 0);
+                return 'c' + (max + 1);
+            };
+            // 승인 — 업체(새로 · 기존 연결)와 아이디 · 메뉴를 만들고 신청서를 '승인' 으로
+            const approve = async (sid, opts) => {
+                const signups = (await store.storeValue(su.SIGNUP_KEY)) || [];
+                const list = Array.isArray(signups) ? signups : [];
+                const i = list.findIndex(x => x && x.id === sid);
+                if (i < 0) return { error: '가입 신청을 찾지 못했습니다.' };
+                const rec = list[i];
+                if (rec.status !== 'pending') return { error: '이미 처리된 신청입니다.' };
+                const accounts = (await store.storeValue('gwPartnerAccounts.v1')) || [];
+                if ((Array.isArray(accounts) ? accounts : []).some(a => str(a.loginId).toLowerCase() === rec.loginId)) return { error: `'${rec.loginId}' 는 그사이 다른 곳에서 쓰기 시작한 아이디입니다. 반려하고 다시 신청하게 해 주세요.` };
+                let existing = null;
+                if (opts.linkCompanyId) {
+                    const raw = await store.rowRaw('customers', opts.linkCompanyId);
+                    if (!raw) return { error: '연결할 업체를 찾지 못했습니다.' };
+                    existing = Object.assign({}, raw.data, { id: raw.id });
+                    if (opts.parentOnly && str(existing.parentId) !== str(rec.parentId)) return { error: '다른 소속의 업체에는 연결할 수 없습니다. 킹오더 담당자에게 문의해 주세요.' };
+                    existing.__rev = raw.rev;
+                }
+                const companyId = existing ? existing.id : await newCompanyId();
+                const firstOfCompany = !(Array.isArray(accounts) ? accounts : []).some(a => a.partnerId === companyId);
+                const r = su.approveSignup(rec, { companyId, existing, by: opts.by, nowMs, firstOfCompany });
+                if (existing) { const rev = existing.__rev; delete r.company.__rev; await store.patchRow('customers', companyId, r.company, rev, opts.by); }
+                else await store.insertRow('customers', companyId, r.company, opts.by);
+                const fresh = (await store.storeValue('gwPartnerAccounts.v1')) || [];
+                await store.setStore('gwPartnerAccounts.v1', (Array.isArray(fresh) ? fresh : []).map(x => (x && x.loginId && !x.id ? Object.assign({}, x, { id: x.loginId }) : x)).concat([r.account]));
+                const perm = (await store.storeValue('gwPartnerDeptPerm.v1')) || {};
+                await store.setStore('gwPartnerDeptPerm.v1', Object.assign({}, perm && typeof perm === 'object' ? perm : {}, { [r.account.loginId]: r.menus }));
+                const latest = (await store.storeValue(su.SIGNUP_KEY)) || [];
+                await store.setStore(su.SIGNUP_KEY, (Array.isArray(latest) ? latest : []).map(x => (x && x.id === sid ? r.signup : x)));
+                await logAudit({ action: 'signup-approve', loginId: rec.loginId, by: opts.by, ok: true, note: `${rec.id} → ${companyId}${existing ? ' (기존 업체 연결)' : ''}` });
+                return { ok: true, companyId, loginId: rec.loginId };
+            };
+            const reject = async (sid, reason, by, parentOnly) => {
+                const signups = (await store.storeValue(su.SIGNUP_KEY)) || [];
+                const list = Array.isArray(signups) ? signups : [];
+                const rec = list.find(x => x && x.id === sid);
+                if (!rec) return { error: '가입 신청을 찾지 못했습니다.' };
+                if (rec.status !== 'pending') return { error: '이미 처리된 신청입니다.' };
+                if (parentOnly && str(rec.parentId) !== str(parentOnly)) return { error: '우리 업체 소속 신청이 아닙니다.' };
+                await store.setStore(su.SIGNUP_KEY, list.map(x => (x && x.id === sid ? su.rejectSignup(rec, reason, by, nowMs) : x)));
+                await logAudit({ action: 'signup-reject', loginId: rec.loginId, by, ok: true, note: `${rec.id} · ${str(reason).slice(0, 80)}` });
+                return { ok: true };
+            };
+
+            // ===== 직원(그룹웨어)만 — 업체 관리 › 파트너센터 아이디 · 가입 승인 =====
+            if (path.startsWith('/api/partner-admin/')) {
+                const st = await requirePerm(env, store, request, ['partner-ids']);
+                if (st.error) return st.error;
+                const by = str(st.me.email).toLowerCase();
+                const input = method === 'POST' ? await body() : {};
+                // 임시 비밀번호 — 서버가 만들어 바로 암호화하고, 화면에는 이번 한 번만 돌려줍니다 (72시간 · 첫 로그인 때 바꾸게)
+                if (path === '/api/partner-admin/temp-password' && method === 'POST') {
+                    const loginId = str(input.loginId).toLowerCase();
+                    const pw = su.tempPassword();
+                    const h = await pc.hashPassword(pw);
+                    const a = await updateAccount(loginId, (x) => {
+                        Object.assign(x, h); delete x.pw;
+                        x.mustChangePw = true; x.tempPwUntil = new Date(nowMs + su.TEMP_HOURS * 3600000).toISOString();
+                        x.tempIssuedAt = new Date(nowMs).toISOString(); x.tempIssuedBy = by;
+                    });
+                    if (!a) return json(404, { ok: false, error: '아이디를 찾지 못했습니다.' });
+                    await store.setStore(su.GUARD_KEY, su.guardClear(await store.storeValue(su.GUARD_KEY), loginId));
+                    await logAudit({ action: 'temp-password', loginId, by, ok: true });
+                    return json(200, { ok: true, password: pw, account: a, hours: su.TEMP_HOURS });
+                }
+                if (path === '/api/partner-admin/unlock' && method === 'POST') {
+                    const loginId = str(input.loginId).toLowerCase();
+                    await store.setStore(su.GUARD_KEY, su.guardClear(await store.storeValue(su.GUARD_KEY), loginId));
+                    await logAudit({ action: 'unlock', loginId, by, ok: true });
+                    return json(200, { ok: true });
+                }
+                if (path === '/api/partner-admin/signup-decide' && method === 'POST') {
+                    const sid = str(input.id);
+                    const r = input.decision === 'approve'
+                        ? await approve(sid, { by, linkCompanyId: str(input.linkCompanyId) })
+                        : (input.decision === 'reject' ? await reject(sid, input.reason, by) : { error: '승인 또는 반려를 골라 주세요.' });
+                    return r.error ? json(400, { ok: false, error: r.error }) : json(200, r);
+                }
+                return json(404, { ok: false, error: '없는 주소입니다: ' + path });
+            }
+
+            // ===== 로그인 없이 — 회원가입 =====
+            if (path === '/api/partner/signup/config' && method === 'GET') {
+                return json(200, { ok: true, turnstileSiteKey: str(env.TURNSTILE_SITE_KEY), consentVersion: su.CONSENT_VERSION });
+            }
+            if (path === '/api/partner/signup/parents' && method === 'GET') {
+                const kind = str(url.searchParams.get('kind'));
+                const q = str(url.searchParams.get('q')).slice(0, 40);
+                if (q.replace(/\s+/g, '').length < 2 || !['hq', 'partner'].includes(kind)) return json(200, { ok: true, list: [] });
+                const rows = await store.rowsWhere('customers', `data->>kind=eq.${encodeURIComponent(kind)}&limit=2000`);
+                return json(200, { ok: true, list: su.parentSearch(rows, kind, q) });
+            }
+            if (path === '/api/partner/signup' && method === 'POST') {
+                const input = await body();
+                // 봇 확인 (Cloudflare Turnstile) — 비밀 키가 설정돼 있을 때만
+                if (str(env.TURNSTILE_SECRET_KEY)) {
+                    const fd = new FormData();
+                    fd.append('secret', str(env.TURNSTILE_SECRET_KEY)); fd.append('response', str(input.turnstileToken)); fd.append('remoteip', ip);
+                    let okBot = false;
+                    try { const vr = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', { method: 'POST', body: fd }); okBot = !!(await vr.json()).success; } catch (e) { okBot = false; }
+                    if (!okBot) return json(400, { ok: false, error: '자동 가입 방지 확인에 실패했습니다. 확인 칸을 다시 눌러 주세요.' });
+                }
+                const rate = su.rateCheck(await store.storeValue(su.RATE_KEY), ip, nowMs);
+                await store.setStore(su.RATE_KEY, rate.rate);
+                if (!rate.ok) return json(429, { ok: false, error: '가입 신청이 너무 잦습니다. 1시간 뒤 다시 시도해 주세요.' });
+                const v = await store.storeValues(['gwPartnerAccounts.v1', su.SIGNUP_KEY]);
+                const signups = Array.isArray(v[su.SIGNUP_KEY]) ? v[su.SIGNUP_KEY] : [];
+                const parentId = str(input.parentId);
+                const parent = parentId ? (await store.rowsWhere('customers', `id=eq.${encodeURIComponent(parentId)}`))[0] || null : null;
+                const digitsBiz = str(input.businessNo).replace(/\D/g, '');
+                let existing = null;
+                if (digitsBiz.length === 10) {
+                    const fmt = su.bizNoFormat(digitsBiz);
+                    existing = (await store.rowsWhere('customers', `biz_no=in.(${encodeURIComponent('"' + fmt + '","' + digitsBiz + '"')})&limit=1`))[0] || null;
+                }
+                const r = su.validateSignup(input, { accounts: v['gwPartnerAccounts.v1'], signups, parent, existing, nowMs, ip });
+                if (r.error) return json(400, { ok: false, error: r.error });
+                Object.assign(r.rec, await pc.hashPassword(String(input.pw)));
+                const fresh = (await store.storeValue(su.SIGNUP_KEY)) || [];
+                const list = Array.isArray(fresh) ? fresh : [];
+                r.rec.id = su.nextSignupId(list);
+                await store.setStore(su.SIGNUP_KEY, list.concat([r.rec]));
+                await logAudit({ action: 'signup', loginId: r.rec.loginId, ok: true, note: `${r.rec.id} · ${r.rec.company.name}` });
+                return json(200, { ok: true, id: r.rec.id });
+            }
+
+            // ===== 로그인 =====
             if (path === '/api/partner/login' && method === 'POST') {
                 const input = await body();
                 const loginId = str(input.loginId).toLowerCase();
                 const pw = input.pw === undefined || input.pw === null ? '' : String(input.pw);
+                const guard = await store.storeValue(su.GUARD_KEY);
+                const g = su.guardState(guard, loginId, nowMs);
+                if (loginId && g.locked) {
+                    await logAudit({ action: 'login', loginId, ok: false, note: '잠김' });
+                    return json(200, { ok: false, locked: true, error: `비밀번호를 ${su.LOCK_FAILS}번 틀려 잠겼습니다. ${Math.ceil((g.until - nowMs) / 60000)}분 뒤 다시 시도하거나 킹오더브라더스 담당자에게 잠금 해제를 요청해 주세요.` });
+                }
                 const f = loginId && pw ? await pc.resolvePartner(partnerIo(store), loginId) : null;
                 const chk = f ? await pc.checkPassword(f.acct, pw) : { ok: false };
-                if (!chk.ok) return json(200, { ok: false, error: '아이디 또는 비밀번호가 맞지 않습니다.' });
+                if (!chk.ok) {
+                    // 아직 승인 전인 회원가입 아이디면 그렇게 알려 줍니다 (비밀번호가 맞을 때만 — 남의 신청 여부를 떠보지 못하게)
+                    if (!f && loginId && pw) {
+                        const sl = (await store.storeValue(su.SIGNUP_KEY)) || [];
+                        const mine = (Array.isArray(sl) ? sl : []).filter(x => x && x.loginId === loginId).pop();
+                        if (mine && mine.status === 'pending' && mine.pwHash && (await pc.checkPassword(mine, pw)).ok) return json(200, { ok: false, pending: true, error: '가입 승인을 기다리고 있습니다. 승인되면 이 아이디로 로그인할 수 있습니다.' });
+                        if (mine && mine.status === 'rejected') return json(200, { ok: false, error: '가입 신청이 반려되었습니다' + (mine.reason ? ` — ${mine.reason}` : '') + '. 다시 신청하거나 킹오더브라더스 담당자에게 문의해 주세요.' });
+                    }
+                    if (f) {
+                        const r = su.guardFail(guard, loginId, nowMs);
+                        await store.setStore(su.GUARD_KEY, r.guard);
+                        await logAudit({ action: 'login', loginId, ok: false, note: `${r.fails}번째 실패${r.locked ? ' · 잠금' : ''}` });
+                        if (r.locked) return json(200, { ok: false, locked: true, error: `비밀번호를 ${su.LOCK_FAILS}번 틀려 ${su.LOCK_MINUTES}분 동안 잠겼습니다.` });
+                        return json(200, { ok: false, error: `아이디 또는 비밀번호가 맞지 않습니다. (${r.fails}/${su.LOCK_FAILS} — ${su.LOCK_FAILS}번 틀리면 ${su.LOCK_MINUTES}분 잠깁니다)` });
+                    }
+                    return json(200, { ok: false, error: '아이디 또는 비밀번호가 맞지 않습니다.' });
+                }
                 if (f.acct.active === false) return json(200, { ok: false, error: '사용이 중지된 아이디입니다. 킹오더브라더스 담당자에게 문의해 주세요.' });
                 // 업체 통합 (2026-10-05) — 업체 관리에서 업체가 지워졌으면 아이디도 쓸 수 없습니다
                 if (f.missing) return json(200, { ok: false, error: '이 아이디의 업체가 등록되어 있지 않습니다. 킹오더브라더스 담당자에게 문의해 주세요.' });
-                if (chk.needUpgrade) {
-                    // 예전 평문 비밀번호 — 이번에 암호화로 바꿔 둡니다 (그사이 바뀐 목록 위에 그 계정만 고칩니다)
-                    try {
-                        const fresh = await store.storeValue('gwPartnerAccounts.v1');
-                        const list = Array.isArray(fresh) ? fresh : [];
-                        const a = list.find(x => str(x.loginId).toLowerCase() === loginId);
-                        if (a && a.pw === pw) { Object.assign(a, await pc.hashPassword(pw)); delete a.pw; await store.setStore('gwPartnerAccounts.v1', list); }
-                    } catch (e) { console.error('[partner] 비밀번호 암호화 저장 실패', e && e.message); }
+                if (f.acct.mustChangePw && f.acct.tempPwUntil && Date.parse(f.acct.tempPwUntil) < nowMs) {
+                    await logAudit({ action: 'login', loginId, ok: false, note: '임시 비밀번호 기간 지남' });
+                    return json(200, { ok: false, error: `임시 비밀번호의 사용 기간(${su.TEMP_HOURS}시간)이 지났습니다. 킹오더브라더스 담당자에게 새 임시 비밀번호를 요청해 주세요.` });
                 }
+                if (g.fails) await store.setStore(su.GUARD_KEY, su.guardClear(guard, loginId));
+                if (chk.needUpgrade) {
+                    // 예전 평문 · 1만 회 비밀번호 — 이번에 10만 회 암호화로 바꿔 둡니다
+                    try { const h = await pc.hashPassword(pw); await updateAccount(loginId, (a) => { Object.assign(a, h); delete a.pw; }); }
+                    catch (e) { console.error('[partner] 비밀번호 암호화 저장 실패', e && e.message); }
+                }
+                await logAudit({ action: 'login', loginId, ok: true });
                 const token = await pc.makeToken(secret, f.acct.loginId, f.acct.partnerId);
-                return json(200, { ok: true, token, session: { loginId: f.acct.loginId, partnerId: f.acct.partnerId, partnerName: f.me.partnerName } });
+                return json(200, { ok: true, token, session: { loginId: f.acct.loginId, partnerId: f.acct.partnerId, partnerName: f.me.partnerName, mustChangePw: f.acct.mustChangePw === true } });
             }
+
+            // ===== 로그인한 파트너 =====
             const isBoot = path === '/api/partner/boot' && method === 'GET';
-            const me = await who(isBoot);          // 소속 가맹점은 자료 받기(boot) 때만 읽습니다
-            if (!me) return json(401, { ok: false, error: '다시 로그인해 주세요.' });
-            const session = { loginId: me.loginId, partnerId: me.partnerId, partnerName: me.partnerName };
+            const t = await pc.readToken(secret, str(request.headers.get('Authorization')).replace(/^Bearer\s+/i, ''));
+            const rp = t ? await pc.resolvePartner(partnerIo(store), t.loginId, { withShops: isBoot }) : null;
+            if (!rp || rp.missing || rp.acct.active === false || rp.acct.partnerId !== t.partnerId) return json(401, { ok: false, error: '다시 로그인해 주세요.' });
+            const me = rp.me;
+            const session = { loginId: me.loginId, partnerId: me.partnerId, partnerName: me.partnerName, mustChangePw: me.mustChangePw };
+            // 비밀번호 바꾸기 (S3 · S4) — 임시 비밀번호로 들어온 사람도 이것만은 됩니다
+            if (path === '/api/partner/password' && method === 'POST') {
+                const input = await body();
+                const cur = String(input.current === undefined ? '' : input.current), next = String(input.next === undefined ? '' : input.next);
+                if (!(await pc.checkPassword(rp.acct, cur)).ok) {
+                    await logAudit({ action: 'password-change', loginId: me.loginId, ok: false, note: '지금 비밀번호 틀림' });
+                    return json(400, { ok: false, error: '지금 비밀번호가 맞지 않습니다.' });
+                }
+                const err = su.passwordProblem(next, me.loginId);
+                if (err) return json(400, { ok: false, error: err });
+                if (cur === next) return json(400, { ok: false, error: '지금과 다른 비밀번호로 정해 주세요.' });
+                const h = await pc.hashPassword(next);
+                await updateAccount(me.loginId, (a) => { Object.assign(a, h); delete a.pw; a.mustChangePw = false; delete a.tempPwUntil; a.pwChangedAt = new Date(nowMs).toISOString(); });
+                await logAudit({ action: 'password-change', loginId: me.loginId, by: me.loginId, ok: true });
+                return json(200, { ok: true });
+            }
+            // 임시 비밀번호로 들어왔으면 바꾸기 전에는 다른 일을 못 합니다 (S4)
+            if (me.mustChangePw) return json(403, { ok: false, mustChange: true, session, error: '임시 비밀번호입니다. 먼저 새 비밀번호로 바꿔 주세요.' });
+            // 상위업체 승인 — 전체 스위치 · 업체 설정 · 업체관리자 아이디가 모두 켜져 있을 때만
+            const policy = await store.storeValue(su.POLICY_KEY);
+            const canApprove = su.parentMayApprove(policy, me.company, rp.acct);
             if (isBoot) {
-                const v = await store.storeValues(pc.ALL_KEYS);
+                const v = await store.storeValues(pc.ALL_KEYS.concat([su.SIGNUP_KEY]));
+                if (canApprove) me.shopSignups = su.parentSignupView(v[su.SIGNUP_KEY], me.partnerId);
                 return json(200, { ok: true, session, store: pc.partnerView(v, me) });
+            }
+            if (path === '/api/partner/signup-decide' && method === 'POST') {
+                if (!canApprove) return json(403, { ok: false, error: '가입 승인 권한이 없습니다.' });
+                const input = await body();
+                const sl = (await store.storeValue(su.SIGNUP_KEY)) || [];
+                const rec = (Array.isArray(sl) ? sl : []).find(x => x && x.id === str(input.id));
+                if (!rec || str(rec.parentId) !== str(me.partnerId)) return json(403, { ok: false, error: '우리 업체 소속 신청이 아닙니다.' });
+                const by = 'partner:' + me.loginId;
+                // 상위업체가 승인하면 그 업체 아래에만 · 유형도 신청 그대로 (기존 업체 연결은 같은 소속일 때만)
+                const r = input.decision === 'approve'
+                    ? await approve(rec.id, { by, linkCompanyId: rec.existingCompanyId || '', parentOnly: true })
+                    : (input.decision === 'reject' ? await reject(rec.id, input.reason, by, me.partnerId) : { error: '승인 또는 반려를 골라 주세요.' });
+                return r.error ? json(400, { ok: false, error: r.error }) : json(200, r);
             }
             if (path === '/api/partner/save' && method === 'POST') {
                 const input = await body();

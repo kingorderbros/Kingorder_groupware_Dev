@@ -1272,7 +1272,7 @@
                     <div class="text-center mb-7">
                         <img src="image/logo.png" alt="킹오더브라더스 로고" class="h-14 mx-auto mb-3 object-contain" onerror="this.onerror=null;this.style.display='none'" />
                         <h1 class="text-xl font-bold text-gray-800">킹오더브라더스 파트너센터</h1>
-                        <p class="text-gray-500 text-sm mt-1">파트너사 전용 업무 접수 시스템입니다.</p>
+                        <p class="text-gray-500 text-sm mt-1">파트너 전용 업무 접수 시스템입니다.</p>
                     </div>
                     <form onsubmit="handlePartnerLogin(event)">
                         <div class="mb-4">
@@ -1294,13 +1294,19 @@
                         <p id="pc-login-msg" class="text-sm text-red-600 mb-3 min-h-[1.25rem]"></p>
                         <button type="submit" class="w-full py-3 px-4 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg shadow-md transition">로그인</button>
                     </form>
-                    <p class="mt-5 pt-4 border-t border-gray-100 text-xs text-gray-400">아이디 · 비밀번호를 모르시면 킹오더브라더스 담당자에게 문의해 주세요.</p>
+                    <!-- 회원가입 (2026-10-05) — 신청하면 '승인대기', 킹오더(또는 소속 본사 · 파트너사)가 승인하면 로그인됩니다 -->
+                    <button type="button" onclick="openPartnerSignup()" class="mt-3 w-full py-2.5 px-4 border border-indigo-300 text-indigo-700 font-semibold rounded-lg hover:bg-indigo-50 transition"><i class="fas fa-user-plus mr-1"></i>회원가입</button>
+                    <p class="mt-5 pt-4 border-t border-gray-100 text-xs text-gray-400">아이디 · 비밀번호를 모르시면 킹오더브라더스 담당자에게 문의해 주세요. 비밀번호를 5번 틀리면 10분 동안 잠깁니다.</p>
                 </div>
-                <p class="text-center text-xs text-gray-400 mt-4">문의 : 담당 영업사원에게 연락해 주세요.</p>
+                <p class="text-center text-xs text-gray-400 mt-4">문의는 담당사원에게 연락해주세요.</p>
                 <!-- 화면 판 표시 — 고친 것이 반영됐는지(옛 파일·캐시를 보고 있는 건 아닌지) 바로 가릴 수 있게 (2026-09-16) -->
                 <p class="text-center text-[10px] text-gray-300 mt-1" title="파일을 고칠 때마다 올라갑니다">화면 <span class="js-pc-build"></span></p>
             </div>
         </div>
+
+        <!-- ①-2 회원가입 · ①-3 임시 비밀번호 바꾸기 (2026-10-05) — renderPartnerSignup · renderPartnerForcedPw 가 그립니다 -->
+        <div id="partner-signup" class="hidden relative z-10 flex items-start justify-center min-h-screen p-4"></div>
+        <div id="partner-pwchange" class="hidden relative z-10 flex items-center justify-center min-h-screen p-4"></div>
 
         <!-- ② 접수 화면 -->
         <div id="partner-app" class="hidden min-h-screen flex flex-col">
@@ -7727,6 +7733,11 @@
                         <label class="block text-xs font-medium text-gray-600 mb-1">업체 유형 <span class="text-red-500">*</span></label>
                         <select id="partner-cust-type" onchange="onPartnerCustTypeChange()" class="w-full p-2 text-sm border border-gray-300 rounded bg-white focus:outline-none focus:ring-2 focus:ring-amber-500"></select>
                         <p class="text-[11px] text-gray-400 mt-1" id="partner-cust-desc">파트너센터에서 보이는 단가·수수료가 이 값으로 정해집니다.</p>
+                    </div>
+                    <!-- 소속 가맹점 가입 승인 (2026-10-05) — 본사 · 파트너사만. 전체 스위치(업체 관리 › 가입 승인)가 켜져 있어야 의미가 있습니다 -->
+                    <div id="partner-approve-box" class="hidden sm:col-span-2">
+                        <label class="flex items-start gap-2 text-sm text-gray-700"><input type="checkbox" id="partner-allow-approve" class="mt-0.5 w-4 h-4 rounded border-gray-300 text-cyan-600" />
+                            <span>소속 가맹점 가입을 <b>이 업체가 승인</b> <span class="block text-[11px] text-gray-400">업체 관리 › 가입 승인의 전체 스위치가 켜져 있을 때, 이 업체의 <b>업체관리자</b> 아이디가 파트너센터에서 승인합니다.</span></span></label>
                     </div>
                     <!-- 거래상태 — 가맹점 · 파트너사가 같은 목록을 씁니다 (2026-10-05 업체 통합) -->
                     <div>
@@ -31826,6 +31837,7 @@ const QUOTE_TEMPLATES = [
             downloadBlobAs(buildXlsxBlob(rows, '업체'), `업체_업로드양식_${ymd(new Date()).replace(/-/g, '')}.xlsx`);
         }
 
+        let lastCompanyImportIds = [];      // 방금 올린 업체들 — 결과 화면의 [아이디 일괄 만들기] 가 씁니다 (2026-10-05)
         async function runCommonCustomerImport(input) {
             const file = input.files && input.files[0];
             if (!file) return;
@@ -31856,6 +31868,7 @@ const QUOTE_TEMPLATES = [
             const seen = new Set();
             const preview = [];
             const links = [];          // 상위업체는 모든 줄을 넣은 뒤에 잇습니다 — 같은 파일 안의 본사 · 파트너사도 찾을 수 있게 (2026-10-05)
+            lastCompanyImportIds = [];
             const cell = (r, k) => (col[k] >= 0 && r[col[k]] != null) ? String(r[col[k]]).trim() : '';
 
             rows.slice(found.row + 1).forEach(r => {
@@ -31947,6 +31960,7 @@ const QUOTE_TEMPLATES = [
                     stat.added++;
                 }
                 if (parentRef) links.push({ c: target, ref: parentRef, kindGiven: !!data.kind });
+                if (lastCompanyImportIds.indexOf(target.id) < 0) lastCompanyImportIds.push(target.id);
                 if (preview.length < 5) preview.push(Object.assign({ name, parentRef }, data));
             });
 
@@ -31985,6 +31999,12 @@ const QUOTE_TEMPLATES = [
                     </p>
                     <p class="text-xs text-green-700/80 mt-1">읽은 열 ${usedCols.length}개 — ${usedCols.map(c => escapeHtml(c.label)).join(' · ')}</p>
                 </div>
+                ${(typeof canManagePartnerIds === 'function' && canManagePartnerIds()) ? (() => {
+                    const without = lastCompanyImportIds.filter(id => !partnerAccounts.some(a => a.partnerId === id)).length;
+                    return without ? `<div class="mt-2 rounded border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs text-indigo-900 flex flex-wrap items-center gap-2">
+                        <span><i class="fas fa-key mr-1"></i>방금 올린 업체 중 파트너센터 아이디가 없는 곳 <b>${without}곳</b></span>
+                        <button type="button" onclick="bulkCreatePartnerIds(lastCompanyImportIds); this.disabled=true" class="ml-auto px-2.5 py-1 rounded bg-indigo-600 text-white hover:bg-indigo-700">아이디 일괄 만들기 (비밀번호 미설정)</button></div>` : '';
+                })() : ''}
                 ${missingParent.length ? `<div class="text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded px-2 py-1.5 mt-2"><p class="font-semibold"><i class="fas fa-link-slash mr-1"></i>상위업체 못 찾음 ${missingParent.length}건 — 업체는 등록했습니다. 상위업체를 먼저 올리거나 업체 관리에서 골라 주세요.</p>
                     <p class="mt-1">${missingParent.slice(0, 20).map(escapeHtml).join(' · ')}${missingParent.length > 20 ? ` 외 ${missingParent.length - 20}건` : ''}</p></div>` : ''}
                 ${unknown.length ? `<p class="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5 mt-2"><i class="fas fa-circle-info mr-1"></i>알아보지 못한 머리글 ${unknown.length}개는 건너뛰었습니다 — ${unknown.map(escapeHtml).join(' · ')}</p>` : ''}
@@ -38409,7 +38429,7 @@ const QUOTE_TEMPLATES = [
                         <div><label class="block text-xs font-medium text-gray-600 mb-1">거래상태</label>
                             <select onchange="setCompanyFilter('status', this.value)" class="${selCls}"><option value="">전체</option>${PARTNER_STATUS.map(o => `<option value="${o.id}"${f.status === o.id ? ' selected' : ''}>${escapeHtml(o.id)}</option>`).join('')}</select></div>
                         <button type="button" onclick="resetCompanyFilter()" class="px-3 py-2 text-sm rounded bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors">초기화</button>
-                        <div class="ml-auto inline-flex rounded border border-gray-300 overflow-hidden">${viewBtn('list', 'fa-list', '목록')}${viewBtn('tree', 'fa-sitemap', '소속 트리')}${canManagePartnerIds() ? viewBtn('ids', 'fa-key', '아이디') : ''}</div>
+                        <div class="ml-auto inline-flex rounded border border-gray-300 overflow-hidden">${viewBtn('list', 'fa-list', '목록')}${viewBtn('tree', 'fa-sitemap', '소속 트리')}${canManagePartnerIds() ? viewBtn('ids', 'fa-key', '아이디') + viewBtn('signups', 'fa-user-check', '가입 승인' + (companySignupPending().length ? ` <span class="ml-0.5 px-1.5 rounded-full text-[10px] bg-red-500 text-white">${companySignupPending().length}</span>` : '')) : ''}</div>
                     </div>
                     ${orphan ? `<p class="px-4 pb-3 text-xs text-rose-700"><i class="fas fa-link-slash mr-1"></i>상위업체가 연결되지 않은 가맹점이 <b>${orphan}곳</b> 있습니다 — 소속 트리 맨 아래 '상위업체 없음' 에서 확인할 수 있습니다.</p>` : ''}
                 </div>
@@ -38428,7 +38448,8 @@ const QUOTE_TEMPLATES = [
                 renderPartnerIdAdmin();
                 return;
             }
-            if (companyFilter.view === 'ids') companyFilter.view = 'list';
+            if (companyFilter.view === 'signups' && canManagePartnerIds()) { box.innerHTML = companySignupsHtml(); return; }
+            if (companyFilter.view === 'ids' || companyFilter.view === 'signups') companyFilter.view = 'list';
             const list = companyFiltered();
             box.innerHTML = companyFilter.view === 'tree' ? companyTreeHtml(list) : companyListHtml(list);
         }
@@ -38447,14 +38468,16 @@ const QUOTE_TEMPLATES = [
             const rows = list.map(a => {
                 const lid = escapeHtml(a.loginId);
                 const on = a.active !== false;
-                const pwSet = !!(a.pwHash || a.pw);
                 return `<div class="flex flex-wrap items-center gap-2 py-1.5 border-b border-gray-100 last:border-0">
                     <span class="font-mono text-sm font-semibold text-gray-800">${lid}</span>
                     <span class="px-1.5 py-0.5 rounded text-[11px] font-semibold ${on ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}">${on ? '사용' : '중지'}</span>
-                    ${pwSet ? '' : '<span class="px-1.5 py-0.5 rounded text-[11px] bg-amber-100 text-amber-800" title="비밀번호를 정해야 로그인할 수 있습니다">비밀번호 없음</span>'}
+                    ${a.role === 'admin' ? '<span class="px-1.5 py-0.5 rounded text-[11px] font-semibold bg-violet-100 text-violet-800">업체관리자</span>' : ''}
+                    ${partnerPwStateHtml(a)}
                     <span class="text-xs text-gray-500">${escapeHtml(a.manager || '')}${a.phone ? ' · ' + escapeHtml(a.phone) : ''}</span>
                     <span class="ml-auto flex gap-1">
                         <button type="button" onclick="openPartnerIdModal('${lid}')" class="${btn} border-indigo-300 text-indigo-700 bg-white hover:bg-indigo-50">수정 · 권한</button>
+                        <button type="button" onclick="issuePartnerTempPassword('${lid}', true)" class="${btn} border-sky-300 text-sky-700 bg-white hover:bg-sky-50">임시 비밀번호</button>
+                        ${partnerLockState(a.loginId).locked ? `<button type="button" onclick="unlockPartnerId('${lid}')" class="${btn} border-red-300 text-red-700 bg-white hover:bg-red-50">잠금 해제</button>` : ''}
                         <button type="button" onclick="togglePartnerIdActive('${lid}')" class="${btn} ${on ? 'border-amber-300 text-amber-700' : 'border-green-300 text-green-700'} bg-white hover:bg-gray-50">${on ? '중지' : '사용'}</button>
                         <button type="button" onclick="deletePartnerId('${lid}')" class="${btn} border-red-200 text-red-600 bg-white hover:bg-red-50">삭제</button>
                     </span></div>`;
@@ -38462,6 +38485,99 @@ const QUOTE_TEMPLATES = [
             return `${rows || '<p class="text-xs text-gray-400 py-1">아직 아이디가 없습니다.</p>'}
                 <button type="button" onclick="openCompanyIdCreate('${id}')" class="mt-2 px-3 py-1.5 text-xs rounded border border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100"><i class="fas fa-user-plus mr-1"></i>아이디 만들기</button>`;
         }
+        // ---------- 업체 관리 › 가입 승인 (2026-10-05 · 제안서 4.1) ----------
+        // 파트너센터 [회원가입] 으로 들어온 신청(app_store 'gwPartnerSignups.v1', 서버만 씀)을 승인 · 반려합니다.
+        // 승인하면 서버가 업체(customers 표)와 아이디 · 메뉴를 만들고, 신청서는 '승인' 으로 바뀝니다.
+        let companySignupTab = 'pending';
+        function companySignupList() { return (loadJsonStore('gwPartnerSignups.v1', []) || []).filter(x => x && x.id); }
+        function companySignupPending() { try { return companySignupList().filter(x => x.status === 'pending'); } catch (e) { return []; } }
+        function companySignupPolicy() { return loadJsonStore('gwPartnerSignupPolicy.v1', {}) || {}; }
+        function setCompanySignupPolicy(on) {
+            saveJsonStore('gwPartnerSignupPolicy.v1', Object.assign({}, companySignupPolicy(), { parentApprove: !!on, updatedAt: new Date().toISOString(), updatedBy: currentUserName || '' }));
+            showAppToast(on ? '본사 · 파트너사의 소속 가맹점 가입 승인을 켰습니다.' : '가입 승인은 이제 관리자만 합니다.', 'blue');
+            drawCompanyRows();
+        }
+        function companySignupsHtml() {
+            const all = companySignupList().slice().sort((a, b) => String(b.at).localeCompare(String(a.at)));
+            const pend = all.filter(x => x.status === 'pending');
+            const done = all.filter(x => x.status !== 'pending');
+            const list = companySignupTab === 'pending' ? pend : done;
+            const pol = companySignupPolicy();
+            const server = partnerUsesServer();
+            const tab = (id, label, n) => `<button type="button" onclick="companySignupTab='${id}'; drawCompanyRows()" class="px-3 py-1.5 text-sm rounded ${companySignupTab === id ? 'bg-gray-800 text-white' : 'bg-white border border-gray-300 text-gray-600'}">${label} <span class="text-xs">${n}</span></button>`;
+            const row = (k, v) => v ? `<div class="flex gap-2"><span class="w-20 shrink-0 text-gray-400">${k}</span><span class="text-gray-800 min-w-0 break-words">${v}</span></div>` : '';
+            const card = (x) => {
+                const co = x.company || {};
+                const same = co.businessNo ? customers.filter(c => c.businessNo && normKeyValue(c.businessNo) === normKeyValue(co.businessNo)) : [];
+                const parent = x.parentId ? customers.find(c => c.id === x.parentId) : null;
+                const st = x.status === 'approved' ? '<span class="px-2 py-0.5 rounded-full text-xs bg-green-100 text-green-700">승인</span>'
+                         : x.status === 'rejected' ? '<span class="px-2 py-0.5 rounded-full text-xs bg-red-100 text-red-700">반려</span>'
+                         : '<span class="px-2 py-0.5 rounded-full text-xs bg-amber-100 text-amber-800">승인대기</span>';
+                return `<div class="bg-white border border-gray-200 rounded-lg p-4">
+                    <div class="flex flex-wrap items-center gap-2 mb-2">${st}${partnerCustTypeChip({ custType: x.kind })}
+                        <b class="text-gray-800">${escapeHtml(co.name || '')}</b><span class="text-xs text-gray-400">${escapeHtml(x.id)} · ${escapeHtml(new Date(x.at).toLocaleString('ko-KR'))}</span></div>
+                    <div class="grid sm:grid-cols-2 gap-x-6 gap-y-1 text-xs">
+                        ${row('사업자번호', escapeHtml(co.businessNo || ''))}${row('대표자', escapeHtml(co.ceo || ''))}
+                        ${row('사업자 구분', escapeHtml(partnerBizTypeName(co.bizType) || ''))}${row('주소', escapeHtml(co.address || ''))}
+                        ${row('담당자', escapeHtml([co.contactName, co.phone, co.email].filter(Boolean).join(' · ')))}${row('아이디', `<span class="font-mono">${escapeHtml(x.loginId)}</span>`)}
+                        ${x.parentId ? row('소속', escapeHtml(x.parentName || (parent ? companyNameOf(parent) : x.parentId)) + (parent ? '' : ' <span class="text-rose-600">(지금 목록에 없음)</span>')) : ''}
+                        ${row('동의', '개인정보 수집 · 이용' + (x.parentId ? (x.consents && x.consents.parentShare ? ' · <b>소속 업체 제공 동의</b>' : ' · 소속 업체 제공 <span class="text-gray-400">동의 안 함</span>') : ''))}
+                        ${x.status === 'rejected' ? row('반려 사유', escapeHtml(x.reason || '')) : ''}
+                        ${x.status !== 'pending' ? row('처리', escapeHtml([x.decidedBy, x.decidedAt ? new Date(x.decidedAt).toLocaleString('ko-KR') : ''].filter(Boolean).join(' · ')) + (x.companyId ? ` · 업체 <button type="button" onclick="openCompanyModal('${escapeHtml(x.companyId)}')" class="underline text-cyan-700">${escapeHtml(x.companyId)}</button>` : '')) : ''}
+                    </div>
+                    ${x.status === 'pending' ? `
+                    <div class="mt-3 pt-3 border-t border-gray-100 flex flex-wrap items-center gap-2">
+                        <select id="su-link-${escapeHtml(x.id)}" class="p-1.5 text-xs border border-gray-300 rounded bg-white max-w-full">
+                            <option value="">새 업체로 등록</option>
+                            ${same.map(c => `<option value="${escapeHtml(c.id)}"${same.length === 1 ? ' selected' : ''}>기존 업체에 연결 — ${escapeHtml(companyNameOf(c))} (${escapeHtml(partnerCustTypeName(c.kind))})</option>`).join('')}
+                        </select>
+                        ${same.length ? '<span class="text-[11px] text-amber-700">사업자번호가 같은 업체가 있습니다</span>' : ''}
+                        <span class="ml-auto flex gap-1.5">
+                            <button type="button" ${server ? '' : 'disabled'} onclick="decideCompanySignup('${escapeHtml(x.id)}', 'approve')" class="px-3 py-1.5 text-xs rounded bg-green-600 text-white hover:bg-green-700 disabled:opacity-40">승인</button>
+                            <button type="button" ${server ? '' : 'disabled'} onclick="decideCompanySignup('${escapeHtml(x.id)}', 'reject')" class="px-3 py-1.5 text-xs rounded bg-white border border-red-300 text-red-700 hover:bg-red-50 disabled:opacity-40">반려</button>
+                        </span>
+                    </div>` : ''}
+                </div>`;
+            };
+            return `<div class="space-y-3">
+                <div class="bg-white border border-gray-200 rounded-lg p-4">
+                    <label class="flex items-start gap-2 text-sm text-gray-800"><input type="checkbox" ${pol.parentApprove ? 'checked' : ''} onchange="setCompanySignupPolicy(this.checked)" class="mt-0.5 w-4 h-4 rounded border-gray-300 text-cyan-600" />
+                        <span><b>본사 · 파트너사도 소속 가맹점 가입을 승인할 수 있게</b> <span class="text-xs text-gray-500">(전체 스위치 · 기본 꺼짐)</span>
+                        <span class="block text-xs text-gray-500 mt-0.5">켜면 업체 창에서 <b>'소속 가맹점 가입을 이 업체가 승인'</b> 을 켠 본사 · 파트너사의 <b>업체관리자</b> 아이디가 파트너센터 홈에서 자기 소속 가맹점 신청을 승인 · 반려합니다. 그룹웨어 관리자는 늘 승인할 수 있습니다.</span></span></label>
+                </div>
+                ${server ? '' : '<p class="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded px-3 py-2">로컬 저장소 모드입니다 — 승인 · 반려는 서버가 있는 곳(dev 주소)에서만 됩니다.</p>'}
+                <div class="flex gap-2">${tab('pending', '승인대기', pend.length)}${tab('done', '처리됨', done.length)}</div>
+                ${list.length ? list.map(card).join('') : `<div class="text-sm text-gray-400 text-center py-12 bg-gray-50 rounded-lg border border-dashed border-gray-200">${companySignupTab === 'pending' ? '승인을 기다리는 가입 신청이 없습니다.' : '처리한 가입 신청이 없습니다.'}<br><span class="text-xs">업체는 파트너센터 로그인 화면의 <b>[회원가입]</b> 으로 신청합니다.</span></div>`}
+            </div>`;
+        }
+        async function decideCompanySignup(id, decision) {
+            const x = companySignupList().find(s => s.id === id);
+            if (!x) return;
+            const body = { id, decision };
+            if (decision === 'approve') {
+                const sel = document.getElementById('su-link-' + id);
+                body.linkCompanyId = sel ? sel.value : '';
+                if (!confirm(`${(x.company || {}).name} 의 가입을 승인할까요?\n${body.linkCompanyId ? '기존 업체에 연결하고' : '새 업체로 등록하고'} 아이디 '${x.loginId}' 를 바로 쓸 수 있게 합니다.`)) return;
+            } else {
+                const reason = prompt('반려 사유를 적어 주세요. (업체가 로그인할 때 보게 됩니다)', '');
+                if (reason === null) return;
+                body.reason = reason;
+            }
+            try { await kobAuth.call('/api/partner-admin/signup-decide', body); }
+            catch (e) { alert('처리하지 못했습니다.\n' + String((e && e.message) || e)); return; }
+            showAppToast(decision === 'approve' ? `${x.loginId} 가입을 승인했습니다.` : `${x.loginId} 가입을 반려했습니다.`, decision === 'approve' ? 'green' : 'blue');
+            // 서버가 만든 업체 · 아이디를 바로 받아 옵니다 (실시간으로도 들어옵니다)
+            try { if (window.kobDb) await kobDb.load('customers', true); } catch (e) { /* 실시간으로 들어옵니다 */ }
+            setTimeout(() => { if (companyFilter.view === 'signups') drawCompanyRows(); }, 800);
+        }
+        // 서버가 바꾼 가입 신청 · 아이디 · 잠금 · 기록이 실시간으로 들어오면 열려 있는 화면을 다시 그립니다
+        window.addEventListener('storage', (e) => {
+            if (!['gwPartnerSignups.v1', 'gwPartnerAccounts.v1', 'gwPartnerLoginGuard.v1', 'gwPartnerAudit.v1', 'gwPartnerSignupPolicy.v1'].includes(e.key)) return;
+            try { if (isPartnerMode()) return; } catch (err) { return; }
+            if (e.key === 'gwPartnerAccounts.v1') { const fresh = loadJsonStore('gwPartnerAccounts.v1', null); if (Array.isArray(fresh)) { partnerAccounts = fresh; partnerAccounts.forEach(a => { if (a && a.loginId && !a.id) a.id = a.loginId; }); } }
+            if (document.getElementById('company-rows') && commonActiveTab === 'companies') renderCompanies();
+            refreshCompanyIdBoxes();
+        });
         function refreshCompanyIdBoxes() {
             const pm = document.getElementById('partner-modal-ids');
             if (pm && !document.getElementById('partner-modal').classList.contains('hidden')) pm.innerHTML = companyIdsHtml(document.getElementById('edit-partner-id').value);
@@ -38654,6 +38770,8 @@ const QUOTE_TEMPLATES = [
             onPartnerCustTypeChange(p ? p.parentId : '');
             const idsBox = document.getElementById('partner-modal-ids');
             if (idsBox) idsBox.innerHTML = companyIdsHtml(p ? p.id : '');
+            const ap = document.getElementById('partner-allow-approve');
+            if (ap) ap.checked = !!(p && p.allowShopApproval === true);
             document.getElementById('partner-modal').classList.remove('hidden');
         }
 
@@ -38699,6 +38817,8 @@ const QUOTE_TEMPLATES = [
             if (pol) pol.classList.toggle('hidden', !(kind === 'franchise' || kind === 'hq'));
             const shopBtn = document.getElementById('partner-shop-detail');
             if (shopBtn) shopBtn.classList.toggle('hidden', !isShopKind(kind));
+            const apBox = document.getElementById('partner-approve-box');
+            if (apBox) apBox.classList.toggle('hidden', !(kind === 'hq' || kind === 'partner'));
             onPartnerParentChange();
         }
         // 프랜차이즈 가맹점은 본사를 고르면 본사의 가격정책을 그대로 따라갑니다 (비어 있을 때만 채움)
@@ -38757,7 +38877,8 @@ const QUOTE_TEMPLATES = [
                 note: val('partner-note'),
                 status: val('partner-status') || '미거래',
                 kind, parentId: parent ? parent.id : '',
-                franchiseHq: (kind === 'franchise' || kind === 'hq') ? franchiseHq : ''
+                franchiseHq: (kind === 'franchise' || kind === 'hq') ? franchiseHq : '',
+                allowShopApproval: (kind === 'hq' || kind === 'partner') && !!(document.getElementById('partner-allow-approve') || {}).checked
             };
             data.contact = data.contactName; data.custType = kind;
             let saved;
@@ -51340,7 +51461,102 @@ const QUOTE_TEMPLATES = [
         }
         let partnerAccounts = loadJsonStore(PARTNER_ACCOUNT_KEY, null);
         if (!Array.isArray(partnerAccounts)) { partnerAccounts = partnerAccountSeed(); saveJsonStore(PARTNER_ACCOUNT_KEY, partnerAccounts); }
-        function savePartnerAccounts() { saveJsonStore(PARTNER_ACCOUNT_KEY, partnerAccounts); }
+        // 2026-10-05 — 아이디마다 id(= 로그인 아이디)를 둡니다. 저장 계층이 목록을 id 로 합쳐, 서버가 고친 다른 아이디(임시 비밀번호 · 비밀번호 변경)를 덮지 않게.
+        partnerAccounts.forEach(a => { if (a && a.loginId && !a.id) a.id = a.loginId; });
+        function savePartnerAccounts() { partnerAccounts.forEach(a => { if (a && a.loginId && !a.id) a.id = a.loginId; }); saveJsonStore(PARTNER_ACCOUNT_KEY, partnerAccounts); }
+
+        // ---------- 파트너센터 계정 보안 (2026-10-05 · 제안서 v2 S1~S6 — 서버 판단은 functions/api/_signup.js) ----------
+        const PARTNER_GUARD_KEY = 'gwPartnerLoginGuard.v1';
+        const PARTNER_AUDIT_KEY = 'gwPartnerAudit.v1';
+        const PARTNER_SIGNUP_KEY = 'gwPartnerSignups.v1';
+        const PARTNER_SIGNUP_POLICY_KEY = 'gwPartnerSignupPolicy.v1';
+        const PARTNER_TEMP_HOURS = 72;
+        const PARTNER_LOCK_FAILS = 5;
+        // 비밀번호 규칙 — 서버(passwordProblem)와 같음. 문제가 없으면 ''
+        function partnerPwProblem(pw, loginId) {
+            const p = String(pw || '');
+            if (p.length < 10) return '비밀번호는 10자 이상이어야 합니다.';
+            if (p.length > 64) return '비밀번호는 64자까지입니다.';
+            if ([/[a-z]/, /[A-Z]/, /[0-9]/, /[^A-Za-z0-9]/].filter(re => re.test(p)).length < 3) return '비밀번호는 영문 대문자 · 소문자 · 숫자 · 특수문자 중 3종류 이상을 섞어 주세요.';
+            const id = String(loginId || '').trim().toLowerCase();
+            if (id.length >= 3 && p.toLowerCase().includes(id)) return '비밀번호에 아이디를 넣을 수 없습니다.';
+            return '';
+        }
+        // 서버가 없는 로컬 모드에서만 화면이 임시 비밀번호를 만듭니다 (서버 모드는 서버가 만듦)
+        function partnerTempPasswordLocal() {
+            const sets = ['ABCDEFGHJKLMNPQRSTUVWXYZ', 'abcdefghijkmnpqrstuvwxyz', '23456789', '!@#$%*?'];
+            const all = sets.join(''); const r = new Uint32Array(16); crypto.getRandomValues(r);
+            const out = sets.map((set, i) => set[r[i] % set.length]);
+            for (let i = 4; i < 12; i++) out.push(all[r[i] % all.length]);
+            for (let i = out.length - 1; i > 0; i--) { const j = r[(i + 4) % 16] % (i + 1); [out[i], out[j]] = [out[j], out[i]]; }
+            return out.join('');
+        }
+        function partnerUsesServer() { return typeof kobStorage !== 'undefined' && kobStorage.mode === 'supabase'; }
+        function partnerLockState(loginId) {
+            const g = (loadJsonStore(PARTNER_GUARD_KEY, {}) || {})[String(loginId || '').toLowerCase()] || {};
+            const until = Number(g.lockUntil) || 0;
+            return { locked: until > Date.now(), until, fails: Number(g.fails) || 0 };
+        }
+        // 비밀번호 상태 한 줄 — 미설정 · 임시(언제까지) · 잠김 · 정상
+        function partnerPwStateHtml(a) {
+            const chip = (cls, t, title) => `<span class="px-1.5 py-0.5 rounded text-[11px] font-semibold ${cls}"${title ? ` title="${escapeHtml(title)}"` : ''}>${t}</span>`;
+            const out = [];
+            if (!(a.pwHash || a.pw)) out.push(chip('bg-amber-100 text-amber-800', '비밀번호 미설정', '임시 비밀번호를 발급해야 로그인할 수 있습니다'));
+            else if (a.mustChangePw) {
+                const until = a.tempPwUntil ? new Date(a.tempPwUntil) : null;
+                const over = until && until.getTime() < Date.now();
+                out.push(chip(over ? 'bg-red-100 text-red-700' : 'bg-sky-100 text-sky-800', over ? '임시 비밀번호 기간 지남' : '임시 비밀번호', until ? `${until.toLocaleString('ko-KR')} 까지 · 첫 로그인 때 바꾸게 됩니다` : ''));
+            } else out.push(chip('bg-green-100 text-green-700', '설정됨', a.pwChangedAt ? `마지막 변경 ${String(a.pwChangedAt).slice(0, 10)}` : ''));
+            const lk = partnerLockState(a.loginId);
+            if (lk.locked) out.push(chip('bg-red-100 text-red-700', '잠김', `${new Date(lk.until).toLocaleTimeString('ko-KR')} 까지 · 비밀번호 ${PARTNER_LOCK_FAILS}번 틀림`));
+            return out.join(' ');
+        }
+        // 임시 비밀번호 발급 — 서버가 12자를 만들어 바로 암호화하고, 화면에는 이번 한 번만 보여 줍니다
+        async function issuePartnerTempPassword(loginId, ask) {
+            const a = partnerAccounts.find(x => x.loginId === loginId);
+            if (!a) return;
+            if (ask && (a.pwHash || a.pw) && !confirm(`'${loginId}' 에 임시 비밀번호를 새로 발급할까요?\n지금 비밀번호는 더 이상 쓸 수 없고, 첫 로그인 때 새 비밀번호로 바꾸게 됩니다.`)) return;
+            let pw;
+            try {
+                if (partnerUsesServer()) {
+                    const j = await kobAuth.call('/api/partner-admin/temp-password', { loginId });
+                    pw = j.password;
+                    const i = partnerAccounts.findIndex(x => x.loginId === loginId);
+                    if (i > -1 && j.account) partnerAccounts[i] = Object.assign({}, j.account);
+                } else {
+                    pw = partnerTempPasswordLocal();
+                    Object.assign(a, await kobPartnerPw.hash(pw), { mustChangePw: true, tempPwUntil: new Date(Date.now() + PARTNER_TEMP_HOURS * 3600000).toISOString(), tempIssuedAt: new Date().toISOString(), tempIssuedBy: currentUserName || '' });
+                    delete a.pw;
+                    const g = loadJsonStore(PARTNER_GUARD_KEY, {}) || {}; delete g[loginId]; saveJsonStore(PARTNER_GUARD_KEY, g);
+                }
+            } catch (e) { alert('임시 비밀번호를 발급하지 못했습니다.\n' + String((e && e.message) || e)); return; }
+            savePartnerAccounts();
+            renderPartnerIdAdmin();
+            if (document.getElementById('pacc-modal') && !document.getElementById('pacc-modal').classList.contains('hidden') && partnerIdModalState && partnerIdModalState.loginId === loginId) renderPartnerIdModal(partnerAccounts.find(x => x.loginId === loginId));
+            showPartnerTempPw(loginId, pw);
+        }
+        function showPartnerTempPw(loginId, pw) {
+            let box = document.getElementById('pc-temp-pw-box');
+            if (!box) { box = document.createElement('div'); box.id = 'pc-temp-pw-box'; document.body.appendChild(box); }
+            box.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[80] p-4';
+            box.innerHTML = `<div class="bg-white w-full max-w-md rounded-lg shadow-xl p-5">
+                <h3 class="text-base font-bold text-gray-800"><i class="fas fa-key text-indigo-600 mr-1"></i>임시 비밀번호 — <span class="font-mono">${escapeHtml(loginId)}</span></h3>
+                <p class="text-xs text-red-600 mt-1">이 창을 닫으면 다시 볼 수 없습니다. 업체 담당자에게 직접 전달해 주세요 (엑셀 · 단체방에 남기지 마세요).</p>
+                <div class="mt-3 flex items-center gap-2"><input id="pc-temp-pw-val" readonly value="${escapeHtml(pw)}" class="flex-1 p-2.5 font-mono text-lg tracking-wider border border-gray-300 rounded bg-gray-50" />
+                    <button type="button" onclick="(function(){const v=document.getElementById('pc-temp-pw-val'); v.select(); try{navigator.clipboard.writeText(v.value);}catch(e){document.execCommand('copy');} showAppToast('복사했습니다.','blue');})()" class="px-3 py-2 text-sm rounded bg-indigo-600 text-white hover:bg-indigo-700">복사</button></div>
+                <p class="text-xs text-gray-500 mt-2">${PARTNER_TEMP_HOURS}시간 동안 쓸 수 있습니다. 이 비밀번호로 로그인하면 먼저 새 비밀번호를 정하게 됩니다.</p>
+                <div class="mt-4 text-right"><button type="button" onclick="document.getElementById('pc-temp-pw-box').remove()" class="px-4 py-2 text-sm rounded bg-gray-200 text-gray-700 hover:bg-gray-300">확인 · 닫기</button></div></div>`;
+        }
+        async function unlockPartnerId(loginId) {
+            try {
+                if (partnerUsesServer()) await kobAuth.call('/api/partner-admin/unlock', { loginId });
+                // 서버 모드는 서버가 지우고 실시간으로 이 화면에 들어옵니다. 로컬 모드만 여기서 지웁니다.
+                if (!partnerUsesServer()) { const g = loadJsonStore(PARTNER_GUARD_KEY, {}) || {}; delete g[String(loginId).toLowerCase()]; saveJsonStore(PARTNER_GUARD_KEY, g); }
+            } catch (e) { alert('잠금을 풀지 못했습니다.\n' + String((e && e.message) || e)); return; }
+            showAppToast(`${loginId} 잠금을 풀었습니다.`, 'green');
+            renderPartnerIdAdmin();
+            if (partnerIdModalState && partnerIdModalState.loginId === loginId) renderPartnerIdModal(partnerAccounts.find(x => x.loginId === loginId));
+        }
         // 예전에 평문으로 저장된 파트너 비밀번호를 암호화로 바꿉니다 (2026-09-28).
         // 사내 직원이 로그인한 뒤(서버에 쓸 수 있을 때) 한 번 돕니다. 파트너가 먼저 로그인하면 서버도 바꿔 둡니다.
         async function migratePartnerPasswords() {
@@ -51408,6 +51624,10 @@ const QUOTE_TEMPLATES = [
                     </div>
                     <div class="flex flex-wrap gap-2 shrink-0">
                         <button type="button" onclick="openPartnerIdModal()" class="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 text-sm font-semibold"><i class="fas fa-user-plus mr-1"></i>아이디 만들기</button>
+                        <span class="inline-flex rounded border border-emerald-300 overflow-hidden">
+                            <select id="pacc-bulk-kind" class="px-2 py-2 text-sm bg-white border-r border-emerald-300"><option value="">모든 유형</option>${PARTNER_CUST_TYPES.map(o => `<option value="${o.id}">${escapeHtml(o.name)}</option>`).join('')}</select>
+                            <button type="button" onclick="bulkCreateForKind()" class="px-3 py-2 text-sm bg-emerald-50 text-emerald-800 hover:bg-emerald-100" title="아이디가 없는 업체마다 하나씩 · 비밀번호 미설정"><i class="fas fa-users mr-1"></i>아이디 없는 업체에 일괄 만들기</button>
+                        </span>
                     </div>
                 </div>
                 <div class="grid grid-cols-2 md:grid-cols-4 gap-2 mb-3">
@@ -51427,7 +51647,7 @@ const QUOTE_TEMPLATES = [
                     : `<div class="bg-white border border-gray-200 rounded-lg overflow-x-auto"><table class="w-full text-sm">
                         <thead class="bg-gray-50 border-b border-gray-200 text-xs text-gray-600"><tr>
                             <th class="p-3 text-left">아이디</th><th class="p-3 text-left">파트너사</th><th class="p-3 text-left">구분</th>
-                            <th class="p-3 text-left">담당자 · 연락처</th><th class="p-3 text-left">사용 가능 업무</th><th class="p-3 text-left">상태</th><th class="p-3 text-left">만든 날</th><th class="p-3"></th>
+                            <th class="p-3 text-left">담당자 · 연락처</th><th class="p-3 text-left">사용 가능 업무</th><th class="p-3 text-left">상태</th><th class="p-3 text-left">비밀번호</th><th class="p-3 text-left">만든 날</th><th class="p-3"></th>
                         </tr></thead>
                         <tbody>${rows.map(a => {
                             const p = ps.find(x => x.id === a.partnerId) || null;
@@ -51441,10 +51661,13 @@ const QUOTE_TEMPLATES = [
                                 <td class="p-3 text-gray-600 text-xs">${escapeHtml(a.manager || '-')}<br><span class="text-gray-400">${escapeHtml(a.phone || '')}</span></td>
                                 <td class="p-3 text-xs text-gray-600">${items.length ? `<b>${items.length}</b>개 업무${preset ? ` · <span class="text-indigo-700">${escapeHtml(preset.name)}</span>` : ' · 직접 지정'}` : '<span class="text-red-600 font-semibold">막힘 (업무 없음)</span>'}</td>
                                 <td class="p-3 whitespace-nowrap">${a.active ? '<span class="px-2 py-0.5 rounded-full text-xs bg-green-100 text-green-700 font-semibold">사용 중</span>' : '<span class="px-2 py-0.5 rounded-full text-xs bg-red-100 text-red-700 font-semibold">중지</span>'}</td>
+                                <td class="p-3 whitespace-nowrap">${partnerPwStateHtml(partnerAccounts.find(x => x.loginId === a.loginId) || a)}</td>
                                 <td class="p-3 text-xs text-gray-500 whitespace-nowrap">${escapeHtml(a.createdAt || '-')}</td>
                                 <td class="p-3 whitespace-nowrap text-right">
                                     <button type="button" onclick="openPartnerIdModal('${escapeHtml(a.loginId)}')" class="px-2 py-1 text-xs rounded border border-indigo-300 bg-indigo-50 text-indigo-700 hover:bg-indigo-100"><i class="fas fa-key mr-1"></i>권한 · 수정</button>
                                     <button type="button" onclick="togglePartnerIdActive('${escapeHtml(a.loginId)}')" class="px-2 py-1 text-xs rounded border ${a.active ? 'border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100' : 'border-green-300 bg-green-50 text-green-700 hover:bg-green-100'}">${a.active ? '중지' : '사용'}</button>
+                                    <button type="button" onclick="issuePartnerTempPassword('${escapeHtml(a.loginId)}', true)" class="px-2 py-1 text-xs rounded border border-sky-300 bg-sky-50 text-sky-700 hover:bg-sky-100">임시 비밀번호</button>
+                                    ${partnerLockState(a.loginId).locked ? `<button type="button" onclick="unlockPartnerId('${escapeHtml(a.loginId)}')" class="px-2 py-1 text-xs rounded border border-red-300 bg-white text-red-700 hover:bg-red-50">잠금 해제</button>` : ''}
                                     <button type="button" onclick="deletePartnerId('${escapeHtml(a.loginId)}')" class="px-2 py-1 text-xs rounded border border-red-200 bg-red-50 text-red-600 hover:bg-red-100">삭제</button>
                                 </td>
                             </tr>`;
@@ -51453,8 +51676,27 @@ const QUOTE_TEMPLATES = [
                     <i class="fas fa-circle-info mr-1"></i>아이디가 없는 파트너사 ${noAcct.length}곳:
                     ${noAcct.slice(0, 12).map(p => `<button type="button" onclick="openPartnerIdModal('', '${escapeHtml(p.id)}')" class="underline mr-1.5">${escapeHtml(String(p.name).replace(/\n/g, ' '))}</button>`).join('')}${noAcct.length > 12 ? ` 외 ${noAcct.length - 12}곳` : ''}
                     — 이름을 누르면 그 파트너사의 아이디를 바로 만듭니다.</div>` : ''}
-                <p class="mt-3 text-xs text-gray-400"><i class="fas fa-circle-info mr-1"></i>비밀번호는 여기서만 바꿀 수 있습니다(파트너는 스스로 바꾸지 못합니다). 중지한 아이디는 파트너센터 로그인이 막힙니다.
-                    본부·업무 접근 권한은 <b>설정 › 파트너 접근 권한</b>에서도 표로 한꺼번에 볼 수 있습니다.</p>`;
+                <p class="mt-3 text-xs text-gray-400"><i class="fas fa-circle-info mr-1"></i>직원은 비밀번호를 정하지 않고 <b>임시 비밀번호</b>만 발급합니다(${PARTNER_TEMP_HOURS}시간 · 첫 로그인 때 바꾸게 함). 업체는 파트너센터 <b>내 정보</b>에서 스스로 바꿉니다.
+                    비밀번호를 ${PARTNER_LOCK_FAILS}번 틀리면 10분 잠기고, 여기서 [잠금 해제] 할 수 있습니다. 중지한 아이디는 로그인이 막힙니다.
+                    본부·업무 접근 권한은 <b>설정 › 파트너 접근 권한</b>에서도 표로 한꺼번에 볼 수 있습니다.</p>
+                ${partnerAuditHtml()}`;
+        }
+        function bulkCreateForKind() {
+            const kind = (document.getElementById('pacc-bulk-kind') || {}).value || '';
+            bulkCreatePartnerIds(customers.filter(c => !kind || c.kind === kind).map(c => c.id));
+        }
+        // 기록 (S6) — 로그인 성공 · 실패 · 잠금 · 임시 비밀번호 · 비밀번호 변경 · 가입 신청 · 승인 · 반려. 서버가 남깁니다.
+        const PARTNER_AUDIT_NAMES = { login: '로그인', 'temp-password': '임시 비밀번호 발급', unlock: '잠금 해제', 'password-change': '비밀번호 변경',
+                                      signup: '가입 신청', 'signup-approve': '가입 승인', 'signup-reject': '가입 반려' };
+        function partnerAuditHtml() {
+            const list = (loadJsonStore(PARTNER_AUDIT_KEY, []) || []).slice(-50).reverse();
+            if (!list.length) return '';
+            return `<details class="mt-4 bg-white border border-gray-200 rounded-lg"><summary class="px-4 py-2.5 text-sm font-bold text-gray-700 cursor-pointer"><i class="fas fa-clock-rotate-left mr-1 text-gray-400"></i>최근 기록 ${list.length}건</summary>
+                <div class="overflow-x-auto"><table class="w-full text-xs"><thead class="bg-gray-50 text-gray-500"><tr><th class="p-2 text-left">때</th><th class="p-2 text-left">일</th><th class="p-2 text-left">아이디</th><th class="p-2 text-left">결과</th><th class="p-2 text-left">한 사람 · 메모</th><th class="p-2 text-left">IP</th></tr></thead>
+                <tbody>${list.map(e => `<tr class="border-t border-gray-100"><td class="p-2 whitespace-nowrap text-gray-500">${escapeHtml(new Date(e.at).toLocaleString('ko-KR'))}</td>
+                    <td class="p-2 whitespace-nowrap">${escapeHtml(PARTNER_AUDIT_NAMES[e.action] || e.action)}</td><td class="p-2 font-mono">${escapeHtml(e.loginId || '')}</td>
+                    <td class="p-2">${e.ok ? '<span class="text-green-700">성공</span>' : '<span class="text-red-600">실패</span>'}</td>
+                    <td class="p-2 text-gray-600">${escapeHtml([e.by, e.note].filter(Boolean).join(' · '))}</td><td class="p-2 text-gray-400">${escapeHtml(e.ip || '')}</td></tr>`).join('')}</tbody></table></div></details>`;
         }
 
         // ---------- 만들기 · 수정 팝업 ----------
@@ -51467,6 +51709,29 @@ const QUOTE_TEMPLATES = [
             const re = new RegExp('^' + PARTNER_LOGIN_PREFIX + '(\\d{5})$');
             const max = partnerAccounts.reduce((m, a) => { const r = re.exec(String(a.loginId || '')); return r ? Math.max(m, Number(r[1])) : m; }, 0);
             return PARTNER_LOGIN_PREFIX + String(max + 1).padStart(5, '0');
+        }
+        // 업체 유형별 처음 열어 줄 메뉴 묶음 (서버 _signup.js presetForKind 와 같음)
+        function partnerPresetForKind(kind) { return kind === 'partner' || kind === 'hq' ? 'full' : (kind === 'dist' ? 'dist' : 'shop'); }
+        // 아이디 일괄 만들기 (2026-10-05 · 제안서 4.2 C) — 아이디가 없는 업체마다 하나씩, '비밀번호 미설정' 으로.
+        // 실제로 쓰기 시작할 때 [임시 비밀번호] 를 누릅니다. 비밀번호가 담긴 엑셀은 만들지 않습니다.
+        function bulkCreatePartnerIds(companyIds) {
+            const have = new Set(partnerAccounts.map(a => a.partnerId));
+            const targets = (companyIds || []).map(id => customers.find(c => c.id === id)).filter(c => c && !have.has(c.id));
+            if (!targets.length) { alert('아이디를 만들 업체가 없습니다 (모두 아이디가 있습니다).'); return 0; }
+            if (!confirm(`아이디가 없는 업체 ${targets.length}곳에 아이디를 하나씩 만들까요?\n아이디는 ptn 번호로 이어 붙고, 비밀번호는 '미설정' 입니다 — 쓰기 시작할 때 [임시 비밀번호] 를 발급해 주세요.`)) return 0;
+            const stamp = ymd(new Date());
+            targets.forEach(c => {
+                const loginId = nextPartnerLoginId();
+                partnerAccounts.push({ id: loginId, loginId, partnerId: c.id, manager: c.contactName || '', phone: c.phone || '', memo: '일괄 생성', active: true,
+                                       role: 'admin', /* 그 업체의 첫 아이디 — 업체관리자 */ createdAt: stamp, createdBy: (currentUserName || '') + ' (일괄)' });
+                const preset = PARTNER_PERM_PRESETS.find(p => p.id === partnerPresetForKind(c.kind));
+                partnerDeptPerm[loginId] = preset ? partnerAllMenuIds().filter(id => preset.menus.indexOf(id) > -1) : partnerDefaultMenus();
+            });
+            savePartnerDeptPerm();
+            savePartnerAccounts();
+            showAppToast(`아이디 ${targets.length}개를 만들었습니다 (비밀번호 미설정).`, 'green');
+            renderPartnerIdAdmin();
+            return targets.length;
         }
         function openPartnerIdModal(loginId, partnerId) {
             const ps = (typeof partners !== 'undefined' ? partners : []);
@@ -51515,7 +51780,15 @@ const QUOTE_TEMPLATES = [
                 <!-- ② 계정 -->
                 <div class="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>${lbl('아이디 <span class="text-red-500">*</span>')}<input type="text" id="pacc-login" value="${escapeHtml(st.loginId || st.suggestId || '')}" ${a ? 'disabled' : ''} oninput="if (partnerIdModalState && !partnerIdModalState.loginId) partnerIdModalState.suggestId = this.value" placeholder="영문 소문자 · 숫자 (예: ptn00001)" autocomplete="off" class="${cls} font-mono disabled:bg-gray-100" />${a ? '' : '<p class="text-[11px] text-gray-400 mt-1">ptn + 5자리 번호를 저절로 채웠습니다. 필요하면 고쳐도 됩니다.</p>'}</div>
-                    <div>${lbl(a ? '비밀번호 <span class="font-normal text-gray-400">— 비우면 그대로</span>' : '비밀번호 <span class="text-red-500">*</span>')}<input type="password" id="pacc-pw" placeholder="${a ? '바꿀 때만 입력' : '4자 이상'}" autocomplete="new-password" class="${cls}" /></div>
+                    <div>${lbl('비밀번호 <span class="font-normal text-gray-400">— 직원은 비밀번호를 정하지 않습니다 (임시 비밀번호 발급)</span>')}${a ? partnerPwStateHtml(a) + `
+                        <div class="flex flex-wrap gap-1.5 mt-1.5">
+                            <button type="button" onclick="issuePartnerTempPassword('${escapeHtml(a.loginId)}', true)" class="px-2.5 py-1 text-xs rounded border border-indigo-300 bg-white text-indigo-700 hover:bg-indigo-50"><i class="fas fa-key mr-1"></i>임시 비밀번호 발급</button>
+                            ${partnerLockState(a.loginId).locked ? `<button type="button" onclick="unlockPartnerId('${escapeHtml(a.loginId)}')" class="px-2.5 py-1 text-xs rounded border border-red-300 bg-white text-red-700 hover:bg-red-50"><i class="fas fa-lock-open mr-1"></i>잠금 해제</button>` : ''}
+                        </div>` : `<label class="flex items-start gap-2 text-sm text-gray-700 mt-1"><input type="checkbox" id="pacc-issue-temp" ${st.issueTemp === false ? '' : 'checked'} onchange="partnerIdModalState.issueTemp = this.checked" class="mt-0.5 w-4 h-4 rounded border-gray-300 text-indigo-600" />
+                            <span>만든 뒤 바로 <b>임시 비밀번호</b> 발급 <span class="block text-[11px] text-gray-400">12자 · ${PARTNER_TEMP_HOURS}시간 동안 쓸 수 있고, 첫 로그인 때 새 비밀번호로 바꾸게 합니다. 끄면 '비밀번호 미설정' 으로 만들어집니다.</span></span></label>`}</div>
+                    <div>${lbl('역할')}<select id="pacc-role" class="${cls}">
+                        <option value="staff"${(a && a.role === 'admin') || (!a && st.role === 'admin') ? '' : ' selected'}>직원</option>
+                        <option value="admin"${(a && a.role === 'admin') || (!a && st.role === 'admin') ? ' selected' : ''}>업체관리자 — 소속 가맹점 가입 승인 가능</option></select></div>
                     <div>${lbl('담당자 <span class="font-normal text-gray-400">— 비우면 파트너사 담당자</span>')}<input type="text" id="pacc-manager" value="${escapeHtml((a && a.manager) || '')}" placeholder="${escapeHtml((p && p.contact) || '')}" class="${cls}" /></div>
                     <div>${lbl('연락처')}<input type="text" id="pacc-phone" value="${escapeHtml((a && a.phone) || '')}" placeholder="${escapeHtml((p && p.phone) || '010-0000-0000')}" class="${cls}" /></div>
                     <div class="sm:col-span-2">${lbl('메모')}<input type="text" id="pacc-memo" value="${escapeHtml((a && a.memo) || '')}" placeholder="예: 2026-09 가맹 신청 · 담당 영업 김영업" class="${cls}" /></div>
@@ -51645,7 +51918,9 @@ const QUOTE_TEMPLATES = [
         // 팝업의 입력값(아이디 · 비밀번호 · 담당자 …)은 다시 그릴 때 날아가지 않게 그때그때 읽어 둡니다
         function partnerIdCollect() {
             const v = id => { const el = document.getElementById(id); return el ? String(el.value || '').trim() : ''; };
-            return { loginId: v('pacc-login').toLowerCase(), pw: v('pacc-pw'), manager: v('pacc-manager'), phone: v('pacc-phone'), memo: v('pacc-memo'),
+            const tmp = document.getElementById('pacc-issue-temp');
+            return { loginId: v('pacc-login').toLowerCase(), manager: v('pacc-manager'), phone: v('pacc-phone'), memo: v('pacc-memo'),
+                     role: v('pacc-role') === 'admin' ? 'admin' : 'staff', issueTemp: tmp ? tmp.checked : false,
                      active: !!(document.getElementById('pacc-active') || {}).checked };
         }
         async function savePartnerId() {
@@ -51662,24 +51937,17 @@ const QUOTE_TEMPLATES = [
             if (!editing) {
                 if (!/^[a-z0-9._-]{3,20}$/.test(f.loginId)) { alert('아이디는 영문 소문자 · 숫자 · . _ - 로 3~20자입니다.'); document.getElementById('pacc-login').focus(); return; }
                 if (partnerAccounts.some(x => x.loginId === f.loginId)) { alert(`'${f.loginId}' 는 이미 있는 아이디입니다.`); document.getElementById('pacc-login').focus(); return; }
-                if (f.pw.length < 4) { alert('비밀번호는 4자 이상 입력해 주세요.'); document.getElementById('pacc-pw').focus(); return; }
-            } else if (f.pw && f.pw.length < 4) { alert('비밀번호는 4자 이상 입력해 주세요.'); document.getElementById('pacc-pw').focus(); return; }
+            }
             if (!st.menus.some(m => m.indexOf(':') > -1) && !confirm('켜진 업무가 하나도 없습니다. 이 아이디는 로그인해도 쓸 수 있는 업무가 없습니다.\n그래도 저장할까요?')) return;
 
-            // 비밀번호는 평문으로 두지 않고 암호화한 값만 저장합니다 (2026-09-28)
-            let pwRec = null;
-            if (f.pw) {
-                try { pwRec = await kobPartnerPw.hash(f.pw); }
-                catch (e) { alert(String(e && e.message || e)); return; }
-            }
+            // 비밀번호는 직원이 정하지 않습니다 (2026-10-05 S1) — 임시 비밀번호를 서버가 만들어 한 번만 보여 줍니다
             const now = new Date();
             if (editing) {
-                if (pwRec) { Object.assign(editing, pwRec); delete editing.pw; }
-                editing.manager = f.manager; editing.phone = f.phone; editing.memo = f.memo; editing.active = f.active;
+                editing.manager = f.manager; editing.phone = f.phone; editing.memo = f.memo; editing.active = f.active; editing.role = f.role;
                 editing.updatedAt = ymd(now); editing.updatedBy = currentUserName || '';
             } else {
-                partnerAccounts.push(Object.assign({ loginId: f.loginId, partnerId: p.id, manager: f.manager, phone: f.phone, memo: f.memo, active: f.active,
-                                       createdAt: ymd(now), createdBy: currentUserName || '' }, pwRec || {}));
+                partnerAccounts.push({ id: f.loginId, loginId: f.loginId, partnerId: p.id, manager: f.manager, phone: f.phone, memo: f.memo, active: f.active, role: f.role,
+                                       createdAt: ymd(now), createdBy: currentUserName || '' });
             }
             const key = editing ? editing.loginId : f.loginId;
             partnerDeptPerm[key] = st.menus.slice();
@@ -51689,6 +51957,7 @@ const QUOTE_TEMPLATES = [
             showAppToast(editing ? `${key} 아이디를 저장했습니다.` : `${key} 아이디를 만들었습니다 — ${String(p.name).replace(/\n/g, ' ')} (${partnerCustTypeName(p.custType) || '구분 미지정'})`, 'green');
             closePartnerIdModal();
             renderPartnerIdAdmin();
+            if (!editing && f.issueTemp) await issuePartnerTempPassword(key, false);
             if (document.getElementById('sec-settings-partner-perm')) renderPartnerPermSettings();
         }
         function togglePartnerIdActive(loginId) {
@@ -52699,6 +52968,8 @@ const QUOTE_TEMPLATES = [
                 const m = document.getElementById('pc-login-msg');
                 if (m) m.textContent = '화면이 예전 판입니다. 새로고침을 한두 번 해 주세요 (PC 는 Ctrl+Shift+R).';
             }
+            // 임시 비밀번호로 들어온 아이디 — 새 비밀번호를 정하는 화면만 보입니다 (2026-10-05 S4)
+            if (kobStorage.mode === 'partner' && window.kobPartner && kobPartner.mustChange) { renderPartnerForcedPw(); return; }
             // 서버 모드 — 로그인이 남아 있으면(토큰) 로그인 창 없이 들어갑니다 (2026-09-28)
             if (kobStorage.mode === 'partner' && window.kobPartner && kobPartner.session) {
                 const me = partnerAccountList().find(a => a.loginId === kobPartner.session.loginId);
@@ -52947,6 +53218,7 @@ const QUOTE_TEMPLATES = [
                     <p class="font-bold text-gray-700 mt-3">이용 가능한 업무가 없습니다</p>
                     <p class="text-sm text-gray-500 mt-1">해당 계정에 부여된 업무 권한이 없습니다.<br>담당 영업사원에게 문의해 주세요.</p>
                 </div>`}
+                ${partnerShopSignupsHtml()}
                 ${partnerShopsPanelHtml()}`;
         }
 
@@ -53264,7 +53536,10 @@ const QUOTE_TEMPLATES = [
                             <p class="text-[11px] text-gray-400 mt-3">필요한 업무가 표시되지 않는 경우 담당 영업사원에게 문의해 주세요.</p>
                         </div>
                     </div>
-                </div>`;
+                </div>
+                ${kobStorage.mode === 'partner' ? `<div class="bg-white rounded-lg border border-gray-200 overflow-hidden mt-3 max-w-md">
+                    <div class="bg-gray-50 border-b border-gray-200 px-4 py-2.5"><h3 class="text-sm font-bold text-gray-700"><i class="fas fa-key mr-1 text-indigo-500"></i>비밀번호 변경</h3></div>
+                    <div class="p-4">${pcPwFormHtml('pcm', false)}</div></div>` : ''}`;
         }
 
         function choosePartnerDevMenu() {
@@ -53440,6 +53715,240 @@ const QUOTE_TEMPLATES = [
             // '무엇을 낼까' 가 아니라 '내가 낸 게 어떻게 됐나' 입니다.
             switchPartnerTab('home');
         }
+        // ==================== 파트너센터 회원가입 · 비밀번호 (2026-10-05 · 제안서 v2 4.1 · S3 · S4) ====================
+        // 서버 판단은 functions/api/_signup.js. 화면은 같은 규칙(partnerPwProblem)으로 먼저 걸러 줍니다.
+        const PC_SIGNUP_KINDS = ['direct', 'franchise', 'partnerShop', 'partner', 'hq', 'dist'];
+        const PC_SIGNUP_PARENT = { franchise: 'hq', partnerShop: 'partner' };
+        let pcSignup = { kind: '', parent: null, siteKey: '', tsToken: '', done: null, busy: false, values: {} };
+        let pcParentTimer = null;
+
+        function pcSignupInput(id, label, opt) {
+            const o = opt || {};
+            const v = escapeHtml(pcSignup.values[id] || '');
+            return `<div class="${o.wide ? 'sm:col-span-2' : ''}"><label class="block text-xs font-medium text-gray-600 mb-1">${label}${o.req ? ' <span class="text-red-500">*</span>' : ''}</label>
+                <input type="${o.type || 'text'}" id="pcs-${id}" value="${o.type === 'password' ? '' : v}" ${o.max ? `maxlength="${o.max}"` : ''} ${o.ph ? `placeholder="${escapeHtml(o.ph)}"` : ''} ${o.auto ? `autocomplete="${o.auto}"` : ''}
+                    oninput="pcSignup.values['${id}'] = this.value" class="w-full p-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" />${o.note ? `<p class="text-[11px] text-gray-400 mt-1">${o.note}</p>` : ''}</div>`;
+        }
+        async function openPartnerSignup() {
+            document.getElementById('partner-login').classList.add('hidden');
+            document.getElementById('partner-signup').classList.remove('hidden');
+            pcSignup = { kind: '', parent: null, siteKey: '', tsToken: '', done: null, busy: false, values: {} };
+            renderPartnerSignup();
+            if (window.kobPartner) {
+                const r = await kobPartner.call('GET', '/api/partner/signup/config');
+                if (r.ok && r.turnstileSiteKey) { pcSignup.siteKey = r.turnstileSiteKey; renderPartnerSignup(); }
+            }
+        }
+        function closePartnerSignup() {
+            document.getElementById('partner-signup').classList.add('hidden');
+            document.getElementById('partner-login').classList.remove('hidden');
+        }
+        function renderPartnerSignup() {
+            const host = document.getElementById('partner-signup');
+            if (!host) return;
+            if (pcSignup.done) {
+                host.innerHTML = `<div class="w-full max-w-md mt-10"><div class="bg-white rounded-xl shadow-lg p-8 text-center">
+                    <i class="fas fa-circle-check text-4xl text-green-500"></i>
+                    <h2 class="text-lg font-bold text-gray-800 mt-3">가입 신청을 받았습니다</h2>
+                    <p class="text-sm text-gray-600 mt-2">신청 번호 <b class="font-mono">${escapeHtml(pcSignup.done.id)}</b> · 아이디 <b class="font-mono">${escapeHtml(pcSignup.done.loginId)}</b></p>
+                    <p class="text-sm text-gray-500 mt-2">킹오더브라더스${pcSignup.done.parentName ? ` 또는 소속 업체(${escapeHtml(pcSignup.done.parentName)})` : ''}가 확인하고 승인하면 이 아이디로 로그인할 수 있습니다.
+                        승인 전에 로그인하면 '승인 대기' 로 안내됩니다.</p>
+                    <button type="button" onclick="closePartnerSignup()" class="mt-5 w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg">로그인 화면으로</button></div></div>`;
+                return;
+            }
+            const kind = pcSignup.kind;
+            const parentKind = PC_SIGNUP_PARENT[kind] || '';
+            const kindOpts = PC_SIGNUP_KINDS.map(id => { const o = PARTNER_CUST_TYPES.find(x => x.id === id) || { name: id, desc: '' };
+                return `<label class="flex items-start gap-2 p-2.5 border rounded-lg cursor-pointer ${kind === id ? 'border-indigo-500 bg-indigo-50' : 'border-gray-200 hover:bg-gray-50'}">
+                    <input type="radio" name="pcs-kind" value="${id}" ${kind === id ? 'checked' : ''} onchange="pcSignupPickKind('${id}')" class="mt-0.5" />
+                    <span><b class="text-sm text-gray-800">${escapeHtml(o.name)}</b><span class="block text-[11px] text-gray-500">${escapeHtml(o.desc || '')}</span></span></label>`; }).join('');
+            host.innerHTML = `<div class="w-full max-w-2xl my-6"><div class="bg-white rounded-xl shadow-lg p-6 sm:p-8">
+                <div class="flex items-start justify-between gap-3 mb-5">
+                    <div><h1 class="text-xl font-bold text-gray-800">파트너센터 회원가입</h1>
+                        <p class="text-sm text-gray-500 mt-1">신청하면 킹오더브라더스가 확인한 뒤 승인합니다. 승인 전에는 로그인할 수 없습니다.</p></div>
+                    <button type="button" onclick="closePartnerSignup()" class="text-sm text-gray-500 hover:text-gray-700 whitespace-nowrap"><i class="fas fa-arrow-left mr-1"></i>로그인</button>
+                </div>
+                <p class="text-xs font-bold text-gray-700 mb-2">① 업체 유형 <span class="text-red-500">*</span></p>
+                <div class="grid sm:grid-cols-2 gap-2 mb-4">${kindOpts}</div>
+                ${parentKind ? `<div class="mb-4 rounded-lg border border-indigo-200 bg-indigo-50/50 p-3">
+                    <label class="block text-xs font-bold text-gray-700 mb-1">소속 ${parentKind === 'hq' ? '프랜차이즈 본사' : '파트너사'} <span class="text-red-500">*</span></label>
+                    ${pcSignup.parent ? `<div class="flex items-center gap-2"><span class="px-2.5 py-1.5 rounded bg-white border border-indigo-300 text-sm font-semibold text-indigo-800">${escapeHtml(pcSignup.parent.name)}</span>
+                        <button type="button" onclick="pcSignup.parent=null; renderPartnerSignup()" class="text-xs text-gray-500 underline">다시 찾기</button></div>`
+                    : `<input type="text" id="pcs-parent-q" placeholder="상호 두 글자 이상" oninput="pcSignupParentSearch(this.value)" class="w-full p-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                       <div id="pcs-parent-res" class="mt-1"></div>
+                       <p class="text-[11px] text-gray-500 mt-1">목록에 없으면 소속 ${parentKind === 'hq' ? '본사' : '파트너사'}에 먼저 문의해 주세요 (킹오더에 등록된 곳만 고를 수 있습니다).</p>`}
+                </div>` : ''}
+                <p class="text-xs font-bold text-gray-700 mb-2">② 사업자 정보</p>
+                <div class="grid sm:grid-cols-2 gap-3 mb-4">
+                    ${pcSignupInput('name', '상호 (업체명)', { req: true, max: 100 })}
+                    ${pcSignupInput('businessNo', '사업자등록번호', { req: true, max: 12, ph: '000-00-00000' })}
+                    ${pcSignupInput('ceo', '대표자명', { req: true, max: 50 })}
+                    <div><label class="block text-xs font-medium text-gray-600 mb-1">사업자 구분</label>
+                        <select id="pcs-bizType" onchange="pcSignup.values.bizType=this.value" class="w-full p-2.5 text-sm border border-gray-300 rounded-lg bg-white">
+                            <option value="">선택</option><option value="personal"${pcSignup.values.bizType === 'personal' ? ' selected' : ''}>일반사업자 (개인)</option><option value="corp"${pcSignup.values.bizType === 'corp' ? ' selected' : ''}>법인사업자</option></select></div>
+                    ${pcSignupInput('address', '사업장 주소', { wide: true, max: 200 })}
+                </div>
+                <p class="text-xs font-bold text-gray-700 mb-2">③ 담당자 · 아이디</p>
+                <div class="grid sm:grid-cols-2 gap-3 mb-4">
+                    ${pcSignupInput('contactName', '담당자 이름', { req: true, max: 50 })}
+                    ${pcSignupInput('phone', '담당자 연락처', { req: true, max: 20, ph: '010-0000-0000' })}
+                    ${pcSignupInput('email', '이메일', { max: 100, type: 'email' })}
+                    ${pcSignupInput('loginId', '아이디', { req: true, max: 20, auto: 'username', note: '영문 소문자 · 숫자 4~20자 (ptn 으로 시작할 수 없음)' })}
+                    ${pcSignupInput('pw', '비밀번호', { req: true, type: 'password', max: 64, auto: 'new-password', note: '10자 이상 · 영문 대문자 · 소문자 · 숫자 · 특수문자 중 3종류 이상' })}
+                    ${pcSignupInput('pw2', '비밀번호 확인', { req: true, type: 'password', max: 64, auto: 'new-password' })}
+                </div>
+                <p class="text-xs font-bold text-gray-700 mb-2">④ 동의</p>
+                <div class="space-y-2 mb-4 text-xs text-gray-600">
+                    <div class="border border-gray-200 rounded-lg p-3">
+                        <label class="flex items-start gap-2 font-semibold text-gray-800"><input type="checkbox" id="pcs-c-privacy" ${pcSignup.values.cPrivacy ? 'checked' : ''} onchange="pcSignup.values.cPrivacy=this.checked" class="mt-0.5" />개인정보 수집 · 이용 동의 <span class="text-red-500">(필수)</span></label>
+                        <ul class="mt-1.5 ml-5 list-disc space-y-0.5">
+                            <li>목적: 파트너센터 회원 관리, 업무 접수 · 처리, 처리 결과 연락</li>
+                            <li>항목: 상호, 사업자등록번호, 대표자명, 사업장 주소, 담당자 이름 · 연락처 · 이메일, 아이디</li>
+                            <li>보유 기간: 회원 탈퇴(아이디 삭제) 또는 거래 종료 후 지체 없이 파기 — 다만 관계 법령이 보관을 정한 것은 그 기간까지</li>
+                            <li>동의하지 않을 수 있으며, 동의하지 않으면 가입할 수 없습니다.</li>
+                        </ul>
+                    </div>
+                    ${parentKind ? `<div class="border border-gray-200 rounded-lg p-3">
+                        <label class="flex items-start gap-2 font-semibold text-gray-800"><input type="checkbox" id="pcs-c-share" ${pcSignup.values.cShare ? 'checked' : ''} onchange="pcSignup.values.cShare=this.checked" class="mt-0.5" />소속 ${parentKind === 'hq' ? '본사' : '파트너사'}에 개인정보 제공 동의 <span class="text-gray-500">(선택)</span></label>
+                        <ul class="mt-1.5 ml-5 list-disc space-y-0.5">
+                            <li>제공받는 자: ${pcSignup.parent ? `<b>${escapeHtml(pcSignup.parent.name)}</b>` : '위에서 고른 소속 업체'}</li>
+                            <li>목적: 소속 가맹점 현황 확인 · 업무 협조</li>
+                            <li>항목: 담당자 이름 · 연락처</li>
+                            <li>보유 기간: 소속 관계가 끝날 때까지</li>
+                            <li>동의하지 않아도 가입할 수 있으며, 그때는 소속 업체에 담당자 이름 · 연락처가 보이지 않습니다.</li>
+                        </ul>
+                    </div>` : ''}
+                    <p><a href="privacy" target="_blank" class="text-indigo-600 underline">개인정보처리방침 보기</a></p>
+                </div>
+                ${pcSignup.siteKey ? '<div id="pcs-turnstile" class="mb-3"></div>' : ''}
+                <p id="pcs-msg" class="text-sm text-red-600 mb-3 min-h-[1.25rem]"></p>
+                <button type="button" onclick="submitPartnerSignup()" ${pcSignup.busy ? 'disabled' : ''} class="w-full py-3 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-semibold rounded-lg">${pcSignup.busy ? '보내는 중…' : '가입 신청'}</button>
+            </div></div>`;
+            if (pcSignup.siteKey) pcMountTurnstile();
+        }
+        // 봇 확인 (Cloudflare Turnstile) — 서버에 키가 있을 때만
+        function pcMountTurnstile() {
+            const el = document.getElementById('pcs-turnstile');
+            if (!el) return;
+            const go = () => { try { pcSignup.tsToken = ''; window.turnstile.render(el, { sitekey: pcSignup.siteKey, callback: (t) => { pcSignup.tsToken = t; } }); } catch (e) { console.warn('[가입] 봇 확인을 그리지 못했습니다', e); } };
+            if (window.turnstile) { go(); return; }
+            if (!document.getElementById('pcs-turnstile-js')) {
+                const sc = document.createElement('script'); sc.id = 'pcs-turnstile-js'; sc.async = true;
+                sc.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit'; sc.onload = go; document.head.appendChild(sc);
+            }
+        }
+        function pcSignupPickKind(kind) {
+            if (PC_SIGNUP_PARENT[kind] !== PC_SIGNUP_PARENT[pcSignup.kind]) pcSignup.parent = null;
+            pcSignup.kind = kind;
+            renderPartnerSignup();
+        }
+        function pcSignupParentSearch(q) {
+            clearTimeout(pcParentTimer);
+            const box = document.getElementById('pcs-parent-res');
+            const kw = String(q || '').trim();
+            if (kw.replace(/\s+/g, '').length < 2) { if (box) box.innerHTML = ''; return; }
+            pcParentTimer = setTimeout(async () => {
+                const r = await kobPartner.call('GET', `/api/partner/signup/parents?kind=${encodeURIComponent(PC_SIGNUP_PARENT[pcSignup.kind])}&q=${encodeURIComponent(kw)}`);
+                const list = (r && r.list) || [];
+                const b = document.getElementById('pcs-parent-res');
+                if (!b) return;
+                b.innerHTML = list.length ? `<div class="border border-gray-200 rounded-lg overflow-hidden divide-y divide-gray-100 bg-white">${list.map(p =>
+                    `<button type="button" onclick='pcSignupPickParent(${JSON.stringify(p).replace(/'/g, '&#39;')})' class="w-full text-left px-3 py-2 text-sm hover:bg-indigo-50">${escapeHtml(p.name)}</button>`).join('')}</div>`
+                    : `<p class="text-xs text-gray-500 px-1 py-1">'${escapeHtml(kw)}' 에 맞는 곳이 없습니다.</p>`;
+            }, 250);
+        }
+        function pcSignupPickParent(p) { pcSignup.parent = p; renderPartnerSignup(); }
+        async function submitPartnerSignup() {
+            const v = pcSignup.values;
+            const msg = (t) => { const el = document.getElementById('pcs-msg'); if (el) el.textContent = t; };
+            const val = (id) => String((document.getElementById('pcs-' + id) || {}).value || '').trim();
+            const pw = String((document.getElementById('pcs-pw') || {}).value || ''), pw2 = String((document.getElementById('pcs-pw2') || {}).value || '');
+            if (!pcSignup.kind) return msg('업체 유형을 골라 주세요.');
+            if (PC_SIGNUP_PARENT[pcSignup.kind] && !pcSignup.parent) return msg('소속 업체를 찾아 골라 주세요.');
+            const loginId = val('loginId').toLowerCase();
+            if (!/^[a-z0-9]{4,20}$/.test(loginId)) return msg('아이디는 영문 소문자 · 숫자 4~20자로 정해 주세요.');
+            if (/^ptn/.test(loginId)) return msg("'ptn' 으로 시작하는 아이디는 쓸 수 없습니다.");
+            const pe = partnerPwProblem(pw, loginId); if (pe) return msg(pe);
+            if (pw !== pw2) return msg('비밀번호 확인이 맞지 않습니다.');
+            if (!(document.getElementById('pcs-c-privacy') || {}).checked) return msg('개인정보 수집 · 이용에 동의해야 가입할 수 있습니다.');
+            if (pcSignup.siteKey && !pcSignup.tsToken) return msg('자동 가입 방지 확인을 눌러 주세요.');
+            const body = { kind: pcSignup.kind, parentId: pcSignup.parent ? pcSignup.parent.id : '', name: val('name'), businessNo: val('businessNo'), ceo: val('ceo'),
+                           bizType: val('bizType'), address: val('address'), contactName: val('contactName'), phone: val('phone'), email: val('email'),
+                           loginId, pw, pw2, turnstileToken: pcSignup.tsToken,
+                           consents: { privacy: true, parentShare: !!(document.getElementById('pcs-c-share') || {}).checked } };
+            pcSignup.busy = true; renderPartnerSignup();
+            const r = await kobPartner.call('POST', '/api/partner/signup', body);
+            pcSignup.busy = false;
+            if (!r.ok) { renderPartnerSignup(); msg(r.error || ('서버 오류 ' + r.status)); if (window.turnstile && pcSignup.siteKey) { try { window.turnstile.reset(); } catch (e) { } pcSignup.tsToken = ''; } return; }
+            pcSignup.done = { id: r.id, loginId, parentName: pcSignup.parent ? pcSignup.parent.name : '' };
+            renderPartnerSignup();
+        }
+
+        // ---------- 비밀번호 바꾸기 (S3 내 정보 · S4 임시 비밀번호 첫 로그인) ----------
+        function pcPwFormHtml(prefix, forced) {
+            const inp = (id, label, auto) => `<div class="mb-3"><label class="block text-xs font-medium text-gray-600 mb-1">${label}</label>
+                <input type="password" id="${prefix}-${id}" autocomplete="${auto}" class="w-full p-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" /></div>`;
+            return inp('cur', forced ? '받은 임시 비밀번호' : '지금 비밀번호', 'current-password') + inp('new', '새 비밀번호', 'new-password') + inp('new2', '새 비밀번호 확인', 'new-password')
+                + `<p class="text-[11px] text-gray-500 mb-2">10자 이상 · 영문 대문자 · 소문자 · 숫자 · 특수문자 중 3종류 이상 · 아이디를 넣을 수 없습니다.</p>
+                   <p id="${prefix}-msg" class="text-sm text-red-600 mb-2 min-h-[1.25rem]"></p>
+                   <button type="button" onclick="submitPartnerPwChange('${prefix}', ${forced ? 'true' : 'false'})" class="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg">비밀번호 바꾸기</button>`;
+        }
+        async function submitPartnerPwChange(prefix, forced) {
+            const g = (id) => String((document.getElementById(`${prefix}-${id}`) || {}).value || '');
+            const msg = (t, ok) => { const el = document.getElementById(`${prefix}-msg`); if (el) { el.textContent = t; el.className = `text-sm mb-2 min-h-[1.25rem] ${ok ? 'text-green-700' : 'text-red-600'}`; } };
+            const loginId = (kobPartner.session && kobPartner.session.loginId) || (partnerUser && partnerUser.loginId) || '';
+            const pe = partnerPwProblem(g('new'), loginId); if (pe) return msg(pe);
+            if (g('new') !== g('new2')) return msg('새 비밀번호 확인이 맞지 않습니다.');
+            if (!g('cur')) return msg(forced ? '받은 임시 비밀번호를 넣어 주세요.' : '지금 비밀번호를 넣어 주세요.');
+            const r = await kobPartner.call('POST', '/api/partner/password', { current: g('cur'), next: g('new') });
+            if (!r.ok) return msg(r.error || ('서버 오류 ' + r.status));
+            if (forced) { msg('바꿨습니다. 파트너센터로 들어갑니다…', true); setTimeout(() => location.reload(), 600); return; }
+            ['cur', 'new', 'new2'].forEach(id => { const el = document.getElementById(`${prefix}-${id}`); if (el) el.value = ''; });
+            msg('비밀번호를 바꿨습니다. 다음 로그인부터 새 비밀번호를 쓰세요.', true);
+        }
+        // 임시 비밀번호로 들어왔을 때 — 다른 화면 없이 이것만 보입니다
+        function renderPartnerForcedPw() {
+            const host = document.getElementById('partner-pwchange');
+            if (!host) return;
+            document.getElementById('partner-login').classList.add('hidden');
+            host.classList.remove('hidden');
+            const sess = kobPartner.session || {};
+            host.innerHTML = `<div class="w-full max-w-md"><div class="bg-white rounded-xl shadow-lg p-8">
+                <h1 class="text-lg font-bold text-gray-800"><i class="fas fa-key text-indigo-600 mr-1"></i>새 비밀번호를 정해 주세요</h1>
+                <p class="text-sm text-gray-500 mt-1 mb-4"><b>${escapeHtml(sess.partnerName || '')}</b> · <span class="font-mono">${escapeHtml(sess.loginId || '')}</span><br>임시 비밀번호로 들어오셨습니다. 바꾼 뒤에 파트너센터를 쓸 수 있습니다.</p>
+                ${pcPwFormHtml('pcf', true)}
+                <button type="button" onclick="kobPartner.logout()" class="mt-3 w-full py-2 text-sm text-gray-500 hover:text-gray-700">로그아웃</button>
+            </div></div>`;
+        }
+
+        // ---------- 소속 가맹점 가입 승인 (상위업체 · 켜져 있을 때만 서버가 목록을 줍니다) ----------
+        const pcDecidedSignups = new Set();
+        function partnerShopSignupsHtml() {
+            const list = (loadJsonStore('gwPartnerShopSignups.v1', null) || []).filter(x => x && !pcDecidedSignups.has(x.id));
+            if (!Array.isArray(loadJsonStore('gwPartnerShopSignups.v1', null))) return '';
+            return `<div class="bg-white rounded-lg border border-amber-200 overflow-hidden mt-4">
+                <div class="bg-amber-50 border-b border-amber-200 px-4 py-2.5">
+                    <h3 class="text-sm font-bold text-amber-900"><i class="fas fa-user-check mr-1"></i>소속 가맹점 가입 승인 대기 <span class="font-normal">${list.length}건</span></h3>
+                    <p class="text-[11px] text-amber-800 mt-0.5">우리 업체 소속으로 가입을 신청한 가맹점입니다. 승인하면 우리 업체 아래 가맹점으로 등록되고 바로 로그인할 수 있습니다.</p>
+                </div>
+                ${list.length ? `<div class="divide-y divide-gray-100">${list.map(x => `<div class="p-3 flex flex-wrap items-center gap-2 text-sm">
+                    <div class="min-w-0 flex-1"><b class="text-gray-800">${escapeHtml(x.name)}</b> <span class="text-xs text-gray-500">${escapeHtml(partnerCustTypeName(x.kind))} · ${escapeHtml(String(x.at || '').slice(0, 10))} · 아이디 <span class="font-mono">${escapeHtml(x.loginId)}</span></span>
+                        <p class="text-xs text-gray-500">${escapeHtml(x.address || '')}${x.contactName ? ' · ' + escapeHtml(x.contactName) + ' ' + escapeHtml(x.phone || '') : ' · <span class="text-gray-400">담당자 정보 제공 동의 안 함</span>'}</p></div>
+                    <button type="button" onclick="decidePartnerShopSignup('${escapeHtml(x.id)}', 'approve')" class="px-3 py-1.5 text-xs rounded bg-green-600 text-white hover:bg-green-700">승인</button>
+                    <button type="button" onclick="decidePartnerShopSignup('${escapeHtml(x.id)}', 'reject')" class="px-3 py-1.5 text-xs rounded border border-red-300 text-red-700 hover:bg-red-50">반려</button></div>`).join('')}</div>`
+                : '<p class="p-4 text-sm text-gray-400">기다리는 신청이 없습니다.</p>'}
+            </div>`;
+        }
+        async function decidePartnerShopSignup(id, decision) {
+            const body = { id, decision };
+            if (decision === 'reject') { const r = prompt('반려 사유를 적어 주세요. (신청한 가맹점이 로그인할 때 보게 됩니다)', ''); if (r === null) return; body.reason = r; }
+            else if (!confirm('이 가맹점의 가입을 승인할까요? 우리 업체 소속 가맹점으로 등록됩니다.')) return;
+            const r = await kobPartner.call('POST', '/api/partner/signup-decide', body);
+            if (!r.ok) { alert(r.error || ('서버 오류 ' + r.status)); return; }
+            pcDecidedSignups.add(id);
+            renderPartnerHome();
+        }
+
         function handlePartnerLogout() {
             if (!confirm('로그아웃할까요?')) return;
             // 서버 모드 — 토큰을 지우고 새로 불러 화면 메모리의 자료를 비웁니다 (2026-09-28)

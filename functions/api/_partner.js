@@ -22,7 +22,9 @@
  *     **읽기 전용**으로 받습니다 — 서버가 골라서 내려 주고, 담당자 이름 · 연락처 · 금액은 내려 주지 않습니다.
  */
 
-export const PBKDF2_ITER = 10000;
+// 2026-10-05 S5 — 1만 → 10만 회 (Cloudflare Workers 가 받는 가장 큰 값). 예전 1만 회로 저장된 것은 로그인할 때 10만 회로 바꿔 둡니다.
+export const PBKDF2_ITER = 100000;
+export const LEGACY_ITER = 10000;
 export const TOKEN_DAYS = 7;
 
 const enc = new TextEncoder();
@@ -43,8 +45,9 @@ export async function hashPassword(pw, saltHex, iter) {
 export async function checkPassword(acct, pw) {
     if (!acct) return { ok: false };
     if (acct.pwHash && acct.pwSalt) {
-        const h = await hashPassword(pw, acct.pwSalt, acct.pwIter || PBKDF2_ITER);
-        return { ok: timingSafeEqual(h.pwHash, acct.pwHash), needUpgrade: false };
+        const iter = Number(acct.pwIter) || LEGACY_ITER;
+        const h = await hashPassword(pw, acct.pwSalt, iter);
+        return { ok: timingSafeEqual(h.pwHash, acct.pwHash), needUpgrade: iter < PBKDF2_ITER };
     }
     if (typeof acct.pw === 'string' && acct.pw !== '') return { ok: timingSafeEqual(acct.pw, String(pw)), needUpgrade: true };
     return { ok: false };
@@ -107,7 +110,7 @@ export async function resolvePartner(io, loginId, opts) {
     const f = findAccount(accounts, list, acct.loginId);
     const company = f && f.partner ? f.partner : null;
     const me = { loginId: acct.loginId, partnerId: acct.partnerId, partnerName: company ? partnerName(company) : s(acct.partnerName),
-                 kind: kindOf(company), company, shops: [] };
+                 kind: kindOf(company), company, shops: [], role: s(acct.role) || 'staff', mustChangePw: acct.mustChangePw === true };
     if (company && o.withShops && PARENT_KINDS.includes(me.kind)) me.shops = arr(await io.children(company.id));
     return { acct, accounts, company, missing: !company, me };
 }
@@ -132,9 +135,12 @@ export function publicCompany(c) {
 }
 // 소속 가맹점 한 곳 — 상호 · 유형 · 주소 · 거래상태 · 계약일 · 설치일만.
 // 담당자 이름 · 연락처 · 사업자번호 · 금액은 내려 주지 않습니다 (제3자 제공 동의 없이 상위업체에 넘기지 않음 · 제안서 v2 5절)
+// 회원가입 때 '소속 본사 · 파트너사에 제공' 에 동의한 가맹점(consentParentShare)만 담당자 이름 · 연락처를 더합니다 (2026-10-05)
 export function shopSummary(c) {
-    return { id: s(c.id), name: partnerName(c), kind: kindOf(c), address: s(c.roadAddress || c.address), status: s(c.status),
-             contractDate: s(c.contractDate), installDate: s(c.installDate) };
+    const o = { id: s(c.id), name: partnerName(c), kind: kindOf(c), address: s(c.roadAddress || c.address), status: s(c.status),
+                contractDate: s(c.contractDate), installDate: s(c.installDate) };
+    if (c.consentParentShare === true) { o.contactName = s(c.contactName || c.contact); o.phone = s(c.phone); }
+    return o;
 }
 // 소속 가맹점의 접수 한 건 — 진행 상태를 보는 데 필요한 것만 (내용 · 첨부 · 담당자 연락처는 빼고)
 export function shopIntakeSummary(x) {
@@ -189,6 +195,9 @@ export function partnerView(store, me) {
     out['gwPartnerShops.v1'] = shops.map(shopSummary);
     out['gwPartnerShopIntakes.v1'] = shopIds.size
         ? arr(store['gwPartnerIntakes.v1']).filter(x => x && shopIds.has(String(x.partnerId))).map(shopIntakeSummary) : [];
+    // 소속 가맹점 가입 신청 — 상위업체 승인이 켜진 업체의 업체관리자 아이디에만 (route 가 me.shopSignups 를 채움)
+    if (Array.isArray(me.shopSignups)) out['gwPartnerShopSignups.v1'] = me.shopSignups;
+    out['gwPartnerMe.v1'] = { role: s(me.role) || 'staff', canApproveShops: Array.isArray(me.shopSignups) };
     return out;
 }
 
