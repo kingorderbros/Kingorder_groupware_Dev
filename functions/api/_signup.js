@@ -2,7 +2,7 @@
  * 파트너센터 계정 보안 · 회원가입 (2026-10-05 · 제안서 v2 6.2 S1~S7 · 4.1 회원가입)
  *
  * 판단만 담습니다(가짜 자료로 바로 시험할 수 있게). Supabase 읽기/쓰기는 [[route]].js 가 합니다.
- *   · S1 비밀번호 규칙 — 10자 이상, 영문 대문자 · 소문자 · 숫자 · 특수문자 중 3종류 이상, 아이디를 넣으면 안 됨
+ *   · S1 비밀번호 규칙 — 6자 이상 · 영문과 숫자를 섞어서 (2026-10-05 사용자 요청으로 쉽게 바꿈)
  *   · S2 실패 잠금     — 5번 잇달아 틀리면 10분 잠금 (app_store 'gwPartnerLoginGuard.v1', 서버만 씀)
  *   · S4 첫 로그인 변경 — 임시 비밀번호(서버가 12자로 만듦, 72시간)로 들어오면 바꾸기 전에는 다른 일을 못 함
  *   · S6 기록          — 생성 · 승인 · 발급 · 로그인 성공/실패를 'gwPartnerAudit.v1' 에 (최근 1,000건)
@@ -29,13 +29,11 @@ const obj = (v) => (v && typeof v === 'object' && !Array.isArray(v) ? v : {});
 // ---------- S1 비밀번호 규칙 ----------
 // 문제가 없으면 '' — 화면(index.html partnerPwProblem)도 같은 규칙입니다
 export function passwordProblem(pw, loginId) {
+    // 2026-10-05 사용자 요청으로 쉽게 — 6자 이상 · 영문과 숫자를 섞어서 (특수문자는 넣어도 되고 안 넣어도 됨)
     const p = String(pw === null || pw === undefined ? '' : pw);
-    if (p.length < 10) return '비밀번호는 10자 이상이어야 합니다.';
+    if (p.length < 6) return '비밀번호는 6자 이상이어야 합니다.';
     if (p.length > 64) return '비밀번호는 64자까지입니다.';
-    const kinds = [/[a-z]/, /[A-Z]/, /[0-9]/, /[^A-Za-z0-9]/].filter(re => re.test(p)).length;
-    if (kinds < 3) return '비밀번호는 영문 대문자 · 소문자 · 숫자 · 특수문자 중 3종류 이상을 섞어 주세요.';
-    const id = s(loginId).toLowerCase();
-    if (id && id.length >= 3 && p.toLowerCase().includes(id)) return '비밀번호에 아이디를 넣을 수 없습니다.';
+    if (!/[A-Za-z]/.test(p) || !/[0-9]/.test(p)) return '비밀번호는 영문과 숫자를 섞어 주세요.';
     return '';
 }
 // 임시 비밀번호 — 12자 · 대문자 · 소문자 · 숫자 · 특수문자 모두 (헷갈리는 글자 0 O 1 l I 는 뺌)

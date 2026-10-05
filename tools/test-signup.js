@@ -10,12 +10,11 @@ const ok = (c, m) => { if (c) { pass++; console.log('  ✓', m); } else { fail++
     const P = await import('../functions/api/_partner.js');
 
     console.log('\n[1] 비밀번호 규칙 · 임시 비밀번호');
-    ok(S.passwordProblem('Abcd1234!x', 'kim01') === '', '10자 · 4종류 → 통과');
-    ok(S.passwordProblem('abcd1234!x', 'kim01') === '', '소문자 · 숫자 · 특수 3종류 → 통과');
-    ok(/10자/.test(S.passwordProblem('Ab1!', 'x')), '10자 미만 거절');
-    ok(/3종류/.test(S.passwordProblem('abcdefghij', 'x')), '한 종류뿐이면 거절');
-    ok(/3종류/.test(S.passwordProblem('abcdefgh12', 'x')), '두 종류면 거절');
-    ok(/아이디/.test(S.passwordProblem('Kim01Kim01!!', 'kim01')), '아이디가 들어가면 거절');
+    ok(S.passwordProblem('abc123', 'kim01') === '', '6자 · 영문 + 숫자 → 통과');
+    ok(S.passwordProblem('Kim01Kim01!!', 'kim01') === '', '특수문자 · 아이디가 들어가도 통과 (쉬운 규칙)');
+    ok(/6자/.test(S.passwordProblem('ab12', 'x')), '6자 미만 거절');
+    ok(/영문과 숫자/.test(S.passwordProblem('abcdefgh', 'x')), '영문만이면 거절');
+    ok(/영문과 숫자/.test(S.passwordProblem('12345678', 'x')), '숫자만이면 거절');
     const tps = Array.from({ length: 30 }, () => S.tempPassword());
     ok(tps.every(t => t.length === 12 && S.passwordProblem(t, 'ptn00001') === ''), '임시 비밀번호 30개 모두 12자 · 규칙 통과');
     ok(new Set(tps).size === 30 && tps.every(t => !/[0O1lI]/.test(t)), '모두 다르고 헷갈리는 글자 없음');
@@ -49,7 +48,7 @@ const ok = (c, m) => { if (c) { pass++; console.log('  ✓', m); } else { fail++
     bad({ loginId: 'ptn00009' }, /ptn/, 'ptn 으로 시작');
     bad({ loginId: 'taken1' }, /이미 쓰고/, '이미 있는 아이디');
     bad({ loginId: 'wait01' }, /신청 중/, '신청 중인 아이디');
-    bad({ pw: 'short', pw2: 'short' }, /10자/, '약한 비밀번호');
+    bad({ pw: 'ab1', pw2: 'ab1' }, /6자/, '짧은 비밀번호');
     bad({ pw2: 'Abcd1234!y' }, /확인/, '비밀번호 확인 다름');
     bad({ consents: { privacy: false } }, /동의/, '필수 동의 없음');
     bad({ phone: '12' }, /연락처/, '연락처');
@@ -186,7 +185,7 @@ const ok = (c, m) => { if (c) { pass++; console.log('  ✓', m); } else { fail++
     x = await call('POST', '/api/partner/save', { key: 'gwPartnerIntakes.v1', upserts: [{ id: 'PI-1' }] }, tokOkt);
     ok(x.status === 403, '저장도 막힘');
     x = await call('POST', '/api/partner/password', { current: temp, next: 'short' }, tokOkt);
-    ok(!x.ok && /10자/.test(x.error), '새 비밀번호도 규칙 검사');
+    ok(!x.ok && /6자|영문과 숫자/.test(x.error), '새 비밀번호도 규칙 검사');
     x = await call('POST', '/api/partner/password', { current: 'nope', next: 'Newpass123!x' }, tokOkt);
     ok(!x.ok && /지금 비밀번호/.test(x.error), '지금 비밀번호가 틀리면 거절');
     x = await call('POST', '/api/partner/password', { current: temp, next: 'Newpass123!x' }, tokOkt);
