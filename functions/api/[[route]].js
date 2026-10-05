@@ -617,9 +617,17 @@ export async function onRequest(context) {
                 if (str(env.TURNSTILE_SECRET_KEY)) {
                     const fd = new FormData();
                     fd.append('secret', str(env.TURNSTILE_SECRET_KEY)); fd.append('response', str(input.turnstileToken)); fd.append('remoteip', ip);
-                    let okBot = false;
-                    try { const vr = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', { method: 'POST', body: fd }); okBot = !!(await vr.json()).success; } catch (e) { okBot = false; }
-                    if (!okBot) return json(400, { ok: false, error: '자동 가입 방지 확인에 실패했습니다. 확인 칸을 다시 눌러 주세요.' });
+                    let okBot = false, codes = [];
+                    try {
+                        const vr = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', { method: 'POST', body: fd });
+                        const vj = await vr.json();
+                        okBot = !!vj.success; codes = Array.isArray(vj['error-codes']) ? vj['error-codes'] : [];
+                    } catch (e) { okBot = false; codes = ['fetch-failed']; }
+                    if (!okBot) {
+                        // 원인을 가릴 수 있게 Cloudflare 가 준 오류 코드를 함께 돌려줍니다 (비밀 값은 들어 있지 않음 · 2026-10-05)
+                        console.warn('[signup] Turnstile 실패', codes.join(','), str(input.turnstileToken) ? '토큰 있음' : '토큰 없음');
+                        return json(400, { ok: false, botCodes: codes, error: '자동 가입 방지 확인에 실패했습니다. 확인 칸을 다시 눌러 주세요.' + (codes.length ? ` (${codes.join(', ')})` : '') });
+                    }
                 }
                 const rate = su.rateCheck(await store.storeValue(su.RATE_KEY), ip, nowMs);
                 await store.setStore(su.RATE_KEY, rate.rate);
