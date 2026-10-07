@@ -49880,7 +49880,7 @@ const QUOTE_TEMPLATES = [
         const PARTNER_AGENT_BIZ_FIELD = {
             key: 'bizType', label: '사업자 구분', type: 'radio', required: true, reloadDocs: true,
             options: [{ id: 'personal', name: '일반사업자' }, { id: 'corp', name: '법인사업자' }, { id: 'nonbiz', name: '비사업자' }],
-            hint: '비사업자 영업자는 통장사본 · 신분증만 받습니다.'
+            hint: '비사업자 영업자는 통장사본 · 신분증만 제출합니다.'
         };
 
         // ==================== 전산 로그인 정보 (전달 형식) ====================
@@ -49952,16 +49952,16 @@ const QUOTE_TEMPLATES = [
             { key: 'deviceType', label: '단말기 종류', type: 'radio', required: true, reloadFields: true,
               options: [{ id: 'wired', name: '유선' }, { id: 'wireless', name: '무선' }],
               sum: '{v} 단말기',
-              hint: '유선을 고르면 단말기 값 처리 방법을 함께 받습니다.' },
-            { key: 'wiredPay', label: '유선 단말기 값 처리', type: 'radio', required: true,
+              hint: '유선을 선택하면 단말기 대금 처리 방법을 함께 입력합니다.' },
+            { key: 'wiredPay', label: '유선 단말기 대금 처리', type: 'radio', required: true,
               showIf: { key: 'deviceType', in: ['wired'] },
               options: [{ id: 'deduct', name: '정산 차감' }, { id: 'deposit', name: '입금' }],
               sum: '{v}',
-              hint: '유선 단말기 값을 정산에서 차감할지, 따로 입금받을지 선택해 주세요.' },
+              hint: '유선 단말기 대금을 정산에서 차감할지, 별도로 입금할지 선택해 주세요.' },
             { key: 'payMethod', label: '결제방법', type: 'radio', required: true, reloadFields: true,
               options: [{ id: 'pg', name: 'PG' }, { id: '2tid', name: '2TID (PG & VAN)' }],
               sum: '{v}',
-              hint: '결제방법과 상관없이 아래 PG 구분 · VAN 구분을 함께 선택해 주세요.' }
+              hint: '결제방법과 관계없이 아래 PG 구분 · VAN 구분을 함께 선택해 주세요.' }
         ];
 
         // showIf — { key, in: [값…] } 인 항목은 그 값을 골랐을 때만 화면에 나타납니다.
@@ -49970,7 +49970,7 @@ const QUOTE_TEMPLATES = [
         const PARTNER_VAN_FIELDS = [
             { key: 'van', label: 'PG 구분', type: 'radio', required: true, reloadFields: true,
               options: PARTNER_VAN_OPTIONS,
-              hint: 'TID 를 채번한 PG사를 선택해 주세요. 고른 곳에 필요한 항목만 아래에 나타납니다.' },
+              hint: 'TID 를 채번한 PG사를 선택해 주세요. 선택한 PG사에 필요한 항목만 아래에 표시됩니다.' },
             { key: 'vanNiceType', label: '나이스 정보통신 구분', type: 'radio', required: true, noSum: true,
               showIf: { key: 'van', in: ['nice'] },
               options: [{ id: 'ict', name: '정보통신' }, { id: 'payments', name: '페이먼츠' }] },
@@ -49990,7 +49990,7 @@ const QUOTE_TEMPLATES = [
             // PG 를 아직 안 골랐어도 나오고, 결제방법(PG · 2TID)과도 상관없습니다.
             { key: 'vanCo', label: 'VAN 구분', type: 'radio', required: true,
               options: PARTNER_VAN_CO_OPTIONS, sum: 'VAN {v}',
-              hint: '단말기를 물릴 VAN사를 선택해 주세요. PG 구분과 따로 받습니다.' },
+              hint: '단말기를 연동할 VAN사를 선택해 주세요. PG 구분과 별도로 선택합니다.' },
             // 요청 내용 — 개수 → 번호 → 채번 스냅샷 → (비고는 스냅샷 바로 아래에 붙습니다)
             { key: 'tidCount', label: 'TID 개수', type: 'number', required: true,
               showIf: { key: 'van', in: PARTNER_VAN_ALL }, placeholder: '예) 2', min: 1,
@@ -49998,7 +49998,7 @@ const QUOTE_TEMPLATES = [
             { key: 'tidNos', label: 'TID 번호', type: 'textarea', rows: 3, required: true, noSum: true,
               showIf: { key: 'van', in: PARTNER_VAN_ALL },
               placeholder: 'TID 번호를 한 줄에 하나씩 입력해 주세요\n예)\n1234567890\n1234567891',
-              hint: '한 줄에 하나씩 — 적은 줄 수가 위 TID 개수와 같아야 접수됩니다.' },
+              hint: '한 줄에 하나씩 입력해 주세요. 입력한 TID 수가 위 TID 개수와 같아야 접수됩니다.' },
             // 채번 페이지 스냅샷 — TID 번호 바로 아래에서 받습니다 (필수 여부는 PG사마다 다릅니다)
             { key: 'tidShots', label: 'TID 채번 스냅샷', type: 'shots', required: false, noSum: true,
               showIf: { key: 'van', in: PARTNER_VAN_ALL } }
@@ -50096,7 +50096,7 @@ const QUOTE_TEMPLATES = [
         // (단말기 맵핑은 결제방법을 PG · 2TID 중에 고르지만, PG 구분과 VAN 구분은 둘 다 받습니다)
         const PARTNER_VAN_FIELDS_DEVICE = PARTNER_VAN_FIELDS.map(f =>
             f.key === 'van'
-                ? Object.assign({}, f, { hint: 'TID 를 채번한 PG사를 선택해 주세요. 결제방법과 상관없이 PG 구분 · VAN 구분을 모두 고릅니다.' })
+                ? Object.assign({}, f, { hint: 'TID 를 채번한 PG사를 선택해 주세요. 결제방법과 관계없이 PG 구분 · VAN 구분을 모두 선택합니다.' })
                 : f);
 
         // ==================== 업무별 접수 항목 (2026-09-14 신설) ====================
@@ -50147,8 +50147,8 @@ const QUOTE_TEMPLATES = [
               options: [{ id: 'yes', name: '대상' }, { id: 'no', name: '미대상' }],
               showIf: { key: 'custType', in: ['direct', 'franchise', 'partner', 'partnerShop', 'hq'] },
               lockIf: (v) => partnerHwHasMethod((v || {}).hwList, 'paid'),
-              lockNote: '유상임대 품목이 있어 <b>CMS 자동이체 대상</b>으로 정해졌습니다 — 월 임대료를 자동이체로 받습니다. 빼려면 3단계에서 유상임대 품목을 없애 주세요.',
-              hint: '유지보수 관리비를 자동이체로 받을지 정합니다. 대상이면 아래 신청서를 함께 작성합니다.' }
+              lockNote: '유상임대 품목이 있어 <b>CMS 자동이체 대상</b>으로 지정되었습니다 — 월 임대료는 자동이체로 청구됩니다. 대상에서 제외하려면 3단계에서 유상임대 품목을 삭제해 주세요.',
+              hint: '유지보수 관리비의 CMS 자동이체 청구 여부입니다. 대상인 경우 아래 신청서를 함께 작성해 주세요.' }
         ];
 
         // 장비 발주 — 품목 표(정책단가·수수료 자동계산)는 다음 단계이고,
@@ -50158,7 +50158,7 @@ const QUOTE_TEMPLATES = [
         // (초안에서도 Step2 의 결제방식을 빼고 Step3 품목별 구매방법으로 합쳤습니다)
         const PARTNER_HW_FIELDS = [
             { key: 'hwList', label: '발주 장비', type: 'hwtable', required: true, noSum: true,
-              hint: '수량을 넣은 품목만 접수됩니다. 품목은 자유롭게 더하거나 지울 수 있습니다.' }
+              hint: '수량을 입력한 품목만 접수됩니다. [품목 추가] 로 품목을 추가하거나 삭제할 수 있습니다.' }
         ];
 
         // ==================== 영업본부 접수 — 랜딩 초안 반영 (2026-09-15) ====================
@@ -50283,10 +50283,10 @@ const QUOTE_TEMPLATES = [
         const PARTNER_SALES_GATE_FIELDS = [
             { key: 'custType', label: '거래 유형', type: 'fixed', required: true,
               options: PARTNER_CUST_TYPES, sum: '{v}',
-              hint: '계정에 지정된 거래 유형입니다. 바꾸려면 킹오더 담당자에게 요청해 주세요.' },
+              hint: '계정에 지정된 거래 유형입니다. 변경이 필요하면 킹오더브라더스 담당자에게 요청해 주세요.' },
             { key: 'franchiseName', label: '프랜차이즈 본사', type: 'fixed', required: true,
               plain: true, sum: '{v}',
-              hint: '계정에 지정된 본사입니다. 바꾸려면 킹오더 담당자에게 요청해 주세요.',
+              hint: '계정에 지정된 본사입니다. 변경이 필요하면 킹오더브라더스 담당자에게 요청해 주세요.',
               showIf: { key: 'custType', in: ['franchise', 'hq'] } },
             // 가격정책은 값만 숨은 칸으로 넘기고 **화면에는 보이지 않습니다** (2026-09-16). 사내 접수함에서만 봅니다.
             { key: 'franchiseHq', label: '프랜차이즈 가격정책', type: 'fixed', required: true, hidden: true, noSum: true,
@@ -50380,7 +50380,7 @@ const QUOTE_TEMPLATES = [
                   const add = String((v || {}).cmsDelivery) === 'yes' ? PARTNER_CMS_DELIVERY_FEE : 0;
                   const sum = base + add;
                   return { value: sum,
-                           text: sum ? `월 ${partnerWon(sum)}원` : '기본 요금을 넣어 주세요',
+                           text: sum ? `월 ${partnerWon(sum)}원` : '기본 요금을 입력해 주세요',
                            note: add ? `기본 ${partnerWon(base)} + 배달연동 ${partnerWon(add)}` : '' };
               } },
             { key: 'cmsApplicant', label: '신청인', type: 'text', required: true, noSum: true,
@@ -50396,7 +50396,7 @@ const QUOTE_TEMPLATES = [
               showIf: PARTNER_CMS_ONLY },
             // 은행은 **찾아서 고릅니다** (2026-09-16) — 이름을 치면 목록이 좁혀지고, 목록에 없는 금융기관은 적은 그대로 둡니다
             { key: 'cmsBank', label: '은행명', type: 'pick', required: true, noSum: true,
-              options: PARTNER_BANKS, placeholder: '은행 이름을 입력해 찾으세요 (예: 국민, 농협)',
+              options: PARTNER_BANKS, placeholder: '은행명을 입력해 검색해 주세요 (예: 국민, 농협)',
               showIf: PARTNER_CMS_ONLY },
             { key: 'cmsAccount', label: '계좌번호', type: 'text', required: true, noSum: true,
               showIf: PARTNER_CMS_ONLY },
@@ -50426,7 +50426,7 @@ const QUOTE_TEMPLATES = [
                   { id: 'privacy', name: '개인정보 및 첨부서류 수집 · 이용에 동의합니다 (필수)' },
                   { id: 'terms',   name: '이용약관 및 개인정보처리방침에 동의합니다 (필수)' }
               ],
-              hint: '두 가지 모두 체크해야 접수됩니다.' }
+              hint: '두 항목 모두 동의해야 접수할 수 있습니다.' }
         ];
 
         // ---------- 가맹점 설치환경 체크 ----------
@@ -50955,7 +50955,7 @@ const QUOTE_TEMPLATES = [
             { n: 2, name: '발주 장비' },
             { n: 3, name: '설치환경 체크' },
             { n: 9, name: '확인 · 접수', last: true,
-              note: '설치 환경이 미비하면 재방문 · 추가 비용이 생길 수 있습니다. 접수 전에 다시 한 번 확인해 주세요' }
+              note: '설치 환경이 미비하면 재방문 · 추가 비용이 발생할 수 있습니다. 접수 전에 다시 한 번 확인해 주세요' }
         ];
 
         // ---------- 무상 장비 지원 (2026-09-15) ----------
@@ -50966,7 +50966,7 @@ const QUOTE_TEMPLATES = [
             // 2026-10-07 — 다른 접수와 같은 [검색] 칸. 고르면 주소를 아래 '설치 주소'(dnAddr) 에 채웁니다
             { key: 'dnTo', label: '지원 대상 (가맹점 · 병원)', type: 'text', lookup: 'shop', lookupAddr: 'dnAddr', required: true, noSum: true,
               placeholder: '지원 대상 상호를 입력하고 [검색] 을 눌러 주세요',
-              hint: '킹오더브라더스에 등록된 우리 업체와 소속 가맹점에서 찾습니다. 새로 여는 곳이면 상호를 그대로 적어 주세요.' },
+              hint: '킹오더브라더스에 등록된 우리 업체와 소속 가맹점에서 찾습니다. 신규 오픈 매장은 상호를 직접 입력해 주세요.' },
             { key: 'dnAddr', label: '설치 주소', type: 'address', required: true, noSum: true },
             { key: 'dnWhy', label: '지원 사유', type: 'textarea', required: true, rows: 2, noSum: true,
               placeholder: '무상 지원이 필요한 사유를 기재해 주세요 (예: 신규 거래처 유치 · 프로모션 · 장비 교체 지원 등)' },
@@ -50994,7 +50994,7 @@ const QUOTE_TEMPLATES = [
             { n: 3, name: '설치환경 체크',
               nameOf: v => String((v || {}).custType) === 'dist' ? '납품 일정' : '설치환경 체크' },
             { n: 9, name: '확인 · 접수', last: true,
-              note: '설치 환경이 미비하면 재방문 · 추가 비용이 생길 수 있습니다. 접수 전에 다시 한 번 확인해 주세요' }
+              note: '설치 환경이 미비하면 재방문 · 추가 비용이 발생할 수 있습니다. 접수 전에 다시 한 번 확인해 주세요' }
         ];
 
         // ---------- 설치 희망일은 신청일 기준 3영업일 뒤부터 (2026-09-21) ----------
@@ -51260,7 +51260,7 @@ const QUOTE_TEMPLATES = [
                           placeholder: '예: 2026-08 또는 2026-08-01 ~ 08-31' },
                         { key: 'settleShop', label: '가맹점 찾기', type: 'shop', required: false, noSum: true,
                           placeholder: '특정 가맹점 건이면 상호를 입력해 주세요',
-                          hint: '영업자(대리점) 건이면 이름을 그대로 적어 주셔도 됩니다.' }
+                          hint: '영업자(대리점) 건은 영업자명을 입력해 주세요.' }
                     ] }
                 ],
                 fields: []
@@ -51290,7 +51290,7 @@ const QUOTE_TEMPLATES = [
                         // 2026-10-07 — 추가 장비 구매 · 메뉴 등록과 같은 [검색] 칸. 고르면 휴대폰을 '현장 연락처' 에 채웁니다 (lookupPhone)
                         { key: 'asShop', label: '가맹점 찾기', type: 'text', lookup: 'shop', lookupPhone: 'asPhone', required: true, noSum: true,
                           placeholder: '장애가 발생한 가맹점명을 입력하고 [검색] 을 눌러 주세요',
-                          hint: '킹오더브라더스에 등록된 우리 업체와 소속 가맹점에서 찾습니다. 목록에 없으면 적으신 그대로 접수됩니다.' },
+                          hint: '킹오더브라더스에 등록된 우리 업체와 소속 가맹점에서 찾습니다. 목록에 없으면 입력하신 상호로 접수됩니다.' },
                         { key: 'device', label: '대상 장비', type: 'select', required: true, sum: '{v}',
                           get options() { return asOptionPairs('device'); } },
                         { key: 'symptom', label: '증상 분류', type: 'select', required: true, sum: '{v}',
@@ -51314,18 +51314,18 @@ const QUOTE_TEMPLATES = [
                     { id: 'menu', name: '메뉴 등록 · 수정', fields: [
                         { key: 'menuShop', label: '가맹점 찾기', type: 'text', lookup: 'shop', required: true, noSum: true,
                           placeholder: '가맹점명을 입력하고 [검색] 을 눌러 주세요',
-                          hint: '킹오더브라더스에 등록된 우리 업체와 소속 가맹점에서 찾습니다. 목록에 없으면 적으신 그대로 접수됩니다.' },
+                          hint: '킹오더브라더스에 등록된 우리 업체와 소속 가맹점에서 찾습니다. 목록에 없으면 입력하신 상호로 접수됩니다.' },
                         { key: 'menuKind', label: '요청 구분', type: 'radio', required: true, reloadFields: true,
                           options: [{ id: 'new', name: '신규 등록' }, { id: 'edit', name: '수정' }],
                           sum: '{v}' },
                         { key: 'menuNewDesc', label: '신규 메뉴 내용', type: 'textarea', required: true, rows: 6, noSum: true,
                           showIf: { key: 'menuKind', in: ['new'] },
-                          placeholder: '메뉴명 · 가격 · 분류(카테고리) · 옵션(사이즈 · 추가 선택) · 판매 시간 등 필요한 내용을 적어 주세요.\n예) 참치김밥 / 4,500원 / 김밥류 / 곱빼기 +1,000원',
-                          hint: '메뉴가 많으면 아래 서류칸에 메뉴판 양식이나 사진을 올리고, 여기에는 특이사항만 적어 주셔도 됩니다.' },
+                          placeholder: '메뉴명 · 가격 · 분류(카테고리) · 옵션(사이즈 · 추가 선택) · 판매 시간 등 필요한 내용을 기재해 주세요.\n예) 참치김밥 / 4,500원 / 김밥류 / 곱빼기 +1,000원',
+                          hint: '메뉴가 많은 경우 메뉴판 양식이나 사진을 아래 서류란에 첨부하고, 이 란에는 특이사항만 기재해 주세요.' },
                         { key: 'menuEditDesc', label: '수정 내용', type: 'textarea', required: true, rows: 6, noSum: true,
                           showIf: { key: 'menuKind', in: ['edit'] },
-                          placeholder: '어떤 메뉴를 어떻게 바꿀지 적어 주세요.\n예) 참치김밥 가격 4,500원 → 5,000원 / 라면 품절 처리 / 김치볶음밥 메뉴 삭제',
-                          hint: '바꿀 메뉴 이름과, 지금 값 → 바꿀 값을 함께 적어 주시면 빨리 처리됩니다.' }
+                          placeholder: '수정할 메뉴와 수정 내용을 기재해 주세요.\n예) 참치김밥 가격 4,500원 → 5,000원 / 라면 품절 처리 / 김치볶음밥 메뉴 삭제',
+                          hint: '메뉴명과 현재 값 → 변경 값을 함께 기재하시면 신속하게 처리됩니다.' }
                     ],
                       docsOwn: true,
                       docsExtra: { all: [
@@ -51385,7 +51385,7 @@ const QUOTE_TEMPLATES = [
             // 2026-10-07 — '장비설치의뢰서'(sales:install) 를 합쳤습니다 (이름 '장비 구매 · 추가' → '추가 장비 구매').
             { id: 'sales:buyhw', cat: 'hw', icon: 'fa-box', days: `영업일 ${INSTALL_LEAD_BIZ_DAYS}일 전`,
               name: '추가 장비 구매',
-              desc: '이미 거래 중인 가맹점에 포스 · 키오스크 · 테이블오더를 더 구매 · 임대하고 설치를 의뢰합니다. 매장 환경을 먼저 확인해 주셔야 설치가 진행됩니다.',
+              desc: '거래 중인 가맹점에 포스 · 키오스크 · 테이블오더를 추가 구매 · 임대하고 설치를 의뢰합니다. 매장 설치환경 확인 후 설치가 진행됩니다.',
               // 예전 이름(장비 구매 · 추가 · 장비설치의뢰서)으로 찾아도 나오게 둡니다
               kw: '하드웨어 구매 발주 렌탈 임대 포스 키오스크 장비추가 장비구매 설치 설치의뢰 장비설치의뢰서 설치발주 설치요청 발주서 설치환경 체크리스트' },
             // 'sales:install'(장비설치의뢰서) 은 2026-10-07 에 '추가 장비 구매' 로 합쳤습니다.
@@ -51657,7 +51657,7 @@ const QUOTE_TEMPLATES = [
             const p = String(pw || '');
             if (p.length < 6) return '비밀번호는 6자 이상이어야 합니다.';
             if (p.length > 64) return '비밀번호는 64자까지입니다.';
-            if (!/[A-Za-z]/.test(p) || !/[0-9]/.test(p)) return '비밀번호는 영문과 숫자를 섞어 주세요.';
+            if (!/[A-Za-z]/.test(p) || !/[0-9]/.test(p)) return '비밀번호는 영문과 숫자를 조합해 주세요.';
             return '';
         }
         // 서버가 없는 로컬 모드에서만 화면이 임시 비밀번호를 만듭니다 (서버 모드는 서버가 만듦)
@@ -52011,7 +52011,7 @@ const QUOTE_TEMPLATES = [
                 </div>`;
         }
         function partnerIdPartnerInfoHtml(p) {
-            if (!p) return '<span class="text-gray-400">파트너사를 고르면 구분 · 담당자 · 연락처가 여기 보입니다.</span>';
+            if (!p) return '<span class="text-gray-400">파트너사를 선택하면 구분 · 담당자 · 연락처가 표시됩니다.</span>';
             const hasAcct = partnerAccounts.filter(a => a.partnerId === p.id);
             return `<span class="text-gray-700"><b>${escapeHtml(String(p.name).replace(/\n/g, ' '))}</b> · 구분 ${partnerCustTypeChip(p)}${p.bizType ? ` · ${escapeHtml(partnerBizTypeName(p.bizType))}` : ''} · 담당 ${escapeHtml(p.contact || '-')} · ${escapeHtml(p.phone || '-')}${p.businessNo ? ` · 사업자 ${escapeHtml(p.businessNo)}` : ''}</span>
                 ${hasAcct.length ? `<span class="block mt-1 text-gray-500">이미 있는 아이디: ${hasAcct.map(a => `<span class="font-mono">${escapeHtml(a.loginId)}</span>`).join(', ')} — 같은 파트너사에 아이디를 더 만들 수 있습니다.</span>` : ''}
@@ -52490,16 +52490,16 @@ const QUOTE_TEMPLATES = [
             { id: 'time',   name: '희망 시간', input: 'text', placeholder: '예: 오전 / 14시 이후',
               from: x => (x.extra || {}).installTime || '' },
             // 2026-09-16 — 바꿀 주소도 [주소 검색] 으로 넣습니다 (input: 'address')
-            { id: 'addr',   name: '주소 · 배송지', input: 'address', placeholder: '바꿀 주소 (검색 뒤 상세주소를 이어 적어 주세요)',
+            { id: 'addr',   name: '주소 · 배송지', input: 'address', placeholder: '변경할 주소 (주소 검색 후 상세주소를 입력해 주세요)',
               from: x => (x.extra || {}).shopAddr || (x.extra || {}).hwTo || '' },
             { id: 'person', name: '담당자 · 연락처', input: 'text', placeholder: '예: 김담당 010-0000-0000',
               from: x => [(x.extra || {}).shopPhone || (x.extra || {}).asPhone || '', x.byName || ''].filter(Boolean).join(' · ') },
-            { id: 'items',  name: '발주 장비 · 수량', input: 'textarea', placeholder: '바꿀 장비와 수량',
+            { id: 'items',  name: '발주 장비 · 수량', input: 'textarea', placeholder: '변경할 장비와 수량',
               // 2026-09-15 — 품목표(hwList) 로 바뀌었습니다. 예전 글 입력(hwItems) 으로
               //              접수된 건도 그대로 보여야 하므로 둘 다 봅니다.
               from: x => partnerHwTableText((x.extra || {}).hwList || '')
                          || (x.extra || {}).hwItems || '' },
-            { id: 'etc',    name: '그 밖', input: 'text', placeholder: '무엇을 어떻게 바꿀지 적어 주세요',
+            { id: 'etc',    name: '그 밖', input: 'text', placeholder: '변경할 항목과 내용을 기재해 주세요',
               from: () => '' }
         ];
         const partnerChangeItem = (id) => PARTNER_CHANGE_ITEMS.find(x => x.id === id) || null;
@@ -52578,7 +52578,7 @@ const QUOTE_TEMPLATES = [
                 <label class="block text-sm font-medium text-gray-700 mb-1">${escapeHtml(f.label)}${star}</label>
                 <input type="hidden" id="${id}" value="${escapeHtml(value || '')}" />
                 <div id="${id}-box"></div>
-                <p class="text-xs text-gray-400 mt-1">바꿀 항목을 고르면 <b>지금 요청하신 값</b>과 <b>바꿀 값</b>을 나란히 적을 수 있습니다.</p>
+                <p class="text-xs text-gray-400 mt-1">변경할 항목을 선택하면 <b>기존 요청 값</b>과 <b>변경 값</b>을 함께 입력할 수 있습니다.</p>
             </div>`;
         }
         // 지금 화면 상태로 변경칸을 그립니다 (고른 접수 · 고른 항목 · 적어 둔 값 유지)
@@ -52641,7 +52641,7 @@ const QUOTE_TEMPLATES = [
                             </div>
                         </div>
                     </div>`;
-                }).join('') : '<p class="text-sm text-gray-400 bg-gray-50 border border-gray-200 rounded px-3 py-2.5">바꿀 항목을 위에서 골라 주세요.</p>'}`;
+                }).join('') : '<p class="text-sm text-gray-400 bg-gray-50 border border-gray-200 rounded px-3 py-2.5">변경할 항목을 위에서 선택해 주세요.</p>'}`;
         }
         // 숨은 칸에 담긴 값 — [{id, to}] 모양입니다
         function partnerChangeValue(prefix) {
@@ -52855,7 +52855,7 @@ const QUOTE_TEMPLATES = [
             if (hit.length === 1 && hit[0] === String(el.value || '').trim()) { box.innerHTML = ''; return; }
             if (!hit.length) {
                 box.innerHTML = `<p class="text-xs text-gray-500 bg-gray-50 border border-gray-200 rounded px-2.5 py-2">
-                    목록에 <b>${escapeHtml(el.value)}</b> 이(가) 없습니다 — 적으신 그대로 접수됩니다.</p>`;
+                    목록에 <b>${escapeHtml(el.value)}</b> 이(가) 없습니다 — 입력하신 내용으로 접수됩니다.</p>`;
                 return;
             }
             box.innerHTML = `<div class="border border-gray-200 rounded-lg overflow-hidden divide-y divide-gray-100 bg-white shadow-sm max-h-56 overflow-y-auto">
@@ -52892,7 +52892,7 @@ const QUOTE_TEMPLATES = [
                 </div>
                 <div id="${id}-res" class="mt-1"></div>
                 <p class="text-xs text-gray-400 mt-1">${f.hint
-                    || '상호를 입력하면 <b>우리 파트너사 담당 가맹점</b>에서 찾아 드립니다. 목록에 없으면 적으신 그대로 접수됩니다.'}</p>
+                    || '상호를 입력하면 <b>소속 가맹점</b>에서 검색합니다. 목록에 없으면 입력하신 상호로 접수됩니다.'}</p>
             </div>`;
         }
         function onPartnerShopInput(key, prefix) {
@@ -52902,7 +52902,7 @@ const QUOTE_TEMPLATES = [
             if (!el || !box) return;
             const q = String(el.value || '').trim();
             if (q.length < PARTNER_SHOP_MIN) {
-                box.innerHTML = q ? `<p class="text-xs text-gray-400 px-1 py-1">${PARTNER_SHOP_MIN}글자 이상 입력하면 찾아 드립니다.</p>` : '';
+                box.innerHTML = q ? `<p class="text-xs text-gray-400 px-1 py-1">${PARTNER_SHOP_MIN}글자 이상 입력하면 검색됩니다.</p>` : '';
                 return;
             }
             const hit = partnerShopFind(q);
@@ -52910,11 +52910,11 @@ const QUOTE_TEMPLATES = [
                 box.innerHTML = partnerShopNone()
                     ? `<p class="text-xs text-gray-500 bg-gray-50 border border-gray-200 rounded px-2.5 py-2">
                         아직 <b>우리 업체 소속으로 등록된 가맹점</b>이 없습니다 —
-                        상호를 적으시면 <b>적으신 그대로</b> 접수됩니다.
+                        상호를 입력하시면 <b>입력하신 상호로</b> 접수됩니다.
                         <br><span class="text-gray-400">소속 가맹점 등록은 담당 영업사원에게 문의해 주세요.</span></p>`
                     : `<p class="text-xs text-gray-500 bg-gray-50 border border-gray-200 rounded px-2.5 py-2">
                         담당 가맹점에서 <b>${escapeHtml(q)}</b> 을(를) 찾지 못했습니다 —
-                        새로 여는 가맹점이면 <b>적으신 그대로</b> 접수됩니다.</p>`;
+                        신규 오픈 가맹점은 <b>입력하신 상호로</b> 접수됩니다.</p>`;
                 return;
             }
             const picked = hit.length === 1 && hit[0].name === q;
@@ -52960,7 +52960,7 @@ const QUOTE_TEMPLATES = [
                 </div>
                 <div id="${id}-res" class="mt-1"></div>
                 <p class="text-xs text-gray-400 mt-1">${f.hint ? q(f.hint)
-                    : '킹오더브라더스에 등록된 <b>우리 업체와 소속 가맹점</b>에서 찾습니다. 고르면 사업자등록번호 · 대표자명 · 주소 · 담당자 휴대폰이 채워집니다.'}</p>
+                    : '킹오더브라더스에 등록된 <b>우리 업체와 소속 가맹점</b>에서 검색합니다. 선택하면 사업자등록번호 · 대표자명 · 주소 · 담당자 휴대폰이 자동 입력됩니다.'}</p>
             </div>`;
         }
         // 찾을 대상 — **로그인한 업체 자신** + 소속 가맹점 (2026-10-07).
@@ -53000,8 +53000,8 @@ const QUOTE_TEMPLATES = [
             partnerShopLookupHits = partnerShopLookupFind(q);
             if (!partnerShopLookupHits.length) {
                 box.innerHTML = note(partnerShopNone()
-                    ? `<b>${escapeHtml(q)}</b> 을(를) 찾지 못했습니다. 우리 업체 소속으로 등록된 가맹점이 아직 없습니다 — 아래 칸을 직접 적어 주시면 <b>적으신 그대로</b> 접수됩니다.<br><span class="text-gray-400">소속 가맹점 등록은 담당 영업사원에게 문의해 주세요.</span>`
-                    : `우리 업체 · 소속 가맹점에서 <b>${escapeHtml(q)}</b> 을(를) 찾지 못했습니다 — 아래 칸을 직접 적어 주시면 <b>적으신 그대로</b> 접수됩니다.`);
+                    ? `<b>${escapeHtml(q)}</b> 을(를) 찾지 못했습니다. 우리 업체 소속으로 등록된 가맹점이 아직 없습니다 — 아래 항목을 직접 입력하시면 <b>입력하신 내용으로</b> 접수됩니다.<br><span class="text-gray-400">소속 가맹점 등록은 담당 영업사원에게 문의해 주세요.</span>`
+                    : `우리 업체 · 소속 가맹점에서 <b>${escapeHtml(q)}</b> 을(를) 찾지 못했습니다 — 아래 항목을 직접 입력하시면 <b>입력하신 내용으로</b> 접수됩니다.`);
                 return;
             }
             box.innerHTML = `<div class="border border-gray-200 rounded-lg overflow-hidden divide-y divide-gray-100 bg-white shadow-sm max-h-64 overflow-y-auto">
@@ -53303,7 +53303,7 @@ const QUOTE_TEMPLATES = [
             const cfgOn = !!(window.KOB_CONFIG && KOB_CONFIG.supabaseUrl && KOB_CONFIG.supabaseAnonKey);
             if (cfgOn && (kobStorage.mode !== 'partner' || !window.kobPartner || !window.kobPartnerPw)) {
                 const m = document.getElementById('pc-login-msg');
-                if (m) m.textContent = '화면이 예전 판입니다. 새로고침을 한두 번 해 주세요 (PC 는 Ctrl+Shift+R).';
+                if (m) m.textContent = '화면이 최신 버전이 아닙니다. 새로고침해 주세요 (PC 는 Ctrl+Shift+R).';
             }
             // 임시 비밀번호로 들어온 아이디 — 새 비밀번호를 정하는 화면만 보입니다 (2026-10-05 S4)
             if (kobStorage.mode === 'partner' && window.kobPartner && kobPartner.mustChange) { renderPartnerForcedPw(); return; }
@@ -53846,7 +53846,7 @@ const QUOTE_TEMPLATES = [
             host.innerHTML = `
                 <div class="mb-3">
                     <h2 class="text-lg font-bold text-gray-800"><i class="fas fa-user mr-1 text-indigo-500"></i>내 정보</h2>
-                    <p class="text-sm text-gray-500">변경된 내용이 있으면 담당 영업사원에게 알려 주세요.</p>
+                    <p class="text-sm text-gray-500">변경 사항이 있으면 담당 영업사원에게 요청해 주세요.</p>
                 </div>
                 <div class="grid gap-3 sm:grid-cols-2">
                     <div class="bg-white rounded-lg border border-gray-200 overflow-hidden">
@@ -54018,7 +54018,7 @@ const QUOTE_TEMPLATES = [
                 return;
             }
 
-            if (!window.kobPartnerPw) { msg.textContent = '화면이 예전 판입니다. 새로고침을 한두 번 해 주세요 (PC 는 Ctrl+Shift+R).'; return; }
+            if (!window.kobPartnerPw) { msg.textContent = '화면이 최신 버전이 아닙니다. 새로고침해 주세요 (PC 는 Ctrl+Shift+R).'; return; }
             const hit = partnerAccountList().find(a => a.loginId.toLowerCase() === id);
             if (!hit || !(await kobPartnerPw.check(partnerAccounts.find(a => a.loginId === hit.loginId), pw))) {
                 msg.textContent = '아이디 또는 비밀번호가 맞지 않습니다.';
@@ -54113,7 +54113,7 @@ const QUOTE_TEMPLATES = [
                         <button type="button" onclick="pcSignup.parent=null; renderPartnerSignup()" class="text-xs text-gray-500 underline">다시 찾기</button></div>`
                     : `<input type="text" id="pcs-parent-q" placeholder="상호 두 글자 이상" oninput="pcSignupParentSearch(this.value)" class="w-full p-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" />
                        <div id="pcs-parent-res" class="mt-1"></div>
-                       <p class="text-[11px] text-gray-500 mt-1">목록에 없으면 소속 ${parentKind === 'hq' ? '본사' : '파트너사'}에 먼저 문의해 주세요 (킹오더에 등록된 곳만 고를 수 있습니다).</p>`}
+                       <p class="text-[11px] text-gray-500 mt-1">목록에 없으면 소속 ${parentKind === 'hq' ? '본사' : '파트너사'}에 먼저 문의해 주세요 (킹오더브라더스에 등록된 업체만 선택할 수 있습니다).</p>`}
                 </div>` : ''}
                 <p class="text-xs font-bold text-gray-700 mb-2">② 사업자 정보</p>
                 <div class="grid sm:grid-cols-2 gap-3 mb-4">
@@ -54139,7 +54139,7 @@ const QUOTE_TEMPLATES = [
                     ${pcSignupInput('phone', '담당자 연락처', { req: true, max: 20, ph: '010-0000-0000' })}
                     ${pcSignupInput('email', '이메일', { max: 100, type: 'email' })}
                     ${pcSignupInput('loginId', '아이디', { req: true, max: 20, auto: 'username', note: '영문 소문자 · 숫자 4~20자 (ptn 으로 시작할 수 없음)' })}
-                    ${pcSignupInput('pw', '비밀번호', { req: true, type: 'password', max: 64, auto: 'new-password', note: '6자 이상 · 영문과 숫자를 섞어서 (특수문자는 선택)' })}
+                    ${pcSignupInput('pw', '비밀번호', { req: true, type: 'password', max: 64, auto: 'new-password', note: '6자 이상 · 영문과 숫자 조합 (특수문자 선택)' })}
                     ${pcSignupInput('pw2', '비밀번호 확인', { req: true, type: 'password', max: 64, auto: 'new-password' })}
                 </div>
                 <p class="text-xs font-bold text-gray-700 mb-2">④ 동의</p>
@@ -54156,7 +54156,7 @@ const QUOTE_TEMPLATES = [
                     ${parentKind ? `<div class="border border-gray-200 rounded-lg p-3">
                         <label class="flex items-start gap-2 font-semibold text-gray-800"><input type="checkbox" id="pcs-c-share" ${pcSignup.values.cShare ? 'checked' : ''} onchange="pcSignup.values.cShare=this.checked" class="mt-0.5" />소속 ${parentKind === 'hq' ? '본사' : '파트너사'}에 개인정보 제공 동의 <span class="text-gray-500">(선택)</span></label>
                         <ul class="mt-1.5 ml-5 list-disc space-y-0.5">
-                            <li>제공받는 자: ${pcSignup.parent ? `<b>${escapeHtml(pcSignup.parent.name)}</b>` : '위에서 고른 소속 업체'}</li>
+                            <li>제공받는 자: ${pcSignup.parent ? `<b>${escapeHtml(pcSignup.parent.name)}</b>` : '위에서 선택한 소속 업체'}</li>
                             <li>목적: 소속 가맹점 현황 확인 · 업무 협조</li>
                             <li>항목: 담당자 이름 · 연락처</li>
                             <li>보유 기간: 소속 관계가 끝날 때까지</li>
@@ -54184,7 +54184,7 @@ const QUOTE_TEMPLATES = [
                     pcSignup.tsToken = '';
                     pcTsWidget = window.turnstile.render(el, { sitekey: pcSignup.siteKey, execution: 'execute', appearance: 'interaction-only',
                         callback: (t) => { pcSignup.tsToken = t; if (pcTsWait) { pcTsWait.ok(t); pcTsWait = null; } },
-                        'error-callback': () => { if (pcTsWait) { pcTsWait.fail(new Error('자동 가입 방지 확인을 하지 못했습니다. 잠시 뒤 다시 눌러 주세요.')); pcTsWait = null; } },
+                        'error-callback': () => { if (pcTsWait) { pcTsWait.fail(new Error('자동 가입 방지 확인에 실패했습니다. 잠시 후 다시 시도해 주세요.')); pcTsWait = null; } },
                         'expired-callback': () => { pcSignup.tsToken = ''; } });
                 } catch (e) { console.warn('[가입] 봇 확인을 그리지 못했습니다', e); }
             };
@@ -54231,7 +54231,7 @@ const QUOTE_TEMPLATES = [
                 if (!window.turnstile || pcTsWidget === null) { fail(new Error('자동 가입 방지 확인을 불러오지 못했습니다. 새로고침한 뒤 다시 시도해 주세요.')); return; }
                 pcTsWait = { ok, fail };
                 try { window.turnstile.reset(pcTsWidget); window.turnstile.execute(pcTsWidget); } catch (e) { pcTsWait = null; fail(e); return; }
-                setTimeout(() => { if (pcTsWait) { pcTsWait = null; fail(new Error('자동 가입 방지 확인이 끝나지 않았습니다. 위에 나온 확인 칸이 있으면 눌러 주세요.')); } }, 90000);
+                setTimeout(() => { if (pcTsWait) { pcTsWait = null; fail(new Error('자동 가입 방지 확인이 완료되지 않았습니다. 위에 표시된 확인 항목이 있으면 선택해 주세요.')); } }, 90000);
             });
         }
         // 알림 — 빨강(문제) · 파랑(진행 중) · 초록. 문제가 있는 칸은 빨간 테두리 · 그 칸으로 이동
@@ -54254,10 +54254,10 @@ const QUOTE_TEMPLATES = [
             const digits = (x) => String(x || '').replace(/\D/g, '');
             if (!b.kind) return ['업체 유형을 골라 주세요.', ''];
             if (PC_SIGNUP_PARENT[b.kind] && !b.parentId) return ['소속 업체를 찾아 골라 주세요.', 'pcs-parent-q'];
-            if (!b.name) return ['상호(업체명)를 넣어 주세요.', 'pcs-name'];
-            if (digits(b.businessNo).length !== 10) return ['사업자등록번호 10자리를 넣어 주세요. (지금 ' + digits(b.businessNo).length + '자리)', 'pcs-businessNo'];
-            if (!b.ceo) return ['대표자명을 넣어 주세요.', 'pcs-ceo'];
-            if (!b.contactName) return ['담당자 이름을 넣어 주세요.', 'pcs-contactName'];
+            if (!b.name) return ['상호(업체명)를 입력해 주세요.', 'pcs-name'];
+            if (digits(b.businessNo).length !== 10) return ['사업자등록번호 10자리를 입력해 주세요. (현재 ' + digits(b.businessNo).length + '자리)', 'pcs-businessNo'];
+            if (!b.ceo) return ['대표자명을 입력해 주세요.', 'pcs-ceo'];
+            if (!b.contactName) return ['담당자 이름을 입력해 주세요.', 'pcs-contactName'];
             if (digits(b.phone).length < 9 || digits(b.phone).length > 11) return ['담당자 연락처를 확인해 주세요. (숫자 9~11자리)', 'pcs-phone'];
             if (b.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(b.email)) return ['이메일 주소를 확인해 주세요.', 'pcs-email'];
             if (!/^[a-z0-9]{4,20}$/.test(b.loginId)) return ['아이디는 영문 소문자 · 숫자 4~20자로 정해 주세요.', 'pcs-loginId'];
@@ -54311,7 +54311,7 @@ const QUOTE_TEMPLATES = [
             const inp = (id, label, auto) => `<div class="mb-3"><label class="block text-xs font-medium text-gray-600 mb-1">${label}</label>
                 <input type="password" id="${prefix}-${id}" autocomplete="${auto}" class="w-full p-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" /></div>`;
             return inp('cur', forced ? '받은 임시 비밀번호' : '지금 비밀번호', 'current-password') + inp('new', '새 비밀번호', 'new-password') + inp('new2', '새 비밀번호 확인', 'new-password')
-                + `<p class="text-[11px] text-gray-500 mb-2">6자 이상 · 영문과 숫자를 섞어서 (특수문자는 선택)</p>
+                + `<p class="text-[11px] text-gray-500 mb-2">6자 이상 · 영문과 숫자 조합 (특수문자 선택)</p>
                    <p id="${prefix}-msg" class="text-sm text-red-600 mb-2 min-h-[1.25rem]"></p>
                    <button type="button" onclick="submitPartnerPwChange('${prefix}', ${forced ? 'true' : 'false'})" class="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg">비밀번호 바꾸기</button>`;
         }
@@ -54321,7 +54321,7 @@ const QUOTE_TEMPLATES = [
             const loginId = (kobPartner.session && kobPartner.session.loginId) || (partnerUser && partnerUser.loginId) || '';
             const pe = partnerPwProblem(g('new'), loginId); if (pe) return msg(pe);
             if (g('new') !== g('new2')) return msg('새 비밀번호 확인이 맞지 않습니다.');
-            if (!g('cur')) return msg(forced ? '받은 임시 비밀번호를 넣어 주세요.' : '지금 비밀번호를 넣어 주세요.');
+            if (!g('cur')) return msg(forced ? '발급받은 임시 비밀번호를 입력해 주세요.' : '현재 비밀번호를 입력해 주세요.');
             const r = await kobPartner.call('POST', '/api/partner/password', { current: g('cur'), next: g('new') });
             if (!r.ok) return msg(r.error || ('서버 오류 ' + r.status));
             if (forced) { msg('바꿨습니다. 파트너센터로 들어갑니다…', true); setTimeout(() => location.reload(), 600); return; }
@@ -55036,7 +55036,7 @@ const QUOTE_TEMPLATES = [
             // 사업자 구분이 **있는** 접수는 그걸 골라야 서류가 정해집니다.
             // 없는 접수는 바로 서류칸을 보여 줍니다.
             if (bizField && !biz) {
-                host.innerHTML = '<p class="mb-4 text-xs rounded border border-gray-200 bg-gray-50 text-gray-500 p-2.5"><i class="fas fa-circle-info mr-1"></i>사업자 구분을 고르면 제출할 서류가 나타납니다.</p>';
+                host.innerHTML = '<p class="mb-4 text-xs rounded border border-gray-200 bg-gray-50 text-gray-500 p-2.5"><i class="fas fa-circle-info mr-1"></i>사업자 구분을 선택하면 제출 서류가 표시됩니다.</p>';
                 return;
             }
             const hasVan = partnerTypeHasVan(partnerPickedDept, partnerFormType);
@@ -55262,7 +55262,7 @@ const QUOTE_TEMPLATES = [
                 const docs = partnerDocsForIntake(values.bizType, partnerCoRep, hasVan, d.id, typeId);
                 const missing = docs.filter(x => x.required && !(partnerDocFiles[x.id] && partnerDocFiles[x.id].dataUrl));
                 if (missing.length) {
-                    alert('아래 필수 서류를 올려야 접수됩니다.\n\n· ' + missing.map(x => x.name).join('\n· '));
+                    alert('아래 필수 서류를 첨부해야 접수됩니다.\n\n· ' + missing.map(x => x.name).join('\n· '));
                     return;
                 }
                 const noTid = docs.filter(x => x.tid && !(partnerDocFiles[x.id] && partnerDocFiles[x.id].tidNo));
@@ -56286,16 +56286,16 @@ const QUOTE_TEMPLATES = [
         const PARTNER_REJECT_KINDS = [
             { id: 'unpaid', name: '미입금 반려', icon: 'fa-won-sign',
               chip: 'text-rose-700 bg-rose-50 border-rose-200',
-              hint: '입금이 확인되지 않아 되돌립니다. 입금 뒤 재요청하면 이어서 처리합니다.' },
+              hint: '입금이 확인되지 않아 반려합니다. 입금 후 재요청하시면 처리를 재개합니다.' },
             { id: 'sched',  name: '설치희망일 반려', icon: 'fa-calendar-xmark',
               chip: 'text-amber-700 bg-amber-50 border-amber-200', needAlt: true,
-              hint: '그 날짜에 설치가 어렵습니다. 가능한 날짜·시간을 함께 알려 주세요.' },
+              hint: '요청하신 일자에 설치가 어렵습니다. 가능한 일자와 시간을 함께 안내해 주세요.' },
             { id: 'docs',   name: '서류미비 반려', icon: 'fa-file-circle-xmark',
               chip: 'text-blue-700 bg-blue-50 border-blue-200',
-              hint: '빠지거나 잘못된 서류가 있습니다. 어떤 서류인지 적어 주세요.' },
+              hint: '누락되었거나 잘못된 서류가 있습니다. 해당 서류를 기재해 주세요.' },
             { id: 'etc',    name: '그 밖', icon: 'fa-circle-question',
               chip: 'text-gray-700 bg-gray-100 border-gray-300',
-              hint: '위에 들어맞지 않는 사유입니다.' }
+              hint: '위 항목에 해당하지 않는 사유입니다.' }
         ];
         const partnerRejectKind = (id) => PARTNER_REJECT_KINDS.find(k => k.id === id) || null;
         function partnerRejectChip(x) {
@@ -56670,7 +56670,7 @@ const QUOTE_TEMPLATES = [
                 // 그냥 '안 됩니다' 만 보내면 또 아무 날짜나 적어 옵니다.
                 let alt = '';
                 if (kind.needAlt) {
-                    alt = prompt('가능한 날짜 · 시간을 알려 주세요.\n(예: 9/18(목) 오전 · 9/19(금) 14시 이후)',
+                    alt = prompt('가능한 일자 · 시간을 입력해 주세요.\n(예: 9/18(목) 오전 · 9/19(금) 14시 이후)',
                                  x.rejectAlt || '');
                     if (alt === null) return;
                     if (!String(alt).trim()) { alert('가능한 날짜 · 시간을 적어야 파트너가 다시 고를 수 있습니다.'); return; }
