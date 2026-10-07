@@ -52918,7 +52918,7 @@ const QUOTE_TEMPLATES = [
                 </div>
                 <div id="${id}-res" class="mt-1"></div>
                 <p class="text-xs text-gray-400 mt-1">${f.hint ? q(f.hint)
-                    : '그룹웨어에 등록된 <b>우리 업체와 소속 가맹점</b>에서 찾습니다. 고르면 사업자등록번호 · 대표자명 · 주소가 채워집니다.'}</p>
+                    : '그룹웨어에 등록된 <b>우리 업체와 소속 가맹점</b>에서 찾습니다. 고르면 사업자등록번호 · 대표자명 · 주소 · 담당자 휴대폰이 채워집니다.'}</p>
             </div>`;
         }
         // 찾을 대상 — **로그인한 업체 자신** + 소속 가맹점 (2026-10-07).
@@ -52990,6 +52990,9 @@ const QUOTE_TEMPLATES = [
             set(key, c.name);
             set('shopBizNo', c.businessNo);
             set('shopCeo', c.ceo);
+            // 담당자 휴대폰 — 휴대폰(mobile) 이 먼저, 없으면 대표 연락처(phone). 소속 가맹점은 제공 동의한 곳만 내려옵니다
+            const phone = c.mobile || c.phone || '';
+            set('shopPhone', phone);
             // 주소칸은 세 칸(우편번호 · 도로명 · 상세)을 채우고 숨은 칸을 다시 잇습니다
             const road = c.roadAddress || c.address || '';
             if (road && document.getElementById(pre + 'shopAddr__road')) {
@@ -52997,8 +53000,8 @@ const QUOTE_TEMPLATES = [
                 put('zip', c.zipCode); put('road', road); put('detail', c.addressDetail);
                 onPartnerAddrInput(pre + 'shopAddr');
             }
-            const filled = [c.businessNo && '사업자등록번호', c.ceo && '대표자명', road && '주소'].filter(Boolean);
-            const miss = [!c.businessNo && '사업자등록번호', !c.ceo && '대표자명', !road && '주소'].filter(Boolean);
+            const filled = [c.businessNo && '사업자등록번호', c.ceo && '대표자명', road && '주소', phone && '담당자 휴대폰'].filter(Boolean);
+            const miss = [!c.businessNo && '사업자등록번호', !c.ceo && '대표자명', !road && '주소', !phone && '담당자 휴대폰'].filter(Boolean);
             const box = document.getElementById(pre + key + '-res');
             if (box) box.innerHTML = `<p class="text-xs text-green-700 px-1 py-1"><i class="fas fa-circle-check mr-1"></i><b>${escapeHtml(c.name)}</b> 을(를) 골랐습니다${filled.length ? ` — ${filled.join(' · ')} 을(를) 채웠습니다` : ''}.</p>`
                 + (miss.length ? `<p class="text-xs text-amber-700 px-1">${miss.join(' · ')} 은(는) 등록된 값이 없거나 가맹점의 제공 동의가 없어 비워 두었습니다 — 직접 입력해 주세요.</p>` : '');

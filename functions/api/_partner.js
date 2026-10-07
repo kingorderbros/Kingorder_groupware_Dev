@@ -146,6 +146,7 @@ export function shopSummary(c) {
     if (c.consentParentShare === true) {
         o.contactName = s(c.contactName || c.contact); o.phone = s(c.phone);
         o.businessNo = s(c.businessNo); o.ceo = s(c.ceo);
+        o.mobile = s(c.mobile);           // 추가 장비 구매 '담당자 휴대폰' 칸 (2026-10-07)
     }
     return o;
 }
