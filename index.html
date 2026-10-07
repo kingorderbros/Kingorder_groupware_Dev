@@ -51286,7 +51286,7 @@ const QUOTE_TEMPLATES = [
                         // 2026-10-07 — 추가 장비 구매 · 메뉴 등록과 같은 [검색] 칸. 고르면 휴대폰을 '현장 연락처' 에 채웁니다 (lookupPhone)
                         { key: 'asShop', label: '가맹점 찾기', type: 'text', lookup: 'shop', lookupPhone: 'asPhone', required: true, noSum: true,
                           placeholder: '장애가 발생한 가맹점명을 입력하고 [검색] 을 눌러 주세요',
-                          hint: '그룹웨어에 등록된 우리 업체와 소속 가맹점에서 찾습니다. 목록에 없으면 적으신 그대로 접수됩니다.' },
+                          hint: '킹오더브라더스에 등록된 우리 업체와 소속 가맹점에서 찾습니다. 목록에 없으면 적으신 그대로 접수됩니다.' },
                         { key: 'device', label: '대상 장비', type: 'select', required: true, sum: '{v}',
                           get options() { return asOptionPairs('device'); } },
                         { key: 'symptom', label: '증상 분류', type: 'select', required: true, sum: '{v}',
@@ -51310,7 +51310,7 @@ const QUOTE_TEMPLATES = [
                     { id: 'menu', name: '메뉴 등록 · 수정', fields: [
                         { key: 'menuShop', label: '가맹점 찾기', type: 'text', lookup: 'shop', required: true, noSum: true,
                           placeholder: '가맹점명을 입력하고 [검색] 을 눌러 주세요',
-                          hint: '그룹웨어에 등록된 우리 업체와 소속 가맹점에서 찾습니다. 목록에 없으면 적으신 그대로 접수됩니다.' },
+                          hint: '킹오더브라더스에 등록된 우리 업체와 소속 가맹점에서 찾습니다. 목록에 없으면 적으신 그대로 접수됩니다.' },
                         { key: 'menuKind', label: '요청 구분', type: 'radio', required: true, reloadFields: true,
                           options: [{ id: 'new', name: '신규 등록' }, { id: 'edit', name: '수정' }],
                           sum: '{v}' },
@@ -52954,7 +52954,7 @@ const QUOTE_TEMPLATES = [
                 </div>
                 <div id="${id}-res" class="mt-1"></div>
                 <p class="text-xs text-gray-400 mt-1">${f.hint ? q(f.hint)
-                    : '그룹웨어에 등록된 <b>우리 업체와 소속 가맹점</b>에서 찾습니다. 고르면 사업자등록번호 · 대표자명 · 주소 · 담당자 휴대폰이 채워집니다.'}</p>
+                    : '킹오더브라더스에 등록된 <b>우리 업체와 소속 가맹점</b>에서 찾습니다. 고르면 사업자등록번호 · 대표자명 · 주소 · 담당자 휴대폰이 채워집니다.'}</p>
             </div>`;
         }
         // 찾을 대상 — **로그인한 업체 자신** + 소속 가맹점 (2026-10-07).
