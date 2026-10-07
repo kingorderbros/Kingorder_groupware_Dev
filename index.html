@@ -35630,7 +35630,10 @@ const QUOTE_TEMPLATES = [
             });
             plan.forEach(p => stat[p.op]++);
             if (!stat.add && !stat.update) {
-                box.innerHTML = importResultBox('바뀐 내용이 없습니다.', [`동일 ${stat.same}건${stat.skip + stat.dup ? ` · 건너뜀 ${stat.skip + stat.dup}건` : ''}`], usedCols, [], [], []);
+                // 끝났으므로 업로드 창을 닫고 알림으로만 알립니다 (2026-10-07)
+                priceImportOpen = false;
+                renderPriceBook();
+                showAppToast(`바뀐 내용이 없습니다 — 동일 ${stat.same}건${stat.skip + stat.dup ? ` · 건너뜀 ${stat.skip + stat.dup}건` : ''}`, 'blue');
                 return;
             }
             if (!confirm(`공급 단가표에 반영할까요?\n\n신규 ${stat.add}건 · 변경 ${stat.update}건 · 동일 ${stat.same}건${stat.skip + stat.dup ? ` · 건너뜀 ${stat.skip + stat.dup}건` : ''}\n\n금액(원)은 파트너사 단가로 들어가고, 금액이 바뀐 품목은 이전 단가가 이력으로 남습니다.`)) {
@@ -35655,15 +35658,11 @@ const QUOTE_TEMPLATES = [
                 }
                 Object.assign(r, p.data, { from: r.from || from, history: r.history || [] });
             });
-            renderPriceBook();      // 저장(savePriceBook)도 함께 합니다
-            const box2 = document.getElementById('price-import-result');
-            const previewCols = [{ key: 'code', label: '정책코드' }, { key: 'cat', label: '카테고리' }, { key: 'name', label: '항목명' },
-                                 { key: 'billing', label: '과금유형' }, { key: 'amount', label: '파트너사 단가' }, { key: 'op', label: '처리' }];
-            const opName = { add: '신규', update: '변경', same: '동일' };
-            const preview = plan.filter(p => p.op !== 'same').slice(0, 15).map(p => Object.assign({}, p.x, { op: opName[p.op], amount: p.x.amount === '' ? '' : formatKRW(p.x.amount) }));
-            if (box2) box2.innerHTML = importResultBox(`공급 단가표에 반영했습니다 — 신규 ${stat.add}건 · 변경 ${stat.update}건`,
-                [`동일 ${stat.same}건${stat.skip + stat.dup ? ` · 건너뜀 ${stat.skip + stat.dup}건` : ''}`].concat(skipped.slice(0, 10).map(escapeHtml)),
-                usedCols, [], preview, previewCols);
+            // 반영이 끝나면 업로드 창을 닫고 결과는 알림으로 (2026-10-07). renderPriceBook 이 저장(savePriceBook)도 합니다
+            priceImportOpen = false;
+            renderPriceBook();
+            showAppToast(`공급 단가표에 반영했습니다 — 신규 ${stat.add}건 · 변경 ${stat.update}건 · 동일 ${stat.same}건${stat.skip + stat.dup ? ` · 건너뜀 ${stat.skip + stat.dup}건` : ''}`, 'green');
+            if (skipped.length) setTimeout(() => alert('건너뛴 줄이 있습니다.\n\n' + skipped.slice(0, 15).join('\n') + (skipped.length > 15 ? `\n… 외 ${skipped.length - 15}건` : '')), 50);
         }
 
         // ==================== 공통관리: 파트너사 ====================
