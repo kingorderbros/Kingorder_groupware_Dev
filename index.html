@@ -35087,7 +35087,7 @@ const QUOTE_TEMPLATES = [
             return priceBook.filter(r => {
                 if (f.cat && r.cat !== f.cat) return false;
                 if (f.kind && r.kind !== f.kind) return false;
-                if (q && !norm([r.cat, r.name, r.memo].join(' ')).includes(q)) return false;
+                if (q && !norm([r.cat, r.name, r.memo, r.code, r.sub].join(' ')).includes(q)) return false;
                 return true;
             });
         }
@@ -35165,7 +35165,9 @@ const QUOTE_TEMPLATES = [
         function priceRowByName(name) {
             const k = String(name || '').replace(/\s+/g, '');
             if (!k) return null;
-            return priceBook.find(r => String(r.name || '').replace(/\s+/g, '') === k) || null;
+            // 미사용(엑셀 사용여부 N · 2026-10-07) 품목보다 쓰는 품목을 먼저 찾습니다
+            const hits = priceBook.filter(r => String(r.name || '').replace(/\s+/g, '') === k);
+            return hits.find(r => r.active !== false) || hits[0] || null;
         }
         // 파트너센터에서 부릅니다 — 로그인한 계정 기준으로 이 품목의 단가
         function partnerPriceOf(name) {
@@ -35175,7 +35177,7 @@ const QUOTE_TEMPLATES = [
         }
         // 이 계정이 발주 화면에서 고를 수 있는 품목 (장비만 — 월정액은 발주 대상이 아닙니다)
         function partnerPriceItems() {
-            return priceBook.filter(r => r.kind !== '월정액')
+            return priceBook.filter(r => r.kind !== '월정액' && r.active !== false)
                 .map(r => ({ id: r.id, cat: r.cat, name: r.name, price: partnerPriceOf(r.name), memo: r.memo || '' }));
         }
 
@@ -35326,7 +35328,10 @@ const QUOTE_TEMPLATES = [
                     const m = priceMargin(r);
                     return `
                 <tr class="border-b border-gray-50 last:border-0 hover:bg-amber-50/40 cursor-pointer" onclick="openPriceModal('${escapeHtml(r.id)}')">
-                    <td class="px-3 py-2 pl-6">${escapeHtml(r.name)}${r.kind === '월정액' ? ' <span class="ml-1 px-1.5 py-0.5 text-[10px] rounded bg-purple-100 text-purple-700">월정액</span>' : ''}</td>
+                    <td class="px-3 py-2 pl-6${r.active === false ? ' opacity-50' : ''}">${escapeHtml(r.name)}${r.kind === '월정액' ? ` <span class="ml-1 px-1.5 py-0.5 text-[10px] rounded bg-purple-100 text-purple-700">${escapeHtml(r.billing && r.billing !== '월정액' ? r.billing : '월정액')}</span>` : ''}${r.active === false ? ' <span class="ml-1 px-1.5 py-0.5 text-[10px] rounded bg-gray-200 text-gray-600">미사용</span>' : ''}
+                        ${(r.code || r.sub || r.billing) ? `<span class="block text-[11px] text-gray-400">${[r.code, r.sub, r.unit, r.kind !== '월정액' ? r.billing : ''].filter(Boolean).map(escapeHtml).join(' · ')}</span>` : ''}
+                        ${(r.shopMonthly || r.partnerFee) ? `<span class="block text-[11px] text-indigo-600">${[r.shopMonthly ? '가맹점 월 ' + formatKRW(priceAsNum(r.shopMonthly)) : '', r.partnerFee ? '파트너 수수료 ' + formatKRW(priceAsNum(r.partnerFee)) : ''].filter(Boolean).join(' · ')}</span>` : ''}
+                        ${r.priceNote ? `<span class="block text-[11px] text-amber-700">${escapeHtml(r.priceNote)}</span>` : ''}</td>
                     <td class="px-3 py-2 text-right whitespace-nowrap text-gray-600">${escapeHtml(priceText(r.cost)) || '<span class="text-gray-300">-</span>'}</td>
                     <td class="px-3 py-2 text-right whitespace-nowrap font-medium">${escapeHtml(priceText(r.price)) || '<span class="text-gray-300">-</span>'}</td>
                     <td class="px-3 py-2 text-right whitespace-nowrap">${m ? `<span class="${m.amount > 0 ? 'text-emerald-700 font-medium' : 'text-gray-400'}">${formatKRW(m.amount)}${m.amount > 0 ? ` <span class="text-[10px] text-gray-400">${m.rate}%</span>` : ''}</span>` : '<span class="text-gray-300">-</span>'}</td>
@@ -35356,9 +35361,11 @@ const QUOTE_TEMPLATES = [
                     </div>
                     <div class="flex flex-wrap gap-2">
                         <button onclick="openPriceModal()" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded text-sm transition-colors whitespace-nowrap"><i class="fas fa-plus mr-1"></i>단가 등록</button>
+                        <button onclick="togglePriceImport()" class="bg-white border border-green-600 text-green-700 hover:bg-green-50 px-3 py-1.5 rounded text-sm transition-colors whitespace-nowrap"><i class="fas fa-file-arrow-up mr-1"></i>엑셀 업로드</button>
                         <button onclick="downloadPriceXlsx()" class="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded text-sm transition-colors whitespace-nowrap"><i class="fas fa-file-excel mr-1"></i>엑셀 내려받기</button>
                     </div>
                 </div>
+                ${priceImportOpen ? priceImportPanelHtml() : ''}
 
                 <div class="bg-white rounded-lg shadow-sm border border-gray-200 mb-4">
                     <div class="px-4 py-3 flex flex-wrap items-end gap-2">
@@ -35507,6 +35514,156 @@ const QUOTE_TEMPLATES = [
                 })
             ];
             downloadBlobAs(buildXlsxBlob(rows, '공급단가표'), `공급단가표_${today.replace(/-/g, '')}.xlsx`);
+        }
+
+        // ==================== 공급 단가표 엑셀 업로드 (2026-10-07) ====================
+        // 기준 양식: UAT/UAT자료/파트너사_가격정책_업로드_260514.xlsx 의 '가격정책' 시트 (첫 시트)
+        //   정책코드 · 카테고리 · 세부구분 · 항목명 · 상세설명 · 수량기준 · 과금유형 · 금액(원) ·
+        //   가맹점 월요금(원) · 파트너 수수료(원) · 금액 별도표기 · 비고 · 적용기준일 · 출처 · 사용여부
+        // 담는 곳 —
+        //   · 정책코드(code)로 같은 줄을 찾아 갱신, 없으면 새로 만듭니다. 엑셀에 없는 기존 줄은 그대로 둡니다.
+        //   · 금액(원) → **파트너사 단가**(tiers.partner) — 2026-10-07 사용자 결정. 킹오더 공급가(price)는 건드리지 않습니다.
+        //   · 개통수수료 · 중계수수료 · 월정액은 kind '월정액' (발주 품목에서 빠짐), 나머지는 '매입가'
+        //   · 가맹점 월요금 → shopMonthly, 파트너 수수료 → partnerFee (목록에 따로 보임)
+        //   · 사용여부 N → active: false (목록에 '미사용', 파트너 발주 품목에서 빠짐)
+        //   · 금액이 바뀌면 단가 수정과 같이 이전 값을 이력(history)으로 남기고 적용기준일을 새 적용일(from)로
+        //   · 같은 항목명이 엑셀 안에 여러 번 나오면(예: 하나시스 · 킹오더 포스의 '포스 세트') 발주 화면에서
+        //     구분되도록 이름 뒤에 세부구분을 붙입니다 → '포스 세트 (하나시스 포스)'
+        const PRICE_IMPORT_COLUMNS = [
+            { key: 'code',        label: '정책코드',          aliases: ['정책코드', '코드', '품목코드'], required: true },
+            { key: 'cat',         label: '카테고리',          aliases: ['카테고리', '분류', '대분류'], required: true },
+            { key: 'sub',         label: '세부구분',          aliases: ['세부구분', '중분류', '브랜드'] },
+            { key: 'name',        label: '항목명',            aliases: ['항목명', '제품명', '품목명', '제품 · 서비스', '제품목록'], required: true },
+            { key: 'desc',        label: '상세설명',          aliases: ['상세설명', '설명', '구성'] },
+            { key: 'unit',        label: '수량기준',          aliases: ['수량기준', '단위'] },
+            { key: 'billing',     label: '과금유형',          aliases: ['과금유형', '구분', '과금'] },
+            { key: 'amount',      label: '금액(원)',          aliases: ['금액(원)', '금액', '정책단가', '파트너사단가'], number: true },
+            { key: 'shopMonthly', label: '가맹점 월요금(원)', aliases: ['가맹점 월요금(원)', '가맹점월요금', '월요금'], number: true },
+            { key: 'partnerFee',  label: '파트너 수수료(원)', aliases: ['파트너 수수료(원)', '파트너수수료', '수수료'], number: true },
+            { key: 'priceNote',   label: '금액 별도표기',     aliases: ['금액 별도표기', '별도표기', '금액표기'] },
+            { key: 'memo',        label: '비고',              aliases: ['비고', '메모'] },
+            { key: 'from',        label: '적용기준일',        aliases: ['적용기준일', '적용일', '적용 시작일'], date: true },
+            { key: 'source',      label: '출처(원본 슬라이드)', aliases: ['출처(원본 슬라이드)', '출처'] },
+            { key: 'active',      label: '사용여부',          aliases: ['사용여부', '사용'] }
+        ];
+        const PRICE_MONTHLY_BILLINGS = ['월정액', '개통수수료', '중계수수료'];
+        let priceImportOpen = false;
+        function togglePriceImport() { priceImportOpen = !priceImportOpen; renderPriceBook(); }
+        function priceImportPanelHtml() {
+            return `<div class="bg-white rounded-lg shadow-sm border border-green-200 mb-4 p-4">
+                <div class="flex flex-wrap items-start justify-between gap-2">
+                    <div>
+                        <h4 class="text-sm font-bold text-gray-800"><i class="fas fa-file-arrow-up text-green-600 mr-1"></i>파트너사 공급단가 엑셀 업로드</h4>
+                        <ul class="text-xs text-gray-500 mt-1 space-y-0.5 list-disc pl-4">
+                            <li><b>첫 번째 시트</b>를 읽고 머리글 이름으로 열을 찾습니다. <b>정책코드 · 카테고리 · 항목명</b>은 필수입니다.</li>
+                            <li><b>정책코드</b>가 같은 품목은 갱신하고, 없으면 새로 등록합니다. 엑셀에 없는 기존 품목은 그대로 둡니다.</li>
+                            <li><b>금액(원)</b>은 <b>파트너사 단가</b>로 들어갑니다. 금액이 바뀐 품목은 이전 단가가 이력으로 남고 <b>적용기준일</b>부터 새 단가가 적용됩니다.</li>
+                            <li>사용여부가 <b>N</b>인 품목은 '미사용'으로 표시되고 파트너 발주 화면에서 제외됩니다.</li>
+                        </ul>
+                    </div>
+                    <button type="button" onclick="downloadPriceImportTemplate()" class="px-3 py-1.5 text-xs rounded border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 whitespace-nowrap"><i class="fas fa-download mr-1"></i>양식 내려받기</button>
+                </div>
+                <label class="mt-3 flex items-center justify-center gap-2 rounded-lg border-2 border-dashed border-green-200 bg-green-50/40 px-4 py-4 cursor-pointer hover:bg-green-50">
+                    <i class="fas fa-file-excel text-green-600"></i><span class="text-sm text-green-800 font-medium">여기를 눌러 <b>.xlsx</b> 파일을 선택해 주세요</span>
+                    <input type="file" accept=".xlsx" class="hidden" onchange="runPriceImport(this)" />
+                </label>
+                <div id="price-import-result" class="mt-3"></div>
+            </div>`;
+        }
+        function downloadPriceImportTemplate() {
+            const head = PRICE_IMPORT_COLUMNS.map(c => c.label);
+            const sample = ['POS-001', '포스', '하나시스 포스', '포스 세트', '본체(128GB)+키/마+금전함+프린터+멀티패드+S/W', '1대', '일시불', 850000, '', '', '', '', ymd(new Date()), '', 'Y'];
+            downloadBlobAs(buildXlsxBlob([head, sample], '가격정책'), `파트너사_가격정책_업로드양식_${ymd(new Date()).replace(/-/g, '')}.xlsx`);
+        }
+        async function runPriceImport(input) {
+            const read = await readImportFile(input, 'price-import-result', PRICE_IMPORT_COLUMNS, 'code', '정책코드');
+            input.value = '';
+            if (!read) return;
+            const { rows, found, box } = read;
+            const col = found.col;
+            const usedCols = PRICE_IMPORT_COLUMNS.filter(c => col[c.key] >= 0);
+            const cell = (r, k) => (col[k] >= 0 && r[col[k]] != null) ? String(r[col[k]]).trim() : '';
+            const numOrEmpty = (v) => v === '' ? '' : (Number(String(v).replace(/[^0-9.-]/g, '')) || 0);
+            const stat = { add: 0, update: 0, same: 0, skip: 0, dup: 0 };
+            const skipped = [];
+            const seen = new Set();
+            const items = [];
+            rows.slice(found.row + 1).forEach((r, i) => {
+                const code = cell(r, 'code'), cat = cell(r, 'cat'), name = cell(r, 'name');
+                if (!code && !cat && !name) return;                              // 빈 줄
+                if (!code || !cat || !name) { stat.skip++; skipped.push(`${found.row + i + 2}행 — 정책코드 · 카테고리 · 항목명 중 빈 칸`); return; }
+                if (seen.has(code)) { stat.dup++; skipped.push(`${found.row + i + 2}행 — 정책코드 ${code} 중복`); return; }
+                seen.add(code);
+                const billing = cell(r, 'billing');
+                const act = cell(r, 'active');
+                items.push({
+                    code, cat, sub: cell(r, 'sub'), baseName: name, desc: cell(r, 'desc'), unit: cell(r, 'unit'), billing,
+                    kind: PRICE_MONTHLY_BILLINGS.indexOf(billing) > -1 ? '월정액' : '매입가',
+                    amount: numOrEmpty(cell(r, 'amount')),
+                    shopMonthly: numOrEmpty(cell(r, 'shopMonthly')), partnerFee: numOrEmpty(cell(r, 'partnerFee')),
+                    priceNote: cell(r, 'priceNote'), memo: cell(r, 'memo'),
+                    from: cell(r, 'from') ? excelDateToYmd(cell(r, 'from')) : '',
+                    source: cell(r, 'source'),
+                    active: !/^(n|no|아니오|미사용|x|0|false)$/i.test(act)
+                });
+            });
+            if (!items.length) { box.innerHTML = '<p class="text-sm text-red-600"><i class="fas fa-triangle-exclamation mr-1"></i>올릴 품목이 없습니다.</p>'; return; }
+            // 같은 항목명이 엑셀 안에 여러 번 나오면 세부구분을 붙여 구분합니다
+            const nameCnt = {};
+            items.forEach(x => { const k = x.baseName.replace(/\s+/g, ''); nameCnt[k] = (nameCnt[k] || 0) + 1; });
+            items.forEach(x => { x.name = nameCnt[x.baseName.replace(/\s+/g, '')] > 1 && x.sub ? `${x.baseName} (${x.sub})` : x.baseName; });
+
+            // 미리 세어 보고 확인을 받습니다
+            const plan = items.map(x => {
+                const cur = priceBook.find(r => r.code === x.code);
+                const data = {
+                    cat: x.cat, name: x.name, kind: x.kind, code: x.code, sub: x.sub, desc: x.desc, unit: x.unit, billing: x.billing,
+                    shopMonthly: x.shopMonthly, partnerFee: x.partnerFee, priceNote: x.priceNote, memo: x.memo, source: x.source, active: x.active,
+                    costLabel: x.kind === '월정액' ? '월 사용료' : '매입가', priceLabel: x.kind === '월정액' ? '중계비' : '킹오더 공급가',
+                    tiers: Object.assign({}, (cur || {}).tiers || {}, { partner: x.amount })
+                };
+                if (x.amount === '') delete data.tiers.partner;
+                if (!cur) return { op: 'add', x, data };
+                const keys = Object.keys(data);
+                const same = keys.every(k => JSON.stringify(cur[k] === undefined ? '' : cur[k]) === JSON.stringify(data[k] === undefined ? '' : data[k]));
+                return { op: same ? 'same' : 'update', x, data, cur };
+            });
+            plan.forEach(p => stat[p.op]++);
+            if (!stat.add && !stat.update) {
+                box.innerHTML = importResultBox('바뀐 내용이 없습니다.', [`동일 ${stat.same}건${stat.skip + stat.dup ? ` · 건너뜀 ${stat.skip + stat.dup}건` : ''}`], usedCols, [], [], []);
+                return;
+            }
+            if (!confirm(`공급 단가표에 반영할까요?\n\n신규 ${stat.add}건 · 변경 ${stat.update}건 · 동일 ${stat.same}건${stat.skip + stat.dup ? ` · 건너뜀 ${stat.skip + stat.dup}건` : ''}\n\n금액(원)은 파트너사 단가로 들어가고, 금액이 바뀐 품목은 이전 단가가 이력으로 남습니다.`)) {
+                box.innerHTML = '<p class="text-sm text-gray-500">반영을 취소했습니다.</p>';
+                return;
+            }
+            const now = new Date().toISOString().slice(0, 16).replace('T', ' ');
+            const by = (typeof currentUserName !== 'undefined' ? currentUserName : '') || '';
+            plan.forEach(p => {
+                if (p.op === 'same') return;
+                const from = p.x.from || priceToday();
+                if (p.op === 'add') {
+                    priceBook.push(Object.assign({ id: 'PR-' + String(priceSeq++).padStart(3, '0') }, p.data,
+                        { cost: '', price: '', hqPrice: {}, partnerPrice: {}, from, history: [] }));
+                    return;
+                }
+                const r = p.cur;
+                if (priceMoneyOf(r) !== priceMoneyOf(Object.assign({}, r, { tiers: p.data.tiers }))) {
+                    r.history = (r.history || []).concat([{ from: r.from || '', to: from, price: r.price, tiers: r.tiers || {},
+                        hqPrice: r.hqPrice || {}, partnerPrice: r.partnerPrice || {}, at: now, by, memo: '엑셀 업로드' }]);
+                    r.from = from;
+                }
+                Object.assign(r, p.data, { from: r.from || from, history: r.history || [] });
+            });
+            renderPriceBook();      // 저장(savePriceBook)도 함께 합니다
+            const box2 = document.getElementById('price-import-result');
+            const previewCols = [{ key: 'code', label: '정책코드' }, { key: 'cat', label: '카테고리' }, { key: 'name', label: '항목명' },
+                                 { key: 'billing', label: '과금유형' }, { key: 'amount', label: '파트너사 단가' }, { key: 'op', label: '처리' }];
+            const opName = { add: '신규', update: '변경', same: '동일' };
+            const preview = plan.filter(p => p.op !== 'same').slice(0, 15).map(p => Object.assign({}, p.x, { op: opName[p.op], amount: p.x.amount === '' ? '' : formatKRW(p.x.amount) }));
+            if (box2) box2.innerHTML = importResultBox(`공급 단가표에 반영했습니다 — 신규 ${stat.add}건 · 변경 ${stat.update}건`,
+                [`동일 ${stat.same}건${stat.skip + stat.dup ? ` · 건너뜀 ${stat.skip + stat.dup}건` : ''}`].concat(skipped.slice(0, 10).map(escapeHtml)),
+                usedCols, [], preview, previewCols);
         }
 
         // ==================== 공통관리: 파트너사 ====================
