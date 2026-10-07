@@ -50116,6 +50116,12 @@ const QUOTE_TEMPLATES = [
               placeholder: '010-0000-0000' }
         ];
 
+        // 추가 장비 구매(2026-10-07) — 이미 거래 중인 곳이라 가맹점명을 적고 [검색] 을 누르면
+        // 그룹웨어 업체(소속 가맹점)에서 찾아, 고르면 사업자번호 · 대표자명 · 주소까지 채웁니다.
+        // 칸 key 는 그대로라 접수함 · 요약 · 운영본부 설치 요청이 똑같이 읽습니다.
+        const PARTNER_BUYHW_SHOP_FIELDS = PARTNER_SHOP_FIELDS.map(f => f.key !== 'shopName' ? f
+            : Object.assign({}, f, { lookup: 'shop', placeholder: '가맹점명을 입력하고 [검색] 을 눌러 주세요' }));
+
         // 신규 가맹점의 결제 방식 — TID 는 아직 없을 수 있어 **진행유형만** 받습니다.
         // (이미 채번한 TID 를 연결하는 건은 단순맵핑 · 단말기 맵핑 쪽입니다)
         const PARTNER_NEWSHOP_PAY_FIELDS = [
@@ -51113,7 +51119,7 @@ const QUOTE_TEMPLATES = [
                       noWantDate: true,       // 설치 희망일을 이미 받습니다
                       steps: PARTNER_BUYHW_STEPS,
                       fields: withStep(1, PARTNER_SALES_GATE_FIELDS)
-                          .concat(withStep(1, PARTNER_SHOP_FIELDS))
+                          .concat(withStep(1, PARTNER_BUYHW_SHOP_FIELDS))
                           .concat(withStep(2, PARTNER_HW_FIELDS))
                           .concat(withStep(3, PARTNER_SITE_FIELDS))
                           .concat(withStep(3, PARTNER_INSTALL_FIELDS))
@@ -52308,6 +52314,8 @@ const QUOTE_TEMPLATES = [
             if (f.type === 'shots') return `<div id="${prefix}shots-host" class="mb-4"></div>`;
             // 가맹점 조회칸 — 직접 타자 치는 대신 **등록된 가맹점을 찾아 고릅니다** (2026-09-14)
             if (f.type === 'shop') return partnerShopFieldHtml(f, prefix, ring, value);
+            // 적고 [검색] 을 눌러 업체를 찾아 고르면 옆 칸까지 채우는 칸 (2026-10-07 · 추가 장비 구매)
+            if (f.lookup === 'shop') return partnerShopLookupFieldHtml(f, prefix, ring, value);
             // 주소칸 — [주소 검색](다음 우편번호) 으로 우편번호 · 도로명주소를 찾고 상세주소를 덧붙입니다 (2026-09-16)
             if (f.type === 'address') return partnerAddressFieldHtml(f, prefix, ring, value);
             // 찾아서 고르는 칸 — 은행명처럼 목록이 길 때. 치면 좁혀지고, 목록에 없으면 적은 그대로 (2026-09-16)
@@ -52680,7 +52688,7 @@ const QUOTE_TEMPLATES = [
 
         // 로그인한 파트너사가 찾을 수 있는 가맹점 — **상위업체가 이 업체인 곳(소속 가맹점)** 만입니다.
         // 2026-10-05 업체 통합: 9/28 자료 보호 뒤로 파트너센터는 가맹점 목록을 받지 못해 이 칸이 늘 비어 있었습니다.
-        // 이제 서버가 소속 가맹점만 골라 'gwPartnerShops.v1' 로 내려 줍니다 (상호 · 주소 · 거래상태만 — 담당자 · 연락처는 없음).
+        // 이제 서버가 소속 가맹점만 골라 'gwPartnerShops.v1' 로 내려 줍니다 (상호 · 주소 · 거래상태 — 담당자 · 연락처 · 사업자번호 · 대표자명은 제공 동의한 가맹점만, 2026-10-07).
         // 상위업체가 지정되지 않은 가맹점은 어느 파트너사에도 보이지 않습니다 — 다른 업체의 거래처가 노출되지 않게.
         function partnerShopList() {
             try {
@@ -52885,6 +52893,103 @@ const QUOTE_TEMPLATES = [
             const box = document.getElementById(id + '-res');
             if (el) el.value = name;
             if (box) box.innerHTML = `<p class="text-xs text-green-700 px-1 py-1"><i class="fas fa-circle-check mr-1"></i><b>${escapeHtml(name)}</b> 을(를) 골랐습니다.</p>`;
+        }
+
+        // ---------- 가맹점명 [검색] 칸 (2026-10-07) ----------
+        // 적고 [검색](또는 Enter) 을 누르면 소속 가맹점(gwPartnerShops.v1)에서 상호 · 사업자번호로 찾습니다.
+        // 고르면 같은 화면의 사업자번호 · 대표자명 · 주소칸을 채웁니다 — 서버가 내려 준 값만 채우므로
+        // 제공 동의가 없는 가맹점은 사업자번호 · 대표자명이 비어 있고, 그 칸은 파트너가 직접 적습니다.
+        // 찾지 못해도 적은 그대로 접수됩니다.
+        function partnerShopLookupFieldHtml(f, prefix, ring, value) {
+            const id = prefix + f.key;
+            const q = s => escapeHtml(s || '');
+            const v = value === undefined || value === null ? '' : String(value);
+            const star = f.required ? ' <span class="text-red-500">*</span>' : '';
+            return `<div class="mb-4" data-shop-lookup="${q(f.key)}">
+                <label class="block text-sm font-medium text-gray-700 mb-1">${q(f.label)}${star}</label>
+                <div class="flex items-center gap-2">
+                    <input type="text" id="${id}" value="${q(v)}" autocomplete="off"${f.required ? ' required' : ''}
+                        onkeydown="if (event.key === 'Enter') { event.preventDefault(); searchPartnerShopLookup('${q(f.key)}', '${q(prefix)}'); }"
+                        placeholder="${q(f.placeholder)}"
+                        class="flex-1 min-w-0 p-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 ${ring || 'focus:ring-indigo-500'}" />
+                    <button type="button" onclick="searchPartnerShopLookup('${q(f.key)}', '${q(prefix)}')"
+                        class="px-3 py-2.5 text-sm font-semibold rounded-lg border border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 transition-colors whitespace-nowrap">
+                        <i class="fas fa-magnifying-glass mr-1"></i>검색</button>
+                </div>
+                <div id="${id}-res" class="mt-1"></div>
+                <p class="text-xs text-gray-400 mt-1">${f.hint ? q(f.hint)
+                    : '그룹웨어에 <b>우리 업체 소속으로 등록된 가맹점</b>에서 찾습니다. 고르면 사업자등록번호 · 대표자명 · 주소가 채워집니다.'}</p>
+            </div>`;
+        }
+        // 상호(브랜드) 또는 사업자번호(숫자만 비교)로 찾습니다
+        function partnerShopLookupFind(q) {
+            const kw = String(q || '').trim().toLowerCase().replace(/\s+/g, '');
+            const digits = kw.replace(/\D/g, '');
+            if (kw.length < PARTNER_SHOP_MIN) return [];
+            const seen = new Set();
+            return partnerShopList().filter(c =>
+                String(c.name).toLowerCase().replace(/\s+/g, '').includes(kw)
+                || String(c.brand || '').toLowerCase().replace(/\s+/g, '').includes(kw)
+                || (digits.length >= 3 && String(c.businessNo || '').replace(/\D/g, '').includes(digits))
+            ).filter(c => { const k = String(c.id || c.name); if (seen.has(k)) return false; seen.add(k); return true; })
+             .slice(0, PARTNER_SHOP_MAX);
+        }
+        let partnerShopLookupHits = [];
+        function searchPartnerShopLookup(key, prefix) {
+            const pre = prefix || 'pcf-';
+            const el = document.getElementById(pre + key);
+            const box = document.getElementById(pre + key + '-res');
+            if (!el || !box) return;
+            const q = String(el.value || '').trim();
+            const note = (t) => `<p class="text-xs text-gray-500 bg-gray-50 border border-gray-200 rounded px-2.5 py-2">${t}</p>`;
+            if (q.length < PARTNER_SHOP_MIN) { box.innerHTML = note(`가맹점명을 ${PARTNER_SHOP_MIN}글자 이상 입력하고 [검색] 을 눌러 주세요.`); return; }
+            partnerShopLookupHits = partnerShopLookupFind(q);
+            if (!partnerShopLookupHits.length) {
+                box.innerHTML = note(partnerShopNone()
+                    ? '아직 <b>우리 업체 소속으로 등록된 가맹점</b>이 없습니다 — 아래 칸을 직접 적어 주시면 <b>적으신 그대로</b> 접수됩니다.<br><span class="text-gray-400">소속 가맹점 등록은 담당 영업사원에게 문의해 주세요.</span>'
+                    : `소속 가맹점에서 <b>${escapeHtml(q)}</b> 을(를) 찾지 못했습니다 — 아래 칸을 직접 적어 주시면 <b>적으신 그대로</b> 접수됩니다.`);
+                return;
+            }
+            box.innerHTML = `<div class="border border-gray-200 rounded-lg overflow-hidden divide-y divide-gray-100 bg-white shadow-sm max-h-64 overflow-y-auto">
+                ${partnerShopLookupHits.map((c, i) => `
+                <button type="button" onclick="pickPartnerShopLookup('${escapeHtml(key)}', '${escapeHtml(pre)}', ${i})"
+                    class="w-full text-left px-3 py-2 hover:bg-indigo-50 transition">
+                    <p class="text-sm font-semibold text-gray-800">${escapeHtml(c.name)}</p>
+                    <p class="text-[11px] text-gray-500">${[c.businessNo, c.ceo, c.roadAddress || c.address]
+                        .filter(Boolean).map(escapeHtml).join(' · ') || '&nbsp;'}</p>
+                </button>`).join('')}
+            </div>`;
+        }
+        function pickPartnerShopLookup(key, prefix, idx) {
+            const pre = prefix || 'pcf-';
+            const c = partnerShopLookupHits[idx];
+            if (!c) return;
+            // 앞서 [검색] 으로 채운 값은 새로 고른 곳에 값이 없으면 비웁니다 (다른 가맹점 값이 남지 않게).
+            // 파트너가 직접 적은 값은 그대로 둡니다.
+            const set = (k, v) => {
+                const el = document.getElementById(pre + k);
+                if (!el) return;
+                const mine = el.dataset.lookupFilled !== undefined && el.value === el.dataset.lookupFilled;
+                if (!v && !mine) return;
+                el.value = v || '';
+                el.dataset.lookupFilled = v || '';
+                el.dispatchEvent(new Event('input', { bubbles: true }));
+            };
+            set(key, c.name);
+            set('shopBizNo', c.businessNo);
+            set('shopCeo', c.ceo);
+            // 주소칸은 세 칸(우편번호 · 도로명 · 상세)을 채우고 숨은 칸을 다시 잇습니다
+            const road = c.roadAddress || c.address || '';
+            if (road && document.getElementById(pre + 'shopAddr__road')) {
+                const put = (k, v) => { const el = document.getElementById(pre + 'shopAddr__' + k); if (el) el.value = v || ''; };
+                put('zip', c.zipCode); put('road', road); put('detail', c.addressDetail);
+                onPartnerAddrInput(pre + 'shopAddr');
+            }
+            const filled = [c.businessNo && '사업자등록번호', c.ceo && '대표자명', road && '주소'].filter(Boolean);
+            const miss = [!c.businessNo && '사업자등록번호', !c.ceo && '대표자명', !road && '주소'].filter(Boolean);
+            const box = document.getElementById(pre + key + '-res');
+            if (box) box.innerHTML = `<p class="text-xs text-green-700 px-1 py-1"><i class="fas fa-circle-check mr-1"></i><b>${escapeHtml(c.name)}</b> 을(를) 골랐습니다${filled.length ? ` — ${filled.join(' · ')} 을(를) 채웠습니다` : ''}.</p>`
+                + (miss.length ? `<p class="text-xs text-amber-700 px-1">${miss.join(' · ')} 은(는) 등록된 값이 없거나 가맹점의 제공 동의가 없어 비워 두었습니다 — 직접 입력해 주세요.</p>` : '');
         }
 
         // 이 항목을 지금 화면에 보여야 하는지 — showIf 가 없으면 늘 보입니다.

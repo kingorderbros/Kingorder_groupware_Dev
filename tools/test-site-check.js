@@ -56,7 +56,8 @@ console.log('\n[5] 추가 장비 구매 (장비설치의뢰서 + 장비 구매 �
     const i = html.indexOf("id: 'buyhw', name: '추가 장비 구매'");
     const seg = html.slice(i, i + 1600);
     ok(/PARTNER_SALES_GATE_FIELDS/.test(seg), '거래 유형(단가 · 유통 여부)을 받는다');
-    ok(/PARTNER_SHOP_FIELDS/.test(seg), '가맹점 정보를 받는다');
+    ok(/PARTNER_BUYHW_SHOP_FIELDS/.test(seg), '가맹점 정보를 받는다');
+    ok(/PARTNER_BUYHW_SHOP_FIELDS = PARTNER_SHOP_FIELDS\.map[\s\S]{0,160}lookup: 'shop'/.test(html), '가맹점명은 [검색] 으로 업체에서 찾는다 (2026-10-07)');
     ok(/PARTNER_HW_FIELDS/.test(seg), '발주 장비를 받는다');
     ok(/PARTNER_SITE_FIELDS/.test(seg), '설치환경 체크를 받는다');
     ok(/PARTNER_INSTALL_FIELDS/.test(seg), '설치 희망일 · 시간을 받는다');

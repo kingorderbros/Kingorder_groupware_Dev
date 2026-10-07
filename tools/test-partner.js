@@ -163,6 +163,14 @@ const ok = (c, m) => { if (c) { pass++; console.log('  ✓', m); } else { fail++
         const shop = v2['gwPartnerShops.v1'].find(x => x.id === 'c5');
         ok(v2['gwPartnerShops.v1'].length === 2 && shop.name === '역삼점' && shop.address === '서울 강남구 역삼로 1' && shop.status === '거래중', '소속 가맹점: 상호 · 주소 · 거래상태');
         ok(!('contactName' in shop) && !('phone' in shop) && !('businessNo' in shop) && !('rentFee' in shop), '소속 가맹점: 담당자 · 연락처 · 사업자번호 · 금액은 내려가지 않는다');
+        // 2026-10-07 — 추가 장비 구매 [검색] 이 칸을 채우도록: 주소는 나눠서, 사업자번호 · 대표자명은 동의한 곳만
+        ok(shop.zipCode === '' && shop.roadAddress === '서울 강남구 역삼로 1' && !('ceo' in shop), '동의 없는 가맹점: 주소는 나눠 주고 대표자명은 없다');
+        const agreed = P.shopSummary({ id: 'c9', name: '삼성점', roadAddress: '서울 강남구 삼성로 3', addressDetail: '2층', zipCode: '06100',
+                                       businessNo: '123-45-67890', ceo: '박대표', consentParentShare: true });
+        ok(agreed.businessNo === '123-45-67890' && agreed.ceo === '박대표' && agreed.zipCode === '06100' && agreed.addressDetail === '2층',
+           '동의한 가맹점: 사업자번호 · 대표자명 · 우편번호 · 상세주소를 준다');
+        ok(P.shopSummary({ id: 'c10', name: '옛점', address: '서울 어딘가 1 3층', addressDetail: '3층' }).addressDetail === '',
+           '도로명이 없는 옛 자료는 상세주소를 따로 주지 않는다 (주소에 이미 들어 있음)');
         const si = v2['gwPartnerShopIntakes.v1'];
         ok(si.length === 1 && si[0].id === 'PI-2' && si[0].status === 'working' && si[0].content === undefined && si[0].byPhone === undefined && si[0].docs === undefined,
            '소속 가맹점 접수: 그 가맹점 것만 · 진행 상태만 (내용 · 연락처 · 서류 없음)');

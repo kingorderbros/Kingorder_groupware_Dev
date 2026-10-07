@@ -136,10 +136,17 @@ export function publicCompany(c) {
 // 소속 가맹점 한 곳 — 상호 · 유형 · 주소 · 거래상태 · 계약일 · 설치일만.
 // 담당자 이름 · 연락처 · 사업자번호 · 금액은 내려 주지 않습니다 (제3자 제공 동의 없이 상위업체에 넘기지 않음 · 제안서 v2 5절)
 // 회원가입 때 '소속 본사 · 파트너사에 제공' 에 동의한 가맹점(consentParentShare)만 담당자 이름 · 연락처를 더합니다 (2026-10-05)
+// 2026-10-07 — 접수 화면에서 가맹점을 찾아 고르면 칸을 채우도록:
+//   · 주소는 우편번호 · 도로명 · 상세주소로 나눠 줍니다 (주소는 원래 보이던 자료)
+//   · 사업자번호 · 대표자명도 **동의한 가맹점만** 더합니다 (담당자 · 연락처와 같은 기준)
 export function shopSummary(c) {
     const o = { id: s(c.id), name: partnerName(c), kind: kindOf(c), address: s(c.roadAddress || c.address), status: s(c.status),
-                contractDate: s(c.contractDate), installDate: s(c.installDate) };
-    if (c.consentParentShare === true) { o.contactName = s(c.contactName || c.contact); o.phone = s(c.phone); }
+                contractDate: s(c.contractDate), installDate: s(c.installDate),
+                zipCode: s(c.zipCode), roadAddress: s(c.roadAddress), addressDetail: c.roadAddress ? s(c.addressDetail) : '' };
+    if (c.consentParentShare === true) {
+        o.contactName = s(c.contactName || c.contact); o.phone = s(c.phone);
+        o.businessNo = s(c.businessNo); o.ceo = s(c.ceo);
+    }
     return o;
 }
 // 소속 가맹점의 접수 한 건 — 진행 상태를 보는 데 필요한 것만 (내용 · 첨부 · 담당자 연락처는 빼고)
