@@ -171,6 +171,22 @@ const ok = (c, m) => { if (c) { pass++; console.log('  ✓', m); } else { fail++
            '동의한 가맹점: 사업자번호 · 대표자명 · 휴대폰 · 우편번호 · 상세주소를 준다');
         ok(P.shopSummary({ id: 'c10', name: '옛점', address: '서울 어딘가 1 3층', addressDetail: '3층' }).addressDetail === '',
            '도로명이 없는 옛 자료는 상세주소를 따로 주지 않는다 (주소에 이미 들어 있음)');
+        // 2026-10-07 — 발주 장비 목록: 그 계정 단가 하나만 · 월정액 · 미사용 제외 · 단가 숨김 계정
+        const book = [
+            { id: 'A', cat: '포스', name: '포스 세트', price: 900000, cost: 500000, tiers: { partner: 850000, direct: 990000 }, partnerPrice: { p17: 800000 }, hqPrice: { visible: 870000 } },
+            { id: 'B', cat: '포스', name: '월 유지보수', kind: '월정액', tiers: { partner: 10000 } },
+            { id: 'C', cat: '포스', name: '옛 장비', active: false, price: 1 },
+            { id: 'D', cat: '키오스크', name: '키오스크', price: 1200000 }
+        ];
+        const pv = (co, pid) => P.partnerPriceView(book, co, pid);
+        ok(pv({ kind: 'partner' }, 'p99').map(x => x.id).join(',') === 'A,D', '발주 장비: 월정액 · 미사용은 빼고 보낸다');
+        ok(pv({ kind: 'partner' }, 'p99')[0].price === 850000 && pv({ kind: 'partner' }, 'p99')[1].price === 1200000, '파트너사 단가, 없으면 킹오더 공급가');
+        ok(pv({ kind: 'partner' }, 'p17')[0].price === 800000, '파트너사별 개별단가가 먼저');
+        ok(pv({ kind: 'franchise', franchiseHq: 'visible' }, 'c7')[0].price === 870000, '프랜차이즈는 정책 단가');
+        ok(!('price' in pv({ kind: 'franchise', franchiseHq: 'hidden' }, 'c7')[0]) && !('price' in pv({ kind: 'partnerShop' }, 'p17')[0]) && !('price' in pv({}, 'x')[0]),
+           '가격비공개형 · 파트너사 가맹점 · 유형 미지정에는 단가를 보내지 않는다');
+        const one = pv({ kind: 'partner' }, 'p99')[0];
+        ok(!('cost' in one) && !('tiers' in one) && !('partnerPrice' in one) && !('hqPrice' in one), '매입가 · 다른 유형 · 다른 업체 단가는 보내지 않는다');
         const si = v2['gwPartnerShopIntakes.v1'];
         ok(si.length === 1 && si[0].id === 'PI-2' && si[0].status === 'working' && si[0].content === undefined && si[0].byPhone === undefined && si[0].docs === undefined,
            '소속 가맹점 접수: 그 가맹점 것만 · 진행 상태만 (내용 · 연락처 · 서류 없음)');

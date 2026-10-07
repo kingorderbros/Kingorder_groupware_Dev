@@ -35170,15 +35170,26 @@ const QUOTE_TEMPLATES = [
             return hits.find(r => r.active !== false) || hits[0] || null;
         }
         // 파트너센터에서 부릅니다 — 로그인한 계정 기준으로 이 품목의 단가
+        // 파트너센터(?mode=partner)는 공급 단가표를 읽지 못하므로 서버가 내려 준
+        // 'gwPartnerPriceItems.v1'(그 계정이 발주할 장비 · 그 계정 단가만)을 씁니다 (2026-10-07)
+        function partnerServerPriceItems() {
+            try { return (loadJsonStore('gwPartnerPriceItems.v1', []) || []).filter(x => x && x.name); } catch (e) { return []; }
+        }
         function partnerPriceOf(name) {
+            if (isPartnerMode()) {
+                const k = String(name || '').replace(/\s+/g, '');
+                const hit = k && partnerServerPriceItems().find(x => String(x.name).replace(/\s+/g, '') === k);
+                return hit ? (Number(hit.price) || 0) : 0;
+            }
             const g = (typeof partnerAccountGate === 'function') ? partnerAccountGate() : {};
             const pid = (typeof partnerUser !== 'undefined' && partnerUser) ? partnerUser.partnerId : '';
             return priceForTier(priceRowByName(name), g.custType, g.franchiseHq, pid);
         }
         // 이 계정이 발주 화면에서 고를 수 있는 품목 (장비만 — 월정액은 발주 대상이 아닙니다)
         function partnerPriceItems() {
+            if (isPartnerMode()) return partnerServerPriceItems().map(x => Object.assign({ memo: '' }, x, { price: Number(x.price) || 0 }));
             return priceBook.filter(r => r.kind !== '월정액' && r.active !== false)
-                .map(r => ({ id: r.id, cat: r.cat, name: r.name, price: partnerPriceOf(r.name), memo: r.memo || '' }));
+                .map(r => ({ id: r.id, cat: r.cat, sub: r.sub || '', name: r.name, desc: r.desc || '', unit: r.unit || '', price: partnerPriceOf(r.name), memo: r.memo || '' }));
         }
 
         // 본사별 · 파트너사별처럼 **몇 곳만 따로 정한** 단가를 목록에 짧게 펼칩니다.
@@ -50794,8 +50805,12 @@ const QUOTE_TEMPLATES = [
                         <button type="button" class="text-gray-300 hover:text-red-500 px-1" onclick="partnerHwDelRow(this)" title="이 품목 지우기"><i class="fas fa-times"></i></button>
                     </div>
                     <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-                        <label class="block col-span-2 sm:col-span-1">${lab('장비')}
-                            <input class="${inp}" data-hw="item" list="pcf-hw-items" value="${escapeHtml(r.item || '')}" placeholder="장비명" /></label>
+                        <div class="block col-span-2 sm:col-span-1 relative">${lab('장비')}
+                            <!-- 2026-10-07 — 공급 단가표 장비에서 선택하거나 이름으로 검색 (partnerHwPickShow) -->
+                            <input class="${inp}" data-hw="item" value="${escapeHtml(r.item || '')}" placeholder="장비 선택 또는 검색" autocomplete="off"
+                                   onfocus="partnerHwPickShow(this)" oninput="partnerHwPickShow(this)" onkeydown="partnerHwPickKey(event, this)"
+                                   onblur="setTimeout(() => partnerHwPickHide(this), 150)" />
+                            <div data-hw-pick class="hidden absolute left-0 right-0 sm:right-auto sm:w-[340px] z-30 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-72 overflow-y-auto"></div></div>
                         <label class="block col-span-2 sm:col-span-1">${lab('모델 / 색상')}
                             <input class="${inp}" data-hw="model" value="${escapeHtml(r.model || '')}" placeholder="모델 / 색상" /></label>
                         <label class="block">${lab('수량')}
@@ -50832,9 +50847,6 @@ const QUOTE_TEMPLATES = [
             return `<div class="mb-4">
                 <label class="block text-sm font-medium text-gray-700 mb-1">${escapeHtml(f.label)}${star}</label>
                 <input type="hidden" id="${id}" value="${escapeHtml(JSON.stringify(rows))}" />
-                <!-- 공급 단가표에 등록된 품목 — 골라 넣으면 단가가 따라옵니다 (2026-09-15) -->
-                <datalist id="pcf-hw-items">${(typeof partnerPriceItems === 'function' ? partnerPriceItems() : [])
-                    .map(x => `<option value="${escapeHtml(x.name)}">${escapeHtml(x.cat || '')}</option>`).join('')}</datalist>
                 <div class="space-y-2.5" id="${id}-box" data-hw-table="${id}" oninput="onPartnerHwInput(this, true)" onchange="onPartnerHwInput(this)">
                     ${body}
                 </div>
@@ -50853,6 +50865,75 @@ const QUOTE_TEMPLATES = [
                 ${f.hint ? `<p class="text-xs text-gray-400 mt-1">${escapeHtml(f.hint)}</p>` : ''}
             </div>`;
         }
+        // ---------- 장비 고르기 (2026-10-07) ----------
+        // 장비 칸을 누르면 공급 단가표의 장비가 카테고리별로 펼쳐지고, 치면 이름 · 카테고리 · 세부구분으로 좁혀집니다.
+        // 고르면 이름이 들어가고 표를 다시 그려 그 계정 단가가 따라옵니다. 목록에 없는 장비는 친 그대로 둡니다.
+        let partnerHwPickHits = [];
+        function partnerHwPickShow(inp) {
+            const box = inp.parentNode.querySelector('[data-hw-pick]');
+            if (!box) return;
+            const all = partnerPriceItems();
+            const norm = v => String(v || '').replace(/\s+/g, '').toLowerCase();
+            const q = norm(inp.value);
+            const exact = all.some(x => norm(x.name) === q);
+            // 이미 고른 이름 그대로면 전체를, 치는 중이면 걸리는 것만
+            const hits = (!q || exact) ? all : all.filter(x => norm([x.name, x.cat, x.sub, x.desc].join(' ')).includes(q));
+            partnerHwPickHits = hits.slice(0, 80);
+            if (!all.length) {
+                box.innerHTML = '<p class="px-3 py-2.5 text-xs text-gray-400">등록된 장비가 없습니다 — 장비명을 직접 입력해 주세요.</p>';
+            } else if (!partnerHwPickHits.length) {
+                box.innerHTML = `<p class="px-3 py-2.5 text-xs text-gray-500"><b>${escapeHtml(inp.value)}</b> 와(과) 일치하는 장비가 없습니다 — 입력하신 이름으로 접수됩니다.</p>`;
+            } else {
+                const mode = partnerHwPriceMode(typeof partnerFormValuesNow === 'function' ? partnerFormValuesNow() : {});
+                let lastCat = null;
+                box.innerHTML = partnerHwPickHits.map((x, i) => {
+                    const head = x.cat !== lastCat ? `<p class="px-3 pt-2 pb-1 text-[10px] font-bold text-gray-400 bg-gray-50 border-t border-gray-100 first:border-t-0">${escapeHtml(x.cat || '기타')}</p>` : '';
+                    lastCat = x.cat;
+                    const sub = [x.sub, x.desc].filter(Boolean).join(' · ');
+                    return head + `<button type="button" data-pick-i="${i}" onmousedown="event.preventDefault()" onclick="partnerHwPickChoose(this, ${i})"
+                        class="w-full text-left px-3 py-2 hover:bg-indigo-50 focus:bg-indigo-50 flex items-start justify-between gap-2">
+                        <span class="min-w-0"><span class="block text-sm text-gray-800">${escapeHtml(x.name)}</span>
+                            ${sub ? `<span class="block text-[11px] text-gray-400 truncate">${escapeHtml(sub)}</span>` : ''}</span>
+                        ${mode.showPrice && x.price ? `<span class="text-xs text-gray-600 tabular-nums whitespace-nowrap">${partnerWon(x.price)}원</span>` : ''}
+                    </button>`;
+                }).join('') + (hits.length > partnerHwPickHits.length ? `<p class="px-3 py-1.5 text-[11px] text-gray-400">… 외 ${hits.length - partnerHwPickHits.length}건 — 이름을 더 입력해 주세요</p>` : '');
+            }
+            box.classList.remove('hidden');
+        }
+        function partnerHwPickHide(inp) {
+            const box = inp && inp.parentNode && inp.parentNode.querySelector('[data-hw-pick]');
+            if (box) box.classList.add('hidden');
+        }
+        function partnerHwPickChoose(btn, i) {
+            const x = partnerHwPickHits[i];
+            const wrap = btn.closest('.relative');
+            const inp = wrap && wrap.querySelector('[data-hw="item"]');
+            if (!x || !inp) return;
+            inp.value = x.name;
+            partnerHwPickHide(inp);
+            // change 를 올려 표를 다시 그립니다 (단가 · 합계 · 서류가 따라옵니다)
+            inp.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+        // ↑ ↓ 로 옮기고 Enter 로 고릅니다
+        function partnerHwPickKey(e, inp) {
+            const box = inp.parentNode.querySelector('[data-hw-pick]');
+            if (!box || box.classList.contains('hidden')) return;
+            const btns = Array.from(box.querySelectorAll('[data-pick-i]'));
+            if (!btns.length) return;
+            const cur = btns.indexOf(box.querySelector('[data-pick-i].bg-indigo-50'));
+            if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+                e.preventDefault();
+                const next = e.key === 'ArrowDown' ? Math.min(btns.length - 1, cur + 1) : Math.max(0, cur - 1);
+                btns.forEach(b => b.classList.remove('bg-indigo-50'));
+                btns[next].classList.add('bg-indigo-50');
+                btns[next].scrollIntoView({ block: 'nearest' });
+            } else if (e.key === 'Enter') {
+                e.preventDefault();
+                const b = cur >= 0 ? btns[cur] : (btns.length === 1 ? btns[0] : null);
+                if (b) partnerHwPickChoose(b, Number(b.getAttribute('data-pick-i')));
+            } else if (e.key === 'Escape') { partnerHwPickHide(inp); }
+        }
+
         // 표 안에서 무엇이든 바뀌면 숨은 칸의 JSON 을 새로 씁니다.
         //   light(글자를 치는 중, input) — JSON 과 금액 숫자만 그 자리에서 갱신. 다시 그리면 커서가 날아갑니다 (2026-09-16)
         //   full (change — 선택 · 체크 · 칸을 떠날 때) — 표를 다시 그려 잠김 · 사유칸 · 서류 · 계산칸까지 맞춥니다

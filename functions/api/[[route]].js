@@ -741,7 +741,11 @@ export async function onRequest(context) {
             if (isBoot) {
                 const v = await store.storeValues(pc.ALL_KEYS.concat([su.SIGNUP_KEY]));
                 if (canApprove) me.shopSignups = su.parentSignupView(v[su.SIGNUP_KEY], me.partnerId);
-                return json(200, { ok: true, session, store: pc.partnerView(v, me) });
+                const view = pc.partnerView(v, me);
+                // 발주 장비 목록 — 그 계정 단가만 (2026-10-07). 못 읽어도 다른 자료는 그대로 내려 줍니다
+                try { view['gwPartnerPriceItems.v1'] = pc.partnerPriceView(await store.rowsWhere('price_book', 'limit=5000'), me.company, me.partnerId); }
+                catch (e) { console.error('[partner] 공급 단가표 읽기 실패', e && e.message); view['gwPartnerPriceItems.v1'] = []; }
+                return json(200, { ok: true, session, store: view });
             }
             if (path === '/api/partner/signup-decide' && method === 'POST') {
                 if (!canApprove) return json(403, { ok: false, error: '가입 승인 권한이 없습니다.' });

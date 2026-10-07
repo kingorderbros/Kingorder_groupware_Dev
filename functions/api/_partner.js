@@ -156,6 +156,34 @@ export function shopIntakeSummary(x) {
              status: s(x.status), at: s(x.at), wantDate: s(x.wantDate) };
 }
 
+// ---------- 발주 장비 목록 (2026-10-07) ----------
+// 공급 단가표(price_book)는 사내 로그인 사용자만 읽는 표라, 파트너센터의 장비 칸이 비어 있고 단가도 0 이었습니다.
+// 서버가 그 계정이 발주할 수 있는 장비만 골라 **그 계정에 맞는 단가 하나만** 계산해 내려 줍니다.
+// 다른 거래 유형 · 다른 파트너사 · 본사 정책 단가와 매입가는 보내지 않습니다.
+// 단가 찾는 차례는 화면의 priceForTier 와 같습니다: 파트너사별 → 프랜차이즈 정책 → 거래 유형 → 킹오더 공급가 → 0
+// 단가를 보이지 않는 계정(거래 유형 미지정 · 파트너사 가맹점 · 가격비공개형 프랜차이즈)에는 단가를 빼고 보냅니다.
+const priceNumOf = (v) => { const n = Number(String(v === undefined || v === null ? '' : v).replace(/[^0-9.-]/g, '')); return isNaN(n) ? 0 : n; };
+const hasVal = (v) => v !== undefined && v !== null && v !== '';
+export function partnerPriceView(rows, company, partnerId) {
+    const c = company || {};
+    const t = s(c.custType || c.kind);
+    const pol = s(c.franchiseHq);
+    const showPrice = !!t && t !== 'partnerShop' && !((t === 'franchise' || t === 'hq') && pol === 'hidden');
+    return arr(rows).filter(r => r && r.name && r.active !== false && r.kind !== '월정액').map(r => {
+        let price = 0;
+        if (showPrice) {
+            const pp = (r.partnerPrice || {})[partnerId], hq = (r.hqPrice || {})[pol], tier = (r.tiers || {})[t];
+            if (partnerId && hasVal(pp)) price = priceNumOf(pp);
+            else if ((t === 'franchise' || t === 'hq') && pol && hasVal(hq)) price = priceNumOf(hq);
+            else if (hasVal(tier)) price = priceNumOf(tier);
+            else price = priceNumOf(r.price);
+        }
+        const o = { id: s(r.id), cat: s(r.cat), sub: s(r.sub), name: s(r.name), desc: s(r.desc), unit: s(r.unit) };
+        if (showPrice) o.price = price;
+        return o;
+    });
+}
+
 // ---------- 파트너센터가 받는 자료 ----------
 // 누구에게 보여도 되는 설정값 (양식 · 서류 목록 · 조직 이름 등)
 export const SHARED_KEYS = ['gwHolidays.v1', 'gwPartnerTypeDocs.v1', 'gwPartnerIntakeDocs.v1', 'gwAsOptions.v1', 'gwOrgDepts.v1', 'gwOrgDeptsRemoved.v1',
