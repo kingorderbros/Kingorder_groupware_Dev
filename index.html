@@ -51283,9 +51283,10 @@ const QUOTE_TEMPLATES = [
                       baseLabels: { wantDate: '방문 희망일' },
                       baseHints: { wantDate: '방문을 원하시는 날짜입니다. 일정은 담당자가 확인 후 조정할 수 있습니다.' },
                       fields: [
-                        { key: 'asShop', label: '가맹점 찾기', type: 'shop', required: true, noSum: true,
-                          placeholder: '장애가 발생한 가맹점 상호를 입력해 주세요',
-                          hint: '상호를 두 글자 이상 입력하면 <b>우리 파트너사 담당 가맹점</b>에서 찾아 드립니다. 목록에 없으면 적으신 그대로 접수됩니다.' },
+                        // 2026-10-07 — 추가 장비 구매 · 메뉴 등록과 같은 [검색] 칸. 고르면 휴대폰을 '현장 연락처' 에 채웁니다 (lookupPhone)
+                        { key: 'asShop', label: '가맹점 찾기', type: 'text', lookup: 'shop', lookupPhone: 'asPhone', required: true, noSum: true,
+                          placeholder: '장애가 발생한 가맹점명을 입력하고 [검색] 을 눌러 주세요',
+                          hint: '그룹웨어에 등록된 우리 업체와 소속 가맹점에서 찾습니다. 목록에 없으면 적으신 그대로 접수됩니다.' },
                         { key: 'device', label: '대상 장비', type: 'select', required: true, sum: '{v}',
                           get options() { return asOptionPairs('device'); } },
                         { key: 'symptom', label: '증상 분류', type: 'select', required: true, sum: '{v}',
@@ -53027,7 +53028,10 @@ const QUOTE_TEMPLATES = [
             set('shopCeo', c.ceo);
             // 담당자 휴대폰 — 휴대폰(mobile) 이 먼저, 없으면 대표 연락처(phone). 소속 가맹점은 제공 동의한 곳만 내려옵니다
             const phone = c.mobile || c.phone || '';
-            set('shopPhone', phone);
+            // 연락처 칸 이름이 양식마다 다릅니다 — 검색칸 정의의 lookupPhone (없으면 shopPhone)
+            const tDefNow = partnerTypeDef(partnerPickedDept, partnerFormType) || {};
+            const phoneKey = (((tDefNow.fields || []).find(ff => ff.key === key) || {}).lookupPhone) || 'shopPhone';
+            set(phoneKey, phone);
             // 주소칸은 세 칸(우편번호 · 도로명 · 상세)을 채우고 숨은 칸을 다시 잇습니다
             const road = c.roadAddress || c.address || '';
             if (road && document.getElementById(pre + 'shopAddr__road')) {
@@ -53038,7 +53042,7 @@ const QUOTE_TEMPLATES = [
             // 안내는 **이 양식에 있는 칸**만 말합니다 (메뉴 등록 · 수정에는 가맹점명 칸만 있음 · 2026-10-07)
             const has = k => !!document.getElementById(pre + k);
             const cols = [['shopBizNo', c.businessNo, '사업자등록번호'], ['shopCeo', c.ceo, '대표자명'],
-                          ['shopAddr__road', road, '주소'], ['shopPhone', phone, '담당자 휴대폰']].filter(x => has(x[0]));
+                          ['shopAddr__road', road, '주소'], [phoneKey, phone, phoneKey === 'shopPhone' ? '담당자 휴대폰' : (((tDefNow.fields || []).find(ff => ff.key === phoneKey) || {}).label || '연락처')]].filter(x => has(x[0]));
             const filled = cols.filter(x => x[1]).map(x => x[2]);
             const miss = cols.filter(x => !x[1]).map(x => x[2]);
             const box = document.getElementById(pre + key + '-res');
