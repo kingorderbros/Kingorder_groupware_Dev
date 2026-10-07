@@ -51156,6 +51156,8 @@ const QUOTE_TEMPLATES = [
                     // 무상 장비 지원 — 사는 건이 아니라 **넣어 주는** 건입니다 (2026-09-15).
                     // 품목은 모두 무상임대로 나가므로 구매계약서 대신 무상임대계약서를 받습니다.
                     { id: 'donate', name: '무상 장비 지원',
+                      // 2026-10-07 — 제목 · 내용을 마지막 단계가 아니라 첫 단계(지원 대상 · 조건) 맨 앞에서 받습니다
+                      baseTextStep: 1,
                       steps: PARTNER_DONATE_STEPS,
                       fields: withStep(1, PARTNER_SALES_GATE_FIELDS)
                           .concat(withStep(1, PARTNER_DONATE_FIELDS))
@@ -51282,6 +51284,7 @@ const QUOTE_TEMPLATES = [
                     // 같은 뜻의 날짜 칸이 두 개면 어느 쪽에 적어야 할지 헷갈립니다.
                     { id: 'as', name: '장애 신고 (A/S)',
                       baseLabels: { wantDate: '방문 희망일' },
+                      wantDateAnyDay: true,      // 장애는 당일~1일 처리라 영업일 제한을 두지 않습니다 (2026-10-07)
                       baseHints: { wantDate: '방문을 원하시는 날짜입니다. 일정은 담당자가 확인 후 조정할 수 있습니다.' },
                       fields: [
                         // 2026-10-07 — 추가 장비 구매 · 메뉴 등록과 같은 [검색] 칸. 고르면 휴대폰을 '현장 연락처' 에 채웁니다 (lookupPhone)
@@ -51533,7 +51536,9 @@ const QUOTE_TEMPLATES = [
         const PARTNER_INTAKE_BASE_FIELDS = [
             { key: 'title',    label: '제목',        type: 'text',     required: true,  placeholder: '접수 내용을 한 줄로 입력해 주세요' },
             { key: 'content',  label: '내용',        type: 'textarea', required: true,  rows: 6, placeholder: '처리에 필요한 내용을 자세히 입력해 주세요' },
-            { key: 'wantDate', label: '희망 처리일', type: 'date',     required: false, hint: '급한 건이면 날짜를 입력해 주세요' },
+            // 2026-10-07 — 희망 처리일도 설치 희망일처럼 신청일 기준 INSTALL_LEAD_BIZ_DAYS 영업일 뒤부터 (A/S 방문 희망일은 제외 · wantDateAnyDay)
+            { key: 'wantDate', label: '희망 처리일', type: 'date',     required: false, minBizDays: INSTALL_LEAD_BIZ_DAYS,
+              get hint() { return installDateHint(); } },
             // 비고(메모)는 본부·접수 구분에 상관없이 **모든 접수**에서 받습니다
             // 2026-10-07 — 예시 '(VAN사 요청 시 전달 사항 등)' 은 결제본부 접수에만 맞는 말이라
             //              메뉴 등록 · A/S 등에서는 빼고, 결제본부 접수에서만 붙입니다 (PARTNER_NOTE_PH_BY_DEPT).
@@ -54486,7 +54491,9 @@ const QUOTE_TEMPLATES = [
             const baseField = (f) => {
                 const lb = (tDef.baseLabels || {})[f.key];
                 const ht = (tDef.baseHints || {})[f.key];
-                return (lb || ht) ? Object.assign({}, f, lb ? { label: lb } : {}, ht ? { hint: ht } : {}) : f;
+                let out = (lb || ht) ? Object.assign({}, f, lb ? { label: lb } : {}, ht ? { hint: ht } : {}) : f;
+                if (f.key === 'wantDate' && tDef.wantDateAnyDay) { out = Object.assign({}, out); delete out.minBizDays; }
+                return out;
             };
             const baseTop = [], baseRest = [];
             { let done = false;
@@ -54567,7 +54574,8 @@ const QUOTE_TEMPLATES = [
                 partnerWizardStep = (partnerTypeSteps(d.id, startType)[0] || {}).n || 1;
                 const top = document.getElementById('pcf-base-top');
                 const rest = document.getElementById('pcf-base-rest');
-                if (top && rest && rest.parentNode) rest.parentNode.insertBefore(top, rest);
+                // baseTextStep 이 있으면 제목 · 내용을 그 단계 맨 앞(원래 자리)에 둡니다 (2026-10-07 · 무상 장비 지원)
+                if (top && rest && rest.parentNode && !tDef.baseTextStep) rest.parentNode.insertBefore(top, rest);
                 const plain = document.getElementById('pcf-plain-bottom');
                 if (plain) plain.classList.add('hidden');
             } else {
@@ -54642,6 +54650,10 @@ const QUOTE_TEMPLATES = [
                     const el = document.getElementById(id);
                     if (el) el.classList.toggle('hidden', !lastNow);
                 });
+                // 제목 · 내용을 앞 단계에서 받는 접수 (baseTextStep · 2026-10-07)
+                { const tt = partnerTypeDef(partnerPickedDept, partnerFormType) || {};
+                  const top = document.getElementById('pcf-base-top');
+                  if (top && tt.baseTextStep) top.classList.toggle('hidden', partnerWizardStep !== tt.baseTextStep); }
                 const bottom = document.getElementById('pcf-wizard-bottom');
                 if (bottom) bottom.innerHTML = list.length
                     ? partnerWizardNavBottomHtml(list, d.tone, src) : '';
@@ -54772,8 +54784,14 @@ const QUOTE_TEMPLATES = [
         function partnerWizardStepOk() {
             const t = partnerTypeDef(partnerPickedDept, partnerFormType) || {};
             const vals = readPartnerFieldsPresent(t.fields || [], 'pcf-');
-            const here = (t.fields || []).filter(f =>
+            let here = (t.fields || []).filter(f =>
                 (f.step || 1) === partnerWizardStep && partnerFieldVisible(f, vals));
+            // 제목 · 내용을 이 단계에서 받으면 함께 검사합니다 (baseTextStep · 2026-10-07)
+            if (t.baseTextStep === partnerWizardStep) {
+                const bt = PARTNER_INTAKE_BASE_FIELDS.filter(f => f.key === 'title' || f.key === 'content');
+                Object.assign(vals, readPartnerFieldsPresent(bt, 'pcf-'));
+                here = bt.concat(here);
+            }
             const miss = firstEmptyRequired(here, vals) || firstBadDate(here, vals);
             if (!miss) return true;
             alert(miss.problem || `'${miss.label}' 을(를) 입력해 주세요.`);
@@ -55189,7 +55207,9 @@ const QUOTE_TEMPLATES = [
                 values.title = `${t.name}${values.shopName ? ' — ' + values.shopName : ''}`;
                 values.content = values.content || '';
             }
-            const miss = firstEmptyRequired(liveBase.concat(liveExtra), values) || firstBadDate(liveExtra, values);
+            // 희망 처리일도 영업일 제한을 봅니다 (2026-10-07 · A/S 방문 희망일은 제외)
+            const dateBase = liveBase.filter(f => !(f.key === 'wantDate' && t && t.wantDateAnyDay));
+            const miss = firstEmptyRequired(liveBase.concat(liveExtra), values) || firstBadDate(dateBase.concat(liveExtra), values);
             if (miss) {
                 alert(miss.problem || `'${miss.label}' ${miss.type === 'radio' ? '을(를) 선택해 주세요.' : '을(를) 입력해 주세요.'}`);
                 const el = document.getElementById('pcf-' + miss.key + '__road') || document.getElementById('pcf-' + miss.key);
