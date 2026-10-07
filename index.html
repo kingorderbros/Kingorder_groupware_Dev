@@ -50672,7 +50672,7 @@ const QUOTE_TEMPLATES = [
         }
         // 접수 **화면**에서 쓰는 행 (2026-10-07) — 처음엔 빈 품목 한 줄만 보이고 [품목 추가] 로 늘립니다.
         // 다 지워도 빈 한 줄은 남깁니다. (읽기 · 접수함 글은 partnerHwRows 그대로 — 저장된 값만 봅니다)
-        const partnerHwBlankRow = () => ({ item: '', model: '', qty: 1, method: 'cash', price: 0, resale: 0,
+        const partnerHwBlankRow = () => ({ cat: '', item: '', model: '', qty: 1, method: 'cash', price: 0, resale: 0,
                                            months: 36, note: '', reason: 'general', exception: false });
         function partnerHwFormRows(raw) {
             try {
@@ -50799,15 +50799,21 @@ const QUOTE_TEMPLATES = [
                 if (c.margin === null) marginNA = true; else sumMargin += c.margin;
                 const priceEditable = mode.editPrice || r.exception;
                 const on = partnerNum(r.qty) > 0;
-                return `<div data-hw-row="${i}" class="rounded-xl border ${on ? 'border-indigo-200 bg-white' : 'border-gray-200 bg-gray-50/60'} p-3 sm:p-4">
+                return `<div data-hw-row="${i}" data-hw-cat="${escapeHtml(r.cat || '')}" data-hw-item="${escapeHtml(r.item || '')}" class="rounded-xl border ${on ? 'border-indigo-200 bg-white' : 'border-gray-200 bg-gray-50/60'} p-3 sm:p-4">
                     <div class="flex items-center justify-between gap-2 mb-2">
                         <span class="text-[11px] font-bold tracking-wide ${on ? 'text-indigo-600' : 'text-gray-400'}">품목 ${i + 1}${on ? '' : ' · 수량 0 — 접수되지 않음'}</span>
                         <button type="button" class="text-gray-300 hover:text-red-500 px-1" onclick="partnerHwDelRow(this)" title="이 품목 지우기"><i class="fas fa-times"></i></button>
                     </div>
                     <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                        <!-- 2026-10-07 — 카테고리를 먼저 고르면 장비 칸에 그 카테고리 장비만 나옵니다 -->
+                        <label class="block col-span-2 sm:col-span-1">${lab('카테고리')}
+                            <select class="${inp}" data-hw="cat">
+                                <option value="">전체</option>
+                                ${partnerHwCats(r.cat).map(c => `<option value="${escapeHtml(c)}"${c === (r.cat || '') ? ' selected' : ''}>${escapeHtml(c)}</option>`).join('')}
+                            </select></label>
                         <div class="block col-span-2 sm:col-span-1 relative">${lab('장비')}
                             <!-- 2026-10-07 — 공급 단가표 장비에서 선택하거나 이름으로 검색 (partnerHwPickShow) -->
-                            <input class="${inp}" data-hw="item" value="${escapeHtml(r.item || '')}" placeholder="장비 선택 또는 검색" autocomplete="off"
+                            <input class="${inp}" data-hw="item" value="${escapeHtml(r.item || '')}" placeholder="${r.cat ? escapeHtml(r.cat) + ' 장비 선택 또는 검색' : '장비 선택 또는 검색'}" autocomplete="off"
                                    onfocus="partnerHwPickShow(this)" oninput="partnerHwPickShow(this)" onkeydown="partnerHwPickKey(event, this)"
                                    onblur="setTimeout(() => partnerHwPickHide(this), 150)" />
                             <div data-hw-pick class="hidden absolute left-0 right-0 sm:right-auto sm:w-[340px] z-30 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-72 overflow-y-auto"></div></div>
@@ -50869,10 +50875,25 @@ const QUOTE_TEMPLATES = [
         // 장비 칸을 누르면 공급 단가표의 장비가 카테고리별로 펼쳐지고, 치면 이름 · 카테고리 · 세부구분으로 좁혀집니다.
         // 고르면 이름이 들어가고 표를 다시 그려 그 계정 단가가 따라옵니다. 목록에 없는 장비는 친 그대로 둡니다.
         let partnerHwPickHits = [];
+        // 카테고리 목록 — 공급 단가표 순서대로. 지금 줄에 저장된 카테고리가 목록에 없어도(예전 자료) 보이게 둡니다
+        function partnerHwCats(cur) {
+            const out = [];
+            partnerPriceItems().forEach(x => { const c = String(x.cat || '').trim(); if (c && out.indexOf(c) < 0) out.push(c); });
+            if (cur && out.indexOf(cur) < 0) out.push(cur);
+            return out;
+        }
+        function partnerHwKnownItem(name) {
+            const k = String(name || '').replace(/\s+/g, '');
+            return k ? partnerPriceItems().find(x => String(x.name).replace(/\s+/g, '') === k) || null : null;
+        }
         function partnerHwPickShow(inp) {
             const box = inp.parentNode.querySelector('[data-hw-pick]');
             if (!box) return;
-            const all = partnerPriceItems();
+            // 이 줄에서 고른 카테고리가 있으면 그 카테고리 장비만 (2026-10-07)
+            const rowEl = inp.closest('[data-hw-row]');
+            const catEl = rowEl && rowEl.querySelector('[data-hw="cat"]');
+            const cat = catEl ? catEl.value : '';
+            const all = partnerPriceItems().filter(x => !cat || x.cat === cat);
             const norm = v => String(v || '').replace(/\s+/g, '').toLowerCase();
             const q = norm(inp.value);
             const exact = all.some(x => norm(x.name) === q);
@@ -50948,10 +50969,24 @@ const QUOTE_TEMPLATES = [
                     return el.type === 'checkbox' ? el.checked : el.value;
                 };
                 const old = {};
-                ['item', 'model', 'qty', 'method', 'price', 'resale', 'months', 'note', 'reason', 'exception']
+                ['cat', 'item', 'model', 'qty', 'method', 'price', 'resale', 'months', 'note', 'reason', 'exception']
                     .forEach(k => { const v = get(k); if (v !== undefined) old[k] = v; });
                 const row = Object.assign({ qty: 0, method: 'cash', price: 0, resale: 0, months: 36,
                                             note: '', reason: 'general', exception: false }, old);
+                // 카테고리 ↔ 장비 맞추기 (2026-10-07)
+                //   · 목록에 있는 장비를 골랐으면 카테고리를 그 장비 것으로
+                //   · 카테고리를 바꿨는데 장비가 그 카테고리 것이 아니면 장비를 비웁니다 (직접 입력한 이름은 그대로)
+                {
+                    const known = partnerHwKnownItem(row.item);
+                    const prevCat = tr.getAttribute('data-hw-cat') || '';
+                    if (known && row.cat && known.cat !== row.cat && row.cat !== prevCat) row.item = '';
+                    else if (known) row.cat = known.cat || '';
+                    // 장비가 비었거나, 목록 장비에서 목록에 없는 이름으로 바뀌면 그 장비 단가를 남기지 않습니다.
+                    // 단가를 직접 적는 경우(정책예외 · 협의단가)는 적은 값을 지킵니다.
+                    const prevKnown = partnerHwKnownItem(tr.getAttribute('data-hw-item') || '');
+                    const editable = row.exception || partnerHwPriceMode(typeof partnerFormValuesNow === 'function' ? partnerFormValuesNow() : {}).editPrice;
+                    if (!editable && (!row.item || (!partnerHwKnownItem(row.item) && prevKnown))) row.price = 0;
+                }
                 // 장비명을 단가표에 있는 품목으로 바꾸면 **그 계정의 단가**가 따라 들어옵니다.
                 // 정책예외로 직접 적어 둔 단가는 그대로 둡니다.
                 if (!row.exception && typeof partnerPriceOf === 'function') {
