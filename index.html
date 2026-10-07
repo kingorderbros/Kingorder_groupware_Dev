@@ -50672,7 +50672,7 @@ const QUOTE_TEMPLATES = [
         }
         // 접수 **화면**에서 쓰는 행 (2026-10-07) — 처음엔 빈 품목 한 줄만 보이고 [품목 추가] 로 늘립니다.
         // 다 지워도 빈 한 줄은 남깁니다. (읽기 · 접수함 글은 partnerHwRows 그대로 — 저장된 값만 봅니다)
-        const partnerHwBlankRow = () => ({ cat: '', item: '', model: '', qty: 1, method: 'cash', price: 0, resale: 0,
+        const partnerHwBlankRow = () => ({ cat: '', sub: '', item: '', model: '', qty: 1, method: 'cash', price: 0, resale: 0,
                                            months: 36, note: '', reason: 'general', exception: false });
         function partnerHwFormRows(raw) {
             try {
@@ -50799,7 +50799,7 @@ const QUOTE_TEMPLATES = [
                 if (c.margin === null) marginNA = true; else sumMargin += c.margin;
                 const priceEditable = mode.editPrice || r.exception;
                 const on = partnerNum(r.qty) > 0;
-                return `<div data-hw-row="${i}" data-hw-cat="${escapeHtml(r.cat || '')}" data-hw-item="${escapeHtml(r.item || '')}" class="rounded-xl border ${on ? 'border-indigo-200 bg-white' : 'border-gray-200 bg-gray-50/60'} p-3 sm:p-4">
+                return `<div data-hw-row="${i}" data-hw-cat="${escapeHtml(r.cat || '')}" data-hw-sub="${escapeHtml(r.sub || '')}" data-hw-item="${escapeHtml(r.item || '')}" class="rounded-xl border ${on ? 'border-indigo-200 bg-white' : 'border-gray-200 bg-gray-50/60'} p-3 sm:p-4">
                     <div class="flex items-center justify-between gap-2 mb-2">
                         <span class="text-[11px] font-bold tracking-wide ${on ? 'text-indigo-600' : 'text-gray-400'}">품목 ${i + 1}${on ? '' : ' · 수량 0 — 접수되지 않음'}</span>
                         <button type="button" class="text-gray-300 hover:text-red-500 px-1" onclick="partnerHwDelRow(this)" title="이 품목 지우기"><i class="fas fa-times"></i></button>
@@ -50811,14 +50811,18 @@ const QUOTE_TEMPLATES = [
                                 <option value="">전체</option>
                                 ${partnerHwCats(r.cat).map(c => `<option value="${escapeHtml(c)}"${c === (r.cat || '') ? ' selected' : ''}>${escapeHtml(c)}</option>`).join('')}
                             </select></label>
+                        <!-- 2026-10-07 — 장비 종류(공급 단가표 세부구분). 모델 / 색상 칸을 대신합니다 -->
+                        <label class="block col-span-2 sm:col-span-1">${lab('장비 종류')}
+                            <select class="${inp}" data-hw="sub">
+                                <option value="">전체</option>
+                                ${partnerHwSubs(r.cat, r.sub).map(c => `<option value="${escapeHtml(c)}"${c === (r.sub || '') ? ' selected' : ''}>${escapeHtml(c)}</option>`).join('')}
+                            </select></label>
                         <div class="block col-span-2 sm:col-span-1 relative">${lab('장비')}
                             <!-- 2026-10-07 — 공급 단가표 장비에서 선택하거나 이름으로 검색 (partnerHwPickShow) -->
-                            <input class="${inp}" data-hw="item" value="${escapeHtml(r.item || '')}" placeholder="${r.cat ? escapeHtml(r.cat) + ' 장비 선택 또는 검색' : '장비 선택 또는 검색'}" autocomplete="off"
+                            <input class="${inp}" data-hw="item" value="${escapeHtml(r.item || '')}" placeholder="${(r.sub || r.cat) ? escapeHtml(r.sub || r.cat) + ' 장비 선택 또는 검색' : '장비 선택 또는 검색'}" autocomplete="off"
                                    onfocus="partnerHwPickShow(this)" oninput="partnerHwPickShow(this)" onkeydown="partnerHwPickKey(event, this)"
                                    onblur="setTimeout(() => partnerHwPickHide(this), 150)" />
                             <div data-hw-pick class="hidden absolute left-0 right-0 sm:right-auto sm:w-[340px] z-30 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-72 overflow-y-auto"></div></div>
-                        <label class="block col-span-2 sm:col-span-1">${lab('모델 / 색상')}
-                            <input class="${inp}" data-hw="model" value="${escapeHtml(r.model || '')}" placeholder="모델 / 색상" /></label>
                         <label class="block">${lab('수량')}
                             <input class="${inp} text-right" data-hw="qty" inputmode="numeric" value="${partnerNum(r.qty)}" /></label>
                         <label class="block">${lab('구매방법')}
@@ -50882,6 +50886,17 @@ const QUOTE_TEMPLATES = [
             if (cur && out.indexOf(cur) < 0) out.push(cur);
             return out;
         }
+        // 장비 종류(세부구분) 목록 — 고른 카테고리 안에서만
+        function partnerHwSubs(cat, cur) {
+            const out = [];
+            partnerPriceItems().forEach(x => {
+                if (cat && x.cat !== cat) return;
+                const c = String(x.sub || '').trim();
+                if (c && out.indexOf(c) < 0) out.push(c);
+            });
+            if (cur && out.indexOf(cur) < 0) out.push(cur);
+            return out;
+        }
         function partnerHwKnownItem(name) {
             const k = String(name || '').replace(/\s+/g, '');
             return k ? partnerPriceItems().find(x => String(x.name).replace(/\s+/g, '') === k) || null : null;
@@ -50893,7 +50908,9 @@ const QUOTE_TEMPLATES = [
             const rowEl = inp.closest('[data-hw-row]');
             const catEl = rowEl && rowEl.querySelector('[data-hw="cat"]');
             const cat = catEl ? catEl.value : '';
-            const all = partnerPriceItems().filter(x => !cat || x.cat === cat);
+            const subEl = rowEl && rowEl.querySelector('[data-hw="sub"]');
+            const sub = subEl ? subEl.value : '';
+            const all = partnerPriceItems().filter(x => (!cat || x.cat === cat) && (!sub || x.sub === sub));
             const norm = v => String(v || '').replace(/\s+/g, '').toLowerCase();
             const q = norm(inp.value);
             const exact = all.some(x => norm(x.name) === q);
@@ -50969,7 +50986,7 @@ const QUOTE_TEMPLATES = [
                     return el.type === 'checkbox' ? el.checked : el.value;
                 };
                 const old = {};
-                ['cat', 'item', 'model', 'qty', 'method', 'price', 'resale', 'months', 'note', 'reason', 'exception']
+                ['cat', 'sub', 'item', 'model', 'qty', 'method', 'price', 'resale', 'months', 'note', 'reason', 'exception']
                     .forEach(k => { const v = get(k); if (v !== undefined) old[k] = v; });
                 const row = Object.assign({ qty: 0, method: 'cash', price: 0, resale: 0, months: 36,
                                             note: '', reason: 'general', exception: false }, old);
@@ -50979,8 +50996,12 @@ const QUOTE_TEMPLATES = [
                 {
                     const known = partnerHwKnownItem(row.item);
                     const prevCat = tr.getAttribute('data-hw-cat') || '';
-                    if (known && row.cat && known.cat !== row.cat && row.cat !== prevCat) row.item = '';
-                    else if (known) row.cat = known.cat || '';
+                    const prevSub = tr.getAttribute('data-hw-sub') || '';
+                    // 카테고리를 바꾸면 그 카테고리에 없는 장비 종류는 비웁니다
+                    if (row.cat !== prevCat && row.sub && partnerHwSubs(row.cat).indexOf(row.sub) < 0) row.sub = '';
+                    const catMoved = row.cat && row.cat !== prevCat, subMoved = row.sub && row.sub !== prevSub;
+                    if (known && ((catMoved && known.cat !== row.cat) || (subMoved && (known.sub || '') !== row.sub))) row.item = '';
+                    else if (known) { row.cat = known.cat || ''; row.sub = known.sub || ''; }
                     // 장비가 비었거나, 목록 장비에서 목록에 없는 이름으로 바뀌면 그 장비 단가를 남기지 않습니다.
                     // 단가를 직접 적는 경우(정책예외 · 협의단가)는 적은 값을 지킵니다.
                     const prevKnown = partnerHwKnownItem(tr.getAttribute('data-hw-item') || '');
