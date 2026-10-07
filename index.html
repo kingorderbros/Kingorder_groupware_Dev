@@ -50972,10 +50972,10 @@ const QUOTE_TEMPLATES = [
               placeholder: '무상 지원이 필요한 사유를 기재해 주세요 (예: 신규 거래처 유치 · 프로모션 · 장비 교체 지원 등)' },
             { key: 'dnCostRate', label: '장비비용 지원비율', type: 'radio', required: true, sum: '{v}',
               options: [{ id: '100', name: '100% (전액 지원)' }, { id: '50', name: '50% (절반 지원)' }],
-              hint: '파트너사가 장비비용을 얼마나 떠안을지입니다.' },
+              hint: '무상 지원 장비비용 중 파트너사가 부담하는 비율을 선택해 주세요.' },
             { key: 'dnPenaltyRate', label: '위약금 지원비율', type: 'radio', required: true, sum: '{v}',
               options: [{ id: '100', name: '100% (전액 지원)' }, { id: '50', name: '50% (절반 지원)' }],
-              hint: '약정 기간을 못 채웠을 때의 위약금을 얼마나 떠안을지입니다.' }
+              hint: '약정 기간 내 해지 시 발생하는 위약금 중 파트너사가 부담하는 비율을 선택해 주세요.' }
         ];
         const PARTNER_DONATE_STEPS = [
             { n: 1, name: '지원 대상 · 조건' },
