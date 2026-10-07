@@ -50963,12 +50963,13 @@ const QUOTE_TEMPLATES = [
         // 사는 것이 아니라 **지원하는** 것이라 받을 것이 다릅니다 —
         // 구매계약서가 아니라 무상임대계약서를 쓰고, 장비비용 · 위약금을 얼마나 떠안을지 정합니다.
         const PARTNER_DONATE_FIELDS = [
-            { key: 'dnTo', label: '지원 대상 (가맹점 · 병원)', type: 'shop', required: true, noSum: true,
-              placeholder: '장비를 넣어 줄 곳의 상호를 입력해 주세요',
-              hint: '새로 여는 곳이면 상호를 그대로 적어 주세요.' },
+            // 2026-10-07 — 다른 접수와 같은 [검색] 칸. 고르면 주소를 아래 '설치 주소'(dnAddr) 에 채웁니다
+            { key: 'dnTo', label: '지원 대상 (가맹점 · 병원)', type: 'text', lookup: 'shop', lookupAddr: 'dnAddr', required: true, noSum: true,
+              placeholder: '지원 대상 상호를 입력하고 [검색] 을 눌러 주세요',
+              hint: '킹오더브라더스에 등록된 우리 업체와 소속 가맹점에서 찾습니다. 새로 여는 곳이면 상호를 그대로 적어 주세요.' },
             { key: 'dnAddr', label: '설치 주소', type: 'address', required: true, noSum: true },
             { key: 'dnWhy', label: '지원 사유', type: 'textarea', required: true, rows: 2, noSum: true,
-              placeholder: '어떤 까닭으로 무상 지원하는지 적어 주세요' },
+              placeholder: '무상 지원이 필요한 사유를 기재해 주세요 (예: 신규 거래처 유치 · 프로모션 · 장비 교체 지원 등)' },
             { key: 'dnCostRate', label: '장비비용 지원비율', type: 'radio', required: true, sum: '{v}',
               options: [{ id: '100', name: '100% (전액 지원)' }, { id: '50', name: '50% (절반 지원)' }],
               hint: '파트너사가 장비비용을 얼마나 떠안을지입니다.' },
@@ -53030,19 +53031,29 @@ const QUOTE_TEMPLATES = [
             const phone = c.mobile || c.phone || '';
             // 연락처 칸 이름이 양식마다 다릅니다 — 검색칸 정의의 lookupPhone (없으면 shopPhone)
             const tDefNow = partnerTypeDef(partnerPickedDept, partnerFormType) || {};
-            const phoneKey = (((tDefNow.fields || []).find(ff => ff.key === key) || {}).lookupPhone) || 'shopPhone';
+            const fieldDef = (tDefNow.fields || []).find(ff => ff.key === key) || {};
+            const labelOf = (k, dflt) => (((tDefNow.fields || []).find(ff => ff.key === k) || {}).label || dflt);
+            const phoneKey = fieldDef.lookupPhone || 'shopPhone';
             set(phoneKey, phone);
-            // 주소칸은 세 칸(우편번호 · 도로명 · 상세)을 채우고 숨은 칸을 다시 잇습니다
+            // 주소칸은 세 칸(우편번호 · 도로명 · 상세)을 채우고 숨은 칸을 다시 잇습니다.
+            // 칸 이름은 검색칸 정의의 lookupAddr (없으면 shopAddr) — 무상 장비 지원은 '설치 주소'(dnAddr) · 2026-10-07
+            const addrKey = fieldDef.lookupAddr || 'shopAddr';
             const road = c.roadAddress || c.address || '';
-            if (road && document.getElementById(pre + 'shopAddr__road')) {
-                const put = (k, v) => { const el = document.getElementById(pre + 'shopAddr__' + k); if (el) el.value = v || ''; };
-                put('zip', c.zipCode); put('road', road); put('detail', c.addressDetail);
-                onPartnerAddrInput(pre + 'shopAddr');
+            const roadEl = document.getElementById(pre + addrKey + '__road');
+            if (roadEl) {
+                const mine = roadEl.dataset.lookupFilled !== undefined && roadEl.value === roadEl.dataset.lookupFilled;
+                if (road || mine) {      // 새 주소가 있거나, 앞서 검색으로 채운 주소면 바꿉니다 (직접 적은 주소는 지킴)
+                    const put = (k, v) => { const el = document.getElementById(pre + addrKey + '__' + k); if (el) el.value = v || ''; };
+                    put('zip', road ? c.zipCode : ''); put('road', road); put('detail', road ? c.addressDetail : '');
+                    roadEl.dataset.lookupFilled = road;
+                    onPartnerAddrInput(pre + addrKey);
+                }
             }
             // 안내는 **이 양식에 있는 칸**만 말합니다 (메뉴 등록 · 수정에는 가맹점명 칸만 있음 · 2026-10-07)
             const has = k => !!document.getElementById(pre + k);
             const cols = [['shopBizNo', c.businessNo, '사업자등록번호'], ['shopCeo', c.ceo, '대표자명'],
-                          ['shopAddr__road', road, '주소'], [phoneKey, phone, phoneKey === 'shopPhone' ? '담당자 휴대폰' : (((tDefNow.fields || []).find(ff => ff.key === phoneKey) || {}).label || '연락처')]].filter(x => has(x[0]));
+                          [addrKey + '__road', road, addrKey === 'shopAddr' ? '주소' : labelOf(addrKey, '주소')],
+                          [phoneKey, phone, phoneKey === 'shopPhone' ? '담당자 휴대폰' : labelOf(phoneKey, '연락처')]].filter(x => has(x[0]));
             const filled = cols.filter(x => x[1]).map(x => x[2]);
             const miss = cols.filter(x => !x[1]).map(x => x[2]);
             const box = document.getElementById(pre + key + '-res');
