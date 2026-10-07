@@ -50503,6 +50503,17 @@ const QUOTE_TEMPLATES = [
             } catch (e) { /* 예전 글자 입력이면 아래 기본 품목으로 시작합니다 */ }
             return PARTNER_HW_CATALOG.map(partnerHwRowSeed);
         }
+        // 접수 **화면**에서 쓰는 행 (2026-10-07) — 처음엔 빈 품목 한 줄만 보이고 [품목 추가] 로 늘립니다.
+        // 다 지워도 빈 한 줄은 남깁니다. (읽기 · 접수함 글은 partnerHwRows 그대로 — 저장된 값만 봅니다)
+        const partnerHwBlankRow = () => ({ item: '', model: '', qty: 1, method: 'cash', price: 0, resale: 0,
+                                           months: 36, note: '', reason: 'general', exception: false });
+        function partnerHwFormRows(raw) {
+            try {
+                const v = JSON.parse(raw || '[]');
+                if (Array.isArray(v) && v.length) return v;
+            } catch (e) { /* 예전 글자 입력이면 빈 한 줄로 시작합니다 */ }
+            return [partnerHwBlankRow()];
+        }
         const partnerNum = (v) => {
             const n = parseInt(String(v === undefined || v === null ? '' : v).replace(/[^0-9-]/g, ''), 10);
             return isNaN(n) ? 0 : n;
@@ -50608,7 +50619,7 @@ const QUOTE_TEMPLATES = [
             const id = prefix + f.key;
             const vals = (typeof partnerFormValuesNow === 'function') ? partnerFormValuesNow() : {};
             const mode = partnerHwPriceMode(vals);
-            const rows = partnerHwRows(value);
+            const rows = partnerHwFormRows(value);
             const star = f.required ? ' <span class="text-red-500">*</span>' : '';
             const inp = 'w-full px-2.5 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 ' + (ring || 'focus:ring-indigo-500');
             const lab = (t) => `<span class="block text-[11px] font-semibold text-gray-500 mb-1">${t}</span>`;
@@ -50669,8 +50680,12 @@ const QUOTE_TEMPLATES = [
                 <datalist id="pcf-hw-items">${(typeof partnerPriceItems === 'function' ? partnerPriceItems() : [])
                     .map(x => `<option value="${escapeHtml(x.name)}">${escapeHtml(x.cat || '')}</option>`).join('')}</datalist>
                 <div class="space-y-2.5" id="${id}-box" data-hw-table="${id}" oninput="onPartnerHwInput(this, true)" onchange="onPartnerHwInput(this)">
-                    ${body || '<p class="text-sm text-gray-400 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2.5">품목이 없습니다 — 아래 [품목 추가] 를 눌러 주세요.</p>'}
+                    ${body}
                 </div>
+                <!-- 2026-10-07 — [품목 추가] 는 마지막 품목 **바로 아래**에 늘 둡니다 -->
+                <button type="button" onclick="partnerHwAddRow('${id}')"
+                    class="mt-2.5 w-full py-2.5 rounded-xl border-2 border-dashed border-indigo-200 text-sm font-semibold text-indigo-600 hover:bg-indigo-50 hover:border-indigo-300 transition">
+                    <i class="fas fa-plus mr-1"></i>품목 추가</button>
                 ${mode.showPrice ? `<div class="mt-2.5 rounded-xl bg-gray-900 text-white px-4 py-3 grid grid-cols-2 sm:grid-cols-4 gap-2" data-hw-sums="${id}">
                     ${mode.marginLabel ? `<div><span class="block text-[11px] text-gray-400">${escapeHtml(mode.marginLabel)} 합계</span>
                         <span class="block text-sm font-semibold tabular-nums" data-hw-sum="margin">${marginNA && !sumMargin ? '해당없음' : partnerWon(sumMargin) + '원'}</span></div>` : ''}
@@ -50678,10 +50693,7 @@ const QUOTE_TEMPLATES = [
                     <div><span class="block text-[11px] text-gray-400">부가세 합계</span><span class="block text-sm font-semibold tabular-nums" data-hw-sum="vat">${partnerWon(sumVat)}원</span></div>
                     <div><span class="block text-[11px] text-gray-400">총 합계</span><span class="block text-base font-bold tabular-nums" data-hw-sum="total">${partnerWon(sumTotal)}원</span></div>
                 </div>` : ''}
-                <div class="mt-2 flex items-center gap-2">
-                    <button type="button" class="text-xs font-semibold text-indigo-600 hover:text-indigo-700" onclick="partnerHwAddRow('${id}')"><i class="fas fa-plus mr-1"></i>품목 추가</button>
-                    ${mode.showPrice ? '' : '<span class="text-xs text-gray-400">단가·합계는 접수 후 안내드립니다.</span>'}
-                </div>
+                ${mode.showPrice ? '' : '<p class="mt-2 text-xs text-gray-400">단가·합계는 접수 후 안내드립니다.</p>'}
                 ${f.hint ? `<p class="text-xs text-gray-400 mt-1">${escapeHtml(f.hint)}</p>` : ''}
             </div>`;
         }
@@ -50739,9 +50751,8 @@ const QUOTE_TEMPLATES = [
         function partnerHwAddRow(id) {
             const hidden = document.getElementById(id);
             if (!hidden) return;
-            const rows = partnerHwRows(hidden.value);
-            rows.push({ item: '', model: '', qty: 1, method: 'cash', price: 0, resale: 0,
-                        months: 36, note: '', reason: 'general', exception: false });
+            const rows = partnerHwFormRows(hidden.value);
+            rows.push(partnerHwBlankRow());
             hidden.value = JSON.stringify(rows);
             refreshPartnerTypeFields();
         }
@@ -53147,7 +53158,20 @@ const QUOTE_TEMPLATES = [
             return String(raw);
         }
         function firstEmptyRequired(fields, values) {
-            return (fields || []).find(f => f.required && !values[f.key]) || null;
+            const empty = (fields || []).find(f => f.required && !values[f.key]);
+            if (empty) return empty;
+            // 발주 장비 — 빈 한 줄로 시작하므로(2026-10-07) 값이 있어도 내용을 봅니다
+            for (const f of (fields || [])) {
+                if (f.type !== 'hwtable' || !f.required) continue;
+                let rows = [];
+                try { rows = JSON.parse(values[f.key] || '[]') || []; } catch (e) { rows = []; }
+                const on = (Array.isArray(rows) ? rows : []).filter(r => partnerNum(r.qty) > 0);
+                if (on.some(r => !String(r.item || '').trim()))
+                    return Object.assign({}, f, { problem: `'${f.label}' 에 장비명이 비어 있는 품목이 있습니다.\n장비명을 입력하거나 그 품목을 지워 주세요.` });
+                if (!on.length)
+                    return Object.assign({}, f, { problem: `'${f.label}' 을(를) 하나 이상 입력해 주세요 (장비명 · 수량).` });
+            }
+            return null;
         }
         // 영업일 제한이 있는 날짜칸(minBizDays)이 너무 이른 날이면 그 칸을 돌려줍니다 (2026-09-21)
         function firstBadDate(fields, values) {
