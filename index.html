@@ -51284,12 +51284,23 @@ const QUOTE_TEMPLATES = [
                         { key: 'chRef', label: '변경할 접수 건', type: 'intakeRef', required: true, noSum: true },
                         { key: 'chChanges', label: '변경 항목', type: 'change', required: true, noSum: true }
                     ] },
+                    // 2026-10-07 — 가맹점은 추가 장비 구매처럼 적고 [검색] 해서 고르고(lookup),
+                    //              요청 구분에 따라 '신규 메뉴 내용' / '수정 내용' 칸을 받습니다.
                     { id: 'menu', name: '메뉴 등록 · 수정', fields: [
-                        { key: 'menuShop', label: '가맹점 찾기', type: 'shop', required: true, noSum: true,
-                          placeholder: '메뉴를 수정할 가맹점 상호를 입력해 주세요' },
-                        { key: 'menuKind', label: '요청 구분', type: 'radio', required: true,
+                        { key: 'menuShop', label: '가맹점 찾기', type: 'text', lookup: 'shop', required: true, noSum: true,
+                          placeholder: '가맹점명을 입력하고 [검색] 을 눌러 주세요',
+                          hint: '그룹웨어에 등록된 우리 업체와 소속 가맹점에서 찾습니다. 목록에 없으면 적으신 그대로 접수됩니다.' },
+                        { key: 'menuKind', label: '요청 구분', type: 'radio', required: true, reloadFields: true,
                           options: [{ id: 'new', name: '신규 등록' }, { id: 'edit', name: '수정' }],
-                          sum: '{v}' }
+                          sum: '{v}' },
+                        { key: 'menuNewDesc', label: '신규 메뉴 내용', type: 'textarea', required: true, rows: 6, noSum: true,
+                          showIf: { key: 'menuKind', in: ['new'] },
+                          placeholder: '메뉴명 · 가격 · 분류(카테고리) · 옵션(사이즈 · 추가 선택) · 판매 시간 등 필요한 내용을 적어 주세요.\n예) 참치김밥 / 4,500원 / 김밥류 / 곱빼기 +1,000원',
+                          hint: '메뉴가 많으면 아래 서류칸에 메뉴판 양식이나 사진을 올리고, 여기에는 특이사항만 적어 주셔도 됩니다.' },
+                        { key: 'menuEditDesc', label: '수정 내용', type: 'textarea', required: true, rows: 6, noSum: true,
+                          showIf: { key: 'menuKind', in: ['edit'] },
+                          placeholder: '어떤 메뉴를 어떻게 바꿀지 적어 주세요.\n예) 참치김밥 가격 4,500원 → 5,000원 / 라면 품절 처리 / 김치볶음밥 메뉴 삭제',
+                          hint: '바꿀 메뉴 이름과, 지금 값 → 바꿀 값을 함께 적어 주시면 빨리 처리됩니다.' }
                     ],
                       docsOwn: true,
                       docsExtra: { all: [
@@ -51501,10 +51512,13 @@ const QUOTE_TEMPLATES = [
             { key: 'content',  label: '내용',        type: 'textarea', required: true,  rows: 6, placeholder: '처리에 필요한 내용을 자세히 입력해 주세요' },
             { key: 'wantDate', label: '희망 처리일', type: 'date',     required: false, hint: '급한 건이면 날짜를 입력해 주세요' },
             // 비고(메모)는 본부·접수 구분에 상관없이 **모든 접수**에서 받습니다
+            // 2026-10-07 — 예시 '(VAN사 요청 시 전달 사항 등)' 은 결제본부 접수에만 맞는 말이라
+            //              메뉴 등록 · A/S 등에서는 빼고, 결제본부 접수에서만 붙입니다 (PARTNER_NOTE_PH_BY_DEPT).
             { key: 'note',     label: '비고 (메모)',  type: 'textarea', required: false, rows: 3,
-              placeholder: '함께 전달할 내용이 있으면 입력해 주세요 (VAN사 요청 시 전달 사항 등)',
+              placeholder: '함께 전달할 내용이 있으면 입력해 주세요',
               hint: '접수 담당자에게 그대로 전달됩니다.' }
         ];
+        const PARTNER_NOTE_PH_BY_DEPT = { payment: '함께 전달할 내용이 있으면 입력해 주세요 (VAN사 요청 시 전달 사항 등)' };
 
         // ---------- 저장 ----------
         let partnerIntakes = [];
@@ -53000,8 +53014,12 @@ const QUOTE_TEMPLATES = [
                 put('zip', c.zipCode); put('road', road); put('detail', c.addressDetail);
                 onPartnerAddrInput(pre + 'shopAddr');
             }
-            const filled = [c.businessNo && '사업자등록번호', c.ceo && '대표자명', road && '주소', phone && '담당자 휴대폰'].filter(Boolean);
-            const miss = [!c.businessNo && '사업자등록번호', !c.ceo && '대표자명', !road && '주소', !phone && '담당자 휴대폰'].filter(Boolean);
+            // 안내는 **이 양식에 있는 칸**만 말합니다 (메뉴 등록 · 수정에는 가맹점명 칸만 있음 · 2026-10-07)
+            const has = k => !!document.getElementById(pre + k);
+            const cols = [['shopBizNo', c.businessNo, '사업자등록번호'], ['shopCeo', c.ceo, '대표자명'],
+                          ['shopAddr__road', road, '주소'], ['shopPhone', phone, '담당자 휴대폰']].filter(x => has(x[0]));
+            const filled = cols.filter(x => x[1]).map(x => x[2]);
+            const miss = cols.filter(x => !x[1]).map(x => x[2]);
             const box = document.getElementById(pre + key + '-res');
             if (box) box.innerHTML = `<p class="text-xs text-green-700 px-1 py-1"><i class="fas fa-circle-check mr-1"></i><b>${escapeHtml(c.name)}</b> 을(를) 골랐습니다${filled.length ? ` — ${filled.join(' · ')} 을(를) 채웠습니다` : ''}.</p>`
                 + (miss.length ? `<p class="text-xs text-amber-700 px-1">${miss.join(' · ')} 은(는) 등록된 값이 없거나 가맹점의 제공 동의가 없어 비워 두었습니다 — 직접 입력해 주세요.</p>` : '');
@@ -54429,7 +54447,8 @@ const QUOTE_TEMPLATES = [
                   if (tDef.noBaseText && (f.key === 'title' || f.key === 'content')) { if (f.key === 'content') done = true; return; }   // 2026-09-16
                   if (tDef.noWantDate && f.key === 'wantDate') return;   // 2026-09-22
                   (done ? baseRest : baseTop).push(f); if (f.key === 'content') done = true; }); }
-            const noteField = baseField(PARTNER_INTAKE_BASE_FIELDS.find(f => f.key === 'note'));
+            const noteField0 = baseField(PARTNER_INTAKE_BASE_FIELDS.find(f => f.key === 'note'));
+            const noteField = PARTNER_NOTE_PH_BY_DEPT[d.id] ? Object.assign({}, noteField0, { placeholder: PARTNER_NOTE_PH_BY_DEPT[d.id] }) : noteField0;
 
             host.innerHTML = `
                 <form onsubmit="submitPartnerIntake(event)" class="bg-white rounded-lg border border-gray-200 p-4 mt-3">
