@@ -51605,7 +51605,9 @@ const QUOTE_TEMPLATES = [
                     ] },
                     // 2026-10-07 — 가맹점은 추가 장비 구매처럼 적고 [검색] 해서 고르고(lookup),
                     //              요청 구분에 따라 '신규 메뉴 내용' / '수정 내용' 칸을 받습니다.
-                    { id: 'menu', name: '메뉴 등록 · 수정', fields: [
+                    { id: 'menu', name: '메뉴 등록 · 수정',
+                      wantDateAnyDay: true,      // 희망 처리일에 영업일 제한을 두지 않습니다 (2026-10-07)
+                      fields: [
                         { key: 'menuShop', label: '가맹점 찾기', type: 'text', lookup: 'shop', required: true, noSum: true,
                           placeholder: '가맹점명을 입력하고 [검색] 을 눌러 주세요',
                           hint: '킹오더브라더스에 등록된 우리 업체와 소속 가맹점에서 찾습니다. 목록에 없으면 입력하신 상호로 접수됩니다.' },
@@ -54786,7 +54788,10 @@ const QUOTE_TEMPLATES = [
                 const lb = (tDef.baseLabels || {})[f.key];
                 const ht = (tDef.baseHints || {})[f.key];
                 let out = (lb || ht) ? Object.assign({}, f, lb ? { label: lb } : {}, ht ? { hint: ht } : {}) : f;
-                if (f.key === 'wantDate' && tDef.wantDateAnyDay) { out = Object.assign({}, out); delete out.minBizDays; }
+                if (f.key === 'wantDate' && tDef.wantDateAnyDay) {
+                    out = Object.assign({}, out, ht ? {} : { hint: '급한 건이면 날짜를 입력해 주세요' });
+                    delete out.minBizDays;
+                }
                 return out;
             };
             const baseTop = [], baseRest = [];
