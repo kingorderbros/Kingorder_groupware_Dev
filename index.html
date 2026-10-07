@@ -47318,6 +47318,24 @@ const QUOTE_TEMPLATES = [
             catch (e) { /* 표시를 못 남겨도 값은 이미 채웠습니다 */ }
         })();
 
+        // 2026-10-07 — '장비설치의뢰서' 를 '추가 장비 구매'(sales:buyhw) 로 합쳤습니다.
+        // 의뢰서는 쓸 수 있었는데 장비 구매는 닫혀 있던 아이디가 설치 의뢰를 못 내게 되지 않도록 열어 줍니다.
+        const PARTNER_BUYHW_MERGE_KEY = 'gwPartnerDeptPerm.newMenus.20261007';
+        (function migratePartnerBuyhwMerge() {
+            try { if (kobStorage.getItem(PARTNER_BUYHW_MERGE_KEY)) return; }
+            catch (e) { return; }
+            let changed = false;
+            Object.keys(partnerDeptPerm).forEach(k => {
+                const list = partnerDeptPerm[k];
+                if (!Array.isArray(list)) return;
+                if (list.indexOf('sales:install') < 0) return;          // 의뢰서를 쓰던 아이디에만
+                if (list.indexOf('sales:buyhw') < 0) { list.push('sales:buyhw'); changed = true; }
+            });
+            if (changed) savePartnerDeptPerm();
+            try { kobStorage.setItem(PARTNER_BUYHW_MERGE_KEY, new Date().toISOString()); }
+            catch (e) { /* 표시를 못 남겨도 값은 이미 채웠습니다 */ }
+        })();
+
         // 인바운드 상담 대행사 아이디는 처음부터 **영업본부 › 인바운드 접수** 만 열어 둡니다.
         // (권한을 지정하지 않은 계정은 '모두 열림' 이 기본이라, 이 계정만 따로 심어 둡니다)
         const PARTNER_PERM_SEED = { vendor1: ['sales', 'sales:inbound'] };
@@ -50939,10 +50957,17 @@ const QUOTE_TEMPLATES = [
             { n: 9, name: '서류 · 최종확인', last: true }
         ];
 
+        // ---------- 추가 장비 구매 (2026-10-07) ----------
+        // '장비 구매 · 추가' 와 '장비설치의뢰서' 가 같은 일(이미 있는 가맹점에 장비를 더 넣는 일)이라
+        // 하나로 합쳤습니다. 의뢰서 순서를 그대로 쓰고, 하드웨어 유통은 신규 개설과 같이
+        // 설치환경 체크가 빠져 '납품 일정' 만 남습니다.
         const PARTNER_BUYHW_STEPS = [
-            { n: 1, name: '수령처 정보' },
-            { n: 3, name: '장비 발주' },
-            { n: 9, name: '서류 · 최종확인', last: true }
+            { n: 1, name: '가맹점 정보' },
+            { n: 2, name: '발주 장비' },
+            { n: 3, name: '설치환경 체크',
+              nameOf: v => String((v || {}).custType) === 'dist' ? '납품 일정' : '설치환경 체크' },
+            { n: 9, name: '확인 · 접수', last: true,
+              note: '설치 환경이 미비하면 재방문 · 추가 비용이 생길 수 있습니다. 접수 전에 다시 한 번 확인해 주세요' }
         ];
 
         // ---------- 설치 희망일은 신청일 기준 3영업일 뒤부터 (2026-09-21) ----------
@@ -51058,7 +51083,9 @@ const QUOTE_TEMPLATES = [
                     // ---------- 장비설치의뢰서 (2026-09-17) ----------
                     // 이미 계약된 가맹점에 장비를 설치할 때 쓰는 의뢰서입니다.
                     // 신규 개설과 부품(가맹점 정보 · 발주 장비 · 설치환경 체크 · 설치 일정)을 함께 씁니다.
-                    { id: 'install', name: '장비설치의뢰서',
+                    // 2026-10-07 — '추가 장비 구매'(buyhw) 로 합쳤습니다. 메뉴·권한·카탈로그에서 빠지고,
+                    // 이미 접수된 건을 열어 보고 운영본부 설치 요청을 이어 갈 수 있게 정의는 그대로 남깁니다 (retired).
+                    { id: 'install', name: '장비설치의뢰서', retired: true,
                       desc: '이미 계약된 가맹점에 장비를 설치합니다. 매장 환경을 확인해 주셔야 설치가 진행됩니다.',
                       noBaseText: true,
                       steps: PARTNER_INSTALL_ORDER_STEPS,
@@ -51075,21 +51102,29 @@ const QUOTE_TEMPLATES = [
                               { id: 'io-shopphoto', name: '매장 내 · 외부 사진',                      required: false }
                           ]
                       } },
-                    // 장비만 사는 건 — 설치·결제 연동이 없어 배송 정보로 대신합니다
-                    { id: 'buyhw', name: '장비 구매 · 추가',
+                    // 추가 장비 구매 (2026-10-07) — '장비 구매 · 추가' 와 '장비설치의뢰서' 를 합친 접수입니다.
+                    // id 는 buyhw 그대로 둡니다 (권한 묶음 · 가입 승인 · 이미 낸 접수가 이 id 를 씁니다).
+                    // 받는 것은 의뢰서와 같습니다: 가맹점 정보 → 발주 장비 → 설치환경 체크 · 설치 일정.
+                    // 거래 유형(단가 · 유통 여부)은 계정 값으로 그대로 받습니다.
+                    // 예전 '장비 구매 · 추가' 의 수령처 · 배송지 · 납품 희망일(hwShop · hwTo · hwWhen)은
+                    // 가맹점명 · 주소 · 설치 희망일로 대신합니다. 예전 접수의 값은 그대로 남아 있습니다.
+                    { id: 'buyhw', name: '추가 장비 구매',
+                      noBaseText: true,
+                      noWantDate: true,       // 설치 희망일을 이미 받습니다
                       steps: PARTNER_BUYHW_STEPS,
-                      fields: withStep(1, PARTNER_SALES_GATE_FIELDS.concat([
-                          { key: 'hwShop', label: '가맹점 찾기 (수령처)', type: 'shop', required: true, noSum: true,
-                            placeholder: '장비를 받을 가맹점 상호를 입력해 주세요',
-                            hint: '새로 여는 매장이면 상호를 그대로 적어 주세요.' },
-                          { key: 'hwTo', label: '배송지 주소', type: 'address', required: true, noSum: true },
-                          { key: 'hwWhen', label: '납품 희망일', type: 'date', required: true, noSum: true }
-                      ])).concat(withStep(3, PARTNER_HW_FIELDS))
+                      fields: withStep(1, PARTNER_SALES_GATE_FIELDS)
+                          .concat(withStep(1, PARTNER_SHOP_FIELDS))
+                          .concat(withStep(2, PARTNER_HW_FIELDS))
+                          .concat(withStep(3, PARTNER_SITE_FIELDS))
+                          .concat(withStep(3, PARTNER_INSTALL_FIELDS))
                           .concat(withStep(9, PARTNER_AGREE_FIELDS)),
+                      // 이미 거래 중인 곳이라 서류는 모두 선택입니다. 도면 · 사진이 있으면 설치 준비가 쉬워집니다.
                       docsOwn: true,
                       docsExtra: { all: [
-                          { id: 'hw-bizreg',   name: '사업자 등록증', required: true },
-                          { id: 'hw-bankbook', name: '통장사본',      required: false }
+                          { id: 'hw-bizreg',    name: '사업자 등록증',                         required: false },
+                          { id: 'hw-bankbook',  name: '통장사본',                              required: false },
+                          { id: 'io-plan',      name: '매장 도면 (장비 위치 · 인터넷 인입 표시)', required: false },
+                          { id: 'io-shopphoto', name: '매장 내 · 외부 사진',                      required: false }
                       ] } },
                     // 무상 장비 지원 — 사는 건이 아니라 **넣어 주는** 건입니다 (2026-09-15).
                     // 품목은 모두 무상임대로 나가므로 구매계약서 대신 무상임대계약서를 받습니다.
@@ -51305,16 +51340,13 @@ const QUOTE_TEMPLATES = [
             // 'payment:franchise'(가맹 신청) 은 2026-09-16 에 '신규 가맹점 개설' 로 합쳤습니다.
             // 결제본부가 받던 서류(매장 사진 · 공동대표 결제계좌 사본 · 동의서)는 신규 개설 서류에 들어 있고,
             // 접수 건은 영업본부 · 결제본부 접수함에 **함께** 나옵니다 (partnerIntakeDepts).
-            { id: 'sales:buyhw', cat: 'hw', icon: 'fa-box', days: '2~3일',
-              name: '장비 구매 · 추가',
-              desc: '포스 · 키오스크 · 테이블오더를 구매 또는 임대합니다.',
-              kw: '하드웨어 구매 발주 렌탈 임대 포스 키오스크' },
-            // 2026-09-17 — 설치 의뢰서(xlsx)를 그대로 옮긴 접수입니다.
-            // 의뢰서에 '영업일 기준 최소 5일 전 접수' 라고 적혀 있어 기간을 그대로 적습니다.
-            { id: 'sales:install', cat: 'hw', icon: 'fa-clipboard-check', days: '영업일 5일 전',
-              name: '장비설치의뢰서',
-              desc: '이미 계약된 가맹점에 장비를 설치합니다. 매장 환경을 먼저 확인해 주셔야 설치가 진행됩니다.',
-              kw: '설치 설치의뢰 설치발주 설치요청 발주서 설치환경 체크리스트' },
+            // 2026-10-07 — '장비설치의뢰서'(sales:install) 를 합쳤습니다 (이름 '장비 구매 · 추가' → '추가 장비 구매').
+            { id: 'sales:buyhw', cat: 'hw', icon: 'fa-box', days: `영업일 ${INSTALL_LEAD_BIZ_DAYS}일 전`,
+              name: '추가 장비 구매',
+              desc: '이미 거래 중인 가맹점에 포스 · 키오스크 · 테이블오더를 더 구매 · 임대하고 설치를 의뢰합니다. 매장 환경을 먼저 확인해 주셔야 설치가 진행됩니다.',
+              // 예전 이름(장비 구매 · 추가 · 장비설치의뢰서)으로 찾아도 나오게 둡니다
+              kw: '하드웨어 구매 발주 렌탈 임대 포스 키오스크 장비추가 장비구매 설치 설치의뢰 장비설치의뢰서 설치발주 설치요청 발주서 설치환경 체크리스트' },
+            // 'sales:install'(장비설치의뢰서) 은 2026-10-07 에 '추가 장비 구매' 로 합쳤습니다.
             { id: 'ops:as', cat: 'fix', icon: 'fa-screwdriver-wrench', days: '당일~1일',
               name: '장애 신고 (A/S)',
               desc: '설치 장비의 장애를 접수합니다. 긴급 건은 유선으로 연락해 주세요.',
@@ -52422,10 +52454,18 @@ const QUOTE_TEMPLATES = [
         ];
         const partnerChangeItem = (id) => PARTNER_CHANGE_ITEMS.find(x => x.id === id) || null;
 
-        // 아직 끝나지 않은 내 접수 (이 화면에서 고를 수 있는 대상)
-        // 처리완료 · 반려된 건은 고칠 것이 없으므로 뺍니다.
+        // 설치가 걸린 접수인지 — 접수 양식에 '설치 희망일'(PARTNER_INSTALL_FIELDS) 이 있는 구분
+        // (신규 가맹점 개설 · 추가 장비 구매 · 무상 장비 지원, 예전 장비설치의뢰서). 양식에서 바로 읽으므로
+        // 설치 일정을 받는 구분이 늘면 따로 고칠 것이 없습니다 (2026-10-07).
+        function partnerIntakeHasInstall(x) {
+            const t = partnerTypeDef((x || {}).dept, (x || {}).type);
+            return !!(t && (t.fields || []).some(f => f.key === 'installDate'));
+        }
+        // 아직 끝나지 않은 내 **설치 관련** 접수 (이 화면에서 고를 수 있는 대상)
+        // 처리완료 · 반려된 건은 고칠 것이 없으므로 빼고, 설치와 무관한 접수
+        // (A/S · 메뉴 · 정산 · 일정 변경 요청 자신 등) 도 뺍니다 (2026-10-07).
         function partnerOpenIntakes() {
-            return myPartnerIntakes().filter(x => PARTNER_OPEN_STATUSES.indexOf(x.status) > -1);
+            return myPartnerIntakes().filter(x => PARTNER_OPEN_STATUSES.indexOf(x.status) > -1 && partnerIntakeHasInstall(x));
         }
 
         // ---------- ① 대상 접수 고르기 ----------
@@ -52439,14 +52479,14 @@ const QUOTE_TEMPLATES = [
                     <label class="block text-sm font-medium text-gray-700 mb-1">${escapeHtml(f.label)}${star}</label>
                     <input type="hidden" id="${id}" value="" />
                     <p class="text-sm text-gray-500 bg-gray-50 border border-gray-200 rounded px-3 py-2.5">
-                        진행 중인 접수가 없습니다. 변경할 건이 있으면 <b>[내 요청]</b> 에서 확인해 주세요.</p>
+                        진행 중인 설치 접수가 없습니다. 변경할 건이 있으면 <b>[내 요청]</b> 에서 확인해 주세요.</p>
                 </div>`;
             }
             return `<div class="mb-4">
                 <label class="block text-sm font-medium text-gray-700 mb-1">${escapeHtml(f.label)}${star}</label>
                 <select id="${id}" onchange="onPartnerRefChange('${escapeHtml(prefix)}')"
                     class="w-full p-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 ${ring || 'focus:ring-indigo-500'}">
-                    <option value="">진행 중인 접수에서 골라 주세요</option>
+                    <option value="">진행 중인 설치 접수에서 골라 주세요</option>
                     ${list.map(x => {
                         const tk = partnerTaskOfIntake(x);
                         const st = PARTNER_INTAKE_STATUS[x.status] || {};
@@ -52455,7 +52495,7 @@ const QUOTE_TEMPLATES = [
                     }).join('')}
                 </select>
                 <div id="${id}-info" class="mt-2"></div>
-                <p class="text-xs text-gray-400 mt-1">처리완료 · 반려된 건은 나오지 않습니다.</p>
+                <p class="text-xs text-gray-400 mt-1">설치가 걸린 접수(신규 가맹점 개설 · 추가 장비 구매 · 무상 장비 지원) 중 진행 중인 건만 나옵니다.</p>
             </div>`;
         }
         // 고른 접수의 요약을 보여 주고, 아래 변경 항목칸을 다시 그립니다
@@ -56130,7 +56170,7 @@ const QUOTE_TEMPLATES = [
             { id: 'ops',   dept: 'ops',   name: '운영본부', icon: 'fa-gears',     color: 'emerald' }
         ];
         function partnerSiteConfirmOf(x, who) { return ((x || {}).siteConfirm || {})[who] || { items: {} }; }
-        // 이 접수가 설치환경 체크를 받는 건인지 (신규 가맹점 개설 · 장비설치의뢰서)
+        // 이 접수가 설치환경 체크를 받는 건인지 (신규 가맹점 개설 · 추가 장비 구매 · 무상 장비 지원 · 예전 장비설치의뢰서)
         function partnerHasSiteCheck(x) {
             if (!x) return false;
             return partnerIntakeFieldsOf(x).some(f => f.type === 'sitechecks');
@@ -56190,7 +56230,7 @@ const QUOTE_TEMPLATES = [
         // 한 번 요청하면 접수에 workId 를 남겨 두 번 만들어지지 않게 합니다.
         function partnerCanRequestInstall(x) {
             if (!x || !partnerHasSiteCheck(x)) return false;
-            return x.dept === 'sales';                     // 영업본부가 받은 건만 (신규 개설 · 장비설치의뢰서)
+            return x.dept === 'sales';                     // 영업본부가 받은 건만 (신규 개설 · 추가 장비 구매 · 무상 지원)
         }
         function partnerInstallDevicesText(x) {
             const f = partnerIntakeFieldsOf(x).find(ff => ff.type === 'hwtable');

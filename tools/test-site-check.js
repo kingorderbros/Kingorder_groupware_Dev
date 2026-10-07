@@ -50,31 +50,35 @@ for (const item of ['포스세트', '오더포스', '키오스크', '테이블�
     ok(html.includes(`item: '${item}'`), `발주 장비에 ${item} 이(가) 있다`);
 }
 
-console.log('\n[5] 새 접수 구분 [장비설치의뢰서]');
+console.log('\n[5] 추가 장비 구매 (장비설치의뢰서 + 장비 구매 · 추가 → 하나로, 2026-10-07)');
 {
-    ok(/id: 'install', name: '장비설치의뢰서'/.test(html), "영업본부에 '장비설치의뢰서' 접수 구분이 있다");
-    const i = html.indexOf("id: 'install', name: '장비설치의뢰서'");
-    const seg = html.slice(i, i + 1400);
+    ok(/id: 'buyhw', name: '추가 장비 구매'/.test(html), "영업본부에 '추가 장비 구매' 접수 구분이 있다");
+    const i = html.indexOf("id: 'buyhw', name: '추가 장비 구매'");
+    const seg = html.slice(i, i + 1600);
+    ok(/PARTNER_SALES_GATE_FIELDS/.test(seg), '거래 유형(단가 · 유통 여부)을 받는다');
     ok(/PARTNER_SHOP_FIELDS/.test(seg), '가맹점 정보를 받는다');
     ok(/PARTNER_HW_FIELDS/.test(seg), '발주 장비를 받는다');
     ok(/PARTNER_SITE_FIELDS/.test(seg), '설치환경 체크를 받는다');
     ok(/PARTNER_INSTALL_FIELDS/.test(seg), '설치 희망일 · 시간을 받는다');
     ok(/io-plan/.test(seg), '매장 도면을 올릴 수 있다');
-    ok(!/docsExtra:[\s\S]{0,400}required: true/.test(seg), '이미 계약된 곳이라 필수 서류를 새로 받지 않는다');
+    ok(!/docsExtra:[\s\S]{0,600}required: true/.test(seg), '이미 거래 중인 곳이라 필수 서류를 새로 받지 않는다');
 
-    const st = html.indexOf('const PARTNER_INSTALL_ORDER_STEPS');
+    const st = html.indexOf('const PARTNER_BUYHW_STEPS');
     const stSeg = html.slice(st, st + 700);
     ok(/'가맹점 정보'/.test(stSeg) && /'발주 장비'/.test(stSeg) && /'설치환경 체크'/.test(stSeg), '단계가 의뢰서 순서와 같다');
+    ok(/'납품 일정'/.test(stSeg), '하드웨어 유통은 납품 일정으로 보인다');
 
-    ok(/sales:install/.test(html), '파트너 아이디에 이 접수 구분 권한을 물려준다');
+    ok(/id: 'install', name: '장비설치의뢰서', retired: true/.test(html), '장비설치의뢰서는 정의만 남긴다 (예전 접수 열람용)');
+    ok(html.indexOf("{ id: 'sales:install', cat:") < 0, '파트너센터 업무 목록에서 장비설치의뢰서가 빠졌다');
+    ok(/list\.indexOf\('sales:install'\) < 0\) return;[\s\S]{0,200}'sales:buyhw'/.test(html), '의뢰서를 쓰던 아이디에 추가 장비 구매를 열어 준다');
     // 파트너센터는 본부가 아니라 **업무 목록**(PARTNER_TASKS)으로 보여 줍니다.
     // 여기에 올리지 않으면 권한이 있어도 화면에 안 나옵니다.
-    const ti = html.indexOf("{ id: 'sales:install', cat:");
+    const ti = html.indexOf("{ id: 'sales:buyhw', cat:");
     ok(ti > 0, '파트너센터 업무 목록에 올라가 있다 (이게 빠지면 화면에 안 나옴)');
-    const tSeg = html.slice(ti, ti + 400);
+    const tSeg = html.slice(ti, ti + 600);
     ok(/cat: 'hw'/.test(tSeg), "'장비' 분류에 들어간다");
-    ok(/name: '장비설치의뢰서'/.test(tSeg), '이름이 장비설치의뢰서다');
-    ok(/kw:.*설치/.test(tSeg), '검색어로도 찾을 수 있다');
+    ok(/name: '추가 장비 구매'/.test(tSeg), '이름이 추가 장비 구매다');
+    ok(/kw:.*설치/.test(tSeg) && /kw:.*장비설치의뢰서/.test(tSeg), '예전 이름 · 설치로도 찾을 수 있다');
 }
 
 console.log('\n[6] 거래 유형 칸이 없는 접수에서도 설치환경 체크가 보이는지');
