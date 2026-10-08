@@ -22266,7 +22266,7 @@ const QUOTE_TEMPLATES = [
                 </div>
 
                 <!-- 아래 칸 — 여기부터 끝까지 따로 스크롤 -->
-                <div id="${wcId(key, 'scroll')}" onscroll="wcAutoFoldOnScroll()" class="flex-1 min-h-0 overflow-y-auto px-4 md:px-8 pt-4 md:pt-6 pb-4 md:pb-8">
+                <div id="${wcId(key, 'scroll')}" class="flex-1 min-h-0 overflow-y-auto px-4 md:px-8 pt-4 md:pt-6 pb-4 md:pb-8">
                 <!-- ② 업무유형 탭 -->
                 <div id="${wcId(key, 'tabs-wrap')}" class="bg-white rounded-t-lg border border-b-0 border-gray-200">
                     <!-- 좁은 화면에서는 탭을 한 줄로 두고 가로 스크롤 (여러 줄로 쌓이면 화면을 다 먹음) -->
@@ -22471,7 +22471,6 @@ const QUOTE_TEMPLATES = [
             rememberWorkCenterCustomer(key, null);   // 지난번 고객 기억도 함께 지웁니다 (일부러 비운 것이므로 되돌리지 않습니다)
             st.custDetailOpen = false;
             st.searchOpen = true;          // 바로 다시 조회할 수 있게 검색 바는 펼쳐 둡니다
-            st.autoFolded = false;
             st.processQuery = '';          // 업무처리 키워드 검색도 함께 비웁니다
             renderWorkCustomerSummary(key);
             renderWorkTypeTabs(key);
@@ -22643,38 +22642,11 @@ const QUOTE_TEMPLATES = [
         // 검색 입력 + 조회 결과(고객 요약)가 상단에 고정돼 있어 좁은 화면에서는 본문이 거의 안 보입니다.
         // 접으면 검색 입력과 조회 결과가 통째로 사라지고 토글 버튼 한 개만 남습니다.
         // 어느 고객 기준인지는 그 버튼 라벨에 함께 표시해, 줄을 하나도 더 쓰지 않게 했습니다.
+        // 스크롤하면 자동으로 접던 기능(2026-10-08 오전)은 접혔다 펴졌다 하며 화면이 올라가 불편하다는 의견으로 뺐습니다.
+        // 지금은 [고객조회 접기 / 펼치기] 버튼으로만 접고 폅니다.
         function toggleWorkSearch(key) {
             const st = wcState[key];
-            const shown = workSearchIsOpen(key) && !st.autoFolded;
-            st.autoFolded = false;
-            st.searchOpen = !shown;
-            // 손으로 접거나 펼쳤으면 맨 위로 돌아갈 때까지 자동 접기를 쉽니다 (펼쳐 놓고 조회하는 중에 다시 접히지 않게)
-            const box = wcEl(key, 'scroll');
-            st.autoHold = !!(box && box.scrollTop > 4);
-            applyWorkSearchCollapse(key);
-        }
-
-        // ---------- ①-2 스크롤하면 고객조회 자동 접기 (UAT 2026-10-08) ----------
-        // 아래 칸(내용)을 내리면 검색 입력 + 고객 요약을 접어 한 줄만 남기고, 맨 위로 돌아오면 다시 펼칩니다.
-        // 펼침 여부(searchOpen)는 그대로 두고 autoFolded 만 켜고 끕니다 — 손으로 접어 둔 상태와 섞이지 않게.
-        // 두 칸이라 위 칸이 접혀도 아래 내용 자리는 그대로이고, 아래 칸이 길어질 뿐입니다.
-        // 내용이 짧아 접으면 스크롤이 없어지는 화면은 접지 않습니다 (접힘 ↔ 펼침 되풀이 방지).
-        function wcAutoFoldOnScroll() {
-            const key = ['ops', 'sales'].find(k => { const el = document.getElementById(wcDef(k).section); return el && !el.classList.contains('hidden'); });
-            const box = key && wcEl(key, 'scroll');
-            if (!box) return;
-            const st = wcState[key];
-            const y = box.scrollTop;
-            if (y <= 4) {
-                st.autoHold = false;
-                if (st.autoFolded) { st.autoFolded = false; applyWorkSearchCollapse(key); }
-                return;
-            }
-            if (y <= 20 || st.autoFolded || st.autoHold || !workSearchIsOpen(key)) return;
-            const body = wcEl(key, 'search-body');
-            const shrink = (body ? body.offsetHeight : 0) + 40;   // 검색 블록 + 바 여백 (대략)
-            if (box.scrollHeight - box.clientHeight - shrink < 24) return;
-            st.autoFolded = true;
+            st.searchOpen = !workSearchIsOpen(key);
             applyWorkSearchCollapse(key);
         }
 
@@ -22688,7 +22660,7 @@ const QUOTE_TEMPLATES = [
         }
 
         function applyWorkSearchCollapse(key) {
-            const open = workSearchIsOpen(key) && !wcState[key].autoFolded;
+            const open = workSearchIsOpen(key);
             const body = wcEl(key, 'search-body');
             const icon = wcEl(key, 'search-icon');
             const label = wcEl(key, 'search-label');
