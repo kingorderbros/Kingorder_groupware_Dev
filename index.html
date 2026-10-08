@@ -1937,7 +1937,7 @@
             </header>
 
             <!-- 콘텐츠 스크롤 영역 -->
-            <div class="flex-1 overflow-y-auto p-4 md:p-8">
+            <div id="main-scroll" onscroll="wcAutoFoldOnScroll()" class="flex-1 overflow-y-auto p-4 md:p-8">
                 
                 <!-- 0. 마이 대시보드 섹션 -->
                 <section id="sec-dashboard-personal" class="content-section">
@@ -22220,8 +22220,8 @@ const QUOTE_TEMPLATES = [
                      (모바일에서는 기본 접힘 — applyWorkSearchCollapse 참고)
                      스크롤 영역의 안쪽 여백(p-4 · md:p-8)만큼 위로 올려(-top-4 · md:-top-8) 헤더 바로 밑에 붙입니다.
                      top-0 이면 그 여백만큼 틈이 생겨 본문이 바 위로 비쳐 올라갑니다. 배경도 불투명하게. -->
-                <div class="sticky -top-4 md:-top-8 z-20 -mx-4 md:-mx-8 -mt-4 md:-mt-8 px-4 md:px-8 pt-4 md:pt-8 pb-4 bg-gray-50 border-b border-gray-200 shadow-sm">
-                    <div class="flex items-center justify-between gap-2 mb-2">
+                <div id="${wcId(key, 'search-bar')}" class="sticky -top-4 md:-top-8 z-20 -mx-4 md:-mx-8 -mt-4 md:-mt-8 px-4 md:px-8 pt-4 md:pt-8 pb-4 bg-gray-50 border-b border-gray-200 shadow-sm">
+                    <div id="${wcId(key, 'search-head')}" class="flex items-center justify-between gap-2 mb-2">
                         <div class="flex items-center gap-2 min-w-0">
                             <h3 id="wc-title-${key}" class="text-base md:text-lg font-bold text-gray-800 truncate">${escapeHtml(c.title)}</h3>
                             <span class="hidden sm:inline px-2 py-0.5 text-xs font-semibold rounded-full bg-amber-100 text-amber-800 whitespace-nowrap">DEV환경</span>
@@ -22259,7 +22259,7 @@ const QUOTE_TEMPLATES = [
                 </div>
 
                 <!-- ② 업무유형 탭 — 고정된 고객조회 바와 붙어 보이지 않게 위쪽 여백을 넉넉히 둡니다 -->
-                <div class="mt-10 md:mt-12 bg-white rounded-t-lg border border-b-0 border-gray-200">
+                <div id="${wcId(key, 'tabs-wrap')}" class="mt-10 md:mt-12 bg-white rounded-t-lg border border-b-0 border-gray-200">
                     <!-- 좁은 화면에서는 탭을 한 줄로 두고 가로 스크롤 (여러 줄로 쌓이면 화면을 다 먹음) -->
                     <div id="${wcId(key, 'type-tabs')}" class="flex gap-1 p-2 overflow-x-auto md:flex-wrap md:overflow-x-visible"></div>
                 </div>
@@ -22461,6 +22461,7 @@ const QUOTE_TEMPLATES = [
             rememberWorkCenterCustomer(key, null);   // 지난번 고객 기억도 함께 지웁니다 (일부러 비운 것이므로 되돌리지 않습니다)
             st.custDetailOpen = false;
             st.searchOpen = true;          // 바로 다시 조회할 수 있게 검색 바는 펼쳐 둡니다
+            st.autoFolded = false;
             st.processQuery = '';          // 업무처리 키워드 검색도 함께 비웁니다
             renderWorkCustomerSummary(key);
             renderWorkTypeTabs(key);
@@ -22634,8 +22635,44 @@ const QUOTE_TEMPLATES = [
         // 어느 고객 기준인지는 그 버튼 라벨에 함께 표시해, 줄을 하나도 더 쓰지 않게 했습니다.
         function toggleWorkSearch(key) {
             const st = wcState[key];
-            st.searchOpen = !workSearchIsOpen(key);
+            const shown = workSearchIsOpen(key) && !st.autoFolded;
+            st.autoFolded = false;
+            st.searchOpen = !shown;
+            // 손으로 접거나 펼쳤으면 맨 위로 돌아갈 때까지 자동 접기를 쉽니다 (펼쳐 놓고 조회하는 중에 다시 접히지 않게)
+            const box = document.getElementById('main-scroll');
+            st.autoHold = !!(box && box.scrollTop > 4);
             applyWorkSearchCollapse(key);
+        }
+
+        // ---------- ①-2 스크롤하면 고객조회 자동 접기 (UAT 2026-10-08) ----------
+        // 내리면 검색 입력 + 고객 요약을 접어 한 줄만 남기고, 맨 위로 돌아오면 다시 펼칩니다.
+        // 펼침 여부(searchOpen)는 그대로 두고 autoFolded 만 켜고 끕니다 — 손으로 접어 둔 상태와 섞이지 않게.
+        // 20px 넘게 내리면 접고, 접히는 높이만큼 스크롤을 당겨 보던 내용이 덜 튀게 합니다.
+        // 당긴 자리는 8px 아래로 내려가지 않게 해 맨 위(4px 이하)로 가지 않습니다 → 접힘 ↔ 펼침이 되풀이되지 않습니다.
+        function wcActiveKey() {
+            return ['ops', 'sales'].find(k => { const el = document.getElementById(wcDef(k).section); return el && !el.classList.contains('hidden'); }) || '';
+        }
+        function wcAutoFoldOnScroll() {
+            const key = wcActiveKey();
+            const box = document.getElementById('main-scroll');
+            if (!key || !box) return;
+            const st = wcState[key];
+            const y = box.scrollTop;
+            if (y <= 4) {
+                st.autoHold = false;
+                if (st.autoFolded) { st.autoFolded = false; applyWorkSearchCollapse(key); }
+                return;
+            }
+            if (st.autoFolded || st.autoHold || !workSearchIsOpen(key)) return;
+            const body = wcEl(key, 'search-body'), tabs = wcEl(key, 'tabs-wrap');
+            if (!body || !tabs || y <= 20) return;
+            // 접고 나서도 8px 이상 내려가 있을 만큼 내용이 길 때만 접습니다 (짧은 화면에서 접힘 ↔ 펼침 되풀이 방지)
+            const shrink = body.offsetHeight + 80;   // 검색 블록 + 바 여백 + 바 아래 빈 줄 (대략)
+            if (box.scrollHeight - box.clientHeight - shrink < 8) return;
+            const before = tabs.offsetTop;
+            st.autoFolded = true;
+            applyWorkSearchCollapse(key);
+            box.scrollTop = Math.max(8, y - (before - tabs.offsetTop));
         }
 
         // 처음 진입 시에는 화면 폭으로 결정 (md 미만이면 접힘)
@@ -22648,13 +22685,19 @@ const QUOTE_TEMPLATES = [
         }
 
         function applyWorkSearchCollapse(key) {
-            const open = workSearchIsOpen(key);
+            const open = workSearchIsOpen(key) && !wcState[key].autoFolded;
             const body = wcEl(key, 'search-body');
             const icon = wcEl(key, 'search-icon');
             const label = wcEl(key, 'search-label');
             if (!body) return;
             // 검색 입력과 조회 결과(고객 요약)가 함께 들어 있는 블록을 통째로 접습니다
             body.classList.toggle('hidden', !open);
+            // 접으면 바의 위아래 여백과 바 아래 빈 줄도 줄여 제목 한 줄만 얇게 남깁니다 (UAT 2026-10-08)
+            const bar = wcEl(key, 'search-bar'), head = wcEl(key, 'search-head'), tabs = wcEl(key, 'tabs-wrap');
+            const tg = (el, on, off) => { if (!el) return; on.forEach(c => el.classList.toggle(c, !open)); off.forEach(c => el.classList.toggle(c, open)); };
+            tg(bar, ['pt-2', 'md:pt-3', 'pb-2'], ['pt-4', 'md:pt-8', 'pb-4']);
+            tg(head, ['mb-0'], ['mb-2']);
+            tg(tabs, ['mt-4', 'md:mt-5'], ['mt-10', 'md:mt-12']);
             if (icon) icon.className = `fas fa-chevron-${open ? 'up' : 'down'} text-xs shrink-0`;
             if (label) label.innerText = open ? (wcSearchLabels(key).toggle + ' 접기') : workSearchCollapsedLabel(key);
         }
