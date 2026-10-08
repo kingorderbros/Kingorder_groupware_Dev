@@ -16442,13 +16442,20 @@ const QUOTE_TEMPLATES = [
             vehicle:  { text: '법인차량',      icon: 'fa-car',                 color: 'text-indigo-700' },
             purchase: { text: '구매/비품',     icon: 'fa-cart-shopping',       color: 'text-teal-600' },
             hr:       { text: '인사/총무',     icon: 'fa-users',               color: 'text-sky-600' },
-            report:   { text: '보고/결재',     icon: 'fa-clipboard-check',     color: 'text-gray-600' }
+            report:   { text: '보고/결재',     icon: 'fa-clipboard-check',     color: 'text-gray-600' },
+            // IT본부 (2026-10-08 UAT)
+            dev:      { text: '개발/배포',     icon: 'fa-code',                color: 'text-cyan-700' },
+            incident: { text: '장애 대응',     icon: 'fa-bug',                 color: 'text-red-600' },
+            devreq:   { text: '개발요청 검토', icon: 'fa-laptop-code',         color: 'text-indigo-600' }
         };
         const TODO_TYPES_BY_DEPT = {
             sales:      ['visit', 'call', 'meeting', 'proposal', 'email'],
             ops:        ['as', 'install', 'menu', 'delivery', 'ob', 'meeting'],
             payment:    ['settle', 'recon', 'merchant', 'unpaid', 'issue', 'meeting'],
-            management: ['contract', 'vehicle', 'purchase', 'hr', 'report', 'meeting']
+            management: ['contract', 'vehicle', 'purchase', 'hr', 'report', 'meeting'],
+            // 관리본부(mgmt)는 경영진과 같은 관리 업무 · IT본부는 개발 업무 (2026-10-08 — 전에는 정의가 없어 모든 부서 구분이 다 나왔음)
+            mgmt:       ['contract', 'vehicle', 'purchase', 'hr', 'report', 'meeting'],
+            it:         ['dev', 'incident', 'devreq', 'meeting', 'report']
         };
         const TODO_TYPES_COMMON = ['personal', 'etc'];   // 부서 공통 — 개인업무 · 기타
 
@@ -16543,6 +16550,24 @@ const QUOTE_TEMPLATES = [
                 { id: 'internal',   name: '내부 업무',      color: 'gray',   icon: 'fa-users' },
                 { id: 'other',      name: '기타',           color: 'amber',  icon: 'fa-ellipsis-h' }
             ],
+            // 관리본부(mgmt · 2026-09-21 신설) — 법인차량 · 법인카드 · 공지 등 관리 업무라 경영진 기본 구분과 같은 축 (2026-10-08)
+            mgmt: [
+                { id: 'hr',         name: '인사/총무',      color: 'theme',  icon: 'fa-users' },
+                { id: 'vehicle',    name: '법인차량',       color: 'green',  icon: 'fa-car' },
+                { id: 'asset',      name: '자산/구매',      color: 'teal',   icon: 'fa-boxes-stacked' },
+                { id: 'external',   name: '대외 업무',      color: 'pink',   icon: 'fa-building-columns' },
+                { id: 'internal',   name: '내부 업무',      color: 'gray',   icon: 'fa-users' },
+                { id: 'other',      name: '기타',           color: 'amber',  icon: 'fa-ellipsis-h' }
+            ],
+            // IT본부 (2026-10-08 UAT) — 그동안 기본 구분이 없어 영업 구분(고객사 미팅 …)이 대신 나왔습니다
+            it: [
+                { id: 'dev',        name: '개발/배포',      color: 'theme',  icon: 'fa-clipboard-check' },
+                { id: 'incident',   name: '장애 대응',      color: 'red',    icon: 'fa-headset' },
+                { id: 'devreq',     name: '개발요청 검토',  color: 'teal',   icon: 'fa-file-signature' },
+                { id: 'meeting',    name: '회의/미팅',      color: 'green',  icon: 'fa-users' },
+                { id: 'internal',   name: '내부 업무',      color: 'gray',   icon: 'fa-users' },
+                { id: 'other',      name: '기타',           color: 'amber',  icon: 'fa-ellipsis-h' }
+            ],
             // 전사일정 전용 구분 — 특정 부서의 업무 성격이 아니라 회사 공식 일정 성격으로 나눕니다
             company: [
                 { id: 'holiday',    name: '휴무/공휴일',    color: 'red',    icon: 'fa-ellipsis-h' },
@@ -16580,9 +16605,34 @@ const QUOTE_TEMPLATES = [
         // 실제로 사용하는 부서별 구분 목록 (추가/수정/삭제 시 localStorage 에 즉시 반영)
         let scheduleTypesByDept = loadScheduleTypes();
 
-        // 부서의 구분 목록. 정의가 없는 부서는 영업 기준으로 폴백합니다.
+        // 조직 관리에서 만든 본부(IT본부 · 관리본부 · 새로 만든 본부 …)도 일정의 부서 · 구분 관리에 나오게 합니다 (2026-10-08).
+        // 기본 구분이 정해진 본부는 그것으로, 없으면 공통 구분(회의 · 내부 업무 · 기타)으로 채웁니다.
+        const SCHEDULE_TYPES_GENERIC = [
+            { id: 'meeting',  name: '회의/미팅', color: 'theme', icon: 'fa-users' },
+            { id: 'internal', name: '내부 업무', color: 'gray',  icon: 'fa-users' },
+            { id: 'other',    name: '기타',      color: 'amber', icon: 'fa-ellipsis-h' }
+        ];
+        function ensureScheduleTypeDepts() {
+            let ids = [];
+            try { ids = allDeptIds(); } catch (e) { ids = []; }
+            ids.forEach(d => {
+                if (Array.isArray(scheduleTypesByDept[d]) && scheduleTypesByDept[d].length) return;
+                scheduleTypesByDept[d] = JSON.parse(JSON.stringify(DEFAULT_SCHEDULE_TYPES[d] || SCHEDULE_TYPES_GENERIC));
+            });
+        }
+        ensureScheduleTypeDepts();
+        // 일정의 부서로 고를 수 있는 본부 — 조직 순서대로, 정의가 남아 있는 옛 부서(경영진 등)도 뒤에 붙입니다
+        function scheduleDeptIds() {
+            ensureScheduleTypeDepts();
+            let org = [];
+            try { org = allDeptIds(); } catch (e) { org = []; }
+            const rest = Object.keys(scheduleTypesByDept).filter(d => d !== COMPANY_DEPT && org.indexOf(d) < 0);
+            return org.concat(rest);
+        }
+
+        // 부서의 구분 목록. 정의가 없는 부서는 공통 구분으로 폴백합니다 (예전에는 영업 구분이 나왔습니다).
         function getScheduleTypes(dept) {
-            return scheduleTypesByDept[dept] || scheduleTypesByDept.sales || [];
+            return scheduleTypesByDept[dept] || (dept ? SCHEDULE_TYPES_GENERIC : scheduleTypesByDept.sales) || [];
         }
 
         // 일정 하나의 구분 정의를 찾음. 삭제된 구분을 쓰던 기존 일정은 '미분류'로 표시됩니다.
@@ -16611,7 +16661,7 @@ const QUOTE_TEMPLATES = [
 
         // 구분을 편집할 수 있는 부서 목록
         function manageableScheduleDepts() {
-            return Object.keys(scheduleTypesByDept).filter(canManageScheduleTypes);
+            return scheduleDeptIds().filter(canManageScheduleTypes);
         }
 
         // ==================== 캘린더 구성 (일정을 담는 4개의 캘린더) ====================
@@ -17751,7 +17801,7 @@ const QUOTE_TEMPLATES = [
         // 'company'(전사)는 전사일정 캘린더에서만 쓰므로 일반 목록에서는 제외합니다.
         function scheduleDeptOptions() {
             if (canManageAllData()) {
-                return Object.keys(scheduleTypesByDept).filter(d => d !== COMPANY_DEPT);
+                return scheduleDeptIds();      // IT본부 · 관리본부 등 조직의 모든 본부 (2026-10-08)
             }
             return [currentUserDept || 'sales'];
         }
@@ -18438,7 +18488,7 @@ const QUOTE_TEMPLATES = [
         function resetScheduleTypes() {
             const dept = scheduleTypeEditDept;
             if (!confirm(`${deptNames[dept] || dept}의 일정 구분을 기본값으로 초기화하시겠습니까?\n직접 추가한 구분은 사라집니다.`)) return;
-            scheduleTypesByDept[dept] = JSON.parse(JSON.stringify(DEFAULT_SCHEDULE_TYPES[dept] || DEFAULT_SCHEDULE_TYPES.sales));
+            scheduleTypesByDept[dept] = JSON.parse(JSON.stringify(DEFAULT_SCHEDULE_TYPES[dept] || SCHEDULE_TYPES_GENERIC));
             saveScheduleTypes();
             renderScheduleTypeDeptTabs();
             renderScheduleTypeList();
