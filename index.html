@@ -51710,9 +51710,10 @@ const QUOTE_TEMPLATES = [
                     { id: 'settle', name: '정산 · 수수료 문의', fields: [
                         // 2026-10-08 UAT — 글로 적던 칸을 시작일 · 종료일 달력 고르기로 (값은 'YYYY-MM-DD ~ YYYY-MM-DD' 그대로)
                         { key: 'period', label: '정산 기간', type: 'daterange', required: true, noSum: true },
-                        { key: 'settleShop', label: '가맹점 찾기', type: 'shop', required: false, noSum: true,
-                          placeholder: '특정 가맹점 건이면 상호를 입력해 주세요',
-                          hint: '영업자(대리점) 건은 영업자명을 입력해 주세요.' }
+                        // 2026-10-08 UAT — 다른 접수(A/S · 메뉴 · 무상 지원)처럼 적고 [검색] 을 누르는 칸으로 (전에는 돋보기 + 치는 대로 검색)
+                        { key: 'settleShop', label: '가맹점 찾기', type: 'text', lookup: 'shop', required: false, noSum: true,
+                          placeholder: '가맹점명을 입력하고 [검색] 을 눌러 주세요 (특정 가맹점 건일 때)',
+                          hint: '킹오더브라더스에 등록된 우리 업체와 소속 가맹점에서 찾습니다. 영업자(대리점) 건은 영업자명을 입력해 주세요.' }
                     ] }
                 ],
                 fields: []
