@@ -24414,8 +24414,7 @@ const QUOTE_TEMPLATES = [
                     <div class="flex flex-wrap gap-1.5">${inboundQuickChipsHtml()}</div>
                     <div class="flex flex-wrap gap-2">
                         ${canEditInboundVendor() ? `<button onclick="openInboundModal()" class="bg-rose-600 hover:bg-rose-700 text-white px-3 py-1.5 rounded text-sm transition-colors"><i class="fas fa-plus mr-1"></i>인입 등록</button>` : ''}
-                        <!-- 파트너센터 접수 주소 — 인바운드 접수는 파트너센터 › 영업본부 › 인바운드 접수에서 받습니다 (2026-09-08) -->
-                        <button onclick="copyPartnerCenterLink()" class="bg-white border border-rose-300 text-rose-700 hover:bg-rose-50 px-3 py-1.5 rounded text-sm transition-colors"><i class="fas fa-link mr-1"></i>파트너센터 접수 주소</button>
+                        <!-- '파트너센터 접수 주소' 단추는 뺐습니다 (2026-10-08) — 외주 대행이 끝나 인입은 수집 · 연결로 받습니다. 주소 복사는 파트너센터 화면에 그대로 있습니다 -->
                         <button onclick="downloadInboundXlsx()" class="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded text-sm transition-colors"><i class="fas fa-file-excel mr-1"></i>엑셀 내려받기</button>
                     </div>
                 </div>

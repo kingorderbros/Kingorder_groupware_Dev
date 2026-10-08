@@ -2055,3 +2055,6 @@ test-files 41(주입 경로 거절 · 폴더 겹침 · 로그아웃 · 목록에
 - **공용 엑셀 읽기 버그 수정** (`readXlsxRows`): 빈 칸 `<c …/>` · 빈 줄 `<row …/>` 를 다음 칸 · 줄과 한 덩어리로 읽어 **칸이 한 칸씩 밀리던 것**(인바운드 엑셀에서 휴대전화가 사업자번호 · 이름 칸으로 들어감). 가맹점 · 단가표 등 엑셀 가져오기 전부에 적용됨.
 - 시험: `tools/test-inbound.js` 44항목(`npm run check` 에 넣음 — 가짜 IMAP 서버 · 네이버 · 메타 · 구글 · Supabase) · `tools/e2e-inbound.js` 헤드리스 27항목(탭 · 빠른 등록 · 재문의 · 운영 배정 · 메일 붙여넣기 · 실엑셀 258건 이관 · 다시 올리면 0건 · 상세 · 본부 저장 · 스팸 · 영업 계정 권한) · 전 화면 51 오류 0 · `wrangler deploy --dry-run` 번들 확인(`cloudflare:sockets` 외부).
 - **배포 전 할 일**: ① Supabase dev SQL Editor 에서 `schema-v7.sql` 실행 ② 네이버 개발자센터 검색 API 키 · 메일함 IMAP(앱 비밀번호) · 메타 토큰 준비 ③ 사이트에서 폼을 받으려면 Cloudflare Access 에서 `/api/inbound/form` 만 예외(Bypass) ④ kingorder-sites 폼 5단계에 보내는 코드 붙이기.
+
+## 2026-10-08 — 인바운드 관리 › 인입 목록에서 '파트너센터 접수 주소' 단추 뺌
+- 외주 인바운드 대행이 끝나 인입은 수집 · 연결로 받으므로 필요 없음(사용자 요청). `copyPartnerCenterLink()` 와 파트너센터 · 파트너 관리 화면의 주소 복사 단추는 그대로.
