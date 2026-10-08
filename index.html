@@ -50758,7 +50758,7 @@ const QUOTE_TEMPLATES = [
         // 대부분 **가맹점주가 직접 매장을 보고** 적으므로, 항목 이름만으로는 판단이 어렵습니다.
         // 그래서 의뢰서의 '비고' 를 안내 문구로 항목마다 함께 보여 주고, 특이사항도 항목마다 받습니다.
         //   구분 · 항목 · 안내문 · 확인(체크) · 특이사항(한 줄)
-        // 영업본부 · 운영본부의 최종확인은 접수함과 장비설치 업무에서 따로 받습니다(아래 PARTNER_SITE_CONFIRMERS).
+        // 영업본부의 최종확인은 접수함에서 따로 받습니다(아래 PARTNER_SITE_CONFIRMERS — 운영본부 확인은 2026-10-08 뺌).
         const PARTNER_SITE_CHECKS = [
             { id: 'power',  cat: '전기',       name: '설치 위치 콘센트 확보',
               hint: '장비 대당 콘센트 2구 이상 필요' },
@@ -56824,14 +56824,13 @@ const QUOTE_TEMPLATES = [
         }
         // ==================== 설치환경 최종확인 · 운영본부 설치 요청 (2026-09-17) ====================
         // 설치 의뢰서에는 확인 칸이 두 개입니다 — 작성자(가맹점주·파트너) 확인, 그리고 최종확인.
-        // 최종확인은 **영업본부와 운영본부가 각각** 합니다.
-        //   · 영업본부 — 접수를 검토하면서 (이 접수함 화면)
-        //   · 운영본부 — 설치를 나가기 전에 (운영업무센터 장비설치 업무)
-        // 값은 접수 건 안에 남깁니다: x.siteConfirm = { sales: {...}, ops: {...} }
+        // 최종확인은 **영업본부만** 합니다 — 접수를 검토하면서 (이 접수함 화면).
+        //   2026-10-08 UAT — 운영본부 사전체크(최종확인) 칸은 뺐습니다. 영업본부 확인으로 충분하다는 의견.
+        //   예전에 운영본부가 체크해 둔 값(x.siteConfirm.ops)은 지우지 않고 남겨 두지만 화면에는 그리지 않습니다.
+        // 값은 접수 건 안에 남깁니다: x.siteConfirm = { sales: {...} }
         //   각 칸 = { items: { 항목id: true }, by, at }
         const PARTNER_SITE_CONFIRMERS = [
-            { id: 'sales', dept: 'sales', name: '영업본부', icon: 'fa-briefcase', color: 'blue' },
-            { id: 'ops',   dept: 'ops',   name: '운영본부', icon: 'fa-gears',     color: 'emerald' }
+            { id: 'sales', dept: 'sales', name: '영업본부', icon: 'fa-briefcase', color: 'blue' }
         ];
         function partnerSiteConfirmOf(x, who) { return ((x || {}).siteConfirm || {})[who] || { items: {} }; }
         // 이 접수가 설치환경 체크를 받는 건인지 (신규 가맹점 개설 · 추가 장비 구매 · 무상 장비 지원 · 예전 장비설치의뢰서)
@@ -56884,7 +56883,7 @@ const QUOTE_TEMPLATES = [
                 <p class="text-indigo-800 font-semibold mb-2"><i class="fas fa-clipboard-check mr-1"></i>설치환경 최종확인
                     ${miss ? `<span class="ml-1 text-xs font-bold text-red-600">작성자 미확인 ${miss}건</span>`
                            : '<span class="ml-1 text-xs font-normal text-gray-500">작성자 확인 완료</span>'}</p>
-                <div class="grid sm:grid-cols-2 gap-2">${PARTNER_SITE_CONFIRMERS.map(cell).join('')}</div>
+                <div class="grid ${PARTNER_SITE_CONFIRMERS.length > 1 ? 'sm:grid-cols-2' : ''} gap-2">${PARTNER_SITE_CONFIRMERS.map(cell).join('')}</div>
             </div>`;
         }
 

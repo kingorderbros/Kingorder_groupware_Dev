@@ -96,13 +96,14 @@ console.log('\n[6] 거래 유형 칸이 없는 접수에서도 설치환경 체�
     ok(vis({ showIf: { key: 'x', in: ['a'] } }, { x: 'a' }) === true, '기존 in 조건도 그대로 동작한다');
 }
 
-console.log('\n[7] 설치환경 최종확인 (영업 · 운영)');
+console.log('\n[7] 설치환경 최종확인 (영업본부만 — 운영본부 사전체크는 2026-10-08 뺌)');
 {
     ok(/PARTNER_SITE_CONFIRMERS/.test(html), '최종확인 주체가 정의돼 있다');
     const i = html.indexOf('const PARTNER_SITE_CONFIRMERS');
     const seg = html.slice(i, i + 400);
     ok(/'sales'[\s\S]{0,60}영업본부/.test(seg), '영업본부가 확인한다');
-    ok(/'ops'[\s\S]{0,60}운영본부/.test(seg), '운영본부도 확인한다');
+    const confEnd = seg.indexOf('];');
+    ok(!/'ops'/.test(seg.slice(0, confEnd)), '운영본부 사전체크 칸은 없다');
     ok(/function savePartnerSiteConfirm\(/.test(html), '확인 결과를 저장한다');
     const si = html.indexOf('function savePartnerSiteConfirm(');
     const sSeg = html.slice(si, si + 1200);
@@ -121,7 +122,7 @@ console.log('\n[8] 운영본부 설치 요청 — 파트너 접수와 업무센�
     ok(/type: 'install'/.test(seg), '운영업무센터 장비설치 업무로 만든다');
     ok(/center: 'ops'/.test(seg), '운영본부 것으로 표시한다');
     ok(/siteCheck: rows\.map/.test(seg), '설치환경 체크 내용을 함께 넘긴다');
-    ok(/siteConfirm:/.test(seg), '영업·운영 최종확인 내용도 넘긴다');
+    ok(/siteConfirm:/.test(seg), '영업본부 최종확인 내용도 넘긴다');
     ok(/installDevices: devices/.test(seg), '발주 장비를 넘긴다');
     ok(/installReqDate: ex\.installDate/.test(seg), '설치 희망일을 넘긴다');
     ok(/fromIntake: \{ id: x\.id/.test(seg), '원본 접수를 찾아갈 수 있게 표시를 남긴다');
