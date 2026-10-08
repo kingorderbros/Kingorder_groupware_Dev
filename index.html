@@ -26522,6 +26522,9 @@ const QUOTE_TEMPLATES = [
         }
 
         function buildWorkIntakeLinkBlocks(key, inputCls) {
+            // 운영업무센터는 [프로젝트 연결] · [일정 등록] 버튼을 두지 않습니다 (UAT 2026-10-08).
+            // 방문 예정일 · 설치일을 넣으면 등록 · 저장할 때 캘린더에 저절로 올라갑니다 — syncOpsWorkSchedule
+            if (key === 'ops') return '';
             if (!useIntakeLinkModal(key)) {
                 return `
                                 <!-- 프로젝트 업무면 프로젝트·WBS를 지정해 진척도에 반영합니다 -->
@@ -26861,6 +26864,61 @@ const QUOTE_TEMPLATES = [
             renderWorkIntakeProjectBtn(key);
         }
 
+        // ---------- 운영업무센터 업무 → 캘린더 자동 일정 (UAT 2026-10-08) ----------
+        // 날짜가 있는 운영 업무는 접수 · 처리 저장 때 '설치 및 A/S 일정 공유' 캘린더에 저절로 올리고,
+        // 날짜를 바꾸면 그 일정도 따라 옮깁니다. 날짜를 지우면 저절로 만든 일정만 지웁니다(손으로 연결한 일정은 둡니다).
+        //   AS유지보수 등 : 방문 예정일(extra.visitDate)
+        //   장비설치      : 설치일자(installDate · 처리에서 확정) → 없으면 설치요청일(installReqDate), 시간도 같은 순서
+        function opsWorkVisit(w) {
+            if (!w) return { date: '', time: '' };
+            if (w.type === 'install') {
+                return w.installDate ? { date: w.installDate, time: w.installTime || '' }
+                                     : { date: w.installReqDate || '', time: w.installReqTime || '' };
+            }
+            return { date: (w.extra || {}).visitDate || '', time: '' };
+        }
+        function syncOpsWorkSchedule(key, w) {
+            if (key !== 'ops' || !w) return false;
+            const { date, time } = opsWorkVisit(w);
+            let sch = w.scheduleId ? schedules.find(x => x.id === w.scheduleId) : null;
+            if (w.scheduleId && !sch) w.scheduleId = null;            // 캘린더에서 지워진 일정
+            if (!date) {
+                if (sch && sch.fromWork && sch.fromWork.auto) {
+                    schedules = schedules.filter(x => x.id !== sch.id);
+                    w.scheduleId = null;
+                    saveSchedules();
+                    return true;
+                }
+                return false;
+            }
+            const typeName = (wcType(key, w.type) || {}).name || '';
+            const company = w.company || (wcCustomer(key, w.customerId) || {}).name || '';
+            const title = `[${typeName}] ${company ? company + ' · ' : ''}${w.title || ''}`.trim();
+            const plusHour = t => { const [h, m] = String(t).split(':').map(Number); return isNaN(h) ? '' : `${String(Math.min(23, h + 1)).padStart(2, '0')}:${String(m || 0).padStart(2, '0')}`; };
+            const timed = { allDay: !time, startTime: time || '', endTime: time ? ((sch && sch.startTime === time && sch.endTime) || plusHour(time)) : '' };
+            if (!sch) {
+                const newId = nextScheduleId();
+                schedules.push(Object.assign({
+                    id: newId, calendar: 'install-as', dept: 'ops', title, date,
+                    type: w.type === 'install' ? 'install' : (w.type === 'as' ? 'as' : defaultScheduleTypeId('ops')),
+                    reminder: 'sameday', progress: DEFAULT_PROGRESS_ID,
+                    salesperson: w.assignee || w.receiver || currentUserName,
+                    createdBy: String(currentUserEmail || '').toLowerCase(),
+                    description: [`업무 ${w.id}`, company ? `고객: ${company}` : '', w.installAddr ? `주소: ${w.installAddr}` : '', w.memo || ''].filter(Boolean).join('\n'),
+                    attendees: [],
+                    fromWork: { kind: 'wc', key, id: w.id, auto: true }
+                }, timed));
+                w.scheduleId = newId;
+                saveSchedules();
+                return true;
+            }
+            const changed = sch.date !== date || sch.title !== title || !!sch.allDay !== timed.allDay || (time && sch.startTime !== time);
+            if (!changed) return false;
+            Object.assign(sch, { date, title }, timed);
+            saveSchedules();
+            return true;
+        }
+
         // 접수 폼에서 체크된 경우 업무 건을 일정으로 만들어 연결합니다. 실패하면 null.
         function createScheduleFromIntake(key, work) {
             if (!(wcEl(key, 'intake-cal') || {}).checked) return null;
@@ -27098,7 +27156,8 @@ const QUOTE_TEMPLATES = [
             if (workIntakeShipOn(key)) createDeliveryFromAs(key, work, '접수 시 처리방법 택배');
 
             // '일정캘린더에 등록'을 체크했으면 접수와 동시에 일정을 만들어 연결한다
-            const madeSchedule = createScheduleFromIntake(key, work);
+            // 운영업무센터는 방문 예정일을 넣었으면 그 날로 저절로 올립니다 (UAT 2026-10-08)
+            const madeSchedule = key === 'ops' ? syncOpsWorkSchedule(key, work) : createScheduleFromIntake(key, work);
             if (madeSchedule) {
                 renderCalendar();
                 if (typeof renderTodaySchedule === 'function') renderTodaySchedule(currentUserName);
@@ -27571,6 +27630,8 @@ const QUOTE_TEMPLATES = [
                 if (w.visitDateAtIntake === undefined) w.visitDateAtIntake = (w.extra || {}).visitDate || '';
                 w.extra = w.extra || {};
                 w.extra.visitDate = v('visitdate');
+                // 방문 예정일을 고쳤으면 캘린더 일정도 따라 옮깁니다 (없던 일정은 새로 만듦 · UAT 2026-10-08)
+                if (syncOpsWorkSchedule(key, w) && typeof renderCalendar === 'function') renderCalendar();
             }
             return w;
         }
@@ -27869,6 +27930,7 @@ const QUOTE_TEMPLATES = [
 
             touchWork(work);
             c.works.unshift(work);
+            syncOpsWorkSchedule(key, work);       // 설치요청일이 있으면 캘린더에 저절로 (UAT 2026-10-08)
             wcEl(key, 'install-form').reset();
             renderWorkInstallIntake(key, true);   // 다음 접수번호 · 등록시간으로 폼을 새로 맞춤
             renderWorkIntakeReceipt(key);         // 다른 접수 폼의 접수번호 미리보기도 같이 밀어 줌
@@ -28077,32 +28139,13 @@ const QUOTE_TEMPLATES = [
             });
             // 설치장비가 바뀌면 목록·캘린더에 보이는 제목도 함께 맞춥니다
             w.title = `${w.installDevices || '장비'} 설치`;
-            // 설치요청일·시간을 고쳤고 캘린더에 연결된 일정이 있으면 그 일정도 따라 옮깁니다 (2026-09-16)
-            if (w.scheduleId) {
-                const sch = schedules.find(s => s.id === w.scheduleId);
-                if (sch && (sch.date !== w.installReqDate || (!sch.allDay && w.installReqTime && sch.startTime !== w.installReqTime))) {
-                    if (w.installReqDate) sch.date = w.installReqDate;
-                    if (w.installReqTime && !sch.allDay && sch.startTime !== w.installReqTime) {
-                        // 종료 시간은 시작 시간과 같은 간격으로 함께 밉니다 (끝이 시작보다 앞서지 않게)
-                        const toMin = t => { const [h, m] = String(t || '').split(':').map(Number); return isNaN(h) ? null : h * 60 + (m || 0); };
-                        const a = toMin(sch.startTime), b = toMin(sch.endTime), n = toMin(w.installReqTime);
-                        if (a !== null && b !== null && n !== null) {
-                            const e = Math.min(23 * 60 + 59, Math.max(n, n + (b - a)));
-                            sch.endTime = `${String(Math.floor(e / 60)).padStart(2, '0')}:${String(e % 60).padStart(2, '0')}`;
-                        }
-                        sch.startTime = w.installReqTime;
-                    }
-                    sch.title = w.title;
-                    saveSchedules();
-                    if (typeof renderCalendar === 'function') renderCalendar();
-                }
-            }
-
             w.installEngineer = el('engineer').value;
             w.installDate = el('date').value;
             w.installTime = el('time').value;
             w.installReason = el('reason').value;
             w.installNote = el('note').value.trim();
+            // 설치일자(확정) · 설치요청일이 바뀌면 캘린더 일정도 따라 옮깁니다 — 설치일자가 있으면 그 날 · 시간이 우선 (UAT 2026-10-08)
+            if (syncOpsWorkSchedule(key, w) && typeof renderCalendar === 'function') renderCalendar();
             return w;
         }
 
@@ -57107,6 +57150,7 @@ const QUOTE_TEMPLATES = [
             };
             touchWork(work);
             c.works.unshift(work);
+            syncOpsWorkSchedule('ops', work);   // 설치 희망일이 있으면 캘린더에 저절로 (UAT 2026-10-08)
             saveWorks();
 
             x.workId = work.id;
