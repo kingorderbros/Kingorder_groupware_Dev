@@ -1828,6 +1828,18 @@
                     </a>
                 </div>
 
+                <!-- IT본부 (2026-10-08 UAT) — 전용 업무 화면 'IT업무센터' : IT 프로젝트 관리 · 개발요청 현황 -->
+                <a href="#" onclick="toggleSubmenu('submenu-it'); navigate('it', this)" id="nav-it" class="nav-item flex justify-between items-center px-3 py-2 rounded-md hover:bg-slate-800/70 transition-colors hidden">
+                    <div><i class="fas fa-laptop-code w-5 mr-2 text-cyan-400"></i><span id="nav-it-label"> IT본부 </span></div>
+                    <i class="fas fa-chevron-down text-xs transition-transform duration-200" id="icon-submenu-it"></i>
+                </a>
+                <div id="submenu-it" class="space-y-1">
+                    <a href="#" onclick="navigate('it-work-center', this)" id="nav-it-work-center" class="nav-item flex items-center justify-between px-3 py-2 pl-10 rounded-md hover:bg-slate-800/70 transition-colors text-sm text-gray-300 hidden">
+                        <div><i class="fas fa-diagram-project w-4 mr-1 text-cyan-400"></i> IT업무센터</div>
+                        <span id="nav-it-work-center-badge" class="hidden ml-auto bg-amber-500 text-white text-xs font-bold rounded-full px-2 leading-5"></span>
+                    </a>
+                </div>
+
                 <!-- 타 본부 메뉴 — 다른 부서의 화면 하나만 쓰는 사람에게는
                      그 본부메뉴를 통째로 보여 주지 않고 실제로 들어가는 메뉴명만 한 줄로 내놓습니다.
                      내용은 renderCrossDeptMenus() 가 CROSS_DEPT_MENUS 를 보고 채웁니다. -->
@@ -3292,6 +3304,9 @@
                 <!-- 5. 결제본부 섹션 -->
 
                 <!-- ============================================================= -->
+                <!-- IT본부 - IT업무센터 (2026-10-08 UAT). 내용은 renderItWorkCenter() 가 그립니다 -->
+                <section id="sec-it-work-center" class="content-section hidden"></section>
+
                 <!-- 5-1. 조직도 (전사 공개) — 팀별 카드. 내용은 renderOrgChart() 가 그립니다 -->
                 <section id="sec-org-chart" class="content-section hidden"></section>
 
@@ -9779,6 +9794,7 @@ const QUOTE_TEMPLATES = [
             'payment-work-center': '결제업무센터 (Payment Work Center)',
             'management': '관리본부 현황 (Management HQ)',
             'management-work-center': '관리업무센터 (Management Work Center)',
+            'it-work-center': 'IT업무센터 (IT Work Center)',
             'management-vehicle': '관리업무센터 (Management Work Center)',   // 옛 경로 — 관리업무센터로 들어옵니다
 
             'org-chart': '조직도 (Org Chart)',
@@ -10604,6 +10620,16 @@ const QUOTE_TEMPLATES = [
                         ]
                     },
                     {
+                        id: 'it', name: 'IT본부', children: [
+                            {
+                                id: 'it-work-center', name: 'IT업무센터', children: [
+                                    { id: 'it-wc-projects', name: 'IT 프로젝트' },
+                                    { id: 'it-wc-dev', name: '개발요청 현황' }
+                                ]
+                            }
+                        ]
+                    },
+                    {
                         id: 'common', name: '공통관리', children: [
                             { id: 'common-customers', name: '업체 관리' },
                             { id: 'common-contract', name: '계약관리' },
@@ -10682,7 +10708,7 @@ const QUOTE_TEMPLATES = [
 
         let permissionGroups = [
             { id: 'admin', name: '관리자 그룹', permissions: pagesConfig.map(p => p.id) },
-            { id: 'management', name: '경영진 그룹', permissions: ['dashboard-personal', 'exec-center', 'collab-center', 'project-center', 'inbound-center', 'inbound-kob', 'calendar-center', 'sales', 'ops', 'payment', 'payment-work-center', 'management', 'management-work-center', 'management-vehicle', 'management-card', 'card-perm', 'management-org', 'org-chart', 'common'] },
+            { id: 'management', name: '경영진 그룹', permissions: ['it', 'it-work-center', 'it-wc-projects', 'it-wc-dev', 'dashboard-personal', 'exec-center', 'collab-center', 'project-center', 'inbound-center', 'inbound-kob', 'calendar-center', 'sales', 'ops', 'payment', 'payment-work-center', 'management', 'management-work-center', 'management-vehicle', 'management-card', 'card-perm', 'management-org', 'org-chart', 'common'] },
             // 영업 그룹에도 payment-work-center 를 부여 — 결제본부가 보낸 보완서류 요청을 처리해야 하므로
             // '영업본부 > 보완서류 제출함' 입구로 같은 화면에 들어옵니다(화면은 역할에 따라 다르게 표시).
             { id: 'sales', name: '영업 그룹', permissions: ['dashboard-personal', 'collab-center', 'project-center', 'inbound-center', 'inbound-kob', 'calendar-center', 'sales', 'sales-work-center', 'sales-supply', 'sales-customers', 'sales-consulting', 'sales-quote', 'payment-work-center', 'management-card', 'org-chart', 'common'] },
@@ -10691,7 +10717,7 @@ const QUOTE_TEMPLATES = [
             { id: 'management-hq', name: '관리본부 그룹', permissions: ['dashboard-personal', 'collab-center', 'project-center', 'calendar-center', 'management', 'management-work-center', 'management-vehicle', 'management-card', 'card-perm', 'org-chart'] },
             // IT 그룹 — 외주 개발 의뢰(파트너센터 › IT본부 › 개발요청)를 맡습니다.
             // IT본부는 아직 전용 업무센터 화면이 없어 부서 메뉴 없이 공용 메뉴 + 개발요청만 씁니다. (2026-09-05)
-            { id: 'it', name: 'IT 그룹', permissions: ['dashboard-personal', 'collab-center', 'project-center', 'calendar-center', 'partner-center-it', 'management-card', 'org-chart', 'common'] }
+            { id: 'it', name: 'IT 그룹', permissions: ['dashboard-personal', 'collab-center', 'project-center', 'calendar-center', 'partner-center-it', 'management-card', 'org-chart', 'common', 'it', 'it-work-center', 'it-wc-projects', 'it-wc-dev'] }
             // '외주업체 그룹 (인바운드 대행)' 은 없앴습니다 (2026-09-08).
             // 인바운드 상담 대행사는 그룹웨어가 아니라 **파트너센터**(?mode=partner)로 들어와
             // 영업본부 › 인바운드 접수만 씁니다. 사내 시스템에 문을 하나 더 둘 까닭이 없습니다.
@@ -10805,6 +10831,12 @@ const QUOTE_TEMPLATES = [
             // PARTNER_CENTER_GRANTS 는 '코드 기본값' 이라 저장된 설정이 있으면 덮여 사라지므로,
             // **새로 생긴 접수함만** 골라 그 본부 그룹에 다시 채웁니다. (2026-09-14 운영본부 신설)
             // 새 접수함을 또 만들면 아래 목록에 그 id 를 한 줄 더 입력해 주세요.
+            // IT업무센터 (2026-10-08) — 저장된 설정에도 IT 그룹 · 경영진 그룹에 채웁니다(위 자료실과 같은 방식)
+            ['it', 'management'].forEach(gid => {
+                const g = permissionGroups.find(x => x.id === gid);
+                if (!g) return;
+                ['it', 'it-work-center', 'it-wc-projects', 'it-wc-dev'].forEach(id => { if (g.permissions.indexOf(id) < 0) g.permissions.push(id); });
+            });
             const NEW_PARTNER_CENTER_IDS = ['partner-center-ops'];
             Object.keys(PARTNER_CENTER_GRANTS).forEach(gid => {
                 const g = permissionGroups.find(x => x.id === gid);
@@ -10831,7 +10863,7 @@ const QUOTE_TEMPLATES = [
         //   coveredBy — 이 권한이 있으면 다른 줄이 같은 화면을 이미 내놓으므로 건너뜁니다
         //   alias     — 이미 다른 본부 아래에 자리가 있는 경우. 그 자리를 쓰고, 이름도 그쪽 이름으로 보여 줍니다
         // 사이드바에 '본부메뉴' 로 나오는 최상위 항목들
-        const DEPT_ROOT_MENU_IDS = ['sales', 'ops', 'payment', 'management'];
+        const DEPT_ROOT_MENU_IDS = ['sales', 'ops', 'payment', 'management', 'it'];
 
         const CROSS_DEPT_MENUS = [
             { parent: 'sales', perm: 'sales-work-center', go: 'sales-work-center',
@@ -10978,6 +11010,11 @@ const QUOTE_TEMPLATES = [
             const seesPayment = isAllowed('payment');
             document.getElementById('nav-payment').classList.toggle('hidden', !seesPayment);
             document.getElementById('nav-payment-work-center').classList.toggle('hidden', !seesPayment || !canUseScreen('payment-work-center'));
+
+            // IT본부 — IT업무센터 (2026-10-08)
+            const seesIt = isAllowed('it');
+            document.getElementById('nav-it').classList.toggle('hidden', !seesIt);
+            document.getElementById('nav-it-work-center').classList.toggle('hidden', !seesIt || !canUseScreen('it-work-center'));
 
             const seesMgmt = isAllowed('management');
             const seesMgmtCenter = canUseScreen('management-work-center') || isAllowed('management-card');
@@ -12512,6 +12549,11 @@ const QUOTE_TEMPLATES = [
             }
             // 관리본부는 전용 대시보드가 없어 하위 메뉴(관리업무센터)로 이동합니다.
             // 법인차량관리는 관리업무센터 안의 탭이 되었으므로 옛 경로도 여기로 보냅니다.
+            // IT본부도 전용 대시보드가 없어 IT업무센터로 보냅니다 (2026-10-08)
+            if (sectionId === 'it') {
+                navigate('it-work-center', document.getElementById('nav-it-work-center'));
+                return;
+            }
             if (sectionId === 'management' || sectionId === 'management-vehicle') {
                 navigate('management-work-center', document.getElementById('nav-management-work-center'));
                 return;
@@ -12599,6 +12641,8 @@ const QUOTE_TEMPLATES = [
                 renderPaymentWorkCenter();   // 활성 탭에 맞춰 렌더
             } else if (sectionId === 'sales') {
                 renderSalesDashboard();
+            } else if (sectionId === 'it-work-center') {
+                renderItWorkCenter();
             } else if (sectionId === 'management-work-center') {
                 renderVehicleCenter();   // 활성 탭(법인차량 3종)에 맞춰 렌더 · 탭별 데이터 동기화 포함
             } else if (sectionId === 'org-chart') {
@@ -19266,6 +19310,9 @@ const QUOTE_TEMPLATES = [
             if (currentProjectId && !list.some(p => p.id === currentProjectId)) currentProjectId = null;
             if (!currentProjectId && list.length) currentProjectId = list[0].id;
             renderProjectDetail();
+            // IT업무센터에서 프로젝트를 등록 · 수정했으면 그 화면도 새로 그립니다 (2026-10-08)
+            const itSec = document.getElementById('sec-it-work-center');
+            if (itSec && !itSec.classList.contains('hidden')) renderItWorkCenter();
         }
 
         // ---------- 본부별 보기 ----------
@@ -19791,6 +19838,166 @@ const QUOTE_TEMPLATES = [
             if (currentProjectId === id) currentProjectId = null;
             closeProjectModal();
             renderProjectCenter();
+        }
+
+        // ==================== IT본부 - IT업무센터 (2026-10-08 UAT) ====================
+        // IT본부 전용 업무 화면입니다. 탭 두 개:
+        //   · IT 프로젝트 — 프로젝트 관리의 자료 중 주관 본부가 IT본부(dept 'it')인 것만 모아 KPI · 카드로 봅니다.
+        //                   등록은 같은 프로젝트 창(주관 본부 IT본부로 고정해 열기), WBS · 간트 · 이슈는 카드를 눌러 프로젝트 관리에서.
+        //   · 개발요청 현황 — 파트너센터 › IT본부 개발요청(devRequests)의 진행 현황 요약. 상세는 기존 창 그대로.
+        let itWcTab = 'projects';
+        let itPrjFilter = 'open';    // open(계획 · 진행) | hold | done | all
+        const IT_WC_TABS = [
+            { id: 'projects', name: 'IT 프로젝트', icon: 'fa-diagram-project', perm: 'it-wc-projects',
+              desc: 'IT본부가 주관하는 프로젝트의 일정 · WBS 진척 · 지연을 한눈에 봅니다. 카드를 누르면 프로젝트 관리에서 WBS · 간트 · 이슈를 다룹니다.' },
+            { id: 'dev', name: '개발요청 현황', icon: 'fa-laptop-code', perm: 'it-wc-dev',
+              desc: '파트너사에 보낸 개발요청의 진행 상황입니다. 줄을 누르면 개발요청 상세가 열립니다.' }
+        ];
+        function itProjects() { return visibleProjects().filter(p => p.dept === 'it'); }
+        function setItWcTab(id) { itWcTab = id; renderItWorkCenter(); }
+        function setItPrjFilter(f) { itPrjFilter = f; renderItWorkCenter(); }
+        function openItProjectModal() {
+            openProjectModal();
+            const sel = document.getElementById('prj-dept');
+            if (sel) sel.value = 'it';                 // 주관 본부를 IT본부로 미리 맞춥니다
+        }
+        function openItProjectDetail(id) {
+            currentProjectId = id;
+            projectDeptFilter = 'it';
+            navigate('project-center', document.getElementById('nav-project-center'));
+        }
+        function renderItWorkCenter() {
+            const host = document.getElementById('sec-it-work-center');
+            if (!host) return;
+            const tabs = IT_WC_TABS.filter(t => canSeePage(t.perm));
+            if (!tabs.length) { host.innerHTML = '<p class="text-sm text-gray-400 p-8 text-center">IT업무센터에서 볼 수 있는 탭이 없습니다.</p>'; return; }
+            if (!tabs.some(t => t.id === itWcTab)) itWcTab = tabs[0].id;
+            const cur = tabs.find(t => t.id === itWcTab);
+            const tabBar = tabs.length > 1 ? `<div class="bg-white rounded-t-lg border border-b-0 border-gray-200"><div class="flex gap-1 p-2 overflow-x-auto">
+                ${tabs.map(t => `<button type="button" onclick="setItWcTab('${t.id}')" class="px-3 py-2 rounded-md text-sm font-medium whitespace-nowrap transition-colors ${t.id === itWcTab ? 'bg-cyan-600 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-100'}"><i class="fas ${t.icon} mr-1"></i>${escapeHtml(t.name)}</button>`).join('')}
+            </div></div>` : '';
+            host.innerHTML = `
+                <div class="mb-4">
+                    <h3 class="text-lg font-bold text-gray-800">IT업무센터</h3>
+                    <p class="text-gray-500 text-sm">IT본부의 프로젝트와 개발요청을 한 곳에서 관리합니다.</p>
+                </div>
+                ${tabBar}
+                <div class="bg-white border border-gray-200 ${tabs.length > 1 ? 'rounded-b-lg' : 'rounded-lg'} px-4 py-3 mb-4"><p class="text-sm text-gray-600">${escapeHtml(cur.desc)}</p></div>
+                <div id="it-wc-body">${itWcTab === 'dev' ? itDevTabHtml() : itProjectTabHtml()}</div>`;
+            // 사이드바 배지 — IT 프로젝트의 지연 WBS 수
+            const badge = document.getElementById('nav-it-work-center-badge');
+            if (badge) {
+                const n = itProjects().filter(p => p.status !== 'done').reduce((s, p) => s + projectDelays(p).length, 0);
+                badge.textContent = n; badge.classList.toggle('hidden', !n);
+            }
+        }
+        function itProjectTabHtml() {
+            recalcAllWbsRollups();
+            const all = itProjects();
+            const today = ymd(new Date());
+            const active = all.filter(p => p.status === 'planning' || p.status === 'active');
+            const delayCnt = active.reduce((n, p) => n + projectDelays(p).length, 0);
+            const soon = active.reduce((n, p) => n + wbsLeaves(p).filter(w => {
+                if (w.status === 'done' || !w.endPlan) return false;
+                const d = Math.round((new Date(w.endPlan) - new Date(today)) / 86400000);
+                return d >= 0 && d <= 7;
+            }).length, 0);
+            const avg = active.length ? Math.round(active.reduce((s, p) => s + projectProgress(p), 0) / active.length) : 0;
+            const kpi = (label, val, cls, icon) => `<div class="bg-white p-4 rounded-lg shadow-sm border-l-4 ${cls}">
+                    <p class="text-xs text-gray-500"><i class="fas ${icon} mr-1"></i>${label}</p><p class="text-2xl font-bold text-gray-800 mt-1">${val}</p></div>`;
+            const filters = [
+                { id: 'open', name: '진행 중 (계획 · 진행)', n: active.length },
+                { id: 'hold', name: '보류', n: all.filter(p => p.status === 'hold').length },
+                { id: 'done', name: '완료', n: all.filter(p => p.status === 'done').length },
+                { id: 'all',  name: '전체', n: all.length }
+            ];
+            const list = all.filter(p => itPrjFilter === 'all' ? true : itPrjFilter === 'open' ? (p.status === 'planning' || p.status === 'active') : p.status === itPrjFilter)
+                .sort((a, b) => String(a.endPlan || '').localeCompare(String(b.endPlan || '')));
+            const card = p => {
+                const st = PROJECT_STATUS[p.status] || PROJECT_STATUS.planning;
+                const prog = projectProgress(p);
+                const leaves = wbsLeaves(p);
+                const doneW = leaves.filter(w => w.status === 'done').length;
+                const dl = projectDelays(p).length;
+                const openIssues = (p.issues || []).filter(i => !i.resolved).length;
+                const dday = p.endPlan && p.status !== 'done' ? Math.round((new Date(p.endPlan) - new Date(today)) / 86400000) : null;
+                return `<button type="button" onclick="openItProjectDetail('${escapeHtml(p.id)}')" title="프로젝트 관리에서 WBS · 간트 · 이슈 보기"
+                        class="text-left bg-white rounded-lg border ${dl ? 'border-red-200' : 'border-gray-200'} shadow-sm p-4 hover:border-cyan-400 hover:shadow transition">
+                    <div class="flex items-start justify-between gap-2">
+                        <p class="font-semibold text-gray-800 truncate">${escapeHtml(p.name)}</p>
+                        <span class="shrink-0 text-xs px-2 py-0.5 rounded border ${st.chip}">${st.name}</span>
+                    </div>
+                    <p class="text-xs text-gray-500 mt-1"><i class="fas fa-user-tie mr-1 text-gray-400"></i>PM ${escapeHtml(p.owner || '-')} · ${escapeHtml(p.startPlan || '-')} ~ ${escapeHtml(p.endPlan || '-')}
+                        ${dday !== null ? `<span class="ml-1 font-semibold ${dday < 0 ? 'text-red-600' : dday <= 7 ? 'text-amber-600' : 'text-gray-500'}">${dday < 0 ? `D+${-dday}` : `D-${dday}`}</span>` : ''}</p>
+                    <div class="mt-3 flex items-center gap-2">
+                        <div class="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden"><div class="h-2 ${prog >= 100 ? 'bg-blue-500' : 'bg-cyan-500'}" style="width:${prog}%"></div></div>
+                        <span class="text-xs font-semibold text-gray-700 w-9 text-right">${prog}%</span>
+                    </div>
+                    <div class="mt-2 flex flex-wrap gap-1.5 text-[11px]">
+                        <span class="px-1.5 py-0.5 rounded bg-gray-100 text-gray-600">WBS ${doneW}/${leaves.length}</span>
+                        ${dl ? `<span class="px-1.5 py-0.5 rounded bg-red-50 text-red-700"><i class="fas fa-triangle-exclamation mr-0.5"></i>지연 ${dl}</span>` : ''}
+                        ${openIssues ? `<span class="px-1.5 py-0.5 rounded bg-amber-50 text-amber-700"><i class="fas fa-circle-exclamation mr-0.5"></i>이슈 ${openIssues}</span>` : ''}
+                    </div>
+                    ${p.description ? `<p class="text-xs text-gray-400 mt-2 line-clamp-2">${escapeHtml(p.description)}</p>` : ''}
+                </button>`;
+            };
+            return `
+                <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+                    ${kpi('진행 중 프로젝트', active.length + '건', 'border-cyan-500', 'fa-diagram-project')}
+                    ${kpi('지연 WBS', delayCnt + '건', 'border-red-500', 'fa-triangle-exclamation')}
+                    ${kpi('7일 안 마감 WBS', soon + '건', 'border-amber-500', 'fa-hourglass-half')}
+                    ${kpi('평균 진척률', avg + '%', 'border-blue-500', 'fa-chart-line')}
+                </div>
+                <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+                    <div class="flex flex-wrap gap-1.5">
+                        ${filters.map(f => `<button type="button" onclick="setItPrjFilter('${f.id}')" class="px-3 py-1.5 rounded-full text-sm ${itPrjFilter === f.id ? 'bg-cyan-600 text-white' : 'bg-white border border-gray-300 text-gray-600 hover:bg-gray-50'}">${escapeHtml(f.name)} <span class="ml-0.5 text-xs opacity-80">${f.n}</span></button>`).join('')}
+                    </div>
+                    <div class="flex gap-2">
+                        <button type="button" onclick="projectDeptFilter = 'it'; navigate('project-center', document.getElementById('nav-project-center'))" class="px-3 py-2 text-sm rounded border border-gray-300 bg-white text-gray-700 hover:bg-gray-50"><i class="fas fa-chart-gantt mr-1"></i>프로젝트 관리에서 보기</button>
+                        <button type="button" onclick="openItProjectModal()" class="px-4 py-2 text-sm rounded bg-cyan-600 hover:bg-cyan-700 text-white"><i class="fas fa-plus mr-1"></i>IT 프로젝트 등록</button>
+                    </div>
+                </div>
+                ${list.length ? `<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">${list.map(card).join('')}</div>`
+                    : `<div class="bg-white border border-dashed border-gray-300 rounded-lg p-10 text-center text-sm text-gray-400">
+                        <i class="fas fa-diagram-project text-3xl block mb-2 text-gray-300"></i>
+                        ${all.length ? '이 조건에 해당하는 IT 프로젝트가 없습니다.' : '아직 IT본부 프로젝트가 없습니다. [IT 프로젝트 등록] 으로 시작해 보세요.'}</div>`}`;
+        }
+        function itDevTabHtml() {
+            const all = (typeof devRequests !== 'undefined' ? devRequests : []).filter(x => x.status !== 'draft');
+            const open = all.filter(x => DEV_OPEN_STATUSES.indexOf(x.status) > -1);
+            const late = open.filter(x => devOverdue(x)).length;
+            const count = k => all.filter(x => x.status === k).length;
+            const chips = DEV_STATUS_FLOW.filter(k => k !== 'draft').map(k => `<span class="text-xs px-2 py-1 rounded border ${DEV_STATUS[k].chip}"><i class="fas ${DEV_STATUS[k].icon} mr-1"></i>${DEV_STATUS[k].name} ${count(k)}</span>`).join('');
+            const list = open.slice().sort((a, b) => String(a.dueDate || '9999').localeCompare(String(b.dueDate || '9999'))).slice(0, 20);
+            return `
+                <div class="grid grid-cols-2 lg:grid-cols-3 gap-3 mb-4">
+                    <div class="bg-white p-4 rounded-lg shadow-sm border-l-4 border-cyan-500"><p class="text-xs text-gray-500">진행 중 개발요청</p><p class="text-2xl font-bold text-gray-800 mt-1">${open.length}건</p></div>
+                    <div class="bg-white p-4 rounded-lg shadow-sm border-l-4 border-red-500"><p class="text-xs text-gray-500">희망 완료일 지남</p><p class="text-2xl font-bold text-gray-800 mt-1">${late}건</p></div>
+                    <div class="bg-white p-4 rounded-lg shadow-sm border-l-4 border-green-500"><p class="text-xs text-gray-500">검수완료</p><p class="text-2xl font-bold text-gray-800 mt-1">${count('done')}건</p></div>
+                </div>
+                <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+                    <div class="flex flex-wrap gap-1.5">${chips}</div>
+                    ${canSeePage('partner-center-it') ? `<button type="button" onclick="navigate('partner-center-it', document.getElementById('nav-partner-center-it'))" class="px-3 py-2 text-sm rounded bg-cyan-600 hover:bg-cyan-700 text-white"><i class="fas fa-arrow-up-right-from-square mr-1"></i>개발요청 전체 · 의뢰서 작성</button>` : ''}
+                </div>
+                <div class="bg-white rounded-lg border border-gray-200 overflow-x-auto">
+                    <table class="w-full text-sm min-w-[720px]">
+                        <thead><tr class="bg-gray-50 text-xs text-gray-500 border-b border-gray-200">
+                            <th class="p-3 text-left font-medium">번호</th><th class="p-3 text-left font-medium">제목</th><th class="p-3 text-left font-medium">파트너사</th>
+                            <th class="p-3 text-left font-medium">희망 완료일</th><th class="p-3 text-left font-medium w-40">진행율</th><th class="p-3 text-left font-medium">상태</th>
+                        </tr></thead>
+                        <tbody>${list.length ? list.map(x => {
+                            const lt = devOverdue(x);
+                            return `<tr onclick="openDevDetail('${escapeHtml(x.id)}')" class="border-b border-gray-100 cursor-pointer hover:bg-cyan-50/40" title="클릭하여 상세 보기">
+                                <td class="p-3 text-gray-500 tabular-nums whitespace-nowrap">${escapeHtml(x.id)}</td>
+                                <td class="p-3 max-w-[300px]"><span class="block truncate font-medium text-gray-800">${escapeHtml(x.title || '')}</span></td>
+                                <td class="p-3 whitespace-nowrap text-gray-700">${escapeHtml(x.partnerName || '-')}</td>
+                                <td class="p-3 whitespace-nowrap ${lt ? 'text-red-600 font-bold' : 'text-gray-600'}">${escapeHtml(x.dueDate || '-')}${lt ? ' · 지연' : ''}</td>
+                                <td class="p-3">${devProgressBar(x)}</td>
+                                <td class="p-3 whitespace-nowrap">${devStatusBadge(x.status)}</td>
+                            </tr>`; }).join('') : '<tr><td colspan="6" class="p-8 text-center text-gray-400">진행 중인 개발요청이 없습니다.</td></tr>'}</tbody>
+                    </table>
+                </div>
+                ${open.length > 20 ? `<p class="text-xs text-gray-400 mt-2">희망 완료일이 가까운 20건만 보여 줍니다. 전체는 [개발요청 전체] 에서 봅니다.</p>` : ''}`;
         }
 
         // ---------- WBS 등록/수정 ----------
@@ -37433,7 +37640,7 @@ const QUOTE_TEMPLATES = [
         // 사이드바의 본부 이름을 조직 마스터 이름으로 맞춥니다.
         // (사이드바 '관리본부' 는 부서가 아니라 관리업무센터 메뉴 묶음이라 여기서 다루지 않습니다)
         function syncDeptMenuNames() {
-            const map = { sales: 'nav-sales-label', ops: 'nav-ops-label', payment: 'nav-payment-label' };
+            const map = { sales: 'nav-sales-label', ops: 'nav-ops-label', payment: 'nav-payment-label', it: 'nav-it-label' };
             Object.keys(map).forEach(id => {
                 const el = document.getElementById(map[id]);
                 if (el) el.innerText = ' ' + deptName(id) + ' ';
@@ -41561,7 +41768,7 @@ const QUOTE_TEMPLATES = [
         // **탭 하나만 열어 줘도 그 화면에는 들어갈 수 있어야 하므로**, 화면 권한을 따로 켤 필요가 없습니다.
         // (예: 결제본부에 '계약 및 클로징 관리' 하나만 주면 영업업무센터 권한 없이도 그 탭만 씁니다)
         const TAB_CONTAINER_MENU_IDS = [
-            'sales-work-center', 'ops-work-center', 'payment-work-center', 'management-work-center', 'sales-supply'
+            'sales-work-center', 'ops-work-center', 'payment-work-center', 'management-work-center', 'sales-supply', 'it-work-center'
         ];
         // 그 화면을 사용 가능한가 — 화면 권한이 있거나, 그 안의 탭 권한이 하나라도 있으면 됩니다
         function canUseScreen(id) {
