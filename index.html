@@ -17000,16 +17000,23 @@ const QUOTE_TEMPLATES = [
                             <span class="bg-white/70 text-gray-700 rounded-full px-1.5">${count}</span>
                         </button>`;
             }).join('');
-            const reset = activeId
-                ? `<button type="button" onclick="filterCalendarBy('')" class="text-xs text-gray-500 hover:text-gray-700 underline ml-1">전체 보기</button>`
-                : '';
-            el.innerHTML = `<span class="text-xs font-semibold text-gray-500 mr-1">캘린더</span>${chips}${reset}`;
+            // '전체 보기' — 맨 왼쪽에 항상 둡니다. 어느 캘린더를 골랐든 누르면 전체 캘린더로 (UAT 2026-10-08)
+            // 건수는 올해 생일만 세는 위 칩과 같은 기준으로 합칩니다.
+            const thisYear = String(new Date().getFullYear());
+            const total = visibleSchedules.filter(s => !isBirthdaySchedule(s) || String(s.date).slice(0, 4) === thisYear).length;
+            const allRing = activeId ? 'bg-white text-gray-600 border border-gray-300 hover:bg-gray-50' : 'bg-gray-700 text-white ring-2 ring-offset-1 ring-gray-400';
+            const all = `<button type="button" onclick="filterCalendarBy('')" title="모든 캘린더의 일정을 함께 봅니다" class="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition-all ${allRing}">
+                            <i class="fas fa-layer-group"></i>전체 보기
+                            <span class="${activeId ? 'bg-gray-100 text-gray-700' : 'bg-white/25 text-white'} rounded-full px-1.5">${total}</span>
+                        </button>`;
+            el.innerHTML = `<span class="text-xs font-semibold text-gray-500 mr-1">캘린더</span>${all}${chips}`;
         }
 
         // 범례 클릭 → 필터 셀렉트와 동기화
+        // 같은 캘린더를 다시 누르면 풀리고, '전체 보기'('')는 언제 눌러도 전체로 돌아갑니다.
         function filterCalendarBy(calId) {
             const sel = document.getElementById('calendar-filter-cal');
-            if (sel) sel.value = sel.value === calId ? '' : calId;
+            if (sel) sel.value = (!calId || sel.value === calId) ? '' : calId;
             renderCalendar();
         }
 
