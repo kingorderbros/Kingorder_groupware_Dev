@@ -12466,6 +12466,7 @@ const QUOTE_TEMPLATES = [
         // 화면 제목 — 같은 화면이라도 '어느 메뉴로 들어왔는가' 에 따라 다르게 보여 줍니다.
         // (예: 관리업무센터 화면에 법인카드만 보이는 사람에게는 '법인카드 사용내역' 으로)
         function pageTitleFor(sectionId) {
+            if (sectionId === 'payment-work-center' && payWcViaSalesMenu) return PAY_WC_SALES_ENTRY.name;
             const cm = crossDeptMenuFor(sectionId);
             if (cm) return crossDeptMenuName(cm);
             return pageTitles[sectionId] || '킹오더브라더스 그룹웨어';
@@ -12533,6 +12534,12 @@ const QUOTE_TEMPLATES = [
                 settingsActiveTab = SETTINGS_TAB_ALIASES[sectionId];
                 navigate('settings', document.getElementById('nav-settings'));
                 return;
+            }
+
+            // 결제업무센터는 두 메뉴(결제본부 > 결제업무센터 · 영업본부 > 보완서류 제출함)로 들어옵니다.
+            // 어느 메뉴를 눌렀는지 기억해 제목을 그 메뉴명으로 맞춥니다. 실시간 다시 그리기는 그대로 둡니다.
+            if (sectionId === 'payment-work-center' && !window.__gwNavSilent && element) {
+                payWcViaSalesMenu = element.id === 'nav-sales-doc-supplement';
             }
 
             // 모든 콘텐츠 섹션 숨기기
@@ -43485,14 +43492,23 @@ const QUOTE_TEMPLATES = [
             }
         ];
         let payWcActiveTab = 'docs';
+        // '영업본부 > 보완서류 제출함' 메뉴로 들어왔는지 (navigate 가 정함)
+        let payWcViaSalesMenu = false;
+        const PAY_WC_SALES_ENTRY = { name: '보완서류 제출함', lead: '결제본부가 요청한 <b>보완서류</b>를 확인하고 제출합니다.' };
 
         function renderPaymentWorkCenter() {
             const payTabs = PAY_WC_TABS.filter(t => canSeePage(t.perm));
             if (payTabs.length && !payTabs.some(t => t.id === payWcActiveTab)) payWcActiveTab = payTabs[0].id;
 
             // 타 본부 메뉴로 들어왔으면(영업본부의 '보완서류 제출함') 제목·설명을 그 이름으로 보여 줍니다
-            applySectionHeading('payment-work-center', 'paywc-center-title', 'paywc-center-lead',
-                '결제업무센터', 'PG/VAN 가맹등록 관련 업무를 업무유형 탭으로 나눠 처리합니다.');
+            // 결제본부 권한도 있는 사람이 '보완서류 제출함' 을 눌렀을 때도 그 이름으로 (UAT 2026-10-08)
+            if (payWcViaSalesMenu) {
+                document.getElementById('paywc-center-title').textContent = PAY_WC_SALES_ENTRY.name;
+                document.getElementById('paywc-center-lead').innerHTML = PAY_WC_SALES_ENTRY.lead;
+            } else {
+                applySectionHeading('payment-work-center', 'paywc-center-title', 'paywc-center-lead',
+                    '결제업무센터', 'PG/VAN 가맹등록 관련 업무를 업무유형 탭으로 나눠 처리합니다.');
+            }
             toggleOneTabLayout('paywc-tabs', 'paywc-tab-desc', payTabs.length < 2);
             const bar = document.getElementById('paywc-tabs');
             if (bar) {
