@@ -51415,9 +51415,10 @@ const QUOTE_TEMPLATES = [
         // 구매계약서가 아니라 무상임대계약서를 쓰고, 장비비용 · 위약금을 얼마나 떠안을지 정합니다.
         const PARTNER_DONATE_FIELDS = [
             // 2026-10-07 — 다른 접수와 같은 [검색] 칸. 고르면 주소를 아래 '설치 주소'(dnAddr) 에 채웁니다
-            { key: 'dnTo', label: '지원 대상 (가맹점 · 병원)', type: 'text', lookup: 'shop', lookupAddr: 'dnAddr', required: true, noSum: true,
+            // lookupNewShop — 검색해도 없으면 '신규 가맹점 개설을 먼저 접수' 안내 + 바로 가기 (UAT 2026-10-08)
+            { key: 'dnTo', label: '지원 대상 (가맹점 · 병원)', type: 'text', lookup: 'shop', lookupAddr: 'dnAddr', lookupNewShop: true, required: true, noSum: true,
               placeholder: '지원 대상 상호를 입력하고 [검색] 을 눌러 주세요',
-              hint: '킹오더브라더스에 등록된 우리 업체와 소속 가맹점에서 찾습니다. 신규 오픈 매장은 상호를 직접 입력해 주세요.' },
+              hint: '킹오더브라더스에 등록된 우리 업체와 소속 가맹점에서 찾습니다. 조회되지 않는 신규 오픈 매장은 신규 가맹점 개설을 먼저 접수해 주세요.' },
             { key: 'dnAddr', label: '설치 주소', type: 'address', required: true, noSum: true },
             // 2026-10-07 — 장비비용 · 위약금 지원비율을 지원 사유 위로
             { key: 'dnCostRate', label: '장비비용 지원비율', type: 'radio', required: true, sum: '{v}',
@@ -51711,7 +51712,8 @@ const QUOTE_TEMPLATES = [
                         // 2026-10-08 UAT — 글로 적던 칸을 시작일 · 종료일 달력 고르기로 (값은 'YYYY-MM-DD ~ YYYY-MM-DD' 그대로)
                         { key: 'period', label: '정산 기간', type: 'daterange', required: true, noSum: true },
                         // 2026-10-08 UAT — 다른 접수(A/S · 메뉴 · 무상 지원)처럼 적고 [검색] 을 누르는 칸으로 (전에는 돋보기 + 치는 대로 검색)
-                        { key: 'settleShop', label: '가맹점 찾기', type: 'text', lookup: 'shop', required: false, noSum: true,
+                        // lookupNameOnly — 상호만 받는 칸이라, 못 찾았을 때 '입력하신 상호로 접수됩니다' 로 안내 (아래 채울 칸이 없음)
+                        { key: 'settleShop', label: '가맹점 찾기', type: 'text', lookup: 'shop', lookupNameOnly: true, required: false, noSum: true,
                           placeholder: '가맹점명을 입력하고 [검색] 을 눌러 주세요 (특정 가맹점 건일 때)',
                           hint: '킹오더브라더스에 등록된 우리 업체와 소속 가맹점에서 찾습니다. 영업자(대리점) 건은 영업자명을 입력해 주세요.' }
                     ] }
@@ -53458,6 +53460,27 @@ const QUOTE_TEMPLATES = [
             const note = (t) => `<p class="text-xs text-gray-500 bg-gray-50 border border-gray-200 rounded px-2.5 py-2">${t}</p>`;
             if (q.length < PARTNER_SHOP_MIN) { box.innerHTML = note(`가맹점명을 ${PARTNER_SHOP_MIN}글자 이상 입력하고 [검색] 을 눌러 주세요.`); return; }
             partnerShopLookupHits = partnerShopLookupFind(q);
+            const fDef = ((partnerTypeDef(partnerPickedDept, partnerFormType) || {}).fields || []).find(ff => ff.key === key) || {};
+            if (!partnerShopLookupHits.length && fDef.lookupNewShop) {
+                // 무상 장비 지원 — 등록된 가맹점에만 지원하므로, 없는 곳(신규 오픈)은 개설 접수를 먼저 받습니다 (UAT 2026-10-08)
+                const canNew = partnerCanSeeMenu('sales:newshop');
+                box.innerHTML = `<div class="text-sm text-amber-900 bg-amber-50 border border-amber-300 rounded-lg px-3 py-2.5">
+                    <p class="font-semibold"><i class="fas fa-triangle-exclamation mr-1 text-amber-600"></i><b>${escapeHtml(q)}</b> 은(는) 등록된 가맹점에서 조회되지 않습니다.</p>
+                    <p class="mt-1">신규 오픈 매장이면 <b>신규 가맹점 개설</b>을 먼저 접수해 주세요. 개설 접수가 처리돼 가맹점이 등록되면 여기서 조회됩니다.</p>
+                    ${canNew ? `<div class="mt-2 flex flex-wrap gap-2">
+                        <button type="button" onclick="goPartnerNewShopFirst()" class="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded text-xs font-semibold">
+                            <i class="fas fa-store mr-1"></i>신규 가맹점 개설 접수로 가기</button>
+                        <span class="text-xs text-amber-700 self-center">상호를 다르게 입력했을 수 있으니 한 번 더 검색해 보셔도 됩니다.</span>
+                    </div>` : '<p class="mt-1 text-xs text-amber-700">신규 가맹점 개설 접수 권한이 없으면 킹오더브라더스 담당자에게 문의해 주세요.</p>'}
+                </div>`;
+                if (typeof showAppToast === 'function') showAppToast('조회되지 않는 매장입니다 — 신규 가맹점 개설을 먼저 진행해 주세요.', 'orange');
+                return;
+            }
+            if (!partnerShopLookupHits.length && fDef.lookupNameOnly) {
+                box.innerHTML = note(`<b>${escapeHtml(q)}</b> 을(를) 찾지 못했습니다 — <b>입력하신 상호로 접수됩니다.</b>`
+                    + (partnerShopNone() ? '<br><span class="text-gray-400">소속 가맹점 등록은 담당 영업사원에게 문의해 주세요.</span>' : ''));
+                return;
+            }
             if (!partnerShopLookupHits.length) {
                 box.innerHTML = note(partnerShopNone()
                     ? `<b>${escapeHtml(q)}</b> 을(를) 찾지 못했습니다. 우리 업체 소속으로 등록된 가맹점이 아직 없습니다 — 아래 항목을 직접 입력하시면 <b>입력하신 내용으로</b> 접수됩니다.<br><span class="text-gray-400">소속 가맹점 등록은 담당 영업사원에게 문의해 주세요.</span>`
@@ -53473,6 +53496,11 @@ const QUOTE_TEMPLATES = [
                         .filter(Boolean).map(escapeHtml).join(' · ') || '&nbsp;'}</p>
                 </button>`).join('')}
             </div>`;
+        }
+        // 무상 장비 지원 → 신규 가맹점 개설 접수로. 작성 중이던 내용은 [임시 저장] 으로 남길 수 있게 먼저 묻습니다
+        function goPartnerNewShopFirst() {
+            if (!confirm('신규 가맹점 개설 접수 화면으로 이동합니다.\n지금 작성 중인 무상 장비 지원 내용은 [임시 저장] 하지 않으면 사라집니다.\n\n이동할까요?')) return;
+            choosePartnerDept('sales', 'newshop');
         }
         function pickPartnerShopLookup(key, prefix, idx) {
             const pre = prefix || 'pcf-';
