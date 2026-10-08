@@ -22121,8 +22121,10 @@ const QUOTE_TEMPLATES = [
             const inputCls = `w-full p-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 ${c.accent.ring}`;
             return `
                 <!-- ① 고객검색 바 — 스크롤해도 상단에 고정. 접으면 선택 고객 한 줄만 남아 본문이 넓어집니다.
-                     (모바일에서는 기본 접힘 — applyWorkSearchCollapse 참고) -->
-                <div class="sticky top-0 z-20 -mx-4 md:-mx-8 -mt-4 md:-mt-8 px-4 md:px-8 pt-4 md:pt-8 pb-4 bg-gray-50/95 backdrop-blur border-b border-gray-200 shadow-sm">
+                     (모바일에서는 기본 접힘 — applyWorkSearchCollapse 참고)
+                     스크롤 영역의 안쪽 여백(p-4 · md:p-8)만큼 위로 올려(-top-4 · md:-top-8) 헤더 바로 밑에 붙입니다.
+                     top-0 이면 그 여백만큼 틈이 생겨 본문이 바 위로 비쳐 올라갑니다. 배경도 불투명하게. -->
+                <div class="sticky -top-4 md:-top-8 z-20 -mx-4 md:-mx-8 -mt-4 md:-mt-8 px-4 md:px-8 pt-4 md:pt-8 pb-4 bg-gray-50 border-b border-gray-200 shadow-sm">
                     <div class="flex items-center justify-between gap-2 mb-2">
                         <div class="flex items-center gap-2 min-w-0">
                             <h3 id="wc-title-${key}" class="text-base md:text-lg font-bold text-gray-800 truncate">${escapeHtml(c.title)}</h3>
