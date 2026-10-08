@@ -213,6 +213,8 @@
            보이는 섹션이 남은 높이를 다 채우게 해, 내용이 고객조회 뒤로 지나가지 않습니다. */
         #main-scroll.wc-mode { overflow: hidden; padding: 0; display: flex; flex-direction: column; }
         #main-scroll.wc-mode > section:not(.hidden) { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+        /* 직원 고르기(계층형)로 바꾼 select — 값 · 필수 검사는 그대로 쓰고 화면에서만 감춥니다 (2026-10-08) */
+        select.ptree-src { position: absolute !important; opacity: 0 !important; pointer-events: none !important; width: 1px !important; height: 1px !important; padding: 0 !important; border: 0 !important; }
     </style>
 
     <!-- ==========================================================================
@@ -13818,13 +13820,8 @@ const QUOTE_TEMPLATES = [
             const box = document.getElementById('task-directive-targets');
             if (!box) return;
             const cands = directiveTargetCandidates(targetDept, currentUserName, currentUserLevel);
-            box.innerHTML = cands.length
-                ? cands.map(u => `<label class="flex items-center gap-2 px-2.5 py-2 hover:bg-purple-50 cursor-pointer">
-                        <input type="checkbox" class="directive-target" value="${escapeHtml(u.name)}" onchange="onDirectiveTargetChange()" />
-                        <span class="text-sm text-gray-800">${escapeHtml(u.name)}</span>
-                        <span class="text-xs text-gray-400">${escapeHtml(u.rank || '')} · ${levelNames[u.level] || ''}</span>
-                    </label>`).join('')
-                : '<p class="text-sm text-gray-400 px-2.5 py-3">지시할 수 있는 대상이 없습니다.</p>';
+            // 일정 참석자 초대와 같은 계층형 (2026-10-08) — 직원 줄은 그대로 .directive-target 체크박스
+            box.innerHTML = peopleCheckTreeHtml(cands, 'directive-target', [], { onchange: 'onDirectiveTargetChange()', empty: '지시할 수 있는 대상이 없습니다.' });
             const all = document.getElementById('task-directive-all');
             if (all) all.checked = false;
             onDirectiveTargetChange();
@@ -13836,6 +13833,7 @@ const QUOTE_TEMPLATES = [
 
         function toggleAllDirectiveTargets(on) {
             document.querySelectorAll('#task-directive-targets .directive-target').forEach(el => { el.checked = on; });
+            ptreeSync(document.querySelector('#task-directive-targets [data-ptree]'));
             onDirectiveTargetChange();
         }
 
@@ -45582,24 +45580,251 @@ const QUOTE_TEMPLATES = [
                         `<option value="${escapeHtml(u.name)}" ${u.name === selected ? 'selected' : ''}>${escapeHtml(u.name)}${u.rank ? ' · ' + escapeHtml(u.rank) : ''}</option>`).join('')}
                 </optgroup>`).join('');
         }
-        // 여러 명 고르기 (참석자 · 보고 대상) — 체크박스
+        // 여러 명 고르기 (참석자 · 보고 대상) — 회사 전체 › 본부 › 팀 › 직원 계층형 (2026-10-08 · 일정 참석자 초대와 같은 모양)
         function personChecksHtml(cls, selected, depts) {
-            const sel = new Set(selected || []);
             const list = orgMembers().filter(u => !depts || depts.indexOf(u.dept) > -1);
-            const byDept = {};
-            list.forEach(u => { (byDept[u.dept] = byDept[u.dept] || []).push(u); });
-            return orgDeptIds(false).filter(d => byDept[d]).map(d => `
-                <div class="mb-2 last:mb-0">
-                    <p class="text-[11px] font-semibold text-gray-500 mb-1">${escapeHtml(deptNames[d] || d)}</p>
-                    <div class="flex flex-wrap gap-x-3 gap-y-1">
-                        ${byDept[d].sort((a, b) => orgRankWeight(a.rank) - orgRankWeight(b.rank)).map(u => `
-                            <label class="inline-flex items-center gap-1 text-xs text-gray-700 cursor-pointer whitespace-nowrap">
-                                <input type="checkbox" class="${escapeHtml(cls)} rounded border-gray-300 text-blue-600 focus:ring-blue-500" value="${escapeHtml(u.name)}" ${sel.has(u.name) ? 'checked' : ''} />
-                                ${escapeHtml(u.name)}<span class="text-gray-400">${u.rank ? escapeHtml(u.rank) : ''}</span>
-                            </label>`).join('')}
-                    </div>
-                </div>`).join('');
+            return peopleCheckTreeHtml(list, cls, selected);
         }
+
+        // ==================== 직원 고르기 공용 — 회사 전체 › 본부 › 팀 › 직원 (UAT 2026-10-08) ====================
+        // 그룹웨어의 직원을 고르는 곳을 모두 일정 참석자 초대와 같은 계층형으로 맞춥니다.
+        //   ① 여러 명(체크박스) — peopleCheckTreeHtml(users, cls, selected, opts)
+        //      직원 줄은 예전과 같은 <input type=checkbox class=cls value=이름> 이라 읽는 코드(:checked)가 그대로 돕니다.
+        //      회사 전체 · 본부 · 팀 줄을 체크하면 그 아래 직원이 모두 체크되고(각 칸에 change 를 보냄), 일부만이면 반쯤 체크.
+        //   ② 한 명(select) — 직원 목록으로 채워진 <select> 를 저절로 찾아 [직원 고르기] 단추로 바꿉니다(enhancePeopleSelect).
+        //      select 는 감춰 둔 채 값 · 필수 검사 · onchange 를 그대로 쓰고, 단추를 누르면 같은 계층 창에서 한 명을 고릅니다.
+        //      직원이 아닌 선택지(선택 안함 · 전체 · 팀 이름 등)는 창 위쪽에 따로 둡니다. 감싸지 않으려면 select 에 data-ptree-skip.
+        function ptreeUserOf(v) {
+            const s = String(v == null ? '' : v);
+            if (!s) return null;
+            return localUsers.find(u => u.name === s || u.id === s || (u.email && String(u.email).toLowerCase() === s.toLowerCase())) || null;
+        }
+        function ptreeRowsHtml(users, personHtml, opts) {
+            const o = opts || {};
+            const groups = orgGrouped(users);
+            const node = (label, icon, inner, open, count, extraCls) => `
+                <div data-ptree-node class="${extraCls || ''}">
+                    <div class="ptree-hd flex items-center gap-1.5 px-2 py-1.5 bg-gray-50/70 border-b border-gray-100">
+                        <button type="button" onclick="ptreeToggle(this)" class="w-4 text-gray-400 hover:text-gray-700" title="펼치기 · 접기"><i class="fas fa-chevron-${open ? 'down' : 'right'} text-[10px]"></i></button>
+                        ${o.multi ? '<input type="checkbox" data-ptree-grp class="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />' : ''}
+                        <span class="text-sm font-semibold text-gray-800 truncate"><i class="fas ${icon} mr-1 text-gray-400"></i>${escapeHtml(label)}</span>
+                        <span data-ptree-count class="ml-auto text-xs text-gray-400 whitespace-nowrap">${count}명</span>
+                    </div>
+                    <div class="ptree-kids pl-4 ${open ? '' : 'hidden'}">${inner}</div>
+                </div>`;
+            const has = (list) => o.isOpen ? list.some(o.isOpen) : false;
+            const depts = groups.map(g => {
+                const teams = g.teams.map(t => node(t.name, 'fa-users', t.members.map(personHtml).join(''), has(t.members), t.members.length)).join('');
+                const loose = (g.hasTeams ? g.direct : g.rest).map(personHtml).join('');
+                const inner = g.heads.map(personHtml).join('') + teams + loose;
+                return node(g.name, 'fa-sitemap', inner, groups.length === 1 || has(g.members), g.members.length);
+            }).join('');
+            return node('회사 전체', 'fa-building', depts, true, users.length, '');
+        }
+        function peopleCheckTreeHtml(users, cls, selected, opts) {
+            const o = opts || {};
+            const sel = new Set(selected || []);
+            if (!users.length) return `<p class="text-xs text-gray-400 px-2 py-2">${escapeHtml(o.empty || '고를 수 있는 직원이 없습니다.')}</p>`;
+            const person = u => `<label class="flex items-center gap-2 px-2 py-1 text-sm cursor-pointer hover:bg-blue-50/50">
+                    <input type="checkbox" data-ptree-person class="${escapeHtml(cls)} rounded border-gray-300 text-blue-600 focus:ring-blue-500" value="${escapeHtml(u.name)}" ${sel.has(u.name) ? 'checked' : ''}${o.onchange ? ` onchange="${o.onchange}"` : ''} />
+                    <span class="text-gray-800">${escapeHtml(u.name)}</span><span class="text-xs text-gray-400">${escapeHtml(u.rank || '')}</span>
+                </label>`;
+            return `<div data-ptree class="text-left">${ptreeRowsHtml(users, person, { multi: true, isOpen: u => sel.has(u.name) })}</div>`;
+        }
+        function ptreeToggle(btn) {
+            const node = btn.closest('[data-ptree-node]');
+            const kids = node && node.querySelector(':scope > .ptree-kids');
+            if (!kids) return;
+            const open = kids.classList.toggle('hidden') === false;
+            const ic = btn.querySelector('i');
+            if (ic) ic.className = `fas fa-chevron-${open ? 'down' : 'right'} text-[10px]`;
+        }
+        // 묶음 줄의 체크 · 반쯤 체크 · 'n / 전체' 를 아래 직원 체크에 맞춥니다
+        function ptreeSync(root) {
+            if (!root) return;
+            root.querySelectorAll('[data-ptree-node]').forEach(node => {
+                const ps = Array.from(node.querySelectorAll('[data-ptree-person]'));
+                const n = ps.filter(x => x.checked).length;
+                const grp = node.querySelector(':scope > .ptree-hd [data-ptree-grp]');
+                if (grp) { grp.checked = ps.length > 0 && n === ps.length; grp.indeterminate = n > 0 && n < ps.length; grp.disabled = !ps.some(x => !x.disabled); }
+                const cnt = node.querySelector(':scope > .ptree-hd [data-ptree-count]');
+                if (cnt) { cnt.textContent = n ? `${n} / ${ps.length}명` : `${ps.length}명`; cnt.classList.toggle('text-blue-600', !!n); cnt.classList.toggle('font-medium', !!n); }
+            });
+        }
+        document.addEventListener('change', (e) => {
+            const t = e.target;
+            if (!t || !t.matches) return;
+            if (t.matches('[data-ptree-grp]')) {
+                const node = t.closest('[data-ptree-node]');
+                const on = t.checked;
+                node.querySelectorAll('[data-ptree-person]').forEach(x => {
+                    if (x.disabled || x.checked === on) return;
+                    x.checked = on;
+                    x.dispatchEvent(new Event('change', { bubbles: true }));
+                });
+                ptreeSync(t.closest('[data-ptree]'));
+            } else if (t.matches('[data-ptree-person]')) {
+                ptreeSync(t.closest('[data-ptree]'));
+            }
+        });
+
+        // ---------- ② 한 명 고르기 — select 를 [직원 고르기] 단추로 ----------
+        function ptreeSelectInfo(sel) {
+            const people = [], specials = [];
+            Array.from(sel.options).forEach(op => {
+                const u = ptreeUserOf(op.value);
+                if (u) people.push({ value: op.value, label: op.text, user: u });
+                // 빈 값의 안내용 선택지('+ 추가…' · '선택하세요')는 창에 넣지 않습니다 — '선택 안함 · 미지정 · 전체' 처럼 비우는 뜻이면 둡니다
+                else if (op.value === '' && (/^\s*\+|선택하세요|…|\.\.\./.test(op.text) || !op.text.trim())) return;
+                else specials.push({ value: op.value, label: op.text });
+            });
+            return { people, specials };
+        }
+        function ptreeQualifies(sel) {
+            if (!sel || sel.tagName !== 'SELECT' || sel.multiple || sel.hasAttribute('data-ptree-skip') || sel.closest('#ptree-modal')) return false;
+            const opts = Array.from(sel.options).filter(op => op.value !== '');
+            if (!opts.length) return false;
+            const hit = opts.filter(op => ptreeUserOf(op.value)).length;
+            return hit > 0 && hit / opts.length >= 0.6;
+        }
+        function ptreeLabelOf(sel) {
+            const op = sel.options[sel.selectedIndex];
+            if (!op) return { text: '직원 고르기', empty: true };
+            const u = ptreeUserOf(op.value);
+            if (!u) return { text: op.text || '선택하세요', empty: !op.value };
+            return { text: `${u.name}${u.rank ? ' · ' + u.rank : ''}`, sub: deptName(u.dept) + (u.team ? ' · ' + u.team : ''), empty: false };
+        }
+        function ptreeRefresh(sel) {
+            const btn = sel && sel._ptreeBtn;
+            if (!btn) return;
+            const l = ptreeLabelOf(sel);
+            btn.querySelector('[data-ptree-lbl]').innerHTML = `<span class="${l.empty ? 'text-gray-400' : 'text-gray-800'} truncate">${escapeHtml(l.text)}</span>${l.sub ? `<span class="text-xs text-gray-400 truncate">${escapeHtml(l.sub)}</span>` : ''}`;
+            btn.disabled = sel.disabled;
+            btn.classList.toggle('hidden', sel.classList.contains('hidden'));
+            btn.classList.toggle('opacity-60', sel.disabled);
+        }
+        function enhancePeopleSelect(sel) {
+            if (sel._ptreeBtn) { ptreeRefresh(sel); return; }
+            if (!ptreeQualifies(sel)) return;
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = (sel.className || '').replace(/\bhidden\b/g, '').replace(/\bptree-src\b/g, '') + ' ptree-btn text-left flex items-center justify-between gap-2 bg-white';
+            if (!/\bw-/.test(btn.className)) btn.className += ' w-full';
+            if (!/\bp[xy]?-/.test(btn.className)) btn.className += ' p-2 text-sm';
+            if (!/\bborder\b/.test(btn.className)) btn.className += ' border border-gray-300 rounded';
+            btn.innerHTML = '<span data-ptree-lbl class="min-w-0 flex items-baseline gap-1.5"></span><i class="fas fa-sitemap text-gray-400 text-xs shrink-0" title="회사 · 본부 · 팀에서 고르기"></i>';
+            btn.addEventListener('click', () => openPeoplePicker(sel));
+            sel.classList.add('ptree-src');
+            sel.insertAdjacentElement('afterend', btn);
+            sel._ptreeBtn = btn;
+            // 코드가 select.value 를 바로 바꿔도 단추 글자가 따라가게 합니다 (이벤트가 없어서)
+            const proto = HTMLSelectElement.prototype;
+            ['value', 'selectedIndex'].forEach(k => {
+                const d = Object.getOwnPropertyDescriptor(proto, k);
+                Object.defineProperty(sel, k, { configurable: true, get() { return d.get.call(this); }, set(v) { d.set.call(this, v); ptreeRefresh(this); } });
+            });
+            sel.addEventListener('change', () => ptreeRefresh(sel));
+            ptreeRefresh(sel);
+        }
+        let ptreeCurSel = null;
+        function ensurePeoplePickerModal() {
+            if (document.getElementById('ptree-modal')) return;
+            document.body.insertAdjacentHTML('beforeend', `
+                <div id="ptree-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[80] p-4" onclick="if(event.target===this)closePeoplePicker()">
+                    <div class="bg-white w-full max-w-md rounded-lg shadow-xl max-h-[85vh] flex flex-col">
+                        <div class="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+                            <h3 class="font-bold text-gray-800"><i class="fas fa-sitemap text-blue-600 mr-1.5"></i><span id="ptree-modal-title">직원 고르기</span></h3>
+                            <button type="button" onclick="closePeoplePicker()" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times"></i></button>
+                        </div>
+                        <div class="px-4 pt-3">
+                            <input type="text" id="ptree-search" oninput="renderPeoplePicker()" placeholder="이름 · 본부 · 팀 · 직급으로 찾기" class="w-full p-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                            <div id="ptree-specials" class="flex flex-wrap gap-1.5 mt-2"></div>
+                        </div>
+                        <div id="ptree-body" class="flex-1 overflow-y-auto m-4 mt-2 border border-gray-200 rounded divide-y divide-gray-50"></div>
+                    </div>
+                </div>`);
+        }
+        function openPeoplePicker(sel) {
+            if (sel.disabled) return;
+            ensurePeoplePickerModal();
+            ptreeCurSel = sel;
+            const lab = sel.id && document.querySelector(`label[for="${sel.id}"]`);
+            const near = sel.closest('div') && sel.closest('div').querySelector('label');
+            document.getElementById('ptree-modal-title').textContent = ((lab || near) && (lab || near).textContent.replace(/\*/g, '').trim()) || '직원 고르기';
+            document.getElementById('ptree-search').value = '';
+            renderPeoplePicker();
+            document.getElementById('ptree-modal').classList.remove('hidden');
+            setTimeout(() => { const s = document.getElementById('ptree-search'); if (s) s.focus(); }, 30);
+        }
+        function closePeoplePicker() {
+            const m = document.getElementById('ptree-modal');
+            if (m) m.classList.add('hidden');
+            ptreeCurSel = null;
+        }
+        function renderPeoplePicker() {
+            const sel = ptreeCurSel;
+            if (!sel) return;
+            const info = ptreeSelectInfo(sel);
+            const cur = sel.value;
+            const q = String((document.getElementById('ptree-search') || {}).value || '').trim().toLowerCase();
+            const valOf = new Map(info.people.map(p => [p.user, p.value]));
+            document.getElementById('ptree-specials').innerHTML = info.specials.map((o, i) =>
+                `<button type="button" onclick="ptreePick(${JSON.stringify(o.value).replace(/"/g, '&quot;')})" class="px-2.5 py-1 rounded-full text-xs border ${o.value === cur ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'}">${escapeHtml(o.label || '(비움)')}</button>`).join('');
+            const person = u => {
+                const v = valOf.get(u);
+                const on = v === cur;
+                return `<button type="button" onclick="ptreePick(${JSON.stringify(v).replace(/"/g, '&quot;')})" class="w-full flex items-center gap-2 px-2 py-1.5 text-sm text-left ${on ? 'bg-blue-50' : 'hover:bg-gray-50'}">
+                        <i class="fas ${on ? 'fa-circle-dot text-blue-600' : 'fa-circle text-gray-200'} text-xs"></i>
+                        <span class="text-gray-800">${escapeHtml(u.name)}</span><span class="text-xs text-gray-400">${escapeHtml(u.rank || '')}</span>
+                        ${q ? `<span class="ml-auto text-[11px] text-gray-400">${escapeHtml(deptName(u.dept))}${u.team ? ' · ' + escapeHtml(u.team) : ''}</span>` : ''}
+                    </button>`;
+            };
+            const users = info.people.map(p => p.user);
+            const body = document.getElementById('ptree-body');
+            if (!users.length) { body.innerHTML = '<p class="text-sm text-gray-400 text-center py-6">고를 수 있는 직원이 없습니다.</p>'; return; }
+            if (q) {
+                const hit = users.filter(u => `${u.name} ${deptName(u.dept)} ${u.team || ''} ${u.rank || ''}`.toLowerCase().includes(q));
+                body.innerHTML = hit.length ? hit.map(person).join('') : '<p class="text-sm text-gray-400 text-center py-6">검색 결과가 없습니다.</p>';
+                return;
+            }
+            body.innerHTML = ptreeRowsHtml(users, person, { multi: false, isOpen: u => valOf.get(u) === cur });
+        }
+        function ptreePick(v) {
+            const sel = ptreeCurSel;
+            if (!sel) return;
+            sel.value = v;
+            sel.dispatchEvent(new Event('input', { bubbles: true }));
+            sel.dispatchEvent(new Event('change', { bubbles: true }));
+            ptreeRefresh(sel);
+            closePeoplePicker();
+        }
+        // 화면에 새로 생기거나 다시 채워진 select · 계층 목록을 찾아 바꿉니다 (팝업마다 따로 부르지 않아도 되게)
+        (function startPeoplePickerObserver() {
+            const scan = (root) => {
+                if (!root || !root.querySelectorAll) return;
+                if (root.tagName === 'SELECT') enhancePeopleSelect(root);
+                root.querySelectorAll('select').forEach(enhancePeopleSelect);
+                if (root.matches && root.matches('[data-ptree]')) ptreeSync(root);
+                root.querySelectorAll('[data-ptree]').forEach(ptreeSync);
+            };
+            const start = () => {
+                scan(document.body);
+                new MutationObserver(muts => {
+                    const seen = new Set();
+                    muts.forEach(m => {
+                        if (m.type === 'attributes') { if (m.target._ptreeBtn) ptreeRefresh(m.target); return; }
+                        const t = m.target.closest ? (m.target.closest('select') || m.target) : m.target;
+                        if (seen.has(t)) return;
+                        seen.add(t);
+                        if (t.tagName === 'SELECT') enhancePeopleSelect(t);
+                        m.addedNodes.forEach(n => { if (n.nodeType === 1) scan(n); });
+                    });
+                }).observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['disabled', 'class'] });
+                // form.reset() 은 select 값을 이벤트 없이 되돌립니다 — 단추 글자를 다시 맞춥니다
+                document.addEventListener('reset', () => setTimeout(() => document.querySelectorAll('select.ptree-src').forEach(ptreeRefresh), 0), true);
+            };
+            if (document.body) start(); else document.addEventListener('DOMContentLoaded', start);
+        })();
         function pickedPersons(cls) {
             return Array.from(document.querySelectorAll('input.' + cls + ':checked')).map(el => el.value);
         }
