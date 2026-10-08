@@ -22233,10 +22233,10 @@ const QUOTE_TEMPLATES = [
                             <h3 id="wc-title-${key}" class="shrink-0 text-base md:text-lg font-bold text-gray-800 truncate">${escapeHtml(c.title)}</h3>
                             <span class="hidden sm:inline px-2 py-0.5 text-xs font-semibold rounded-full bg-amber-100 text-amber-800 whitespace-nowrap">DEV환경</span>
                             <!-- 접혔을 때만 — 선택된 고객사명 (applyWorkSearchCollapse) -->
-                            <span id="${wcId(key, 'search-picked')}" class="hidden min-w-0 truncate px-2 py-0.5 rounded text-sm font-semibold bg-white border border-gray-300 text-gray-800"></span>
+                            <span id="${wcId(key, 'search-picked')}" onclick="toggleWorkSearch('${key}')" class="hidden"></span>
                         </div>
                         <div class="flex items-center gap-2 shrink-0">
-                            <p class="hidden xl:block text-xs text-gray-500">${c.lead}</p>
+                            <p id="${wcId(key, 'search-lead')}" class="hidden xl:block text-xs text-gray-500">${c.lead}</p>
                             <button type="button" onclick="toggleWorkSearch('${key}')" class="flex items-center gap-1 max-w-[55vw] sm:max-w-none px-2.5 py-1.5 rounded border border-gray-300 bg-white text-xs text-gray-600 hover:bg-gray-50 transition-colors">
                                 <i id="${wcId(key, 'search-icon')}" class="fas fa-chevron-up text-xs shrink-0"></i><span id="${wcId(key, 'search-label')}" class="truncate">${escapeHtml(sl.toggle)} 접기</span>
                             </button>
@@ -22694,16 +22694,23 @@ const QUOTE_TEMPLATES = [
             tg(bar, ['pt-1.5', 'pb-1.5'], ['pt-3', 'pb-3']);
             tg(head, ['mb-0'], ['mb-2']);
             if (icon) icon.className = `fas fa-chevron-${open ? 'up' : 'down'} text-xs shrink-0`;
-            if (label) label.innerText = wcSearchLabels(key).toggle + (open ? ' 접기' : ' 펼치기');
-            // 접힌 줄에는 선택된 고객사명만 (고르지 않았으면 '고객 미선택')
+            // 좁은 화면에서는 '접기 · 펼치기' 만 — 고객사명 칩이 잘리지 않게 자리를 비켜 줍니다
+            if (label) label.innerHTML = `<span class="hidden sm:inline">${escapeHtml(wcSearchLabels(key).toggle)} </span>${open ? '접기' : '펼치기'}`;
+            // 접힌 줄에는 선택된 고객사명만 — 센터 색(운영 초록 · 영업 파랑)으로 꽉 채운 칩이라 한눈에 보입니다 (UAT 2026-10-08)
+            // 고르지 않았으면 주황 테두리로 '고객 미선택'
+            // 접히면 안내문(xl 화면에서만 보이던 것)을 숨겨 고객사명 칩에 자리를 줍니다
+            const lead = wcEl(key, 'search-lead');
+            if (lead) lead.classList.toggle('xl:block', open);
             const picked = wcEl(key, 'search-picked');
             if (picked) {
                 const c = wcCustomer(key, wcState[key].customerId);
-                picked.classList.toggle('hidden', open);
-                picked.textContent = c ? c.name : '고객 미선택';
-                picked.title = c ? c.name : '';
-                picked.classList.toggle('text-gray-800', !!c);
-                picked.classList.toggle('text-gray-400', !c);
+                picked.title = c ? '선택한 고객사: ' + c.name + ' (누르면 고객조회를 펼칩니다)' : '고객을 고르지 않았습니다 — 누르면 고객조회를 펼칩니다';
+                picked.className = open ? 'hidden'
+                    : c ? `cursor-pointer inline-flex items-center gap-1.5 min-w-0 px-3 py-1 rounded-full text-white text-sm md:text-base font-bold shadow-sm ${wcDef(key).accent.btn.split(' ')[0]}`
+                        : 'cursor-pointer inline-flex items-center gap-1.5 min-w-0 px-3 py-1 rounded-full text-sm font-semibold bg-amber-50 border border-amber-300 text-amber-700';
+                picked.innerHTML = c
+                    ? `<i class="fas fa-store text-xs shrink-0"></i><span class="truncate">${escapeHtml(c.name)}</span>`
+                    : '<i class="fas fa-circle-exclamation text-xs shrink-0"></i><span class="truncate">고객 미선택</span>';
             }
         }
 
