@@ -1741,7 +1741,7 @@
                     <i class="fas fa-calendar-days w-5 mr-2 text-sky-400"></i> 일정캘린더
                 </a>
                 <a href="#" onclick="navigate('collab-center', this)" id="nav-collab-center" class="nav-item flex items-center justify-between px-3 py-2 rounded-md hover:bg-slate-800/70 transition-colors">
-                    <div><i class="fas fa-ticket-alt w-5 mr-2 text-green-400"></i> 협업티켓센터</div>
+                    <div><i class="fas fa-ticket-alt w-5 mr-2 text-green-400"></i> 협업업무센터</div>
                     <span id="nav-collab-center-badge" class="hidden ml-auto bg-blue-600 text-white text-xs font-bold rounded-full px-2 leading-5"></span>
                 </a>
                 <a href="#" onclick="navigate('project-center', this)" id="nav-project-center" class="nav-item flex items-center justify-between px-3 py-2 rounded-md hover:bg-slate-800/70 transition-colors">
@@ -1994,9 +1994,9 @@
                             </h4>
                             <div id="personal-tasks-list" class="space-y-2 max-h-72 overflow-y-auto pr-2"></div>
                         </div>
-                        <!-- 3행 좌: 할당된 티켓 -->
+                        <!-- 3행 좌: 할당된 요청 -->
                         <div class="bg-white p-5 rounded-lg shadow-sm border border-gray-200">
-                            <h4 class="font-bold text-gray-700 mb-3 border-b border-gray-100 pb-2"><i class="fas fa-ticket-alt text-red-500 mr-2"></i>할당된 티켓 (이슈)</h4>
+                            <h4 class="font-bold text-gray-700 mb-3 border-b border-gray-100 pb-2"><i class="fas fa-ticket-alt text-red-500 mr-2"></i>할당된 요청 (이슈)</h4>
                             <div id="personal-tickets-list" class="space-y-2 max-h-60 overflow-y-auto pr-2"></div>
                         </div>
                         <!-- 3행 우: 내가 요청한 협업 내역 -->
@@ -2091,7 +2091,7 @@
                             <h3 class="text-3xl font-bold text-gray-800 mt-2">99.9%</h3>
                         </div>
                         <div onclick="showOpsDetail('urgent')" class="bg-white p-6 rounded-lg shadow-sm border-t-4 border-red-500 cursor-pointer hover:shadow-md transition-shadow group">
-                            <p class="text-sm font-medium text-gray-500 group-hover:text-red-500 transition-colors">미해결 긴급 티켓 <i class="fas fa-chevron-down text-xs ml-1 opacity-0 group-hover:opacity-100"></i></p>
+                            <p class="text-sm font-medium text-gray-500 group-hover:text-red-500 transition-colors">미해결 긴급 요청 <i class="fas fa-chevron-down text-xs ml-1 opacity-0 group-hover:opacity-100"></i></p>
                             <h3 class="text-3xl font-bold text-red-600 mt-2">2건</h3>
                         </div>
                         <div onclick="showOpsDetail('cs')" class="bg-white p-6 rounded-lg shadow-sm border-t-4 border-green-500 cursor-pointer hover:shadow-md transition-shadow group">
@@ -2107,7 +2107,7 @@
                             <button onclick="closeOpsDetail()" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times"></i></button>
                         </div>
                         
-                        <!-- 미해결 긴급 티켓 뷰 -->
+                        <!-- 미해결 긴급 요청 뷰 -->
                         <div id="ops-detail-urgent" class="hidden">
                             <div class="space-y-3 max-h-[400px] overflow-y-auto pr-2">
                                 <div class="bg-red-50 p-3 rounded-lg border border-red-100 flex justify-between items-center"><div><p class="text-sm font-bold text-red-800">서버 장애로 인한 결제 실패 현상</p><p class="text-xs text-gray-600 mt-1">담당: 시스템팀 | 접수시간: 10:30</p></div><span class="text-xs bg-red-200 text-red-800 px-2 py-1 rounded font-semibold">긴급</span></div>
@@ -2392,7 +2392,7 @@
                         <div class="mb-4 flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-3 sm:space-y-0">
                             <div>
                                 <h3 class="text-lg font-bold text-gray-800">협업 조회 권한 설정</h3>
-                                <p class="text-gray-500 text-sm">직책 레벨별로 협업티켓센터에서 조회할 수 있는 범위를 정합니다. 개별 사용자에 예외를 둘 수도 있습니다.</p>
+                                <p class="text-gray-500 text-sm">직책 레벨별로 협업업무센터에서 조회할 수 있는 범위를 정합니다. 개별 사용자에 예외를 둘 수도 있습니다.</p>
                             </div>
                             <button onclick="saveCollabPermissions()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded text-sm transition-colors">저장</button>
                         </div>
@@ -2400,7 +2400,7 @@
                         <div class="bg-white rounded-lg shadow-sm border border-gray-100 overflow-hidden mb-5">
                             <div class="p-4 border-b border-gray-100">
                                 <h4 class="font-semibold text-gray-800">직책 레벨별 기본 조회 범위</h4>
-                                <p class="text-xs text-gray-500 mt-0.5">레벨에 따라 협업티켓센터에서 기본으로 보이는 티켓의 범위입니다.</p>
+                                <p class="text-xs text-gray-500 mt-0.5">레벨에 따라 협업업무센터에서 기본으로 보이는 요청의 범위입니다.</p>
                             </div>
                             <div class="overflow-x-auto">
                                 <table class="w-full text-sm text-left">
@@ -2529,16 +2529,16 @@
                 </section>
 
                 <!-- ============================================================= -->
-                <!-- 통합 협업티켓센터 섹션 (부서별 협업관리 3개를 통합) -->
+                <!-- 통합 협업업무센터 섹션 (부서별 협업관리 3개를 통합) -->
                 <!-- ============================================================= -->
                 <section id="sec-collab-center" class="content-section hidden">
                     <div class="mb-4 flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-3 sm:space-y-0">
                         <div>
-                            <h3 class="text-lg font-bold text-gray-800">협업티켓센터</h3>
-                            <p class="text-gray-500 text-sm">부서·동료 간 협업 요청을 한 곳에서 발행하고, 받은·보낸 티켓과 대기 현황을 처리합니다. <span id="collab-scope-label" class="text-indigo-600 font-medium"></span></p>
+                            <h3 class="text-lg font-bold text-gray-800">협업업무센터</h3>
+                            <p class="text-gray-500 text-sm">부서·동료 간 협업 요청을 한 곳에서 발행하고, 받은·보낸 요청과 대기 현황을 처리합니다. <span id="collab-scope-label" class="text-indigo-600 font-medium"></span></p>
                         </div>
                         <div class="flex space-x-2">
-                            <button onclick="openTaskModal(currentUserDept && currentUserDept !== 'admin' ? currentUserDept : 'sales')" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded text-sm transition-colors"><i class="fas fa-plus mr-1"></i> 티켓 등록</button>
+                            <button onclick="openTaskModal(currentUserDept && currentUserDept !== 'admin' ? currentUserDept : 'sales')" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded text-sm transition-colors"><i class="fas fa-plus mr-1"></i> 협업요청 등록</button>
                         </div>
                     </div>
 
@@ -2547,7 +2547,7 @@
                         <div class="bg-white p-4 rounded-lg shadow-sm border-l-4 border-amber-500">
                             <p class="text-xs font-medium text-gray-500"><i class="fas fa-bell mr-1 text-amber-500"></i> 내가 처리할 대기</p>
                             <h3 id="collab-kpi-inbox-pending" class="text-2xl font-bold text-gray-800 mt-1 tabular-nums">0건</h3>
-                            <p class="text-xs text-gray-400 mt-0.5">받은 티켓 중 미처리</p>
+                            <p class="text-xs text-gray-400 mt-0.5">받은 요청 중 미처리</p>
                         </div>
                         <div class="bg-white p-4 rounded-lg shadow-sm border-l-4 border-indigo-500">
                             <p class="text-xs font-medium text-gray-500"><i class="fas fa-paper-plane mr-1 text-indigo-500"></i> 내가 보낸 대기</p>
@@ -2555,7 +2555,7 @@
                             <p class="text-xs text-gray-400 mt-0.5">발행 후 상대 응답 대기</p>
                         </div>
                         <div class="bg-white p-4 rounded-lg shadow-sm border-l-4 border-red-500">
-                            <p class="text-xs font-medium text-gray-500"><i class="fas fa-hourglass-half mr-1 text-red-500"></i> 지연 티켓</p>
+                            <p class="text-xs font-medium text-gray-500"><i class="fas fa-hourglass-half mr-1 text-red-500"></i> 지연 요청</p>
                             <h3 id="collab-kpi-aged" class="text-2xl font-bold text-gray-800 mt-1 tabular-nums">0건</h3>
                             <p class="text-xs text-gray-400 mt-0.5">3일 이상 미응답</p>
                         </div>
@@ -2568,8 +2568,8 @@
 
                     <!-- 탭 -->
                     <div class="flex flex-wrap gap-1 border-b border-gray-200">
-                        <button data-collab-tab="received" onclick="switchCollabTab('received')" class="collab-tab px-4 py-2.5 text-sm font-semibold border-b-2 -mb-px flex items-center gap-1.5"><i class="fas fa-inbox"></i> 받은 티켓 <span id="collab-tabcnt-received" class="text-xs bg-gray-100 rounded-full px-1.5">0</span></button>
-                        <button data-collab-tab="sent" onclick="switchCollabTab('sent')" class="collab-tab px-4 py-2.5 text-sm font-semibold border-b-2 -mb-px flex items-center gap-1.5"><i class="fas fa-paper-plane"></i> 발행한 티켓 <span id="collab-tabcnt-sent" class="text-xs bg-gray-100 rounded-full px-1.5">0</span></button>
+                        <button data-collab-tab="received" onclick="switchCollabTab('received')" class="collab-tab px-4 py-2.5 text-sm font-semibold border-b-2 -mb-px flex items-center gap-1.5"><i class="fas fa-inbox"></i> 받은 요청 <span id="collab-tabcnt-received" class="text-xs bg-gray-100 rounded-full px-1.5">0</span></button>
+                        <button data-collab-tab="sent" onclick="switchCollabTab('sent')" class="collab-tab px-4 py-2.5 text-sm font-semibold border-b-2 -mb-px flex items-center gap-1.5"><i class="fas fa-paper-plane"></i> 발행한 요청 <span id="collab-tabcnt-sent" class="text-xs bg-gray-100 rounded-full px-1.5">0</span></button>
                         <button data-collab-tab="directive" onclick="switchCollabTab('directive')" class="collab-tab px-4 py-2.5 text-sm font-semibold border-b-2 -mb-px flex items-center gap-1.5"><i class="fas fa-bullhorn"></i> 업무지시 <span id="collab-tabcnt-directive" class="text-xs bg-gray-100 rounded-full px-1.5">0</span></button>
                         <button data-collab-tab="board" onclick="switchCollabTab('board')" class="collab-tab px-4 py-2.5 text-sm font-semibold border-b-2 -mb-px flex items-center gap-1.5"><i class="fas fa-columns"></i> 전체 현황</button>
                         <button data-collab-tab="pending" onclick="switchCollabTab('pending')" class="collab-tab px-4 py-2.5 text-sm font-semibold border-b-2 -mb-px flex items-center gap-1.5"><i class="fas fa-hourglass-half"></i> 펜딩 모아보기 <span id="collab-tabcnt-pending" class="text-xs bg-gray-100 rounded-full px-1.5">0</span></button>
@@ -2596,11 +2596,11 @@
                         <button onclick="resetCollabFilters()" class="text-sm text-gray-600 border border-gray-300 rounded px-3 py-1.5 hover:bg-gray-50">초기화</button>
                     </div>
 
-                    <!-- 탭 콘텐츠: 받은 티켓 -->
+                    <!-- 탭 콘텐츠: 받은 요청 -->
                     <div id="collab-view-received" class="collab-view">
                         <div id="collab-received-list" class="space-y-3"></div>
                     </div>
-                    <!-- 탭 콘텐츠: 발행한 티켓 -->
+                    <!-- 탭 콘텐츠: 발행한 요청 -->
                     <div id="collab-view-sent" class="collab-view hidden">
                         <div id="collab-sent-list" class="space-y-3"></div>
                     </div>
@@ -2654,7 +2654,7 @@
                     </div>
                     <!-- 탭 콘텐츠: 펜딩 모아보기 -->
                     <div id="collab-view-pending" class="collab-view hidden">
-                        <div class="bg-indigo-50 border border-indigo-100 rounded-lg px-4 py-2.5 text-sm text-gray-600 mb-3"><i class="fas fa-hourglass-half text-indigo-500 mr-1"></i> 액션이 필요한 <b>대기·보류</b> 티켓과 <b>일정 변경 요청</b> 건을 모았습니다. 오래된 순으로 정렬됩니다.</div>
+                        <div class="bg-indigo-50 border border-indigo-100 rounded-lg px-4 py-2.5 text-sm text-gray-600 mb-3"><i class="fas fa-hourglass-half text-indigo-500 mr-1"></i> 액션이 필요한 <b>대기·보류</b> 요청과 <b>일정 변경 요청</b> 건을 모았습니다. 오래된 순으로 정렬됩니다.</div>
                         <div id="collab-pending-list" class="space-y-3"></div>
                     </div>
                 </section>
@@ -4388,7 +4388,7 @@
     <!-- ==================== 업무/이슈 등록 모달 ==================== -->
     <div id="task-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
         <div class="bg-white w-full max-w-md p-6 rounded-lg shadow-xl max-h-[90vh] overflow-y-auto">
-            <h3 id="task-modal-title" class="text-lg font-bold text-gray-800 mb-4">티켓 등록</h3>
+            <h3 id="task-modal-title" class="text-lg font-bold text-gray-800 mb-4">협업요청 등록</h3>
             <form id="task-form" onsubmit="submitTask(event)">
                 <input type="hidden" id="task-dept" value="sales" />
                 <div class="mb-4">
@@ -4398,14 +4398,14 @@
                     </select>
                 </div>
                 <div class="mb-4">
-                    <label class="block text-sm font-medium text-gray-700 mb-1">티켓 유형</label>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">요청 유형</label>
                     <select id="task-type" onchange="onTaskTypeChange()" class="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500">
                         <!-- 발행 대상에 따라 동적 렌더링 -->
                     </select>
                 </div>
                 <div class="mb-4">
                     <label class="block text-sm font-medium text-gray-700 mb-1">제목</label>
-                    <input type="text" id="task-title" required class="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="티켓 제목을 입력하세요" />
+                    <input type="text" id="task-title" required class="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="요청 제목을 입력하세요" />
                 </div>
                 <div class="mb-4">
                     <label class="block text-sm font-medium text-gray-700 mb-1">상세 내용</label>
@@ -4449,10 +4449,10 @@
                         <p id="task-directive-count" class="text-xs text-gray-500 mt-1">선택된 대상 0명</p>
                     </div>
                 </div>
-                <!-- 요청 근거 첨부 (타부서/우리 팀 발행 시에만) — 받는 담당자가 티켓 상세에서 바로 열어 봅니다 -->
+                <!-- 요청 근거 첨부 (타부서/우리 팀 발행 시에만) — 받는 담당자가 요청 상세에서 바로 열어 봅니다 -->
                 <div id="task-file-wrap" class="mb-4 hidden">
                     <label class="block text-sm font-medium text-gray-700 mb-1"><i class="fas fa-paperclip text-blue-500 mr-1"></i>첨부자료 <span class="text-gray-400 text-xs">(선택 · 요청 내용을 보여줄 이미지·문서)</span></label>
-                    <p class="text-xs text-gray-400 mb-2">여기에 올린 자료는 받는 담당자가 티켓 상세에서 바로 열어 확인할 수 있습니다.</p>
+                    <p class="text-xs text-gray-400 mb-2">여기에 올린 자료는 받는 담당자가 요청 상세에서 바로 열어 확인할 수 있습니다.</p>
                     <div id="task-file-drop" onclick="pickCollabRequestFiles()" data-drop-handler="collabRequestDropFiles"
                          class="border-2 border-dashed border-gray-300 rounded p-3 text-center cursor-pointer hover:border-blue-400 hover:bg-blue-50/40 transition-colors">
                         <i class="fas fa-cloud-arrow-up text-gray-300 text-xl"></i>
@@ -4593,13 +4593,13 @@
         </div>
     </div>
 
-    <!-- ==================== 협업 티켓 이관 모달 ==================== -->
-    <!-- 받은 티켓을 같은 팀의 다른 담당자에게 넘기거나, 아예 다른 부서(개인 지정 가능)로 이관합니다. -->
+    <!-- ==================== 협업 요청 이관 모달 ==================== -->
+    <!-- 받은 요청을 같은 팀의 다른 담당자에게 넘기거나, 아예 다른 부서(개인 지정 가능)로 이관합니다. -->
     <div id="collab-transfer-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
         <div class="bg-white w-full max-w-lg p-6 rounded-lg shadow-xl max-h-[90vh] overflow-y-auto">
             <div class="flex justify-between items-start mb-4">
                 <div>
-                    <h3 class="text-lg font-bold text-gray-800"><i class="fas fa-share-from-square text-indigo-500 mr-1"></i>협업 티켓 이관</h3>
+                    <h3 class="text-lg font-bold text-gray-800"><i class="fas fa-share-from-square text-indigo-500 mr-1"></i>협업 요청 이관</h3>
                     <p id="collab-transfer-subject" class="text-xs text-gray-500 mt-1"></p>
                 </div>
                 <button type="button" onclick="closeCollabTransferModal()" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times"></i></button>
@@ -4681,7 +4681,7 @@
                         <input type="date" id="accept-date" required class="flex-1 min-w-0 p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500" />
                         <input type="time" id="accept-time" step="300" value="18:00" class="w-32 p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500" title="완료 시각" />
                     </div>
-                    <p class="text-xs text-gray-400 mt-1">이 날짜가 되면 티켓에 '완료 처리' 버튼이 활성화됩니다.</p>
+                    <p class="text-xs text-gray-400 mt-1">이 날짜가 되면 요청에 '완료 처리' 버튼이 활성화됩니다.</p>
                 </div>
                 <div class="mb-6">
                     <label class="block text-sm font-medium text-gray-700 mb-1">상세 내용 (메모)</label>
@@ -4701,7 +4701,7 @@
     <div id="collab-schedule-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
         <div class="bg-white w-full max-w-md p-6 rounded-lg shadow-xl max-h-[90vh] overflow-y-auto">
             <h3 class="text-lg font-bold text-gray-800 mb-1"><i class="far fa-calendar-alt text-teal-600 mr-1"></i>일정 변경 요청</h3>
-            <p class="text-sm text-gray-500 mb-4">수락한 티켓의 처리완료 예정일 변경을 요청합니다. <b>요청자가 수락해야</b> 예정일이 변경됩니다.</p>
+            <p class="text-sm text-gray-500 mb-4">수락한 요청의 처리완료 예정일 변경을 요청합니다. <b>요청자가 수락해야</b> 예정일이 변경됩니다.</p>
             <form id="collab-schedule-form" onsubmit="submitScheduleChange(event)">
                 <input type="hidden" id="sched-task-id" />
                 <div id="sched-info" class="mb-4 bg-gray-50 border border-gray-200 rounded p-2.5 text-sm space-y-1"></div>
@@ -5531,7 +5531,7 @@
             <div class="flex justify-between items-start p-5 pb-3 border-b border-gray-100 sticky top-0 bg-white">
                 <div>
                     <h3 class="text-lg font-bold text-gray-800"><i class="fas fa-bullhorn text-purple-600 mr-1"></i>업무지시 현황</h3>
-                    <p class="text-sm text-gray-500 mt-0.5">대상자별 진행 상태와 진척률입니다. 각 줄을 누르면 개별 티켓 상세로 이동합니다.</p>
+                    <p class="text-sm text-gray-500 mt-0.5">대상자별 진행 상태와 진척률입니다. 각 줄을 누르면 개별 요청 상세로 이동합니다.</p>
                 </div>
                 <button type="button" onclick="closeDirectiveGroupModal()" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times"></i></button>
             </div>
@@ -5633,7 +5633,7 @@
     <!-- ==================== 협업 완료 처리 모달 ==================== -->
     <div id="collab-complete-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
         <div class="bg-white w-full max-w-md p-6 rounded-lg shadow-xl max-h-[90vh] overflow-y-auto">
-            <h3 class="text-lg font-bold text-gray-800 mb-4"><i class="fas fa-flag-checkered text-blue-600 mr-1"></i> 티켓 완료 처리</h3>
+            <h3 class="text-lg font-bold text-gray-800 mb-4"><i class="fas fa-flag-checkered text-blue-600 mr-1"></i> 요청 완료 처리</h3>
             <form id="collab-complete-form" onsubmit="submitCollabComplete(event)">
                 <input type="hidden" id="complete-task-id" />
                 <div class="mb-4 bg-blue-50 border border-blue-100 rounded p-2.5 text-sm text-blue-800">
@@ -5650,7 +5650,7 @@
                 <!-- 처리 근거 첨부 — 요청자가 상세 화면에서 그대로 열어 확인합니다 -->
                 <div class="mb-6">
                     <label class="block text-sm font-medium text-gray-700 mb-1"><i class="fas fa-paperclip text-blue-500 mr-1"></i>첨부자료 <span class="text-gray-400 text-xs">(선택 · 처리 결과를 보여줄 이미지·문서)</span></label>
-                    <p class="text-xs text-gray-400 mb-2">여기에 올린 자료는 요청자가 티켓 상세에서 바로 열어 확인할 수 있습니다.</p>
+                    <p class="text-xs text-gray-400 mb-2">여기에 올린 자료는 요청자가 요청 상세에서 바로 열어 확인할 수 있습니다.</p>
                     <div id="complete-file-drop" onclick="pickCollabCompleteFiles()" data-drop-handler="collabCompleteDropFiles"
                          class="border-2 border-dashed border-gray-300 rounded p-3 text-center cursor-pointer hover:border-blue-400 hover:bg-blue-50/40 transition-colors">
                         <i class="fas fa-cloud-arrow-up text-gray-300 text-xl"></i>
@@ -5669,7 +5669,7 @@
 
     <!-- 완료 첨부자료 선택기 (완료 모달 · 완료 후 추가 첨부에서 공용) -->
     <input type="file" id="collab-complete-file-input" class="hidden" multiple onchange="onCollabCompleteFilesPicked(event)" />
-    <!-- 요청 첨부자료 선택기 (티켓 등록 모달 · 발행 후 추가 첨부에서 공용) -->
+    <!-- 요청 첨부자료 선택기 (협업요청 등록 모달 · 발행 후 추가 첨부에서 공용) -->
     <input type="file" id="collab-request-file-input" class="hidden" multiple onchange="onCollabRequestFilesPicked(event)" />
 
     <!-- ==================== 완료 첨부자료 열람 모달 ==================== -->
@@ -5682,7 +5682,7 @@
         </div>
     </div>
 
-    <!-- ==================== 협업 티켓 상세 보기 모달 ==================== -->
+    <!-- ==================== 협업 요청 상세 보기 모달 ==================== -->
     <div id="collab-detail-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onclick="if(event.target===this)closeCollabDetailModal()">
         <div class="bg-white w-full max-w-lg p-6 rounded-lg shadow-xl flex flex-col max-h-[90vh]">
             <div class="flex justify-between items-start mb-4">
@@ -5704,7 +5704,7 @@
     <div id="collab-delay-ask-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
         <div class="bg-white w-full max-w-md p-6 rounded-lg shadow-xl max-h-[90vh] overflow-y-auto">
             <h3 class="text-lg font-bold text-gray-800 mb-1"><i class="fas fa-hourglass-half text-red-500 mr-1"></i> 지연사유 확인요청</h3>
-            <p class="text-sm text-gray-500 mb-4">처리완료 예정일이 지난 티켓입니다. 요청받은 부서에 지연 사유 확인을 요청합니다.</p>
+            <p class="text-sm text-gray-500 mb-4">처리완료 예정일이 지난 요청입니다. 요청받은 부서에 지연 사유 확인을 요청합니다.</p>
             <form id="collab-delay-ask-form" onsubmit="submitDelayInquiry(event)">
                 <input type="hidden" id="delay-ask-task-id" />
                 <div id="delay-ask-info" class="mb-4 bg-red-50 border border-red-100 rounded p-2.5 text-sm text-red-700"></div>
@@ -5735,7 +5735,7 @@
                 <div class="mb-6">
                     <label class="block text-sm font-medium text-gray-700 mb-1">처리완료 예정일(재조정) <span class="text-gray-400 text-xs">(선택)</span></label>
                     <input type="date" id="delay-answer-newdate" class="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-amber-500" />
-                    <p class="text-xs text-gray-400 mt-1">새 예정일을 입력하면 티켓의 처리완료 예정일이 갱신됩니다.</p>
+                    <p class="text-xs text-gray-400 mt-1">새 예정일을 입력하면 요청의 처리완료 예정일이 갱신됩니다.</p>
                 </div>
                 <div class="flex justify-end space-x-2">
                     <button type="button" onclick="closeDelayAnswerModal()" class="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition-colors">닫기</button>
@@ -9761,7 +9761,7 @@ const QUOTE_TEMPLATES = [
             'settings-archive': '자료실 관리 권한 (Archive Managers)',
             'partner-ids': '업체 관리 › 파트너센터 아이디 (Partner Accounts)',
             'data-admin': '전체 자료 수정 · 삭제 (Data Admin)',
-            'collab-center': '협업티켓센터 (Collaboration Ticket Center)',
+            'collab-center': '협업업무센터 (Collaboration Work Center)',
             'project-center': '프로젝트 관리 (Project Management)',
             'exec-center': '경영 현황판 (Executive Overview)',
             'inbound-center': '인바운드 관리 (Inbound Lead Management)',
@@ -9786,9 +9786,9 @@ const QUOTE_TEMPLATES = [
             'archive': '자료실 (Archive)'
         };
 
-        // 협업 요청(티켓): assigneeUser = 수신 부서의 담당자(개인). ageDays = 발행 후 경과일(데모용 지연 계산).
+        // 협업 요청(요청): assigneeUser = 수신 부서의 담당자(개인). ageDays = 발행 후 경과일(데모용 지연 계산).
         // ---------- 저장 (2026-09-17) ----------
-        // 협업티켓은 Supabase 'collab_requests' 표에 한 건 = 한 줄로 둡니다 (js/kob-db.js).
+        // 협업요청은 Supabase 'collab_requests' 표에 한 건 = 한 줄로 둡니다 (js/kob-db.js).
         let collabRequests = (window.kobDb ? ((r) => (typeof gwDropDeadBlobs === 'function' ? gwDropDeadBlobs(r) : r))(kobDb.rows('collab_requests')) : []);
         let collabRequestsSaved = new Map(collabRequests.map(x => [x.id, JSON.stringify(x)]));
 
@@ -9801,12 +9801,12 @@ const QUOTE_TEMPLATES = [
                 const now = JSON.stringify(x);
                 if (collabRequestsSaved.get(x.id) === now) return;
                 collabRequestsSaved.set(x.id, now);
-                kobDb.save('collab_requests', x).catch(e => console.error('[협업티켓] 저장 실패', e));
+                kobDb.save('collab_requests', x).catch(e => console.error('[협업요청] 저장 실패', e));
             });
             Array.from(collabRequestsSaved.keys()).forEach(id => {
                 if (alive.has(id)) return;
                 collabRequestsSaved.delete(id);
-                kobDb.remove('collab_requests', id).catch(e => console.error('[협업티켓] 삭제 실패', e));
+                kobDb.remove('collab_requests', id).catch(e => console.error('[협업요청] 삭제 실패', e));
             });
         }
 
@@ -10006,7 +10006,7 @@ const QUOTE_TEMPLATES = [
         function gwUploadFailedAlert(failed) {
             if (failed && failed.length) alert('아래 파일은 올리지 못했습니다.\n\n· ' + failed.join('\n· '));
         }
-        // 고르자마자 목록에 보이는 첨부(협업티켓 · WBS 산출물) — 화면에는 이 창의 blob: 주소로 바로 보여 주고,
+        // 고르자마자 목록에 보이는 첨부(협업요청 · WBS 산출물) — 화면에는 이 창의 blob: 주소로 바로 보여 주고,
         // 뒤에서 Storage 에 올린 뒤 entry.path · entry.url 을 실제 주소로 바꾸고 저장합니다 (afterSave).
         //   rootsFn: 지금의 목록들을 돌려주는 함수 — 올리는 사이 목록을 다시 읽었거나(남의 변경) 항목이 복사되었어도(여러 부서 지시)
         //            같은 올리기 번호(uploadKey)를 가진 항목을 **지금 목록에서** 모두 찾아 고칩니다 (2026-09-29 검토)
@@ -10090,7 +10090,7 @@ const QUOTE_TEMPLATES = [
         // ==================== 조직 마스터 — 본부(부서) · 팀 ====================
         // 예전에는 부서 이름이 코드에 박혀 있었습니다(deptNames 상수).
         // 이제 **본부·팀 목록이 자료**가 되어, 조직도 관리에서 넣고 고치면
-        // 조직도 · 경영 현황판 · 협업티켓 · 일정 · 업무센터 · 권한 설정이 **모두 그 이름을 따릅니다.**
+        // 조직도 · 경영 현황판 · 협업요청 · 일정 · 업무센터 · 권한 설정이 **모두 그 이름을 따릅니다.**
         //   · id      — 코드가 쓰는 값. 한 번 만들면 바뀌지 않습니다 (이름만 바뀝니다)
         //   · external— 사외 조직(외주업체). 조직도·본부 목록에서 빠집니다
         //   · system  — 기본 제공 본부. 지울 수 없습니다 (이름은 고칠 수 있습니다)
@@ -10163,7 +10163,7 @@ const QUOTE_TEMPLATES = [
         }
         function orgDeptIds(withExternal) { return orgDeptList(withExternal).map(d => d.id); }
         function orgFindDept(id) { return orgDepts.find(d => d.id === id) || null; }
-        // 업무를 배분하는 본부들 — 협업티켓 · 업무이관 · 일정 · 현황판이 함께 씁니다 (사외 제외)
+        // 업무를 배분하는 본부들 — 협업요청 · 업무이관 · 일정 · 현황판이 함께 씁니다 (사외 제외)
         function allDeptIds() { return orgDeptIds(false); }
 
         // 부서 id → 이름 표. 화면 곳곳이 이 표를 그대로 읽고 있어 모양은 그대로 두고 내용만 다시 채웁니다.
@@ -10507,7 +10507,7 @@ const QUOTE_TEMPLATES = [
                     { id: 'org-chart', name: '조직도' },
                     { id: 'team-overview', name: '팀 통합현황', note: '팀장·본부장 이상만' },
                     { id: 'calendar-center', name: '일정캘린더' },
-                    { id: 'collab-center', name: '협업티켓센터' },
+                    { id: 'collab-center', name: '협업업무센터' },
                     { id: 'project-center', name: '프로젝트 관리' },
                     {
                         id: 'inbound-center', name: '인바운드 관리', children: [
@@ -10624,7 +10624,7 @@ const QUOTE_TEMPLATES = [
                     { id: 'partner-ids', name: '업체 관리 보기 (아이디 · 가입 승인은 파트너센터 권한에서)' },
                     { id: 'card-perm', name: '법인카드 조회 권한' },
                     // 화면이 아니라 '권한' 하나입니다 — 켜진 그룹은 본부 · 작성자 · 처리 상태와 관계없이
-                    // 모든 자료(티켓 · 일정 · 거래처 · 파트너 · 접수 …)를 수정 · 삭제합니다. 관리자는 늘 켜져 있습니다 (2026-09-28)
+                    // 모든 자료(요청 · 일정 · 거래처 · 파트너 · 접수 …)를 수정 · 삭제합니다. 관리자는 늘 켜져 있습니다 (2026-09-28)
                     { id: 'data-admin', name: '전체 자료 수정 · 삭제', note: '본부 · 작성자 · 처리 상태와 관계없이' },
                     {
                         id: 'settings', name: '설정', children: [
@@ -10923,7 +10923,7 @@ const QUOTE_TEMPLATES = [
             externalUser = !!(permissionGroups.find(g => g.id === currentUserGroupId) || {}).external;
 
             document.getElementById('nav-dashboard-personal').classList.toggle('hidden', !isAllowed('dashboard-personal'));
-            // 협업티켓센터·일정캘린더: 사내 사용자에게는 항상 노출 (조회 범위는 권한 설정으로 별도 제어).
+            // 협업업무센터·일정캘린더: 사내 사용자에게는 항상 노출 (조회 범위는 권한 설정으로 별도 제어).
             // 사외 계정에는 감춥니다.
             document.getElementById('nav-collab-center').classList.toggle('hidden', externalUser);
             document.getElementById('nav-calendar-center').classList.toggle('hidden', externalUser);
@@ -11343,7 +11343,7 @@ const QUOTE_TEMPLATES = [
             'collab-completed':   { icon: 'fa-flag-checkered',    color: 'blue',   label: '완료' },
             'delay-inquiry':      { icon: 'fa-hourglass-half',    color: 'red',    label: '지연사유 확인요청' },
             'delay-answer':       { icon: 'fa-reply',             color: 'amber',  label: '지연사유 회신' },
-            'collab-transferred': { icon: 'fa-share-from-square', color: 'indigo', label: '티켓 이관' },
+            'collab-transferred': { icon: 'fa-share-from-square', color: 'indigo', label: '요청 이관' },
             'schedule-change':        { icon: 'fa-calendar-alt',   color: 'teal', label: '일정 변경 요청' },
             'schedule-change-result': { icon: 'fa-calendar-check', color: 'teal', label: '일정 변경 결과' },
             'directive-progress':  { icon: 'fa-chart-line',    color: 'purple', label: '지시 진척' },
@@ -11366,7 +11366,7 @@ const QUOTE_TEMPLATES = [
             if (n.type === 'collab-completed') return `<b>${escapeHtml(n.title)}</b> 처리가 완료되었습니다.${n.detail ? `<br><span class="text-xs text-gray-600">처리내용: ${escapeHtml(n.detail)}</span>` : ''}${n.issue ? `<br><span class="text-xs text-amber-600">이슈: ${escapeHtml(n.issue)}</span>` : ''}${n.fileCount ? `<br><span class="text-xs text-blue-700 font-semibold"><i class="fas fa-paperclip mr-1"></i>첨부자료 ${n.fileCount}건 · 클릭하여 확인</span>` : ''}`;
             if (n.type === 'delay-inquiry') return `<b>${escapeHtml(n.title)}</b> 지연에 대한 사유 확인요청이 도착했습니다.${n.detail ? `<br><span class="text-xs text-gray-600">요청: ${escapeHtml(n.detail)}</span>` : ''}`;
             if (n.type === 'delay-answer') return `<b>${escapeHtml(n.title)}</b> 지연 사유가 회신되었습니다.${n.detail ? `<br><span class="text-xs text-gray-600">사유: ${escapeHtml(n.detail)}</span>` : ''}`;
-            if (n.type === 'collab-transferred') return `<b>${escapeHtml(n.title)}</b> 티켓 담당이 이관되었습니다.${n.detail ? `<br><span class="text-xs text-gray-600">${escapeHtml(n.detail)}</span>` : ''}`;
+            if (n.type === 'collab-transferred') return `<b>${escapeHtml(n.title)}</b> 요청 담당이 이관되었습니다.${n.detail ? `<br><span class="text-xs text-gray-600">${escapeHtml(n.detail)}</span>` : ''}`;
             if (n.type === 'schedule-change') return `<b>${escapeHtml(n.title)}</b> 처리완료 예정일 <b>변경 요청</b>이 도착했습니다. 확인 후 수락해 주세요.${n.detail ? `<br><span class="text-xs text-gray-600">${escapeHtml(n.detail)}</span>` : ''}`;
             if (n.type === 'schedule-change-result') return `<b>${escapeHtml(n.title)}</b> 일정 변경 요청이 처리되었습니다.${n.detail ? `<br><span class="text-xs text-gray-600">${escapeHtml(n.detail)}</span>` : ''}`;
             if (n.type === 'directive-progress') return `<b>${escapeHtml(n.title)}</b> 지시 업무의 진척률이 갱신되었습니다.${n.detail ? `<br><span class="text-xs text-gray-600">${escapeHtml(n.detail)}</span>` : ''}`;
@@ -11870,17 +11870,17 @@ const QUOTE_TEMPLATES = [
             // 1. 해야 할 일 (개인 할 일 + 할당 업무)
             renderPersonalTasks(userName);
 
-            // 2. 할당된 티켓 (이슈) + 수신된 협업 요청
+            // 2. 할당된 요청 (이슈) + 수신된 협업 요청
             const ticketsEl = document.getElementById('personal-tickets-list');
 
-            // (a) 우리 부서로 수신된 협업 요청 (협업티켓센터 '받은 티켓'과 동일 소스)
+            // (a) 우리 부서로 수신된 협업 요청 (협업업무센터 '받은 요청'과 동일 소스)
             //     관리자는 부서 구분이 없으므로 전체 수신 요청을 확인할 수 있게 표시
             //     업무지시는 아래 (a-2)에서 D-day와 함께 따로 보여주므로 여기서 제외합니다.
             const myCollabInbox = collabRequests.filter(r =>
                 (dept === 'admin' || r.targetDept === dept) && r.status === 'pending' && !isDirective(r)
             );
             const collabHtml = myCollabInbox.map(r => {
-                return `<div class="bg-indigo-50 p-2 rounded text-sm text-gray-800 border border-indigo-100 cursor-pointer hover:bg-indigo-100" onclick="navigate('collab-center', document.getElementById('nav-collab-center'))" title="클릭하여 협업티켓센터에서 처리">
+                return `<div class="bg-indigo-50 p-2 rounded text-sm text-gray-800 border border-indigo-100 cursor-pointer hover:bg-indigo-100" onclick="navigate('collab-center', document.getElementById('nav-collab-center'))" title="클릭하여 협업업무센터에서 처리">
                     <div class="flex items-center justify-between">
                         <span><span class="font-bold text-indigo-600 mr-1">[협업수신]</span>${collabTypeLabel(r.type)}${escapeHtml(r.title)}</span>
                         <span class="text-xs bg-indigo-200 text-indigo-800 px-1.5 py-0.5 rounded whitespace-nowrap ml-1">대기</span>
@@ -11915,7 +11915,7 @@ const QUOTE_TEMPLATES = [
 
             const allMyTickets = [...directiveHtml, ...collabHtml, ...myIssues];
 
-            ticketsEl.innerHTML = allMyTickets.length > 0 ? allMyTickets.join('') : '<p class="text-sm text-gray-500 text-center mt-4">할당된 티켓/이슈가 없습니다.</p>';
+            ticketsEl.innerHTML = allMyTickets.length > 0 ? allMyTickets.join('') : '<p class="text-sm text-gray-500 text-center mt-4">할당된 요청/이슈가 없습니다.</p>';
 
             // 3. 내가 요청한 협업 내역 — 협업요청 + 업무지시를 함께 표시하고, 클릭하면 상세를 엽니다.
             //    업무지시는 여러 명에게 같은 내용이 나가므로 묶음(directiveGroupId) 단위로 한 줄만 보여줍니다.
@@ -11923,7 +11923,7 @@ const QUOTE_TEMPLATES = [
             const registeredEl = document.getElementById('personal-registered-list');
             const reqStatusLabel = { completed: ['완료됨', 'text-blue-600'], accepted: ['수락됨', 'text-green-600'], hold: ['보류', 'text-yellow-600'], rejected: ['거절됨', 'text-red-600'], cancelled: ['취소됨', 'text-gray-500'], pending: ['대기중', 'text-indigo-600'] };
 
-            // 업무지시는 묶음별로 접고, 나머지는 티켓 그대로
+            // 업무지시는 묶음별로 접고, 나머지는 요청 그대로
             const reqDirectiveGroups = new Map();
             const reqPlain = [];
             myRequests.forEach(r => {
@@ -11967,7 +11967,7 @@ const QUOTE_TEMPLATES = [
                 </div>`;
             });
 
-            // 일반 협업요청 한 줄 (클릭 시 티켓 상세)
+            // 일반 협업요청 한 줄 (클릭 시 요청 상세)
             const plainRows = reqPlain.map(r => {
                 const [sl, sc] = reqStatusLabel[r.status] || reqStatusLabel.pending;
                 return `<div onclick="openCollabDetailModal('${r.id}')" class="bg-gray-50 p-2 rounded text-sm text-gray-800 border border-gray-200 cursor-pointer hover:bg-gray-100" title="클릭하여 상세 보기">
@@ -12196,7 +12196,7 @@ const QUOTE_TEMPLATES = [
                 // 팀원별 예정 일정 (본인 부서 일정, 오늘 이후, 날짜순)
                 const scheds = schedules.filter(s => canViewSchedule(s) && s.salesperson === m.name && (s.dept || 'sales') === m.dept && s.date >= todayStr)
                     .slice().sort((a, b) => (new Date(a.date) - new Date(b.date)) || compareScheduleTime(a, b));
-                // 부서에서 할당된 진행중 업무 티켓
+                // 부서에서 할당된 진행중 업무 요청
                 const tasks = localTasks.filter(t => t.assignee === m.name && t.type === 'task' && t.status !== 'done');
 
                 const todoHtml = todos.length ? todos.map(t => {
@@ -12222,7 +12222,7 @@ const QUOTE_TEMPLATES = [
                 }).join('') : '<p class="text-xs text-gray-400 py-1">예정된 일정이 없습니다.</p>';
 
                 const taskHtml = tasks.length
-                    ? `<div class="mt-2 pt-2 border-t border-gray-100"><p class="text-xs font-semibold text-gray-400 mb-1">할당 티켓</p>` +
+                    ? `<div class="mt-2 pt-2 border-t border-gray-100"><p class="text-xs font-semibold text-gray-400 mb-1">할당 요청</p>` +
                       tasks.map(t => `<div class="text-xs text-gray-600 py-0.5 truncate"><span class="font-bold text-blue-600 mr-1">[${deptNames[t.dept] || ''}]</span>${escapeHtml(t.title)}</div>`).join('') +
                       `</div>`
                     : '';
@@ -12719,7 +12719,7 @@ const QUOTE_TEMPLATES = [
         //   (예전엔 이 표들은 말없이 남의 내용으로 바뀌어, 내가 고친 것이 사라진 줄 몰랐습니다)
         const KOB_CONFLICT_OWN = ['schedules', 'works', 'customers', 'cases', 'contracts', 'quotes'];
         const KOB_TABLE_LABEL = {
-            collab_requests: '협업티켓', notifications: '알림', local_tasks: '자부서 업무', todos: '할 일', projects: '프로젝트',
+            collab_requests: '협업요청', notifications: '알림', local_tasks: '자부서 업무', todos: '할 일', projects: '프로젝트',
             notices: '공지', supplies: '공급', price_book: '단가표', settlements: '정산', pay_doc_requests: '보완서류 요청',
             install_checks: '설치 체크', pg_fees: 'PG 수수료', partner_intakes: '파트너 접수'
         };
@@ -13510,7 +13510,7 @@ const QUOTE_TEMPLATES = [
             const used = orgDepts.map(d => d.style);
             return ORG_STYLE_KEYS.filter(k => k !== 'gray').find(k => used.indexOf(k) < 0) || ORG_STYLE_KEYS[orgDepts.length % ORG_STYLE_KEYS.length];
         }
-        // 부서 이름은 조직 마스터 한 곳에서만 옵니다 — 조직도 · 메뉴 · 티켓 · 일정이 같은 이름을 씁니다
+        // 부서 이름은 조직 마스터 한 곳에서만 옵니다 — 조직도 · 메뉴 · 요청 · 일정이 같은 이름을 씁니다
         function orgDeptName(id) { return deptName(id); }
         // 직급 순서 — 카드 안에서 윗사람이 먼저 오도록
         // 직급 목록 (2026-09-21) — 위가 높은 직급. 조직도 관리 › 직급 관리에서 추가 · 수정 · 삭제 · 순서를 바꿉니다.
@@ -13708,7 +13708,7 @@ const QUOTE_TEMPLATES = [
         }
 
         // ==================== 업무/이슈 및 협업 등록 로직 ====================
-        // 협업 티켓 유형 라벨 (이슈/협업/기타/업무)
+        // 협업 요청 유형 라벨 (이슈/협업/기타/업무)
         function collabTypeLabel(type) {
             if (type === 'issue') return '<span class="text-red-600 font-bold mr-1">[이슈]</span>';
             if (type === 'collab') return '<span class="text-indigo-600 font-bold mr-1">[협업]</span>';
@@ -13720,9 +13720,9 @@ const QUOTE_TEMPLATES = [
         function openTaskModal(dept) {
             document.getElementById('task-modal').classList.remove('hidden');
             document.getElementById('task-dept').value = dept;
-            document.getElementById('task-modal-title').innerText = '티켓 등록';
+            document.getElementById('task-modal-title').innerText = '협업요청 등록';
 
-            // 발행 대상 옵션: 자기 부서 포함 모든 부서에 발행 가능(같은 팀 개인 지정 티켓 허용).
+            // 발행 대상 옵션: 자기 부서 포함 모든 부서에 발행 가능(같은 팀 개인 지정 요청 허용).
             // 자기 부서 옵션에는 '(우리 팀)' 표시를 붙여 구분한다.
             const targetSelect = document.getElementById('task-collab-target');
             Array.from(targetSelect.options).forEach(opt => {
@@ -13738,7 +13738,7 @@ const QUOTE_TEMPLATES = [
             onTaskTargetChange();
         }
 
-        // 발행 대상에 따라 티켓 유형 옵션 구성
+        // 발행 대상에 따라 요청 유형 옵션 구성
         function populateTaskTypeOptions() {
             const targetDept = document.getElementById('task-collab-target').value;
             const myDept = document.getElementById('task-dept').value;
@@ -13801,7 +13801,7 @@ const QUOTE_TEMPLATES = [
         function onTaskTargetChange() {
             const targetDept = document.getElementById('task-collab-target').value;
             populateTaskTypeOptions();
-            // 진행 상태는 자체 진행 티켓에만 의미 있음
+            // 진행 상태는 자체 진행 요청에만 의미 있음
             document.getElementById('task-status-wrap').classList.toggle('hidden', targetDept !== 'none');
             // 수신 담당자(개인) 지정: 타부서 발행일 때만 노출하고 해당 부서 구성원으로 채움
             const auWrap = document.getElementById('task-assignee-user-wrap');
@@ -13814,7 +13814,7 @@ const QUOTE_TEMPLATES = [
                 auSelect.innerHTML = '<option value="">부서 전체 (담당자 미지정)</option>' +
                     members.map(u => `<option value="${escapeHtml(u.name)}">${escapeHtml(u.name)} · ${escapeHtml(u.rank || '')}</option>`).join('');
             }
-            // 첨부자료는 협업 티켓(타부서·우리 팀 발행)에만 붙습니다. 자체 진행 업무는 첨부 저장소가 없습니다.
+            // 첨부자료는 협업 요청(타부서·우리 팀 발행)에만 붙습니다. 자체 진행 업무는 첨부 저장소가 없습니다.
             const fileWrap = document.getElementById('task-file-wrap');
             if (fileWrap) fileWrap.classList.toggle('hidden', targetDept === 'none');
             onTaskTypeChange();
@@ -13873,7 +13873,7 @@ const QUOTE_TEMPLATES = [
                 saveCollabRequests();   // 같은 폼에서 협업 요청으로 등록될 수도 있습니다
             } else if (type === 'directive') {
                 // ---------- 업무지시 발행 ----------
-                // 완료기한은 지시자가 정하고, 선택한 대상 수만큼 티켓을 만들어 같은 묶음(directiveGroupId)으로 연결합니다.
+                // 완료기한은 지시자가 정하고, 선택한 대상 수만큼 요청을 만들어 같은 묶음(directiveGroupId)으로 연결합니다.
                 if (!canIssueDirective(currentUserLevel, dept, targetDept)) {
                     alert('업무지시 권한이 없습니다.\n본부장·팀장(자기 부서) 또는 대표·관리자만 지시할 수 있습니다.');
                     return;
@@ -13952,7 +13952,7 @@ const QUOTE_TEMPLATES = [
                     requestFiles: takeCollabRequestFiles(1)[0]
                 });
                 // 받는 쪽에 알립니다 (2026-09-17). 지금까지는 업무지시(directive)만 알림을 보내고
-                // 일반 협업 요청은 상대가 협업티켓센터를 열어 봐야 알 수 있었습니다.
+                // 일반 협업 요청은 상대가 협업업무센터를 열어 봐야 알 수 있었습니다.
                 const newReq = collabRequests[collabRequests.length - 1];
                 pushNotification({
                     id: 'cnoti_' + collabNotiIdCounter++,
@@ -13969,7 +13969,7 @@ const QUOTE_TEMPLATES = [
             closeTaskModal();
         }
 
-        // 자체 진행 업무/이슈(localTasks)는 통합 협업티켓센터의 '전체 현황' 칸반에 함께 표시됨.
+        // 자체 진행 업무/이슈(localTasks)는 통합 협업업무센터의 '전체 현황' 칸반에 함께 표시됨.
         // 등록/변경 시 협업센터를 다시 렌더링한다.
         function renderLocalTasks() {
             saveLocalTasks();
@@ -14049,12 +14049,12 @@ const QUOTE_TEMPLATES = [
             currentDetailTaskId = null;
         }
 
-        // ==================== 통합 협업티켓센터 ====================
+        // ==================== 통합 협업업무센터 ====================
         // 조회 범위(스코프) 값: self(본인만) / dept(자기 부서) / hq(본부) / cross(전 부서 크로스체크) / all(전사)
         // — 현재 부서 구조상 hq==dept로 동작하지만, 향후 본부-팀 분리를 위해 별도 스코프로 둠.
         // — cross: 본부장끼리 타 부서 업무를 서로 확인하는 범위. 조회는 전 부서, 수정·삭제는 자기 부서만.
         const collabScopeNames = {
-            self: '본인 관련 티켓만',
+            self: '본인 관련 요청만',
             dept: '자기 부서',
             hq: '본부(부서) 전체',
             cross: '전 부서 크로스체크 (타 부서는 조회만)',
@@ -14085,7 +14085,7 @@ const QUOTE_TEMPLATES = [
             return scopeOfLevel(collabLevelScope, level, 'self');
         }
 
-        // 현재 사용자가 조회 가능한 티켓 목록 (권한 스코프 적용)
+        // 현재 사용자가 조회 가능한 요청 목록 (권한 스코프 적용)
         function getVisibleTickets() {
             const name = currentUserName, dept = currentUserDept, level = currentUserLevel;
             const scope = getCollabScopeFor(name, dept, level);
@@ -14144,7 +14144,7 @@ const QUOTE_TEMPLATES = [
             const initial = escapeHtml(String(name).charAt(0));
             return `<span class="inline-flex items-center gap-1"><span class="w-4 h-4 rounded-full bg-indigo-500 text-white text-[9px] font-bold grid place-items-center">${initial}</span><b class="text-gray-600 font-medium">${escapeHtml(name)}</b></span>`;
         }
-        // 티켓 카드 (받은/발행/펜딩 공용). mode: 'inbox' 이면 처리 버튼 노출
+        // 요청 카드 (받은/발행/펜딩 공용). mode: 'inbox' 이면 처리 버튼 노출
         function collabTicketCard(req, mode) {
             const descHTML = req.description ? `<div class="text-xs text-gray-600 mt-2 bg-gray-50 p-2 rounded border border-gray-100">${escapeHtml(req.description).replace(/\n/g, '<br>')}</div>` : '';
             const aged = req.status === 'pending' && (req.ageDays || 0) >= 3;
@@ -14152,7 +14152,7 @@ const QUOTE_TEMPLATES = [
             const overdue = isCollabOverdue(req);
             const inq = req.delayInquiry;
             const border = overdue ? 'border-red-400' : ({ pending: 'border-amber-400', accepted: 'border-green-400', hold: 'border-yellow-400', rejected: 'border-red-400', completed: 'border-blue-400', cancelled: 'border-gray-300' }[req.status] || 'border-gray-300');
-            // 받은 티켓은 완료·거절 전까지 다른 팀원/부서로 이관할 수 있습니다
+            // 받은 요청은 완료·거절 전까지 다른 팀원/부서로 이관할 수 있습니다
             const transferBtn = (mode === 'inbox' && canTransferCollab(req))
                 ? `<button type="button" onclick="openCollabTransferModal('${req.id}')" class="px-3 py-1 bg-indigo-500 hover:bg-indigo-600 text-white rounded text-xs font-semibold">↪ 이관</button>`
                 : '';
@@ -14205,7 +14205,7 @@ const QUOTE_TEMPLATES = [
                         ${dueNote}
                     </div>`;
             } else if (mode === 'outbox' && (overdue || hasPendingScheduleChange(req))) {
-                // 요청한 부서: ① 지연된 티켓에 지연사유 확인요청 ② 담당자가 올린 일정 변경 요청 확인
+                // 요청한 부서: ① 지연된 요청에 지연사유 확인요청 ② 담당자가 올린 일정 변경 요청 확인
                 let delayBtn = '';
                 if (overdue) {
                     if (!inq) {
@@ -14366,7 +14366,7 @@ const QUOTE_TEMPLATES = [
             // 내가 지시한 업무: 지시자가 나 (조회범위가 넓으면 우리 부서가 발행한 지시까지)
             const issued = directives.filter(r => r.assignee === name
                 || (wide && ((r.sourceDept === dept && dept !== 'admin') || dept === 'admin')));
-            // directiveGroupId 로 묶기 (없으면 티켓 id 자체를 묶음 키로)
+            // directiveGroupId 로 묶기 (없으면 요청 id 자체를 묶음 키로)
             const groups = new Map();
             issued.forEach(r => {
                 const key = r.directiveGroupId || r.id;
@@ -14422,7 +14422,7 @@ const QUOTE_TEMPLATES = [
         }
 
         function renderCollabCenter() {
-            saveCollabRequests();   // 바뀐 협업티켓을 저장합니다 (안 바뀌었으면 아무것도 안 보냄)
+            saveCollabRequests();   // 바뀐 협업요청을 저장합니다 (안 바뀌었으면 아무것도 안 보냄)
             if (!document.getElementById('collab-received-list')) return;
             const name = currentUserName, dept = currentUserDept;
             const visible = getVisibleTickets();
@@ -14437,14 +14437,14 @@ const QUOTE_TEMPLATES = [
             //  - self  : 내가 담당(assigneeUser)=받은 / 내가 요청자(assignee)=발행
             //  - dept↑ : 내 부서가 수신=받은 / 내 부서가 발행=발행 (개인 기준도 함께 포함)
             const wide = scope !== 'self';
-            const allData = canManageAllData();     // 관리자 · 전체 자료 권한은 모든 티켓의 처리 단추를 봅니다 (2026-09-28)
+            const allData = canManageAllData();     // 관리자 · 전체 자료 권한은 모든 요청의 처리 단추를 봅니다 (2026-09-28)
             const received = filtered.filter(r => r.assigneeUser === name || allData || (wide && ((r.targetDept === dept && dept !== 'admin') || dept === 'admin')));
             const sent = filtered.filter(r => r.assignee === name || (wide && ((r.sourceDept === dept && dept !== 'admin') || dept === 'admin')));
 
-            // 받은 티켓 렌더
+            // 받은 요청 렌더
             const recEl = document.getElementById('collab-received-list');
             recEl.innerHTML = received.length ? received.map(r => collabTicketCard(r, 'inbox')).join('') : collabEmpty('수신된 협업 요청이 없습니다.');
-            // 발행 티켓 렌더
+            // 발행 요청 렌더
             const sentEl = document.getElementById('collab-sent-list');
             sentEl.innerHTML = sent.length ? sent.map(r => collabTicketCard(r, 'outbox')).join('') : collabEmpty('발행한 협업 요청이 없습니다.');
 
@@ -14455,9 +14455,9 @@ const QUOTE_TEMPLATES = [
             pendEl.innerHTML = pending.length ? pending.map(r => {
                 const isInbox = r.assigneeUser === name || allData || (wide && r.targetDept === dept);
                 return collabTicketCard(r, isInbox ? 'inbox' : 'outbox');
-            }).join('') : collabEmpty('액션이 필요한 대기·보류 티켓이 없습니다.');
+            }).join('') : collabEmpty('액션이 필요한 대기·보류 요청이 없습니다.');
 
-            // 전체 현황(칸반): 협업 티켓(상태 매핑) + 자체 진행 업무/이슈(localTasks)를 함께 표시
+            // 전체 현황(칸반): 협업 요청(상태 매핑) + 자체 진행 업무/이슈(localTasks)를 함께 표시
             //  - 협업: pending=todo, accepted/hold=progress, rejected=done
             //  - 자체: todo=todo, inprogress=progress, done=done
             const filterSrc = document.getElementById('collab-filter-source').value;
@@ -14599,7 +14599,7 @@ const QUOTE_TEMPLATES = [
                 req.completedAt = ymd(new Date());          // 완료 처리일 자동 반영
                 req.completeDetail = document.getElementById('complete-detail').value.trim();
                 req.completeIssue = document.getElementById('complete-issue').value.trim();
-                // 고른 첨부자료를 티켓으로 옮깁니다 (objectURL 소유권도 함께 넘어가므로 여기서 revoke 하지 않습니다)
+                // 고른 첨부자료를 요청으로 옮깁니다 (objectURL 소유권도 함께 넘어가므로 여기서 revoke 하지 않습니다)
                 req.completeFiles = (req.completeFiles || []).concat(collabCompleteFiles);
                 collabCompleteFiles = [];
                 notifyRequesterOfCompletion(req);           // 요청자에게 통보
@@ -14629,11 +14629,11 @@ const QUOTE_TEMPLATES = [
         }
 
         // ==================== 완료 첨부자료 ====================
-        // 처리한 사람이 완료 처리 시 근거 자료(이미지·문서)를 올리면, 요청한 사람이 티켓 상세에서
+        // 처리한 사람이 완료 처리 시 근거 자료(이미지·문서)를 올리면, 요청한 사람이 요청 상세에서
         // 내려받지 않고 그대로 열어 확인합니다. 요청자가 열람하면 처리자 화면에 '확인함' 으로 표시됩니다.
         // 첨부는 고르자마자 화면에 보이고(blob:) 뒤에서 파일 저장소(Storage)에 올라가 경로가 저장됩니다 (2026-09-29 · 3단계).
         const COLLAB_FILE_MAX_SIZE  = 20 * 1024 * 1024;   // 파일당 20MB
-        const COLLAB_FILE_MAX_COUNT = 10;                 // 티켓당 10개
+        const COLLAB_FILE_MAX_COUNT = 10;                 // 요청당 10개
         let collabCompleteFiles = [];      // 완료 모달에서 고른 파일 (제출 전 임시 보관)
         let collabFileIdCounter = 1;
         let collabFileViewRef = null;      // { reqId, fileId }
@@ -14685,7 +14685,7 @@ const QUOTE_TEMPLATES = [
         }
 
         // ---------- 완료 모달: 파일 고르기 ----------
-        // 완료 처리 후 추가로 첨부할 때도 같은 입력기를 씁니다 (collabFileAddTarget 에 티켓 id 보관).
+        // 완료 처리 후 추가로 첨부할 때도 같은 입력기를 씁니다 (collabFileAddTarget 에 요청 id 보관).
         let collabFileAddTarget = null;
         function pickCollabCompleteFiles(reqId) {
             collabFileAddTarget = reqId || null;
@@ -14703,7 +14703,7 @@ const QUOTE_TEMPLATES = [
             addCollabCompleteFiles(files);
         }
 
-        // 고른 파일을 목록에 담습니다. 완료 후 추가 첨부(collabFileAddTarget)면 티켓에 바로 붙입니다.
+        // 고른 파일을 목록에 담습니다. 완료 후 추가 첨부(collabFileAddTarget)면 요청에 바로 붙입니다.
         function addCollabCompleteFiles(fileList) {
             const files = Array.from(fileList || []);
             if (!files.length) return;
@@ -14735,7 +14735,7 @@ const QUOTE_TEMPLATES = [
             renderCollabCompleteFileList();
         }
 
-        // 완료 처리 전(또는 취소)에만 호출 — 아직 티켓에 넘기지 않은 파일의 메모리를 되돌립니다.
+        // 완료 처리 전(또는 취소)에만 호출 — 아직 요청에 넘기지 않은 파일의 메모리를 되돌립니다.
         function clearCollabCompleteFiles() {
             collabCompleteFiles.forEach(f => { if (f.url) URL.revokeObjectURL(f.url); });
             collabCompleteFiles = [];
@@ -14762,10 +14762,10 @@ const QUOTE_TEMPLATES = [
             }).join('');
         }
 
-        // ---------- 티켓 등록 모달: 요청 첨부 파일 고르기 ----------
+        // ---------- 협업요청 등록 모달: 요청 첨부 파일 고르기 ----------
         // 완료 첨부(collabCompleteFiles)와 같은 구조를 쓰되, 요청하는 쪽이 붙이는 자료라 저장 위치만 다릅니다.
-        //  - 발행 전  : collabRequestFiles 에 임시 보관했다가 submitTask 에서 티켓의 requestFiles 로 넘김
-        //  - 발행 후  : collabRequestFileAddTarget 에 티켓 id 를 담아 티켓에 바로 붙임 (완료 전까지)
+        //  - 발행 전  : collabRequestFiles 에 임시 보관했다가 submitTask 에서 요청의 requestFiles 로 넘김
+        //  - 발행 후  : collabRequestFileAddTarget 에 요청 id 를 담아 요청에 바로 붙임 (완료 전까지)
         let collabRequestFiles = [];
         let collabRequestFileAddTarget = null;
 
@@ -14779,7 +14779,7 @@ const QUOTE_TEMPLATES = [
             addCollabRequestFiles(event.target.files);
             event.target.value = '';
         }
-        // 끌어다 놓기 · 붙여넣기 — 티켓 등록 모달 안의 구역이므로 '등록 모달용' 으로 고정합니다
+        // 끌어다 놓기 · 붙여넣기 — 협업요청 등록 모달 안의 구역이므로 '등록 모달용' 으로 고정합니다
         function collabRequestDropFiles(files) {
             collabRequestFileAddTarget = null;
             addCollabRequestFiles(files);
@@ -14816,7 +14816,7 @@ const QUOTE_TEMPLATES = [
             renderCollabRequestFileList();
         }
 
-        // 발행 전(또는 취소)에만 호출 — 아직 티켓에 넘기지 않은 파일의 메모리를 되돌립니다.
+        // 발행 전(또는 취소)에만 호출 — 아직 요청에 넘기지 않은 파일의 메모리를 되돌립니다.
         // 발행에 성공한 파일은 takeCollabRequestFiles() 로 이미 빠져나간 뒤라 여기서 지워지지 않습니다.
         function clearCollabRequestFiles() {
             collabRequestFiles.forEach(f => { if (f.url && /^blob:/i.test(f.url)) URL.revokeObjectURL(f.url); });
@@ -14825,8 +14825,8 @@ const QUOTE_TEMPLATES = [
             renderCollabRequestFileList();
         }
 
-        // 발행 시 임시 보관분을 티켓으로 넘깁니다. 업무지시처럼 티켓이 여러 건 만들어지면
-        // 티켓마다 별도 항목(id)으로 복사해 열람 표시가 서로 섞이지 않게 합니다.
+        // 발행 시 임시 보관분을 요청으로 넘깁니다. 업무지시처럼 요청이 여러 건 만들어지면
+        // 요청마다 별도 항목(id)으로 복사해 열람 표시가 서로 섞이지 않게 합니다.
         function takeCollabRequestFiles(copyCount) {
             const src = collabRequestFiles;
             collabRequestFiles = [];               // 여기서 비워야 closeTaskModal 이 blob URL 을 되돌리지 않습니다
@@ -14858,7 +14858,7 @@ const QUOTE_TEMPLATES = [
             }).join('');
         }
 
-        // ---------- 티켓 상세: 첨부자료 목록 ----------
+        // ---------- 요청 상세: 첨부자료 목록 ----------
         // 요청한 쪽인지 판별 — 요청자 본인이거나 요청 부서 소속이면 '확인하는 사람' 입니다.
         function isCollabRequesterSide(req) {
             return !!req && (req.assignee === currentUserName || req.sourceDept === currentUserDept || canManageAllData());
@@ -14867,7 +14867,7 @@ const QUOTE_TEMPLATES = [
         function isCollabHandlerSide(req) {
             return !!req && (req.assigneeUser === currentUserName || req.targetDept === currentUserDept || canManageAllData());
         }
-        // 요청 첨부를 더 붙일 수 있는 사람 — 요청한 쪽이, 티켓이 끝나기 전까지
+        // 요청 첨부를 더 붙일 수 있는 사람 — 요청한 쪽이, 요청이 끝나기 전까지
         function canAddCollabRequestFile(req) {
             if (!req) return false;
             if (req.status === 'completed' || req.status === 'rejected' || req.status === 'cancelled') return false;
@@ -14952,7 +14952,7 @@ const QUOTE_TEMPLATES = [
             </div>`;
         }
 
-        // 완료 처리 후 티켓에 붙어 있는 첨부 내리기 (처리한 쪽만)
+        // 완료 처리 후 요청에 붙어 있는 첨부 내리기 (처리한 쪽만)
         function removeCollabTicketFile(reqId, fileId) {
             const req = collabRequests.find(r => r.id === reqId);
             if (!req || !canAddCollabCompleteFile(req)) return;
@@ -14966,7 +14966,7 @@ const QUOTE_TEMPLATES = [
             openCollabDetailModal(req.id);
         }
 
-        // 발행한 티켓에 붙어 있는 요청 첨부 내리기 (요청한 쪽만)
+        // 발행한 요청에 붙어 있는 요청 첨부 내리기 (요청한 쪽만)
         function removeCollabTicketRequestFile(reqId, fileId) {
             const req = collabRequests.find(r => r.id === reqId);
             if (!req || !canAddCollabRequestFile(req)) return;
@@ -15123,7 +15123,7 @@ const QUOTE_TEMPLATES = [
         }
 
         // ==================== 업무지시 (directive) ====================
-        // 일반 협업티켓과 다른 점
+        // 일반 협업요청과 다른 점
         //  ① 완료기한(dueDate)을 '지시자'가 정합니다. (협업요청은 수신자가 수락하며 예정일을 정함)
         //  ② 수신자에게 D-day 를 표시합니다.
         //  ③ 진척률(0~100%)을 수신자가 갱신하고 지시자가 확인합니다.
@@ -15152,7 +15152,7 @@ const QUOTE_TEMPLATES = [
         }
 
         // ---------- 완료기한의 '시각' ----------
-        // 티켓을 발행할 때 날짜와 함께 시각까지 정합니다. (예: 2026-08-14 18:00)
+        // 요청을 발행할 때 날짜와 함께 시각까지 정합니다. (예: 2026-08-14 18:00)
         // 시각이 없는 예전 데이터는 그날 18:00 로 봅니다 — 하루의 끝을 기준으로 두는 편이
         // '오늘까지'라는 말과 가깝고, 없던 자료가 갑자기 지연으로 잡히지 않습니다.
         const DUE_TIME_DEFAULT = '18:00';
@@ -15221,7 +15221,7 @@ const QUOTE_TEMPLATES = [
         // 묶음 단위로 ① 완료기한 변경 ② 지시 취소 를 처리합니다.
         // 이미 끝난 건(완료·거절·취소)은 건드리지 않고, 진행 중인 건에만 적용됩니다.
 
-        // 같은 묶음에 속한 티켓들. groupId 가 없는 단독 지시는 자기 자신만 반환.
+        // 같은 묶음에 속한 요청들. groupId 가 없는 단독 지시는 자기 자신만 반환.
         function directiveGroupItems(groupId) {
             if (!groupId) return [];
             return collabRequests.filter(r => isDirective(r) && (r.directiveGroupId || r.id) === groupId);
@@ -15397,7 +15397,7 @@ const QUOTE_TEMPLATES = [
             return req.targetDept === currentUserDept;
         }
 
-        // 수락된 티켓 중 처리완료 예정일이 도래(오늘 포함)했는지
+        // 수락된 요청 중 처리완료 예정일이 도래(오늘 포함)했는지
         // 업무지시는 기한 전 완료가 정상이므로 이 제한을 받지 않습니다.
         function isCollabDue(req) {
             if (isDirective(req)) return req.status === 'accepted';
@@ -15583,7 +15583,7 @@ const QUOTE_TEMPLATES = [
         //  - req.scheduleHistory       : 지금까지의 변경 요청 이력 (수락·거절 모두 기록)
         // 업무지시는 기한을 지시자가 정하므로(묶음 단위 '기한 변경') 이 기능의 대상이 아닙니다.
 
-        // 변경 요청 권한: 수락 상태의 협업 티켓을 맡은 수신 담당자(또는 수신 부서 소속·관리자)
+        // 변경 요청 권한: 수락 상태의 협업 요청을 맡은 수신 담당자(또는 수신 부서 소속·관리자)
         function canRequestScheduleChange(req) {
             if (!req || isDirective(req)) return false;
             if (req.status !== 'accepted') return false;
@@ -15592,7 +15592,7 @@ const QUOTE_TEMPLATES = [
             if (req.assigneeUser) return req.assigneeUser === currentUserName;
             return req.targetDept === currentUserDept;
         }
-        // 확인(수락/거절) 권한: 티켓을 발행한 요청자 본인(또는 발행 부서 소속·관리자)
+        // 확인(수락/거절) 권한: 요청을 발행한 요청자 본인(또는 발행 부서 소속·관리자)
         function canDecideScheduleChange(req) {
             if (!req || isDirective(req)) return false;
             if (req.status !== 'accepted') return false;
@@ -15679,7 +15679,7 @@ const QUOTE_TEMPLATES = [
         function openScheduleConfirmModal(id) {
             const req = collabRequests.find(r => r.id === id);
             if (!req || !req.scheduleChange) return;
-            if (!canDecideScheduleChange(req)) { alert('일정 변경을 확인할 권한이 없습니다.\n티켓을 발행한 요청자만 확인할 수 있습니다.'); return; }
+            if (!canDecideScheduleChange(req)) { alert('일정 변경을 확인할 권한이 없습니다.\n요청을 발행한 요청자만 확인할 수 있습니다.'); return; }
             const sc = req.scheduleChange;
             document.getElementById('schedok-task-id').value = id;
             document.getElementById('schedok-decision').value = '';
@@ -15741,7 +15741,7 @@ const QUOTE_TEMPLATES = [
                 : '일정 변경을 거절했습니다.\n기존 처리완료 예정일이 유지됩니다.');
         }
 
-        // ---------- 티켓 상세 보기 ----------
+        // ---------- 요청 상세 보기 ----------
         let collabDetailId = '';
         function openCollabDetailModal(id) {
             const req = collabRequests.find(r => r.id === id);
@@ -15928,13 +15928,13 @@ const QUOTE_TEMPLATES = [
             document.getElementById('collab-detail-modal').classList.remove('hidden');
         }
         function closeCollabDetailModal() { document.getElementById('collab-detail-modal').classList.add('hidden'); }
-        // 관리자 — 협업티켓 · 업무지시를 상태 · 부서 · 담당과 관계없이 고치고 지웁니다 (2026-09-28)
+        // 관리자 — 협업요청 · 업무지시를 상태 · 부서 · 담당과 관계없이 고치고 지웁니다 (2026-09-28)
         function openCollabAdminEdit(id) {
             const req = collabRequests.find(r => r.id === id);
             if (!req) return;
             const depts = orgDeptList(false).map(d => ({ v: d.id, l: d.name })).concat([{ v: 'admin', l: '소속 없음 (관리자)' }]);
             openAdminRecordEditor({
-                title: `${isDirective(req) ? '업무지시' : '협업티켓'} · ${req.title || id}`, record: req,
+                title: `${isDirective(req) ? '업무지시' : '협업요청'} · ${req.title || id}`, record: req,
                 choices: {
                     status: [['pending', '대기'], ['accepted', '진행중(수락)'], ['hold', '보류'], ['completed', '완료'], ['rejected', '거절'], ['cancelled', '취소']].map(([v, l]) => ({ v, l })),
                     targetDept: depts, sourceDept: depts
@@ -15948,8 +15948,8 @@ const QUOTE_TEMPLATES = [
             });
         }
 
-        // ==================== 협업 티켓 이관 ====================
-        // 받은 티켓을 ① 같은 부서의 다른 팀원 ② 다른 부서(개인 지정 가능) 로 넘깁니다.
+        // ==================== 협업 요청 이관 ====================
+        // 받은 요청을 ① 같은 부서의 다른 팀원 ② 다른 부서(개인 지정 가능) 로 넘깁니다.
         //  - 팀원 이관 : 담당자만 바뀌고 진행 상태·완료예정일은 그대로 (보류 건은 대기로 되돌림)
         //  - 부서 이관 : 받는 부서가 다시 수락해야 하므로 대기 상태로 초기화
         // 이관 이력은 req.transfers 에 쌓여 상세 모달에서 전체 경로를 볼 수 있습니다.
@@ -15971,7 +15971,7 @@ const QUOTE_TEMPLATES = [
         function openCollabTransferModal(id) {
             const req = collabRequests.find(r => r.id === id);
             if (!req) return;
-            if (!canTransferCollab(req)) { alert('이 티켓을 이관할 권한이 없습니다.\n수신 담당자 또는 수신 부서 소속만 이관할 수 있습니다.'); return; }
+            if (!canTransferCollab(req)) { alert('이 요청을 이관할 권한이 없습니다.\n수신 담당자 또는 수신 부서 소속만 이관할 수 있습니다.'); return; }
 
             document.getElementById('collab-transfer-form').reset();
             document.getElementById('transfer-task-id').value = id;
@@ -16028,7 +16028,7 @@ const QUOTE_TEMPLATES = [
             const id = document.getElementById('transfer-task-id').value;
             const req = collabRequests.find(r => r.id === id);
             if (!req) return;
-            if (!canTransferCollab(req)) { alert('이 티켓을 이관할 권한이 없습니다.'); return; }
+            if (!canTransferCollab(req)) { alert('이 요청을 이관할 권한이 없습니다.'); return; }
 
             const reason = document.getElementById('transfer-reason').value.trim();
             if (!reason) { alert('이관 사유를 입력하세요.'); return; }
@@ -16078,8 +16078,8 @@ const QUOTE_TEMPLATES = [
 
             const toLabel = `${deptNames[toDept] || toDept}${toUser ? ' · ' + toUser : ' 전체'}`;
             alert(kind === 'team'
-                ? `'${req.title}' 티켓을 ${toUser} 님에게 이관했습니다.`
-                : `'${req.title}' 티켓을 ${toLabel} 로 이관했습니다.\n받는 부서의 수락을 기다립니다.`);
+                ? `'${req.title}' 요청을 ${toUser} 님에게 이관했습니다.`
+                : `'${req.title}' 요청을 ${toLabel} 로 이관했습니다.\n받는 부서의 수락을 기다립니다.`);
         }
 
         // 이관 통보: 요청자(발행 부서)와 새 담당자(수신 부서) 양쪽에 알림
@@ -16382,7 +16382,7 @@ const QUOTE_TEMPLATES = [
             ['urgent', 'cs'].forEach(t => document.getElementById(`ops-detail-${t}`).classList.add('hidden'));
 
             if (type === 'urgent') {
-                document.getElementById('ops-detail-title').innerHTML = '<i class="fas fa-exclamation-triangle text-red-500 mr-2"></i>미해결 긴급 티켓 (운영부)';
+                document.getElementById('ops-detail-title').innerHTML = '<i class="fas fa-exclamation-triangle text-red-500 mr-2"></i>미해결 긴급 요청 (운영부)';
                 document.getElementById('ops-detail-urgent').classList.remove('hidden');
             } else if (type === 'cs') {
                 document.getElementById('ops-detail-title').innerHTML = '<i class="fas fa-clock text-green-500 mr-2"></i>최근 CS 처리 내역';
@@ -18654,7 +18654,7 @@ const QUOTE_TEMPLATES = [
         // 실제 결과물 파일·이미지를 그 WBS 에 올려 보관합니다.
         //  · 포맷을 정해 두면 파일을 올릴 때 그 형식만 받아들이고, 표·상세에 배지로 보입니다.
         //  · 제출 필수(deliverableRequired)인 WBS 는 결과물 파일이 하나도 없으면 완료 처리되지 않습니다.
-        //  · 파일은 협업티켓 첨부와 같은 방식(원본 참조 + 임시 주소)으로 브라우저 안에서만 보관합니다.
+        //  · 파일은 협업요청 첨부와 같은 방식(원본 참조 + 임시 주소)으로 브라우저 안에서만 보관합니다.
         const DELIVERABLE_FORMATS = {
             doc:     { name: '문서',         short: '문서',   icon: 'fa-file-word',        chip: 'text-blue-700 bg-blue-50 border-blue-200',          exts: ['doc', 'docx', 'hwp', 'hwpx', 'rtf', 'odt', 'txt', 'md'] },
             sheet:   { name: '스프레드시트', short: '시트',   icon: 'fa-file-excel',       chip: 'text-green-700 bg-green-50 border-green-200',       exts: ['xls', 'xlsx', 'xlsm', 'xlsb', 'csv'] },
@@ -18717,7 +18717,7 @@ const QUOTE_TEMPLATES = [
             if (isDeliverableRequired(w)) return { key: 'missing', name: '미제출', chip: 'text-red-700 bg-red-50 border-red-200',     icon: 'fa-triangle-exclamation' };
             return { key: 'none', name: '해당 없음', chip: 'text-gray-500 bg-gray-100 border-gray-300', icon: 'fa-minus' };
         }
-        // 산출물 파일 한 건 만들기 (구조는 협업티켓 첨부 newCollabFileEntry 와 같습니다)
+        // 산출물 파일 한 건 만들기 (구조는 협업요청 첨부 newCollabFileEntry 와 같습니다)
         function newWbsFileEntryLocal(file) {
             return {
                 id: gwUid('wfile_'),
@@ -19087,7 +19087,7 @@ const QUOTE_TEMPLATES = [
         // 지연 집계는 리프 기준 — 요약 작업의 지연은 하위 지연의 반영이라 함께 세면 중복입니다.
         const projectDelays = (p) => wbsLeaves(p).map(w => ({ w, d: wbsDelay(w) })).filter(x => x.d && x.d.kind !== 'doneLate');
 
-        // 조회 범위 — 협업티켓과 같은 스코프 규칙을 그대로 씁니다.
+        // 조회 범위 — 협업요청과 같은 스코프 규칙을 그대로 씁니다.
         function visibleProjects() {
             const scope = getCollabScopeFor(currentUserName, currentUserDept, currentUserLevel);
             if (scope === 'all' || scope === 'cross' || canManageAllData()) return projects.slice();
@@ -23066,7 +23066,7 @@ const QUOTE_TEMPLATES = [
             const today = execToday();
             const out = [];
 
-            // ① 협업티켓 (업무지시 · 협업요청)
+            // ① 협업요청 (업무지시 · 협업요청)
             const COLLAB_STATE = {
                 pending:   { name: '대기',   chip: 'bg-gray-100 text-gray-700' },
                 accepted:  { name: '진행중', chip: 'bg-blue-100 text-blue-700' },
@@ -23340,7 +23340,7 @@ const QUOTE_TEMPLATES = [
                 <div class="mb-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
                     <div>
                         <h3 class="text-lg font-bold text-gray-800"><i class="fas fa-chess-king text-amber-500 mr-2"></i>경영 현황판</h3>
-                        <p class="text-gray-500 text-sm">협업티켓 · 업무센터 · 프로젝트 · 견적 · 보완서류 · 인바운드를 한 곳에 모았습니다. 카드를 누르면 상세가 열립니다.</p>
+                        <p class="text-gray-500 text-sm">협업요청 · 업무센터 · 프로젝트 · 견적 · 보완서류 · 인바운드를 한 곳에 모았습니다. 카드를 누르면 상세가 열립니다.</p>
                     </div>
                     <div class="flex items-center gap-2">
                         <span class="text-xs text-gray-400">${today} 기준 · ${execFilterOn() ? `<b class="text-amber-700">${it.length}건</b> / 전체 ${execAllItems.length}건` : `전체 ${it.length}건`}</span>
@@ -33251,7 +33251,7 @@ const QUOTE_TEMPLATES = [
         // (겸직 관리자는 본부 소속이라 예전의 isSystemAdmin() 검사로는 걸러지지 않았습니다)
         // ==================== 관리자 자료 수정 창 (공용 · 2026-09-28) ====================
         // 화면마다 따로 만들지 않고, 자료 한 건의 항목(글 · 숫자 · 예/아니오)을 모두 입력칸으로 보여 주는 창 하나를 씁니다.
-        // 협업티켓 · 업무 · 접수 · 보완서류 · 이슈처럼 '수정 · 삭제 화면이 없거나 상태 때문에 막힌' 자료에 붙입니다.
+        // 협업요청 · 업무 · 접수 · 보완서류 · 이슈처럼 '수정 · 삭제 화면이 없거나 상태 때문에 막힌' 자료에 붙입니다.
         //   openAdminRecordEditor({ title, record, choices: { 칸: [{ v, l }] }, skip: [칸…], onSave(patch), onDelete() })
         //   · 목록 · 첨부 같은 묶음 값과 그림 자료(data:)는 여기서 고치지 않습니다(그대로 둠)
         //   · 저장하면 adminEditedAt · adminEditedBy 를 남깁니다
@@ -36989,7 +36989,7 @@ const QUOTE_TEMPLATES = [
                     <div class="px-4 py-3 border-b border-gray-100 flex flex-wrap justify-between items-center gap-2">
                         <div>
                             <h4 class="text-sm font-bold text-gray-700"><i class="fas fa-diagram-project text-indigo-500 mr-1"></i>본부 · 팀 관리</h4>
-                            <p class="text-xs text-gray-500 mt-0.5">여기서 만든 본부와 팀은 <b>조직도 · 경영 현황판 · 협업티켓 · 일정 · 업무이관 · 권한 설정</b>에 함께 반영됩니다.</p>
+                            <p class="text-xs text-gray-500 mt-0.5">여기서 만든 본부와 팀은 <b>조직도 · 경영 현황판 · 협업요청 · 일정 · 업무이관 · 권한 설정</b>에 함께 반영됩니다.</p>
                             <p class="text-xs text-gray-500 mt-0.5">팀을 지정하지 않은 사람은 <b>${escapeHtml(orgNoTeamLabel)}</b> 묶음으로 한 상자에 모입니다.
                                 <button onclick="openOrgNoTeamModal()" class="text-indigo-600 hover:underline ml-1"><i class="fas fa-pen text-[10px] mr-0.5"></i>이름 수정</button></p>
                         </div>
@@ -37093,8 +37093,8 @@ const QUOTE_TEMPLATES = [
             document.getElementById('org-unit-name').placeholder = '예: 마케팅본부';
             document.getElementById('org-unit-dept-wrap').classList.add('hidden');
             document.getElementById('org-unit-help').innerHTML = d
-                ? '이름만 바뀝니다. 이 본부에 딸린 구성원 · 티켓 · 일정 · 권한은 그대로 이어집니다.'
-                : '본부를 만들면 구성원 등록 · 협업티켓 · 일정 · 업무이관 · 경영 현황판의 본부 목록에 바로 나타납니다.';
+                ? '이름만 바뀝니다. 이 본부에 딸린 구성원 · 요청 · 일정 · 권한은 그대로 이어집니다.'
+                : '본부를 만들면 구성원 등록 · 협업요청 · 일정 · 업무이관 · 경영 현황판의 본부 목록에 바로 나타납니다.';
             document.getElementById('org-unit-modal').classList.remove('hidden');
         }
         function openOrgTeamModal(deptId, teamId) {
@@ -41363,7 +41363,7 @@ const QUOTE_TEMPLATES = [
             {
                 id: 'collab-perm', name: '협업 조회 권한', icon: 'fa-shield-halved',
                 panel: 'sec-settings-collab-perm', perm: 'settings-collab-perm',
-                desc: '직책 레벨별로 협업티켓센터에서 조회할 수 있는 범위를 정합니다.',
+                desc: '직책 레벨별로 협업업무센터에서 조회할 수 있는 범위를 정합니다.',
                 render: () => renderCollabPermissions()
             },
             {

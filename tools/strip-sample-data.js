@@ -5,7 +5,7 @@
  *   node tools/strip-sample-data.js ../소스/Index_ver1.0.html index.html
  *
  * 하는 일
- *   1) 샘플 데이터(고객사 · 파트너사 · 계약 · 견적 · 업무 · 일정 · 프로젝트 · 협업티켓 · 인바운드 · 단가표 …)를 빈 배열로
+ *   1) 샘플 데이터(고객사 · 파트너사 · 계약 · 견적 · 업무 · 일정 · 프로젝트 · 협업요청 · 인바운드 · 단가표 …)를 빈 배열로
  *   2) 사용자 목록은 관리자 1명만 남기고, 사용자 · 차량 목록을 저장소(kobStorage)에 남게 함
  *   3) 저장소 호출(localStorage.* · loadJsonStore/saveJsonStore)을 kobStorage(Supabase ↔ 로컬 폴백)로 갈아 끼움
  *   4) API_BASE 를 config/app-config.js 의 값으로

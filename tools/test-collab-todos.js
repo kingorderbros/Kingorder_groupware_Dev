@@ -1,4 +1,4 @@
-// 협업티켓 · 알림 · 자부서업무 · 내 할 일 · 공지 · 프로젝트 저장(4-4) 시험
+// 협업요청 · 알림 · 자부서업무 · 내 할 일 · 공지 · 프로젝트 저장(4-4) 시험
 // index.html 안의 **실제 코드를 꺼내서** 돌립니다.
 const fs = require('fs');
 const path = require('path');
@@ -17,9 +17,9 @@ function slice(a, b, label) {
 }
 
 const KINDS = [
-    { label: '협업티켓', var: 'collabRequests', table: 'collab_requests', fn: 'CollabRequests',
+    { label: '협업요청', var: 'collabRequests', table: 'collab_requests', fn: 'CollabRequests',
       counter: 'collabIdCounter', start: 12, mk: (n) => ({ id: 'collab_' + n, title: '자료 요청', status: 'pending', targetDept: 'ops' }),
-      big: 'collab_42', code: slice('let collabRequests = (window.kobDb', 'let collabIdCounter', '협업티켓') },
+      big: 'collab_42', code: slice('let collabRequests = (window.kobDb', 'let collabIdCounter', '협업요청') },
     { label: '알림', var: 'collabNotifications', table: 'notifications', fn: 'Notifications',
       counter: 'collabNotiIdCounter', start: 1, mk: (n) => ({ id: 'cnoti_' + n, type: 'collab-completed', toUser: '홍길동', read: false }),
       big: 'cnoti_42', code: slice('let collabNotifications = (window.kobDb', 'let collabNotiIdCounter', '알림') },
@@ -157,7 +157,7 @@ function run(k, seed) {
         const seg = html2.slice(i - 400, i + 400);
         ok(/toDept:\s*newReq\.targetDept/.test(seg), '받는 부서 앞으로 보낸다');
         ok(/toUser:\s*newReq\.assigneeUser/.test(seg), '담당자를 지정했으면 그 사람 앞으로도 보낸다');
-        ok(/ticketId:\s*newReq\.id/.test(seg), '알림을 누르면 그 티켓을 열 수 있게 연결한다');
+        ok(/ticketId:\s*newReq\.id/.test(seg), '알림을 누르면 그 요청을 열 수 있게 연결한다');
     }
 
     console.log('\n[공통] 저장소가 없어도 터지지 않는지');

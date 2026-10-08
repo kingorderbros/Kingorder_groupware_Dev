@@ -2,7 +2,7 @@
  * 첨부파일 (2026-09-29 · 3단계 — 파일을 자료 안의 base64 에서 Supabase Storage 로)
  *
  * 예전에는 첨부를 base64 로 자료(JSON) 안에 넣거나(자료실 · 개발의뢰 · 파트너 접수 …), 브라우저 메모리에만
- * 두어서(보완서류 · WBS 산출물 · 협업티켓) 새로고침하면 사라졌습니다. 이제 파일은 Storage 버킷 `files` 에 두고
+ * 두어서(보완서류 · WBS 산출물 · 협업요청) 새로고침하면 사라졌습니다. 이제 파일은 Storage 버킷 `files` 에 두고
  * 자료에는 { path, name, type, size } 만 남깁니다.
  *
  *   POST /api/files/session           로그인 토큰(직원: Supabase · 파트너: 파트너 토큰) → 파일용 쿠키
@@ -18,7 +18,7 @@
  * 이 파일은 판단(쿠키 · 경로 · 권한 · 이름)만 담고 Storage 읽기/쓰기는 [[route]].js 가 합니다 — 가짜 자료로 바로 시험합니다.
  */
 
-export const MAX_BYTES = 20 * 1024 * 1024;        // 한 파일 20MB (WBS 산출물 · 협업티켓과 같은 한도)
+export const MAX_BYTES = 20 * 1024 * 1024;        // 한 파일 20MB (WBS 산출물 · 협업요청과 같은 한도)
 export const COOKIE = 'kob_files';
 export const COOKIE_HOURS = 12;
 

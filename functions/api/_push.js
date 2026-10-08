@@ -28,7 +28,7 @@ const PUSH_HOSTS = [/^fcm\.googleapis\.com$/, /^android\.googleapis\.com$/, /(^|
 // 알림 종류 → 직원이 켜고 끄는 묶음
 export const CATEGORIES = [
     { id: 'work',      label: '업무 접수' },
-    { id: 'collab',    label: '협업티켓' },
+    { id: 'collab',    label: '협업요청' },
     { id: 'directive', label: '지시 업무' },
     { id: 'project',   label: '프로젝트' },
     { id: 'meeting',   label: '영업 회의' },

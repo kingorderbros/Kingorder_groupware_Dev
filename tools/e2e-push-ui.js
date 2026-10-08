@@ -9,7 +9,7 @@ srv.listen(8800,async()=>{const br=await pp.launch({executablePath:'/Application
  await pg.goto('http://localhost:8800/?noti=N9',{waitUntil:'networkidle0'});
  // 서버가 있는 것처럼 kobPush 를 바꿔 끼웁니다
  await pg.evaluate(()=>{window.__sent=[];window.__st={supported:true,ready:true,ios:false,standalone:false,permission:'default',subscribed:false};window.__prefs={work:true,collab:true,directive:true,project:true,meeting:false,issue:true,dev:true,etc:true};
-   window.kobPush={remote:true,state:async()=>Object.assign({},__st),status:async()=>({devices:[{device:'맥 · 크롬'}],prefs:__prefs,categories:[{id:'work',label:'업무 접수'},{id:'collab',label:'협업티켓'},{id:'meeting',label:'영업 회의'},{id:'etc',label:'그 밖의 알림'}]}),
+   window.kobPush={remote:true,state:async()=>Object.assign({},__st),status:async()=>({devices:[{device:'맥 · 크롬'}],prefs:__prefs,categories:[{id:'work',label:'업무 접수'},{id:'collab',label:'협업요청'},{id:'meeting',label:'영업 회의'},{id:'etc',label:'그 밖의 알림'}]}),
      enable:async()=>{__st.subscribed=true;__st.permission='granted';return true;},disable:async()=>{__st.subscribed=false;return true;},setPrefs:async p=>{Object.assign(__prefs,p);__sent.push(['prefs',p]);},send:(n,l)=>__sent.push(['send',n.type,l,n.toUser||n.toDept])};
    enterApp({email:'daniel@kingorder.co.kr',dept:'admin',name:'정장훈'});});
  await new Promise(s=>setTimeout(s,3200));

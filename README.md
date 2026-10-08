@@ -27,7 +27,7 @@
 
 | | 시연본 (`소스/`) | 개발환경 |
 |---|---|---|
-| 샘플 데이터 | 고객사 · 파트너사 · 계약 · 견적 · 업무 · 일정 · 프로젝트 · 협업티켓 · 인바운드 · 단가표 · 카드내역 · 차량 … 수백 건 | **전부 없음.** 사용자는 첫 로그인용 `admin` 하나 |
+| 샘플 데이터 | 고객사 · 파트너사 · 계약 · 견적 · 업무 · 일정 · 프로젝트 · 협업요청 · 인바운드 · 단가표 · 카드내역 · 차량 … 수백 건 | **전부 없음.** 사용자는 첫 로그인용 `admin` 하나 |
 | 저장 | 브라우저 `localStorage` | `kobStorage` → **Supabase `app_store`** (설정이 비면 localStorage 로컬 모드) |
 | 법인차량 API | `server.js` (Node · `data/*.json`) | **Cloudflare Pages Functions** → Supabase `vehicle_logs` · `vehicle_reservations` |
 | 로그인 | 아이디만 (비밀번호 없음 · 데모 접두어) | **이메일 + 비밀번호** (Supabase Auth · 4절) |
