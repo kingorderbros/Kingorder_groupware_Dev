@@ -22227,11 +22227,13 @@ const QUOTE_TEMPLATES = [
                 <!-- ① 고객검색 바 — 위 칸(고정). 아래 ②~ 은 따로 스크롤되는 칸이라 내용이 이 바 뒤로 지나가지 않습니다.
                      접으면 선택 고객 한 줄만 남아 본문이 넓어집니다. (모바일에서는 기본 접힘 — applyWorkSearchCollapse 참고)
                      세 칸 배치(고객조회 · 업무유형 탭 고정, 업무이력부터 스크롤)는 #main-scroll.wc-mode (navigate) — 2026-10-08 UAT -->
-                <div id="${wcId(key, 'search-bar')}" class="shrink-0 relative z-10 px-4 md:px-8 pt-4 md:pt-6 pb-4 bg-gray-50 border-b border-gray-200 shadow-sm">
+                <div id="${wcId(key, 'search-bar')}" class="shrink-0 relative z-10 px-4 md:px-8 pt-3 pb-3 bg-gray-50 border-b border-gray-200 shadow-sm">
                     <div id="${wcId(key, 'search-head')}" class="flex items-center justify-between gap-2 mb-2">
                         <div class="flex items-center gap-2 min-w-0">
-                            <h3 id="wc-title-${key}" class="text-base md:text-lg font-bold text-gray-800 truncate">${escapeHtml(c.title)}</h3>
+                            <h3 id="wc-title-${key}" class="shrink-0 text-base md:text-lg font-bold text-gray-800 truncate">${escapeHtml(c.title)}</h3>
                             <span class="hidden sm:inline px-2 py-0.5 text-xs font-semibold rounded-full bg-amber-100 text-amber-800 whitespace-nowrap">DEV환경</span>
+                            <!-- 접혔을 때만 — 선택된 고객사명 (applyWorkSearchCollapse) -->
+                            <span id="${wcId(key, 'search-picked')}" class="hidden min-w-0 truncate px-2 py-0.5 rounded text-sm font-semibold bg-white border border-gray-300 text-gray-800"></span>
                         </div>
                         <div class="flex items-center gap-2 shrink-0">
                             <p class="hidden xl:block text-xs text-gray-500">${c.lead}</p>
@@ -22266,12 +22268,12 @@ const QUOTE_TEMPLATES = [
                 </div>
 
                 <!-- 가운데 칸 — ② 업무유형 탭(영업활동등록 · 상담관리 …) + 설명. 고객조회를 접든 펴든 그 바로 아래에 고정 (UAT 2026-10-08) -->
-                <div class="shrink-0 px-4 md:px-8 pt-3 md:pt-4 pb-3 bg-gray-50 border-b border-gray-200">
+                <div class="shrink-0 px-4 md:px-8 py-2 bg-gray-50 border-b border-gray-200">
                 <div id="${wcId(key, 'tabs-wrap')}" class="bg-white rounded-t-lg border border-b-0 border-gray-200">
                     <!-- 좁은 화면에서는 탭을 한 줄로 두고 가로 스크롤 (여러 줄로 쌓이면 화면을 다 먹음) -->
-                    <div id="${wcId(key, 'type-tabs')}" class="flex gap-1 p-2 overflow-x-auto md:flex-wrap md:overflow-x-visible"></div>
+                    <div id="${wcId(key, 'type-tabs')}" class="flex gap-1 p-1.5 overflow-x-auto md:flex-wrap md:overflow-x-visible"></div>
                 </div>
-                <div class="bg-white border border-gray-200 rounded-b-lg px-4 py-3">
+                <div class="bg-white border border-gray-200 rounded-b-lg px-4 py-2">
                     <div class="flex flex-wrap items-center justify-between gap-2">
                         <p id="${wcId(key, 'type-desc')}" class="text-sm text-gray-600"></p>
                         <div class="flex flex-wrap items-center gap-2">
@@ -22283,7 +22285,7 @@ const QUOTE_TEMPLATES = [
                 </div>
 
                 <!-- 아래 칸 — ③ 업무이력부터 끝까지 따로 스크롤 -->
-                <div id="${wcId(key, 'scroll')}" class="flex-1 min-h-0 overflow-y-auto px-4 md:px-8 pt-4 md:pt-5 pb-4 md:pb-8">
+                <div id="${wcId(key, 'scroll')}" onscroll="wcAutoFoldOnScroll()" class="flex-1 min-h-0 overflow-y-auto px-4 md:px-8 pt-2 pb-4 md:pb-8">
 
                 <!-- ③ 업무이력 — 기본 접힘, 펼치면 고정 높이(240px) 스크롤 테이블
                      영업본부도 운영본부와 같은 순서가 되도록, 카테고리 바·전용 패널보다 위에 둡니다.
@@ -22643,13 +22645,29 @@ const QUOTE_TEMPLATES = [
 
         // ---------- ①-1 고객검색 바 접기/펼치기 ----------
         // 검색 입력 + 조회 결과(고객 요약)가 상단에 고정돼 있어 좁은 화면에서는 본문이 거의 안 보입니다.
-        // 접으면 검색 입력과 조회 결과가 통째로 사라지고 토글 버튼 한 개만 남습니다.
-        // 어느 고객 기준인지는 그 버튼 라벨에 함께 표시해, 줄을 하나도 더 쓰지 않게 했습니다.
-        // 스크롤하면 자동으로 접던 기능(2026-10-08 오전)은 접혔다 펴졌다 하며 화면이 올라가 불편하다는 의견으로 뺐습니다.
-        // 지금은 [고객조회 접기 / 펼치기] 버튼으로만 접고 폅니다.
+        // 접으면 검색 입력과 조회 결과가 통째로 사라지고 제목 줄 하나만 남습니다.
+        // 어느 고객 기준인지는 제목 옆에 고객사명만 띄워, 줄을 하나도 더 쓰지 않게 했습니다.
         function toggleWorkSearch(key) {
             const st = wcState[key];
             st.searchOpen = !workSearchIsOpen(key);
+            // 내린 채로 손으로 펼쳤으면 맨 위로 돌아갈 때까지 자동 접기를 쉽니다 (펼쳐 놓고 조회하는 중에 다시 접히지 않게)
+            const box = wcEl(key, 'scroll');
+            st.autoHold = !!(st.searchOpen && box && box.scrollTop > 20);
+            applyWorkSearchCollapse(key);
+        }
+
+        // ---------- ①-2 아래 칸을 내리면 고객조회 자동 접기 (UAT 2026-10-08 · 세 칸 배치 뒤 다시 요청) ----------
+        // 아래 칸(업무이력부터)을 20px 넘게 내리면 접고, 접힌 줄에는 선택된 고객사명만 보입니다.
+        // 펼치는 것은 [고객조회 펼치기] 버튼으로만 — 맨 위로 와도 저절로 펴지지 않습니다(화면이 오르내리지 않게).
+        // 위 · 가운데 칸은 고정이라 접혀도 아래 내용 자리는 튀지 않고, 아래 칸이 길어질 뿐입니다.
+        function wcAutoFoldOnScroll() {
+            const key = ['ops', 'sales'].find(k => { const el = document.getElementById(wcDef(k).section); return el && !el.classList.contains('hidden'); });
+            const box = key && wcEl(key, 'scroll');
+            if (!box) return;
+            const st = wcState[key];
+            if (box.scrollTop <= 4) { st.autoHold = false; return; }
+            if (box.scrollTop <= 20 || st.autoHold || !workSearchIsOpen(key)) return;
+            st.searchOpen = false;
             applyWorkSearchCollapse(key);
         }
 
@@ -22673,19 +22691,22 @@ const QUOTE_TEMPLATES = [
             // 접으면 바의 위아래 여백과 바 아래 빈 줄도 줄여 제목 한 줄만 얇게 남깁니다 (UAT 2026-10-08)
             const bar = wcEl(key, 'search-bar'), head = wcEl(key, 'search-head');
             const tg = (el, on, off) => { if (!el) return; on.forEach(c => el.classList.toggle(c, !open)); off.forEach(c => el.classList.toggle(c, open)); };
-            tg(bar, ['pt-2', 'md:pt-3', 'pb-2'], ['pt-4', 'md:pt-6', 'pb-4']);
+            tg(bar, ['pt-1.5', 'pb-1.5'], ['pt-3', 'pb-3']);
             tg(head, ['mb-0'], ['mb-2']);
             if (icon) icon.className = `fas fa-chevron-${open ? 'up' : 'down'} text-xs shrink-0`;
-            if (label) label.innerText = open ? (wcSearchLabels(key).toggle + ' 접기') : workSearchCollapsedLabel(key);
+            if (label) label.innerText = wcSearchLabels(key).toggle + (open ? ' 접기' : ' 펼치기');
+            // 접힌 줄에는 선택된 고객사명만 (고르지 않았으면 '고객 미선택')
+            const picked = wcEl(key, 'search-picked');
+            if (picked) {
+                const c = wcCustomer(key, wcState[key].customerId);
+                picked.classList.toggle('hidden', open);
+                picked.textContent = c ? c.name : '고객 미선택';
+                picked.title = c ? c.name : '';
+                picked.classList.toggle('text-gray-800', !!c);
+                picked.classList.toggle('text-gray-400', !c);
+            }
         }
 
-        // 접힌 상태의 버튼 라벨 — 어느 고객 기준으로 보고 있는지만 버튼 안에 함께 표시합니다.
-        // (별도 줄을 만들지 않아 좁은 화면에서 본문 높이를 최대한 확보)
-        function workSearchCollapsedLabel(key) {
-            const t = wcSearchLabels(key).toggle;
-            const c = wcCustomer(key, wcState[key].customerId);
-            return c ? `${t} · ${c.name}` : `${t} 펼치기`;
-        }
 
         // 고객 요약 — 조회 결과를 한 줄 요약 + [특이사항] 을 누르면 결제 관련 정보가 펼쳐집니다.
         //   기본 표시 : 대표연락처 · 계약일/설치일 · 파트너사/직영 · 주소 · 킹오더 담당자 ·
