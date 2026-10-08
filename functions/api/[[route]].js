@@ -221,20 +221,23 @@ const escapeForHtml = (v) => str(v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<
 // 구글에 있어야 할 캘린더 목록을 셉니다 — 화면의 CALENDARS 구성과 같은 축입니다.
 //   공유 3종(전사 · 영업진행 · 설치A/S) + 부서마다 1개 + 구글 주소가 있는 직원마다 1개
 const GCAL_HIDDEN_DEPTS = ['vendor', 'admin', 'company'];
+// 구글에 보이는 캘린더 이름 — 그룹웨어 일정캘린더(index.html CALENDARS 의 name)와 똑같이 씁니다 (UAT 2026-10-08).
+// 팀별 · 개인은 구글에 여러 개가 생기므로 그룹웨어 이름 뒤에 부서명 · 이름만 붙여 구분합니다.
+const GCAL_LABELS = { company: '전사일정', 'sales-share': '킹오더 영업일정 및 진행상황 공유', 'install-as': '설치 및 A/S 일정 공유', team: '팀별', personal: '개인' };
 const googleAddrOf = (u) => str(u && u.googleEmail).toLowerCase();
 function calendarPlan(users, depts) {
     const people = (users || []).filter(u => str(u.dept) !== 'vendor');
     const everyone = people.map(googleAddrOf).filter(Boolean);
     const missingGoogle = people.filter(u => !googleAddrOf(u)).map(u => ({ name: str(u.name), email: str(u.email) }));
     const wanted = [
-        { key: 'cal:company', kind: 'company', label: '킹오더 전사일정', shareTo: everyone },
-        { key: 'cal:sales-share', kind: 'sales-share', label: '킹오더 영업일정·진행상황', shareTo: everyone },
-        { key: 'cal:install-as', kind: 'install-as', label: '킹오더 설치·A/S 일정', shareTo: everyone }
+        { key: 'cal:company', kind: 'company', label: GCAL_LABELS.company, shareTo: everyone },
+        { key: 'cal:sales-share', kind: 'sales-share', label: GCAL_LABELS['sales-share'], shareTo: everyone },
+        { key: 'cal:install-as', kind: 'install-as', label: GCAL_LABELS['install-as'], shareTo: everyone }
     ];
     (depts || []).filter(d => !GCAL_HIDDEN_DEPTS.includes(str(d.id))).forEach(d => {
         wanted.push({
             key: 'cal:team:' + str(d.id), kind: 'team', dept: str(d.id),
-            label: '킹오더 ' + str(d.name) + ' 일정',
+            label: GCAL_LABELS.team + ' – ' + str(d.name),
             shareTo: people.filter(u => str(u.dept) === str(d.id)).map(googleAddrOf).filter(Boolean)
         });
     });
@@ -243,7 +246,7 @@ function calendarPlan(users, depts) {
         if (!addr) return;
         wanted.push({
             key: 'cal:personal:' + str(u.email).toLowerCase(), kind: 'personal', member: str(u.email).toLowerCase(),
-            label: '킹오더 일정 – ' + str(u.name), shareTo: [addr]
+            label: GCAL_LABELS.personal + ' – ' + str(u.name), shareTo: [addr]
         });
     });
     return { wanted, missingGoogle };
@@ -960,6 +963,7 @@ export async function onRequest(context) {
                 const cals = (await g.calendars()) || [];
                 const plan = calendarPlan(who.users, (await store.storeValue('gwOrgDepts.v1')) || []);
                 const madeKeys = new Set(cals.filter(c => c.google_calendar_id).map(c => c.key));
+                const labelOf = new Map(cals.map(c => [c.key, str(c.label)]));
                 return json(200, {
                     ok: true,
                     configured: !!str(env.GOOGLE_CLIENT_ID),
@@ -970,6 +974,8 @@ export async function onRequest(context) {
                     calendars: cals.map(c => ({ key: c.key, kind: c.kind, label: c.label, ready: !!c.google_calendar_id, shareState: c.share_state, error: c.last_error })),
                     planned: plan.wanted.length,
                     ready: plan.wanted.filter(w => madeKeys.has(w.key)).length,
+                    // 이미 만들었지만 구글 이름이 그룹웨어 이름과 다른 캘린더 수 — [구글 캘린더 준비] 를 누르면 맞춥니다
+                    renameNeeded: plan.wanted.filter(w => madeKeys.has(w.key) && labelOf.get(w.key) !== w.label).length,
                     missingGoogle: plan.missingGoogle
                 });
             }
@@ -999,7 +1005,7 @@ export async function onRequest(context) {
                 const plan = calendarPlan(who.users, depts);
                 const existing = new Map(((await g.calendars()) || []).map(c => [c.key, c]));
 
-                const made = [], shared = [], failed = [];
+                const made = [], renamed = [], shared = [], failed = [];
                 let used = 0, remaining = 0;
 
                 for (const want of plan.wanted) {
@@ -1013,6 +1019,14 @@ export async function onRequest(context) {
                             await g.saveCalendar(row);
                             existing.set(want.key, row);
                             made.push({ key: want.key, label: want.label });
+                        } else if (str(row.label) !== want.label && used < budget) {
+                            // 이미 있는 캘린더 — 이름이 바뀌었으면(옛 '킹오더 …' 이름 · 부서명 · 직원 이름 변경) 구글 쪽 이름도 맞춥니다
+                            await gcal.renameCalendar(env, g, row.google_calendar_id, want.label);
+                            used++;
+                            await g.patchCalendar(want.key, { label: want.label });
+                            row = Object.assign({}, row, { label: want.label });
+                            existing.set(want.key, row);
+                            renamed.push({ key: want.key, label: want.label });
                         }
                         // 공유 — 이미 공유된 사람은 건너뜁니다
                         if (used < budget && want.shareTo.length) {
@@ -1031,10 +1045,14 @@ export async function onRequest(context) {
                     } catch (e) {
                         if (e.code === 'not-connected') return json(409, { ok: false, error: '먼저 [구글 캘린더 연결] 을 눌러 주세요.' });
                         failed.push({ key: want.key, error: e.message });
-                        try { await g.saveCalendar({ key: want.key, kind: want.kind, label: want.label, last_error: e.message }); } catch (e2) { /* 기록 실패는 넘어갑니다 */ }
+                        // 이미 있는 줄은 오류만 적습니다 — 이름까지 덮으면 구글 이름을 못 바꿨는데도 바뀐 것으로 남습니다
+                        try {
+                            if (existing.has(want.key)) await g.patchCalendar(want.key, { last_error: e.message });
+                            else await g.saveCalendar({ key: want.key, kind: want.kind, label: want.label, last_error: e.message });
+                        } catch (e2) { /* 기록 실패는 넘어갑니다 */ }
                     }
                 }
-                return json(200, { ok: true, made, shared, failed, remaining, missingGoogle: plan.missingGoogle, done: remaining === 0 && !failed.length });
+                return json(200, { ok: true, made, renamed, shared, failed, remaining, missingGoogle: plan.missingGoogle, done: remaining === 0 && !failed.length });
             }
 
             // 받아오기 — 관리자가 손으로 확인할 때 씁니다

@@ -134,6 +134,19 @@ const fakeStore = { storeValue: async () => USERS, calendars: async () => CALS }
     const again = G.toGoogleEvent(Object.assign({ id: 's10' }, back), ctx);
     eq('두 번 옮겨도 같은 구글 일정이 된다', JSON.stringify(again), JSON.stringify(ev));
 
+    console.log('\n[6] 구글 캘린더 이름 = 그룹웨어 캘린더 이름 (UAT 2026-10-08)');
+    {
+        const fs = require('fs'), path = require('path');
+        const route = fs.readFileSync(path.join(__dirname, '../functions/api/[[route]].js'), 'utf8');
+        const html = fs.readFileSync(path.join(__dirname, '../index.html'), 'utf8');
+        const labels = eval('(' + route.match(/const GCAL_LABELS = (\{[^\n]*\});/)[1] + ')');
+        ['personal', 'team', 'sales-share', 'install-as', 'company'].forEach(id => {
+            const m = html.match(new RegExp(`id: '${id}', name: '([^']+)'`));
+            eq(`${id} — 화면 이름 '${m && m[1]}'`, labels[id], m && m[1]);
+        });
+        ok('옛 이름(킹오더 일정 – · 킹오더 전사일정 …)이 서버에 남아 있지 않다', !/'킹오더 (일정|전사일정|설치·A\/S|영업일정·진행상황)/.test(route));
+    }
+
     console.log(`\n=========== 통과 ${pass} · 실패 ${fail} ===========`);
     process.exit(fail ? 1 : 0);
 })().catch(e => { console.error(e); process.exit(1); });
