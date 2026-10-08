@@ -21015,7 +21015,7 @@ const QUOTE_TEMPLATES = [
                     {
                         // 프랜차이즈지원 탭을 여기로 합쳤습니다(2026-08-18). 가맹본부·가맹점 요청도 이 탭에서 접수합니다.
                         id: 'as', name: 'AS유지보수', icon: 'fa-screwdriver-wrench', active: 'bg-red-600',
-                        desc: '설치 장비의 고장·오류와 가맹본부·가맹점 지원 요청을 함께 접수하고 처리 이력을 관리합니다. 처리방법을 <b>택배</b>로 선택하면 접수 단계에서 택배 정보를 함께 받습니다.',
+                        desc: '설치 장비의 고장·오류와 가맹본부·가맹점 지원 요청을 함께 접수하고 처리 이력을 관리합니다. 처리방법을 "택배"로 선택하면 접수 단계에서 택배 정보를 함께 받습니다.',
                         fields: [
                             // required: true — 대상 장비 · 증상 분류 · 처리방법은 접수 필수 항목입니다. (2026-09-05)
                             // 빈 '선택하세요'로 시작해 저절로 골라지지 않게 하고, 등록할 때 값을 확인합니다.
@@ -21070,7 +21070,7 @@ const QUOTE_TEMPLATES = [
                         // deliveryForm: true — 장비설치와 같은 흐름(접수대장 → 처리 팝업 → 업무이력)을 쓰되,
                         // 접수·처리 항목이 신규 장비 택배 발송에 맞게 따로 구성돼 있습니다. (buildWorkDeliveryIntake / buildDeliveryActionBody)
                         id: 'delivery', name: '택배', icon: 'fa-box', active: 'bg-orange-600', deliveryForm: true,
-                        desc: '<b>신규 택배요청</b>으로 인입된 건을 접수하고 발송까지 관리합니다. AS유지보수로 인입된 건의 택배는 [AS유지보수] 접수에서 처리방법을 <b>택배</b>로 골라 받습니다.',
+                        desc: '"신규 택배요청"으로 인입된 건을 접수하고 발송까지 관리합니다. AS유지보수로 인입된 건의 택배는 [AS유지보수] 접수에서 처리방법을 "택배"로 골라 받습니다.',
                         fields: []
                     },
                     {
@@ -22226,7 +22226,7 @@ const QUOTE_TEMPLATES = [
             return `
                 <!-- ① 고객검색 바 — 위 칸(고정). 아래 ②~ 은 따로 스크롤되는 칸이라 내용이 이 바 뒤로 지나가지 않습니다.
                      접으면 선택 고객 한 줄만 남아 본문이 넓어집니다. (모바일에서는 기본 접힘 — applyWorkSearchCollapse 참고)
-                     두 칸 배치는 #main-scroll.wc-mode (navigate) — 2026-10-08 UAT -->
+                     세 칸 배치(고객조회 · 업무유형 탭 고정, 업무이력부터 스크롤)는 #main-scroll.wc-mode (navigate) — 2026-10-08 UAT -->
                 <div id="${wcId(key, 'search-bar')}" class="shrink-0 relative z-10 px-4 md:px-8 pt-4 md:pt-6 pb-4 bg-gray-50 border-b border-gray-200 shadow-sm">
                     <div id="${wcId(key, 'search-head')}" class="flex items-center justify-between gap-2 mb-2">
                         <div class="flex items-center gap-2 min-w-0">
@@ -22265,14 +22265,13 @@ const QUOTE_TEMPLATES = [
                     </div>
                 </div>
 
-                <!-- 아래 칸 — 여기부터 끝까지 따로 스크롤 -->
-                <div id="${wcId(key, 'scroll')}" class="flex-1 min-h-0 overflow-y-auto px-4 md:px-8 pt-4 md:pt-6 pb-4 md:pb-8">
-                <!-- ② 업무유형 탭 -->
+                <!-- 가운데 칸 — ② 업무유형 탭(영업활동등록 · 상담관리 …) + 설명. 고객조회를 접든 펴든 그 바로 아래에 고정 (UAT 2026-10-08) -->
+                <div class="shrink-0 px-4 md:px-8 pt-3 md:pt-4 pb-3 bg-gray-50 border-b border-gray-200">
                 <div id="${wcId(key, 'tabs-wrap')}" class="bg-white rounded-t-lg border border-b-0 border-gray-200">
                     <!-- 좁은 화면에서는 탭을 한 줄로 두고 가로 스크롤 (여러 줄로 쌓이면 화면을 다 먹음) -->
                     <div id="${wcId(key, 'type-tabs')}" class="flex gap-1 p-2 overflow-x-auto md:flex-wrap md:overflow-x-visible"></div>
                 </div>
-                <div class="bg-white border border-gray-200 rounded-b-lg p-4 mb-5">
+                <div class="bg-white border border-gray-200 rounded-b-lg px-4 py-3">
                     <div class="flex flex-wrap items-center justify-between gap-2">
                         <p id="${wcId(key, 'type-desc')}" class="text-sm text-gray-600"></p>
                         <div class="flex flex-wrap items-center gap-2">
@@ -22281,6 +22280,10 @@ const QUOTE_TEMPLATES = [
                         </div>
                     </div>
                 </div>
+                </div>
+
+                <!-- 아래 칸 — ③ 업무이력부터 끝까지 따로 스크롤 -->
+                <div id="${wcId(key, 'scroll')}" class="flex-1 min-h-0 overflow-y-auto px-4 md:px-8 pt-4 md:pt-5 pb-4 md:pb-8">
 
                 <!-- ③ 업무이력 — 기본 접힘, 펼치면 고정 높이(240px) 스크롤 테이블
                      영업본부도 운영본부와 같은 순서가 되도록, 카테고리 바·전용 패널보다 위에 둡니다.
