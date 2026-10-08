@@ -6317,8 +6317,13 @@
             </div>
 
             <div class="p-6 space-y-4">
+                <!-- 원문 · 유입 정보 — 홈페이지 폼 · 메일 · 블로그 · 인스타 등에서 수집된 건만 (2026-10-08) -->
+                <div id="inbound-origin-wrap" class="hidden border border-emerald-200 rounded-lg overflow-hidden">
+                    <div class="bg-emerald-50 px-3 py-2 border-b border-emerald-200 text-sm font-bold text-emerald-900"><i class="fas fa-plug mr-1"></i>원문 · 유입 정보 <span class="font-normal text-xs text-emerald-700/80 ml-1">수집한 그대로 — 고치지 않습니다</span></div>
+                    <div id="inbound-origin-body" class="p-3"></div>
+                </div>
                 <div class="border border-gray-200 rounded-lg overflow-hidden">
-                    <div class="bg-gray-50 px-3 py-2 border-b border-gray-200 text-sm font-bold text-gray-700"><i class="fas fa-building text-gray-500 mr-1"></i>외주업체 작성</div>
+                    <div class="bg-gray-50 px-3 py-2 border-b border-gray-200 text-sm font-bold text-gray-700"><i class="fas fa-building text-gray-500 mr-1"></i>인입 정보 <span class="font-normal text-xs text-gray-500 ml-1">외주업체 작성 항목 · 자동 수집 공통</span></div>
                     <div id="inbound-vendor-body" class="p-3"></div>
                 </div>
 
@@ -10537,7 +10542,9 @@ const QUOTE_TEMPLATES = [
                     {
                         id: 'inbound-center', name: '인바운드 관리', children: [
                             { id: 'inbound-vendor', name: '외주업체 작성 항목' },
-                            { id: 'inbound-kob', name: '킹오더 담당자 작성 항목' }
+                            { id: 'inbound-kob', name: '킹오더 담당자 작성 항목' },
+                            // 홈페이지 · 메일 · 블로그 · 인스타 수집 연결과 가져오기 · 배정 규칙 (2026-10-08)
+                            { id: 'inbound-sources', name: '수집 · 연결 설정' }
                         ]
                     },
                     {
@@ -10783,6 +10790,8 @@ const QUOTE_TEMPLATES = [
             'dashboard-personal', 'users', 'settings', 'settings-contract-approval', 'settings-approvers',
             'settings-collab-perm', 'settings-calendar-perm', 'settings-notice', 'collab-center', 'exec-center',
             'project-center', 'inbound-center', 'inbound-vendor', 'inbound-kob', 'calendar-center', 'permissions',
+            // 수집 · 연결 설정(2026-10-08)은 인바운드 관리를 가진 영업 · 운영 그룹에 저절로 물려주지 않습니다 — 아래에서 경영진에게만 줍니다
+            'inbound-sources',
             'sales', 'sales-customers', 'sales-work-center', 'sales-supply', 'sales-consulting', 'sales-quote',
             'ops', 'ops-work-center', 'payment', 'payment-work-center', 'management', 'management-work-center',
             'management-vehicle', 'management-card', 'card-perm', 'management-org', 'org-chart', 'common'
@@ -10845,6 +10854,11 @@ const QUOTE_TEMPLATES = [
                 if (!g) return;
                 ['it', 'it-work-center', 'it-wc-projects', 'it-wc-dev'].forEach(id => { if (g.permissions.indexOf(id) < 0) g.permissions.push(id); });
             });
+            // 인바운드 수집 · 연결 설정 (2026-10-08) — 경영진 그룹에만 기본으로. 인입 담당자에게는 권한 관리에서 켜 줍니다
+            (function () {
+                const g = permissionGroups.find(x => x.id === 'management');
+                if (g && g.permissions.indexOf('inbound-sources') < 0) g.permissions.push('inbound-sources');
+            })();
             const NEW_PARTNER_CENTER_IDS = ['partner-center-ops'];
             Object.keys(PARTNER_CENTER_GRANTS).forEach(gid => {
                 const g = permissionGroups.find(x => x.id === gid);
@@ -24264,7 +24278,7 @@ const QUOTE_TEMPLATES = [
 
         let inboundRecords = [];
         let inboundSeq = 13;
-        let inboundFilter = { q: '', route: '', service: '', result: '', contact: '', from: '', to: '' };
+        let inboundFilter = { q: '', route: '', service: '', result: '', contact: '', from: '', to: '', quick: '', channel: '', dept: '' };
 
         // ---------- 인입 자료를 두 화면이 나눠 씁니다 (2026-09-07) ----------
         // 외주업체는 **별도 페이지(?mode=inbound)** 로 들어와 인입만 넣습니다.
@@ -24290,6 +24304,7 @@ const QUOTE_TEMPLATES = [
         // 그룹웨어 쪽 — 외주업체 창에서 인입을 넣으면 이 창에도 곧바로 반영합니다
         function initInboundSync() {
             window.addEventListener('storage', (e) => {
+                if (e.key === INBOUND_SOURCES_KEY) { inboundSources = loadInboundSources(); return; }   // 수집 설정 (2026-10-08)
                 if (e.key !== INBOUND_KEY) return;
                 loadInboundRecords();
                 const sec = document.getElementById('sec-inbound-center');
@@ -24324,6 +24339,16 @@ const QUOTE_TEMPLATES = [
             const q = (f.q || '').trim().toLowerCase();
             const norm = v => String(v || '').replace(/[\s-]/g, '').toLowerCase();
             return inboundRecords.filter(r => {
+                // 스팸은 [스팸] 칩에서만 (2026-10-08)
+                if (f.quick === 'spam') { if (!r.spam) return false; }
+                else if (r.spam) return false;
+                if (f.quick === 'unassigned' && ((r.kob || {}).dept || (r.kob || {}).result)) return false;
+                if (f.quick === 'nocontact' && (!(r.kob || {}).dept || inboundHasContact(r) || (r.kob || {}).result)) return false;
+                if (f.quick === 'late' && !inboundLate(r)) return false;
+                if (f.quick === 'check' && !inboundNeedsCheck(r)) return false;
+                if (f.quick === 'stop' && (!inboundStopped(r) || (r.kob || {}).result)) return false;
+                if (f.channel && inboundChannelOf(r) !== f.channel) return false;
+                if (f.dept && canSeeInboundKob() && (f.dept === 'none' ? !!(r.kob || {}).dept : (r.kob || {}).dept !== f.dept)) return false;
                 if (f.from && (r.inDate || '') < f.from) return false;
                 if (f.to && (r.inDate || '') > f.to) return false;
                 if (f.route && !(r.routes || []).includes(f.route)) return false;
@@ -24340,7 +24365,7 @@ const QUOTE_TEMPLATES = [
                     if (!norm(hay).includes(norm(q))) return false;
                 }
                 return true;
-            }).sort((a, b) => (b.inDate || '').localeCompare(a.inDate || '') || (b.id || '').localeCompare(a.id || ''));
+            }).sort((a, b) => (b.inDate || '').localeCompare(a.inDate || '') || (b.inAt || '').localeCompare(a.inAt || '') || (b.id || '').localeCompare(a.id || ''));
         }
 
         function setInboundFilter(field, value) {
@@ -24348,16 +24373,16 @@ const QUOTE_TEMPLATES = [
             renderInboundList();
         }
         function resetInboundFilter() {
-            inboundFilter = { q: '', route: '', service: '', result: '', contact: '', from: '', to: '' };
+            inboundFilter = { q: '', route: '', service: '', result: '', contact: '', from: '', to: '', quick: '', channel: '', dept: '' };
             renderInboundCenter();
         }
 
         // ---------- 화면 ----------
-        function renderInboundCenter() {
-            const host = document.getElementById('sec-inbound-center');
+        // 인입 목록 탭 (2026-10-08 — 탭 틀은 아래 renderInboundCenter 가 그립니다)
+        function renderInboundListTab(host) {
             if (!host) return;
             const kob = canSeeInboundKob();
-            const all = inboundRecords;
+            const all = inboundLive();
             const thisMonth = ymd(new Date()).slice(0, 7);
             const card = (label, value, sub, cls) => `
                 <div class="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
@@ -24386,13 +24411,7 @@ const QUOTE_TEMPLATES = [
 
             host.innerHTML = `
                 <div class="mb-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-                    <div>
-                        <h3 class="text-lg font-bold text-gray-800">인바운드 관리</h3>
-                        <p class="text-gray-500 text-sm">
-                            외주업체가 인입 건을 등록하고, 킹오더 담당자가 컨택 결과를 이어서 적습니다.
-                            ${kob ? '' : '<span class="text-rose-600 font-medium">킹오더 담당자 작성 항목은 표시되지 않습니다.</span>'}
-                        </p>
-                    </div>
+                    <div class="flex flex-wrap gap-1.5">${inboundQuickChipsHtml()}</div>
                     <div class="flex flex-wrap gap-2">
                         ${canEditInboundVendor() ? `<button onclick="openInboundModal()" class="bg-rose-600 hover:bg-rose-700 text-white px-3 py-1.5 rounded text-sm transition-colors"><i class="fas fa-plus mr-1"></i>인입 등록</button>` : ''}
                         <!-- 파트너센터 접수 주소 — 인바운드 접수는 파트너센터 › 영업본부 › 인바운드 접수에서 받습니다 (2026-09-08) -->
@@ -24432,6 +24451,10 @@ const QUOTE_TEMPLATES = [
                                 <option value="3+" ${inboundFilter.contact === '3+' ? 'selected' : ''}>3회 이상</option>
                                 <option value="stop" ${inboundFilter.contact === 'stop' ? 'selected' : ''}>컨택 중단 (${inboundMaxContact}회 이상)</option>
                             </select></div>` : ''}
+                        <div><label class="block text-xs font-medium text-gray-600 mb-1">수집 채널</label>
+                            <select onchange="setInboundFilter('channel', this.value)" class="${selCls}"><option value="">전체</option>${Object.keys(INBOUND_CHANNELS).map(k => `<option value="${k}" ${inboundFilter.channel === k ? 'selected' : ''}>${escapeHtml(INBOUND_CHANNELS[k].name)}</option>`).join('')}</select></div>
+                        ${kob ? `<div><label class="block text-xs font-medium text-gray-600 mb-1">본부</label>
+                            <select onchange="setInboundFilter('dept', this.value)" class="${selCls}">${[['', '전체'], ['영업', '영업본부'], ['운영', '운영본부'], ['none', '미배정']].map(([v, n]) => `<option value="${v}" ${inboundFilter.dept === v ? 'selected' : ''}>${n}</option>`).join('')}</select></div>` : ''}
                         <button type="button" onclick="resetInboundFilter()" class="px-3 py-2 text-sm rounded bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors">초기화</button>
                     </div>
                     ${kob ? `
@@ -24460,7 +24483,8 @@ const QUOTE_TEMPLATES = [
         // 표 컬럼 — 킹오더 영역은 권한이 있을 때만 배열에 담깁니다 (없으면 화면·엑셀 모두에서 빠짐)
         function inboundColumns() {
             const cols = [
-                { label: '인입일자', get: r => r.inDate, cls: 'whitespace-nowrap text-gray-500' },
+                { label: '인입일자', get: r => r.inAt || r.inDate, cls: 'whitespace-nowrap text-gray-500' },
+                { label: '수집 채널', get: r => INBOUND_CHANNELS[inboundChannelOf(r)].name, html: r => inboundChannelChip(r) + ((r.flags || []).length || r.dupOf ? ` <span class="text-amber-600" title="${escapeHtml((r.flags || []).join(' · '))}">⚠</span>` : '') },
                 { label: '인입 경로', get: r => inboundListText(r.routes), cls: 'whitespace-nowrap' },
                 { label: '게시판 서비스 유형', get: r => inboundListText(r.services) },
                 { label: '업체명', get: r => r.company, cls: 'whitespace-nowrap font-medium' },
@@ -24476,6 +24500,7 @@ const QUOTE_TEMPLATES = [
             ];
             if (!canSeeInboundKob()) return cols;
             return cols.concat([
+                { label: '본부', get: r => (r.kob || {}).dept ? r.kob.dept + '본부' : '미배정', html: r => inboundDeptChip(r) + (inboundLate(r) ? `<div class="text-[10px] text-rose-600 font-semibold mt-0.5 whitespace-nowrap">${escapeHtml(inboundLate(r))}</div>` : ''), kob: true },
                 { label: '고객 컨택일자', get: r => (r.kob || {}).contactAt, cls: 'whitespace-nowrap text-gray-500', kob: true },
                 { label: '담당자', get: r => (r.kob || {}).owner, cls: 'whitespace-nowrap', kob: true },
                 { label: '고객 영업 현황', get: r => (r.kob || {}).salesStatus, wide: true, kob: true },
@@ -24500,7 +24525,7 @@ const QUOTE_TEMPLATES = [
 
             const list = inboundFiltered();
             const cntEl = document.getElementById('inbound-count');
-            if (cntEl) cntEl.innerText = `· ${list.length}건 / 전체 ${inboundRecords.length}건`;
+            if (cntEl) cntEl.innerText = `· ${list.length}건 / 전체 ${inboundLive().length}건`;
 
             if (!list.length) {
                 body.innerHTML = `<tr><td colspan="${cols.length}" class="px-3 py-10 text-center text-sm text-gray-400"><i class="fas fa-inbox text-2xl block mb-2 text-gray-300"></i>조건에 맞는 인입 건이 없습니다.</td></tr>`;
@@ -24642,6 +24667,7 @@ const QUOTE_TEMPLATES = [
                     </div>
                 </div>`;
 
+            renderInboundOrigin(d);     // 원문 · 유입 정보 (수집된 건만 · 2026-10-08)
             document.getElementById('inbound-vendor-body').innerHTML = `
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     ${text('인입일자', 'inDate', 'date', '', true)}
@@ -24671,8 +24697,15 @@ const QUOTE_TEMPLATES = [
                             <input type="date" id="inb-kob-contactAt" value="${escapeHtml(k.contactAt || '')}" onchange="setInboundKobField('contactAt', this.value)" class="${cls}" />
                         </div>
                         <div>
+                            <label class="block text-xs font-medium text-gray-600 mb-1">본부 <span class="text-gray-400 font-normal">(배정)</span></label>
+                            <select id="inb-kob-dept" onchange="setInboundKobField('dept', this.value); renderInboundModal();" class="${cls}">
+                                ${[['', '미배정'], ['영업', '영업본부'], ['운영', '운영본부']].map(([v, n]) => `<option value="${v}" ${(k.dept || '') === v ? 'selected' : ''}>${n}</option>`).join('')}
+                            </select>
+                        </div>
+                        <div>
                             <label class="block text-xs font-medium text-gray-600 mb-1">담당자</label>
-                            <input type="text" id="inb-kob-owner" value="${escapeHtml(k.owner || '')}" oninput="setInboundKobField('owner', this.value)" placeholder="예: 김철수" class="${cls}" />
+                            <input type="text" id="inb-kob-owner" list="inb-owner-list" value="${escapeHtml(k.owner || '')}" oninput="setInboundKobField('owner', this.value)" placeholder="이름을 고르거나 적기" class="${cls}" />
+                            <datalist id="inb-owner-list">${(k.dept ? inboundDeptUsers(k.dept) : (localUsers || []).map(u => u.name)).map(n => `<option value="${escapeHtml(n)}"></option>`).join('')}</datalist>
                         </div>
                         <div class="sm:col-span-2">
                             <label class="block text-xs font-medium text-gray-600 mb-1">고객 영업 현황</label>
@@ -24710,8 +24743,14 @@ const QUOTE_TEMPLATES = [
             if (!d) return;
             if (canEditInboundVendor()) {
                 if (!d.inDate) { alert('인입일자를 입력해 주세요.'); return; }
-                if (!(d.company || '').trim()) { alert('업체명을 입력해 주세요.'); return; }
-                if (!(d.phone || '').trim()) { alert('휴대전화를 입력해 주세요.'); return; }
+                if (d.channel) {
+                    // 수집한 건(블로그 · 인스타 · 메일 …)은 업체명 · 휴대전화가 없을 수 있습니다 (2026-10-08) — 누군지 · 다시 찾아갈 곳만 있으면 됩니다
+                    if (!(d.company || d.name || '').trim()) { alert('업체명이나 이름 중 하나는 입력해 주세요.'); return; }
+                    if (!(d.phone || d.email || (d.source || {}).url || '').trim()) { alert('휴대전화 · 이메일 · 원문 주소 중 하나는 있어야 합니다.'); return; }
+                } else {
+                    if (!(d.company || '').trim()) { alert('업체명을 입력해 주세요.'); return; }
+                    if (!(d.phone || '').trim()) { alert('휴대전화를 입력해 주세요.'); return; }
+                }
             }
             const k = inboundKob(d);
             if (k.result === '실패' && !k.failReason) { alert('진행 결과가 실패이면 실패사유를 선택해 주세요.'); return; }
@@ -24773,6 +24812,1018 @@ const QUOTE_TEMPLATES = [
                         : []))
             ];
             downloadBlobAs(buildXlsxBlob(rows, 'INBOUND'), `인바운드_인입현황_${today.replace(/-/g, '')}.xlsx`);
+        }
+
+
+        // ==================== 인바운드 관리 — 수집 · 현황 · 보드 · 분석 (2026-10-08) ====================
+        // 외주업체(인바운드 대행)가 10/16 로 끝나면서, 홈페이지 · 블로그 · 카페 · 인스타 · 전화로 들어오는 문의를
+        // 이 화면 하나로 모읍니다. 설계는 홈페이지 이전/인입관리/ 와이어프레임 v0.1.
+        //   · 자료는 그대로 gwInboundRecords.v1 — 외주업체 항목 + kob 에 수집 항목(channel · source · raw · extKey · flags · kob.dept)을 덧붙입니다.
+        //     서버(/api/inbound/form · 자동 수집)도 같은 목록에 넣고, kobStorage 가 저장할 때 서버 값 위에 내 변경만 얹으므로 서로 지우지 않습니다.
+        //   · 수집 설정은 gwInboundSources.v1, 비밀 값(메일 비밀번호 · 네이버 Secret · 인스타 토큰)은 서버에만(/api/inbound/secret).
+        //   · 탭: 현황판 · 인입 목록 · 본부 보드 · 수집 · 연결(테스트) · 경로 분석 · 배정 · 규칙
+        let inboundTab = 'dash';
+        const INBOUND_TABS = [
+            { id: 'dash',     name: '현황판',      icon: 'fa-gauge-high',      show: () => canSeeInboundKob(),
+              desc: '오늘 처리할 일(미배정 · 기준 시간 넘김 · 컨택 중단)과 들어온 흐름을 봅니다.' },
+            { id: 'list',     name: '인입 목록',   icon: 'fa-list',            show: () => true,
+              desc: '모든 채널의 인입 건입니다. 줄을 누르면 원문 · 유입 정보 · 컨택 기록이 열립니다.' },
+            { id: 'board',    name: '본부 보드',   icon: 'fa-table-columns',   show: () => canSeeInboundKob(),
+              desc: '영업본부 · 운영본부가 단계별로 처리 현황을 봅니다. 카드를 누르면 상세가 열립니다.' },
+            { id: 'sources',  name: '수집 · 연결', icon: 'fa-plug',            show: () => canSeePage('inbound-sources'),
+              desc: '소스마다 실제 자료를 가져와 미리 보고(저장 안 함), 고른 건만 등록합니다. 연결 설정과 자동 수집도 여기서 합니다.' },
+            { id: 'analysis', name: '경로 분석',   icon: 'fa-chart-column',    show: () => canSeeInboundKob(),
+              desc: '어느 채널 · 검색어 · 블로그 글의 문의가 수주로 이어지는지 봅니다.' },
+            { id: 'rules',    name: '배정 · 규칙', icon: 'fa-sliders',         show: () => canSeeInboundKob(),
+              desc: '자동 배정 규칙 · 기준 시간 · 추가 컨택 중단 횟수입니다. 고치기는 수집 · 연결 권한이 있어야 합니다.' },
+        ];
+        function setInboundTab(id) { inboundTab = id; renderInboundCenter(); }
+
+        // ---------- 채널 ----------
+        const INBOUND_CHANNELS = {
+            kod_contact: { name: '킹오더닷컴 · 문의하기',    group: '홈페이지', icon: 'fas fa-globe',        auto: true },
+            kod_popup:   { name: '킹오더닷컴 · 상담 팝업',   group: '홈페이지', icon: 'fas fa-globe',        auto: true },
+            kod_qr:      { name: '킹오더닷컴 · QR킹 폼',     group: '홈페이지', icon: 'fas fa-globe',        auto: true },
+            qrk_contact: { name: '큐알킹 · 문의하기',        group: '홈페이지', icon: 'fas fa-globe',        auto: true },
+            bf_contact:  { name: '브랜드팩토리 · 문의하기',  group: '홈페이지', icon: 'fas fa-globe',        auto: true },
+            mail:        { name: '아임웹 알림 메일',         group: '홈페이지', icon: 'fas fa-envelope',     auto: true },
+            blog:        { name: '네이버 블로그',            group: '블로그',   icon: 'fas fa-blog',         auto: false },
+            cafe:        { name: '네이버 카페',              group: '카페',     icon: 'fas fa-mug-hot',      auto: false },
+            insta:       { name: '인스타그램',               group: 'SNS',      icon: 'fab fa-instagram',    auto: false },
+            phone:       { name: '대표전화',                 group: '전화 · 메신저', icon: 'fas fa-phone',   auto: false },
+            kakao:       { name: '카카오톡 채널',            group: '전화 · 메신저', icon: 'fas fa-comment', auto: false },
+            referral:    { name: '소개',                     group: '주변소개', icon: 'fas fa-handshake',    auto: false },
+            sheet:       { name: '시트 · 엑셀 이관',         group: '이관',     icon: 'fas fa-file-excel',   auto: false },
+            partner:     { name: '파트너센터(대행사)',       group: '대행사',   icon: 'fas fa-building',     auto: false },
+            etc:         { name: '기타',                     group: '기타',     icon: 'fas fa-circle',       auto: false },
+        };
+        function inboundChannelOf(r) { return INBOUND_CHANNELS[r.channel] ? r.channel : (r.vendor ? 'partner' : 'etc'); }
+        function inboundChannelChip(r) {
+            const c = INBOUND_CHANNELS[inboundChannelOf(r)];
+            return `<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-[11px] whitespace-nowrap ${c.auto ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-white border-gray-200 text-gray-700'}" title="${escapeHtml(c.name)}"><i class="${c.icon}"></i>${escapeHtml(c.group)}</span>`;
+        }
+        function inboundDeptChip(r) {
+            const d = (r.kob || {}).dept;
+            if (!d) return '<span class="px-1.5 py-0.5 rounded border border-rose-200 bg-rose-50 text-rose-600 text-[11px] whitespace-nowrap">미배정</span>';
+            return d === '운영' ? '<span class="px-1.5 py-0.5 rounded bg-violet-100 text-violet-800 text-[11px] whitespace-nowrap">운영본부</span>'
+                                : '<span class="px-1.5 py-0.5 rounded bg-blue-100 text-blue-800 text-[11px] whitespace-nowrap">영업본부</span>';
+        }
+
+        // ---------- 수집 설정 (서버 _inbound.js DEFAULTS 와 같은 모양) ----------
+        const INBOUND_SOURCES_KEY = 'gwInboundSources.v1';
+        const INBOUND_SOURCE_DEFAULTS = {
+            form:  { enabled: true, origins: ['https://xn--9m1bt07agwh.com', 'https://www.xn--9m1bt07agwh.com', 'https://qrking.co.kr', 'https://www.qrking.co.kr', 'https://kingorderbrandfactory.com', 'https://www.kingorderbrandfactory.com', 'http://localhost:4321', 'http://localhost:4322', 'http://localhost:4324'] },
+            mail:  { host: 'imap.naver.com', port: 993, user: '', folder: 'INBOX', from: '', subject: '', sinceDays: 7, limit: 20 },
+            naver: { clientId: '', kinds: ['cafearticle', 'blog'], keywords: ['킹오더', '큐알킹'], exclude: ['kingorder_b'], display: 20 },
+            blog:  { blogId: 'kingorder_b' },
+            insta: { igUserId: '', pageId: '', username: 'k1ngorder', apiVersion: 'v21.0' },
+            sheet: { url: '' },
+            auto:  { mail: false, insta: false, intervalMin: 10 },
+            rules: { defaultDept: '영업', opsKeywords: ['AS', 'A/S', '고장', '안 됨', '안됨', '교체', '수리', '사용법', '설정 방법', '메뉴 수정', '메뉴 가격'], dupDays: 30, slaAssignMin: 30, slaContactMin: 120 },
+        };
+        function loadInboundSources() {
+            let saved = null;
+            try { saved = JSON.parse(kobStorage.getItem(INBOUND_SOURCES_KEY) || 'null'); } catch (e) { saved = null; }
+            const s = saved && typeof saved === 'object' ? saved : {};
+            const out = {};
+            Object.keys(INBOUND_SOURCE_DEFAULTS).forEach(k => { out[k] = Object.assign({}, INBOUND_SOURCE_DEFAULTS[k], s[k] || {}); });
+            return out;
+        }
+        let inboundSources = loadInboundSources();
+        function saveInboundSources() {
+            try { kobStorage.setItem(INBOUND_SOURCES_KEY, JSON.stringify(inboundSources)); return true; } catch (e) { return false; }
+        }
+        function canEditInboundSources() { return canSeePage('inbound-sources'); }
+
+        // ---------- 값 다듬기 (서버 _inbound.js 와 같은 규칙) ----------
+        const inbDigits = (v) => String(v || '').replace(/\D/g, '');
+        function inbNormPhone(v) {
+            const d = inbDigits(v);
+            if (/^01\d{8,9}$/.test(d)) return d.length === 11 ? `${d.slice(0, 3)}-${d.slice(3, 7)}-${d.slice(7)}` : `${d.slice(0, 3)}-${d.slice(3, 6)}-${d.slice(6)}`;
+            if (/^02\d{7,8}$/.test(d)) return d.length === 10 ? `02-${d.slice(2, 6)}-${d.slice(6)}` : `02-${d.slice(2, 5)}-${d.slice(5)}`;
+            if (/^0\d{9,10}$/.test(d)) return d.length === 11 ? `${d.slice(0, 3)}-${d.slice(3, 7)}-${d.slice(7)}` : `${d.slice(0, 3)}-${d.slice(3, 6)}-${d.slice(6)}`;
+            return String(v || '').trim();
+        }
+        function inbPhoneLooksWrong(v) {
+            const d = inbDigits(v);
+            if (!d) return false;
+            if (/^01/.test(d)) return !/^01\d{8,9}$/.test(d);
+            return !/^0\d{8,10}$/.test(d);
+        }
+        const INB_SERVICE_ALIASES = [[/키오스크/, '키오스크'], [/qr\s*오더|큐알/i, 'QR오더'], [/테이블\s*오더/, '테이블오더'], [/포스|pos/i, '포스연동'], [/무인\s*결제/, '무인 결제 시스템'], [/냉장고|내장고/, '무인 냉장고'], [/패키지/, '전체 패키지 견적']];
+        function inbNormServices(list) {
+            const out = [];
+            (Array.isArray(list) ? list : String(list || '').split(/[,，·\/\n]/)).forEach(v => {
+                const t = String(v || '').trim(); if (!t) return;
+                const hit = INB_SERVICE_ALIASES.find(([re]) => re.test(t));
+                if (hit && !out.includes(hit[1])) out.push(hit[1]);
+            });
+            return out;
+        }
+        function inbNormRoutes(list) {
+            const out = [];
+            (Array.isArray(list) ? list : String(list || '').split(/[,，]/)).forEach(v => {
+                let t = String(v || '').trim(); if (!t) return;
+                if (/sns|인스타|페이스북|메타/i.test(t)) t = 'SNS';
+                if (!INBOUND_ROUTES.includes(t)) t = '기타';
+                if (!out.includes(t)) out.push(t);
+            });
+            return out;
+        }
+        function inbDeptByRules(text) {
+            const r = inboundSources.rules;
+            if ((r.opsKeywords || []).some(k => k && String(text || '').includes(k))) return '운영';
+            return r.defaultDept === '운영' ? '운영' : (r.defaultDept === '영업' ? '영업' : '');
+        }
+        function inbNowStamp() { const d = new Date(); return `${ymd(d)} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; }
+
+        // 아임웹 알림 메일 본문 — 서버 parseNotifyText 와 같은 규칙 (붙여넣기용)
+        const INB_NOTIFY_FIELDS = [
+            ['at', ['등록시각', '작성일시', '접수일시']], ['name', ['작성자', '이름', '성함', '담당자명', '고객명']],
+            ['company', ['업체명', '매장명', '상호', '상호명', '회사명', '기관명']], ['phone', ['연락처', '휴대폰', '휴대전화', '전화번호', '핸드폰', '휴대폰번호']],
+            ['email', ['이메일', '이메일 주소', 'E-mail', 'email']], ['services', ['문의유형', '문의 유형', '관심 서비스', '관심서비스', '관심 제품', '상담 희망 제품', '관심 있는 서비스']],
+            ['self', ['알게 된 경로', '어떻게 알게 되셨나요', '유입경로', '유입 경로', '방문 경로']], ['biz', ['업종', '매장형태', '매장 형태', '업태']],
+            ['message', ['문의내용', '문의 내용', '문의사항', '내용', '요청사항', '메시지']],
+            ['_skip', ['등록자', '등록위치', '응답', '개인정보 수집동의', '개인정보 수집 및 이용 동의', '개인정보 수집 및 이용에 동의합니다']],
+        ];
+        const INB_NOTIFY_LABELS = new Map();
+        INB_NOTIFY_FIELDS.forEach(([k, list]) => list.forEach(l => INB_NOTIFY_LABELS.set(l.replace(/\s/g, '').toLowerCase(), k)));
+        const inbLabelKey = (line) => INB_NOTIFY_LABELS.get(String(line || '').replace(/[\s:：]/g, '').toLowerCase());
+        function parseInboundNotifyText(text) {
+            const lines = String(text || '').replace(/\r/g, '').split('\n').map(s => s.trim()).filter(Boolean);
+            const out = { at: '', name: '', company: '', phone: '', email: '', services: '', self: '', biz: '', message: '' };
+            let cur = null;
+            for (const line of lines) {
+                const k = inbLabelKey(line);
+                if (k) { cur = k === '_skip' ? null : k; continue; }
+                const words = line.split(/\s+/);
+                let hit = null;
+                for (let n = Math.min(3, words.length - 1); cur !== 'message' && n >= 1 && !hit; n--) {
+                    const k2 = inbLabelKey(words.slice(0, n).join(' '));
+                    if (k2) hit = { k: k2, v: words.slice(n).join(' ').replace(/^[:：]\s*/, '') };
+                }
+                if (hit) { cur = null; if (hit.k !== '_skip' && !out[hit.k]) out[hit.k] = hit.v; continue; }
+                if (cur) out[cur] = out[cur] ? (cur === 'message' ? out[cur] + '\n' + line : out[cur]) : line;
+                if (cur && cur !== 'message') cur = null;
+            }
+            const at = (out.at.match(/(\d{4})[-.\/](\d{1,2})[-.\/](\d{1,2})\D+(\d{1,2}):(\d{2})/) || []);
+            out.at = at.length ? `${at[1]}-${String(at[2]).padStart(2, '0')}-${String(at[3]).padStart(2, '0')} ${String(at[4]).padStart(2, '0')}:${at[5]}` : '';
+            return out;
+        }
+
+        // 수집 건 한 줄 — 서버 makeRecord 와 같은 모양
+        function makeInboundRecord(f) {
+            const at = f.inAt || inbNowStamp();
+            const rec = {
+                id: '', inDate: at.slice(0, 10), inAt: at, routes: f.routes && f.routes.length ? f.routes : [f.route || '기타'],
+                services: inbNormServices(f.services || []), company: String(f.company || '').trim(), name: String(f.name || '').trim(), bizNo: String(f.bizNo || '').trim(),
+                phone: inbNormPhone(f.phone), email: String(f.email || '').trim(), firstContactAt: '', requestNote: String(f.message || '').trim().slice(0, 4000),
+                needs: f.needs || [], vendor: '', channel: f.channel || 'etc', source: f.source || {}, selfRoutes: f.selfRoutes || [],
+                raw: String(f.raw || '').slice(0, 6000), extKey: String(f.extKey || ''), flags: [],
+                createdAt: ymd(new Date()), createdBy: f.createdBy || currentUserName || '',
+                kob: Object.assign({ contactAt: '', salesStatus: '', result: '', failReason: '', owner: '', extras: [], dept: '' }, f.kob || {}),
+            };
+            if (inbPhoneLooksWrong(rec.phone)) rec.flags.push('연락처 확인 필요');
+            if (!rec.requestNote) rec.flags.push('문의내용 없음');
+            if (f.autoAssign !== false && !rec.kob.dept) rec.kob.dept = inbDeptByRules(rec.requestNote + ' ' + rec.company);
+            return rec;
+        }
+
+        // 이미 있는 건인가 — 같은 열쇠(extKey: 메일 Message-ID · 댓글 id · 엑셀 날짜+연락처+업체 …)만 봅니다.
+        // 같은 연락처로 다시 온 문의는 '이미 있음' 이 아니라 '재문의' 로 따로 넣습니다.
+        function inboundExisting(rec) {
+            if (!rec.extKey) return null;
+            return inboundRecords.find(x => x.extKey === rec.extKey) || null;
+        }
+        function inboundRecentSamePhone(rec) {
+            const d = inbDigits(rec.phone);
+            if (d.length < 9) return null;
+            const since = ymd(new Date(Date.now() - (Number(inboundSources.rules.dupDays) || 30) * 86400000));
+            return inboundRecords.find(x => inbDigits(x.phone) === d && (x.inDate || '') >= since) || null;
+        }
+        // 여러 건 넣기 — 이미 있는 건은 건너뛰고, 같은 연락처 재문의는 표시만 합니다
+        function inboundAddRecords(recs) {
+            let added = 0, skipped = 0;
+            recs.forEach(src => {
+                const rec = JSON.parse(JSON.stringify(src));
+                if (inboundExisting(rec)) { skipped++; return; }
+                const prev = inboundRecentSamePhone(rec);
+                if (prev) { if (!rec.flags.includes('재문의: ' + prev.id)) rec.flags.push('재문의: ' + prev.id); rec.dupOf = prev.id; if (prev.kob && prev.kob.dept) rec.kob.dept = prev.kob.dept; }   // 규칙 1순위 — 이전 건의 본부로 (서버 appendRecords 와 같음)
+                rec.id = 'IN-' + String(inboundSeq++).padStart(4, '0');
+                inboundRecords.unshift(rec);
+                added++;
+            });
+            if (added) saveInboundRecords();
+            return { added, skipped };
+        }
+
+        // ---------- 단계 · 기준 시간 ----------
+        const INBOUND_STAGES = [
+            { id: '미배정',   chip: 'bg-rose-100 text-rose-700' },
+            { id: '배정',     chip: 'bg-orange-100 text-orange-700', hint: '본부 배정 · 아직 컨택 안 함' },
+            { id: '진행중',   chip: 'bg-blue-100 text-blue-700' },
+            { id: '보류',     chip: 'bg-amber-100 text-amber-700' },
+            { id: '영업수주', chip: 'bg-green-100 text-green-700' },
+            { id: '실패',     chip: 'bg-red-100 text-red-700' },
+        ];
+        function inboundHasContact(r) { const k = r.kob || {}; return !!(k.contactAt || (k.extras || []).length); }
+        function inboundStage(r) {
+            const k = r.kob || {};
+            if (k.result) return k.result;
+            if (!k.dept) return '미배정';
+            return inboundHasContact(r) ? '진행중' : '배정';
+        }
+        function inboundAgeMin(r) {
+            if (!r.inAt) return null;
+            const t = new Date(r.inAt.replace(' ', 'T') + ':00');
+            return isNaN(t) ? null : Math.round((Date.now() - t.getTime()) / 60000);
+        }
+        function inboundAgeText(m) { return m < 60 ? m + '분' : m < 1440 ? Math.floor(m / 60) + '시간' : Math.floor(m / 1440) + '일'; }
+        // 기준 시간을 넘겼는가 — 들어온 시각(inAt)이 있는 건만 (예전 엑셀 건은 날짜만 있어 재지 않습니다)
+        function inboundLate(r) {
+            if (r.spam || (r.kob || {}).result) return null;
+            const m = inboundAgeMin(r); if (m === null) return null;
+            const R = inboundSources.rules;
+            if (!(r.kob || {}).dept) return m > (Number(R.slaAssignMin) || 30) ? '배정 지연 ' + inboundAgeText(m) : null;
+            if (!inboundHasContact(r)) return m > (Number(R.slaContactMin) || 120) ? '미컨택 ' + inboundAgeText(m) : null;
+            return null;
+        }
+        function inboundNeedsCheck(r) { return !r.spam && ((r.flags || []).length > 0 || !!r.dupOf); }
+        function inboundLive() { return inboundRecords.filter(r => !r.spam); }
+
+        // 담당자 고르기 — 부서 이름에 영업 · 운영이 들어간 구성원
+        function inboundDeptUsers(dept) {
+            const word = dept === '운영' ? '운영' : '영업';
+            const list = (localUsers || []).filter(u => String(deptName(u.dept) || '').includes(word)).map(u => u.name).filter(Boolean);
+            return list.length ? list : (localUsers || []).map(u => u.name).filter(Boolean);
+        }
+
+        // ---------- 탭 틀 ----------
+        function renderInboundCenter() {
+            const host = document.getElementById('sec-inbound-center');
+            if (!host) return;
+            const tabs = INBOUND_TABS.filter(t => t.show());
+            if (!tabs.some(t => t.id === inboundTab)) inboundTab = tabs[0].id;
+            const cur = tabs.find(t => t.id === inboundTab);
+            const live = inboundLive();
+            const badge = { dash: live.filter(r => inboundLate(r)).length, list: live.filter(r => !(r.kob || {}).dept && !(r.kob || {}).result).length };
+            host.innerHTML = `
+                <div class="mb-4">
+                    <h3 class="text-lg font-bold text-gray-800">인바운드 관리</h3>
+                    <p class="text-gray-500 text-sm">홈페이지 · 블로그 · 카페 · 인스타 · 전화로 들어온 문의를 한 곳에 모아 영업본부 · 운영본부가 나눠 처리합니다.</p>
+                </div>
+                <div class="bg-white rounded-t-lg border border-b-0 border-gray-200"><div class="flex gap-1 p-2 overflow-x-auto">
+                    ${tabs.map(t => `<button type="button" onclick="setInboundTab('${t.id}')" class="px-3 py-2 rounded-md text-sm font-medium whitespace-nowrap transition-colors ${t.id === inboundTab ? 'bg-rose-600 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-100'}">
+                        <i class="${t.icon.startsWith('fa-') ? 'fas ' + t.icon : t.icon} mr-1"></i>${escapeHtml(t.name)}${badge[t.id] ? `<span class="ml-1.5 px-1.5 rounded-full text-[11px] ${t.id === inboundTab ? 'bg-white text-rose-600' : 'bg-rose-500 text-white'}">${badge[t.id]}</span>` : ''}</button>`).join('')}
+                </div></div>
+                <div class="bg-white border border-gray-200 rounded-b-lg px-4 py-3 mb-4"><p class="text-sm text-gray-600">${escapeHtml(cur.desc)}</p></div>
+                <div id="inbound-tab-body"></div>`;
+            const body = document.getElementById('inbound-tab-body');
+            if (inboundTab === 'dash') renderInboundDash(body);
+            else if (inboundTab === 'board') renderInboundBoard(body);
+            else if (inboundTab === 'sources') renderInboundSources(body);
+            else if (inboundTab === 'analysis') renderInboundAnalysis(body);
+            else if (inboundTab === 'rules') renderInboundRules(body);
+            else renderInboundListTab(body);
+            const nb = document.getElementById('nav-inbound-center-badge');
+            if (nb) { const n = badge.list; nb.textContent = n; nb.classList.toggle('hidden', !n || !canSeeInboundKob()); }
+        }
+
+        const inbCard = (inner, extra) => `<div class="bg-white rounded-lg shadow-sm border border-gray-200 ${extra || ''}">${inner}</div>`;
+        function inbBar(label, v, max, cls, title) {
+            return `<div class="flex items-center gap-2 text-xs my-1" ${title ? `title="${escapeHtml(title)}"` : ''}><div class="w-28 shrink-0 truncate text-gray-600">${escapeHtml(label)}</div>
+                <div class="flex-1 bg-gray-100 rounded h-3.5 overflow-hidden"><div class="${cls || 'bg-rose-500'} h-3.5 rounded" style="width:${max ? Math.max(2, v / max * 100) : 0}%"></div></div>
+                <div class="w-12 text-right tabular-nums font-semibold text-gray-700">${v}</div></div>`;
+        }
+        function inbCount(list, keyFn) {
+            const m = new Map();
+            list.forEach(r => [].concat(keyFn(r)).forEach(k => m.set(k, (m.get(k) || 0) + 1)));
+            return Array.from(m.entries()).sort((a, b) => b[1] - a[1]);
+        }
+
+        // ---------- 현황판 ----------
+        function renderInboundDash(host) {
+            const live = inboundLive();
+            const today = ymd(new Date()), month = today.slice(0, 7);
+            const open = live.filter(r => !(r.kob || {}).result);
+            const kpi = (label, v, sub, cls, onclick) => `<button type="button" ${onclick ? `onclick="${onclick}"` : 'disabled'} class="text-left bg-white p-4 rounded-lg shadow-sm border border-gray-200 ${onclick ? 'hover:border-rose-300' : ''}">
+                <p class="text-xs text-gray-500">${label}</p><p class="text-2xl font-bold mt-1 ${cls || 'text-gray-800'}">${v}</p><p class="text-[11px] text-gray-400 mt-0.5">${sub}</p></button>`;
+            const unassigned = open.filter(r => !(r.kob || {}).dept).length;
+            const late = live.filter(r => inboundLate(r)).length;
+            const stop = open.filter(inboundStopped).length;
+            const check = live.filter(inboundNeedsCheck).length;
+            const R = inboundSources.rules;
+
+            // 이번 달 채널별
+            const thisMonth = live.filter(r => (r.inDate || '').startsWith(month));
+            const byCh = inbCount(thisMonth, r => inboundChannelOf(r));
+            const chMax = byCh.length ? byCh[0][1] : 0;
+            // 담당자별 대기
+            const owners = new Map();
+            open.filter(r => (r.kob || {}).dept).forEach(r => {
+                const k = (r.kob.owner || '(담당 미정)') + '|' + r.kob.dept;
+                const o = owners.get(k) || { name: r.kob.owner || '(담당 미정)', dept: r.kob.dept, wait: 0, doing: 0, late: 0 };
+                if (inboundHasContact(r)) o.doing++; else o.wait++;
+                if (inboundLate(r)) o.late++;
+                owners.set(k, o);
+            });
+            // 월별 (최근 12개월)
+            const months = [];
+            for (let i = 11; i >= 0; i--) { const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - i); months.push(ymd(d).slice(0, 7)); }
+            const mCount = months.map(m => live.filter(r => (r.inDate || '').startsWith(m)).length);
+            const mMax = Math.max(1, ...mCount);
+            // 자료 품질
+            const routeEtc = live.filter(r => !(r.routes || []).length || (r.routes || []).every(x => x === '기타')).length;
+            const noResult = live.filter(r => inboundHasContact(r) && !(r.kob || {}).result).length;
+            const failNoReason = live.filter(r => (r.kob || {}).result === '실패' && !(r.kob || {}).failReason).length;
+            const pct = (a, b) => b ? Math.round(a / b * 100) : 0;
+
+            host.innerHTML = `
+                <div class="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
+                    ${kpi('오늘 들어온 문의', live.filter(r => r.inDate === today).length + '건', `이번 달 ${thisMonth.length}건`)}
+                    ${kpi('미배정', unassigned + '건', `${R.slaAssignMin}분 넘으면 기준 초과`, unassigned ? 'text-rose-600' : '', "inboundQuick('unassigned')")}
+                    ${kpi('기준 시간 넘김', late + '건', `배정 ${R.slaAssignMin}분 · 1차 컨택 ${R.slaContactMin}분`, late ? 'text-rose-600' : '', "inboundQuick('late')")}
+                    ${kpi('확인 필요', check + '건', '연락처 이상 · 내용 없음 · 재문의', check ? 'text-amber-600' : '', "inboundQuick('check')")}
+                    ${kpi(`추가 컨택 ${inboundMaxContact}회 도달`, stop + '건', '종료할지 결정', stop ? 'text-amber-600' : '', "inboundQuick('stop')")}
+                </div>
+                <div class="grid grid-cols-1 xl:grid-cols-3 gap-4 mb-4">
+                    ${inbCard(`<div class="p-4"><h4 class="font-bold text-sm text-gray-800 mb-2"><i class="fas fa-plug text-rose-500 mr-1"></i>이번 달 채널별</h4>
+                        ${byCh.length ? byCh.map(([k, n]) => inbBar(INBOUND_CHANNELS[k].name, n, chMax, INBOUND_CHANNELS[k].auto ? 'bg-emerald-500' : 'bg-amber-500')).join('') : '<p class="text-xs text-gray-400 py-4 text-center">이번 달 인입이 없습니다.</p>'}
+                        <p class="text-[11px] text-gray-400 mt-2">초록 = 자동 수집 · 노랑 = 수동 · 이관</p></div>`)}
+                    ${inbCard(`<div class="p-4"><h4 class="font-bold text-sm text-gray-800 mb-2"><i class="fas fa-user-clock text-rose-500 mr-1"></i>담당자별 대기</h4>
+                        ${owners.size ? `<table class="w-full text-sm"><thead class="text-[11px] text-gray-500"><tr><th class="text-left py-1">담당</th><th>본부</th><th>미컨택</th><th>진행</th><th>기준 초과</th></tr></thead><tbody class="divide-y text-center tabular-nums">
+                        ${Array.from(owners.values()).sort((a, b) => b.late - a.late || b.wait - a.wait).map(o => `<tr><td class="text-left py-1.5">${escapeHtml(o.name)}</td><td class="text-xs">${o.dept}</td><td>${o.wait}</td><td>${o.doing}</td><td class="${o.late ? 'text-rose-600 font-bold' : ''}">${o.late}</td></tr>`).join('')}</tbody></table>` : '<p class="text-xs text-gray-400 py-4 text-center">배정된 진행 건이 없습니다.</p>'}</div>`)}
+                    ${inbCard(`<div class="p-4"><h4 class="font-bold text-sm text-gray-800 mb-2"><i class="fas fa-list-check text-rose-500 mr-1"></i>지금 할 일</h4><ul class="text-sm space-y-2">
+                        ${unassigned ? `<li><button onclick="inboundQuick('unassigned')" class="text-left hover:underline"><span class="px-1.5 rounded bg-rose-100 text-rose-700 text-xs mr-1">배정</span>미배정 ${unassigned}건을 본부에 나눠 주세요</button></li>` : ''}
+                        ${late ? `<li><button onclick="inboundQuick('late')" class="text-left hover:underline"><span class="px-1.5 rounded bg-rose-100 text-rose-700 text-xs mr-1">컨택</span>기준 시간을 넘긴 ${late}건</button></li>` : ''}
+                        ${check ? `<li><button onclick="inboundQuick('check')" class="text-left hover:underline"><span class="px-1.5 rounded bg-amber-100 text-amber-800 text-xs mr-1">확인</span>확인이 필요한 ${check}건 (연락처 · 내용 · 재문의)</button></li>` : ''}
+                        ${stop ? `<li><button onclick="inboundQuick('stop')" class="text-left hover:underline"><span class="px-1.5 rounded bg-amber-100 text-amber-800 text-xs mr-1">중단</span>추가 컨택 ${inboundMaxContact}회 도달 ${stop}건 — 종료할지 결정</button></li>` : ''}
+                        ${canEditInboundSources() ? `<li><button onclick="setInboundTab('sources'); inbSrcTab='quick'; renderInboundCenter();" class="text-left hover:underline"><span class="px-1.5 rounded bg-gray-200 text-gray-700 text-xs mr-1">루틴</span>블로그 · 카페 · 인스타 · 카톡 확인 후 빠른 등록</button></li>` : ''}
+                        ${!unassigned && !late && !check && !stop ? '<li class="text-gray-400 text-xs">밀린 일이 없습니다.</li>' : ''}</ul></div>`)}
+                </div>
+                <div class="grid grid-cols-1 xl:grid-cols-3 gap-4">
+                    ${inbCard(`<div class="p-4"><h4 class="font-bold text-sm text-gray-800 mb-1">월별 인입 (최근 12개월)</h4><p class="text-[11px] text-gray-400 mb-3">스팸 제외</p>
+                        <div class="flex items-end gap-1 h-36 border-b border-gray-200">${months.map((m, i) => `<div class="flex-1 flex flex-col items-center justify-end h-full" title="${m} · ${mCount[i]}건">
+                            <div class="text-[10px] tabular-nums text-gray-500">${mCount[i] || ''}</div><div class="w-full rounded-t ${m === month ? 'bg-rose-500' : 'bg-rose-200'}" style="height:${mCount[i] / mMax * 85}%"></div></div>`).join('')}</div>
+                        <div class="flex gap-1 mt-1">${months.map(m => `<div class="flex-1 text-center text-[10px] text-gray-400">${m.slice(5)}</div>`).join('')}</div></div>`, 'xl:col-span-2')}
+                    ${inbCard(`<div class="p-4"><h4 class="font-bold text-sm text-gray-800 mb-2">자료 품질</h4>
+                        ${inbBar("경로 '기타' · 미기재", routeEtc, live.length, 'bg-rose-400', '어디서 왔는지 모르는 건 — 홈페이지 폼 자동 수집(UTM)으로 줄어듭니다')}
+                        ${inbBar('컨택 후 결과 미기재', noResult, live.length, 'bg-amber-400')}
+                        ${inbBar('실패 사유 미기재', failNoReason, live.length, 'bg-amber-400')}
+                        <p class="text-[11px] text-gray-500 mt-2">전체 ${live.length}건 중 경로 불명 ${pct(routeEtc, live.length)}%</p></div>`)}
+                </div>`;
+        }
+        // 현황판 카드 → 인입 목록 빠른 거르기
+        function inboundQuick(q) {
+            inboundFilter.quick = q;
+            inboundTab = 'list';
+            renderInboundCenter();
+        }
+
+        // ---------- 본부 보드 ----------
+        let inboundBoardDept = '';   // '' 전체 · 영업 · 운영
+        let inboundBoardInit = false;
+        function renderInboundBoard(host) {
+            const mine = String(deptName(currentUserDept) || '');
+            if (!inboundBoardInit) {
+                inboundBoardInit = true;      // 처음 열 때만 — 내 부서 본부로 맞춥니다
+                if (mine.includes('영업')) inboundBoardDept = '영업'; else if (mine.includes('운영')) inboundBoardDept = '운영';
+            }
+            const list = inboundLive().filter(r => !inboundBoardDept || (r.kob || {}).dept === inboundBoardDept || (!(r.kob || {}).dept && inboundBoardDept));
+            const recent = ymd(new Date(Date.now() - 30 * 86400000));
+            host.innerHTML = `
+                <div class="flex flex-wrap items-center gap-2 mb-3">
+                    ${[['', '전체'], ['영업', '영업본부'], ['운영', '운영본부']].map(([v, n]) => `<button type="button" onclick="inboundBoardDept='${v}'; renderInboundCenter();" class="px-3 py-1.5 rounded text-sm ${inboundBoardDept === v ? 'bg-gray-800 text-white' : 'bg-white border border-gray-300 text-gray-600 hover:bg-gray-50'}">${n}</button>`).join('')}
+                    <span class="text-xs text-gray-400 ml-2">미배정 칸은 어느 본부를 골라도 보입니다 · 수주 · 실패 칸은 최근 30일만</span>
+                </div>
+                <div class="flex gap-3 overflow-x-auto pb-3">${INBOUND_STAGES.map(st => {
+                    let col = list.filter(r => inboundStage(r) === st.id);
+                    if (st.id === '영업수주' || st.id === '실패') col = col.filter(r => (r.inDate || '') >= recent);
+                    col.sort((a, b) => String(b.inAt || b.inDate || '').localeCompare(String(a.inAt || a.inDate || '')));
+                    return `<div class="w-64 shrink-0 bg-gray-100 rounded-lg p-2">
+                        <div class="flex items-center justify-between px-1 mb-2"><span class="px-2 py-0.5 rounded-full text-xs font-semibold ${st.chip}" title="${escapeHtml(st.hint || '')}">${st.id}</span><span class="text-xs text-gray-500 tabular-nums">${col.length}</span></div>
+                        <div class="space-y-2 min-h-[60px] max-h-[620px] overflow-y-auto">${col.slice(0, 60).map(r => {
+                            const late = inboundLate(r), n = inboundExtraCount(r);
+                            return `<button type="button" onclick="openInboundModal('${escapeHtml(r.id)}')" class="w-full text-left bg-white rounded-md p-2.5 shadow-sm border ${late ? 'border-rose-300' : 'border-gray-200'} hover:border-rose-400">
+                                <div class="flex items-center justify-between gap-1">${inboundChannelChip(r)}<span class="text-[10px] text-gray-400">${escapeHtml((r.inAt || r.inDate || '').slice(5))}</span></div>
+                                <p class="font-semibold text-sm mt-1.5 truncate">${escapeHtml(r.company || r.name || '(이름 없음)')}</p>
+                                <p class="text-xs text-gray-500 mt-0.5 line-clamp-2">${escapeHtml(r.requestNote || inboundListText(r.services) || '')}</p>
+                                <div class="flex items-center justify-between mt-1.5 text-[11px]"><span class="text-gray-500">${escapeHtml((r.kob || {}).owner || '')} ${(r.kob || {}).dept ? '' : ''}</span>
+                                    <span class="${inboundStopped(r) ? 'text-rose-600 font-bold' : 'text-gray-400'}">${n ? '추가 ' + n + '회' : ''}</span></div>
+                                ${late ? `<p class="text-[11px] text-rose-600 font-semibold mt-1">${late}</p>` : ''}
+                                ${inboundNeedsCheck(r) ? `<p class="text-[11px] text-amber-700 mt-1 truncate">⚠ ${escapeHtml((r.flags || []).join(' · ') || '재문의')}</p>` : ''}
+                            </button>`;
+                        }).join('') || '<p class="text-[11px] text-gray-400 text-center py-4">없음</p>'}${col.length > 60 ? `<p class="text-[11px] text-gray-400 text-center">외 ${col.length - 60}건 — 인입 목록에서</p>` : ''}</div></div>`;
+                }).join('')}</div>`;
+        }
+
+        // ---------- 경로 분석 ----------
+        function renderInboundAnalysis(host) {
+            const live = inboundLive();
+            const routes = INBOUND_ROUTES.concat(['(미기재)']);
+            const rowOf = (name, list) => {
+                const c = (id) => list.filter(r => (r.kob || {}).result === id).length;
+                const won = c('영업수주'), closed = won + c('실패');
+                return `<tr class="${name.startsWith('기타') || name === '(미기재)' ? 'bg-rose-50/40' : ''}"><td class="px-3 py-2 font-medium">${escapeHtml(name)}</td><td class="text-right">${list.length}</td>
+                    <td class="text-right">${list.filter(inboundHasContact).length}</td><td class="text-right">${c('진행중')}</td><td class="text-right">${c('보류')}</td><td class="text-right">${c('실패')}</td>
+                    <td class="text-right font-bold ${won ? 'text-green-600' : ''}">${won}</td><td class="text-right pr-3">${closed ? Math.round(won / closed * 100) + '%' : '-'}</td></tr>`;
+            };
+            const byRoute = routes.map(rt => [rt, live.filter(r => rt === '(미기재)' ? !(r.routes || []).length : (r.routes || [])[0] === rt)]).filter(([, l]) => l.length);
+            const byCh = Object.keys(INBOUND_CHANNELS).map(k => [INBOUND_CHANNELS[k].name, live.filter(r => inboundChannelOf(r) === k)]).filter(([, l]) => l.length);
+            const kw = inbCount(live.filter(r => (r.source || {}).keyword), r => r.source.keyword).slice(0, 15);
+            const posts = inbCount(live.filter(r => (r.source || {}).post || ((r.source || {}).utm_source === 'blog' && (r.source || {}).utm_campaign)), r => r.source.post || r.source.utm_campaign).slice(0, 15);
+            const fails = inbCount(live.filter(r => (r.kob || {}).result === '실패'), r => r.kob.failReason || '(사유 미기재)');
+            const head = `<thead class="bg-gray-50 text-xs text-gray-500 border-b"><tr><th class="text-left px-3 py-2">구분</th><th class="text-right">인입</th><th class="text-right">컨택</th><th class="text-right">진행중</th><th class="text-right">보류</th><th class="text-right">실패</th><th class="text-right">수주</th><th class="text-right pr-3">수주율</th></tr></thead>`;
+            const wonOf = (name, f) => live.filter(r => f(r) === name && (r.kob || {}).result === '영업수주').length;
+            host.innerHTML = `
+                <div class="grid grid-cols-1 xl:grid-cols-2 gap-4 mb-4">
+                    ${inbCard(`<div class="px-4 pt-3 pb-1 font-bold text-sm text-gray-800">인입 경로별 <span class="font-normal text-xs text-gray-400">(첫 번째 경로 기준 · 수주율 = 수주 ÷ (수주 + 실패))</span></div>
+                        <div class="overflow-x-auto"><table class="w-full text-sm tabular-nums">${head}<tbody class="divide-y">${byRoute.map(([n, l]) => rowOf(n, l)).join('') || '<tr><td colspan="8" class="py-6 text-center text-gray-400 text-xs">자료가 없습니다</td></tr>'}</tbody></table></div>`)}
+                    ${inbCard(`<div class="px-4 pt-3 pb-1 font-bold text-sm text-gray-800">수집 채널별</div>
+                        <div class="overflow-x-auto"><table class="w-full text-sm tabular-nums">${head}<tbody class="divide-y">${byCh.map(([n, l]) => rowOf(n, l)).join('') || '<tr><td colspan="8" class="py-6 text-center text-gray-400 text-xs">자료가 없습니다</td></tr>'}</tbody></table></div>`)}
+                </div>
+                <div class="grid grid-cols-1 xl:grid-cols-3 gap-4">
+                    ${inbCard(`<div class="p-4"><h4 class="font-bold text-sm text-gray-800 mb-1">검색어별 인입</h4><p class="text-[11px] text-gray-400 mb-2">홈페이지 폼이 광고 검색어를 함께 보낸 건 — 네이버 광고 분석과 이어 봅니다</p>
+                        ${kw.length ? kw.map(([k, n]) => inbBar(k, n, kw[0][1], 'bg-green-500', `수주 ${wonOf(k, r => (r.source || {}).keyword)}건`)).join('') : '<p class="text-xs text-gray-400 py-4 text-center">아직 검색어가 남은 건이 없습니다 (새 사이트 폼 연결 후 쌓입니다)</p>'}</div>`)}
+                    ${inbCard(`<div class="p-4"><h4 class="font-bold text-sm text-gray-800 mb-1">블로그 · 카페 글별 인입</h4><p class="text-[11px] text-gray-400 mb-2">UTM 링크 · 빠른 등록의 '출처 글' 합산</p>
+                        ${posts.length ? posts.map(([k, n]) => inbBar(k, n, posts[0][1], 'bg-amber-500')).join('') : '<p class="text-xs text-gray-400 py-4 text-center">아직 글이 기록된 건이 없습니다</p>'}</div>`)}
+                    ${inbCard(`<div class="p-4"><h4 class="font-bold text-sm text-gray-800 mb-2">실패 사유</h4>
+                        ${fails.length ? fails.map(([k, n]) => inbBar(k, n, fails[0][1], k.startsWith('(') ? 'bg-rose-300' : 'bg-gray-400')).join('') : '<p class="text-xs text-gray-400 py-4 text-center">실패 건이 없습니다</p>'}</div>`)}
+                </div>`;
+        }
+
+        // ---------- 배정 · 규칙 ----------
+        function setInboundRule(field, value) {
+            if (!canEditInboundSources()) return;
+            const R = inboundSources.rules;
+            if (field === 'opsKeywords') R.opsKeywords = String(value || '').split(/[,\n]/).map(s => s.trim()).filter(Boolean);
+            else if (['dupDays', 'slaAssignMin', 'slaContactMin'].includes(field)) R[field] = Math.max(1, parseInt(value, 10) || INBOUND_SOURCE_DEFAULTS.rules[field]);
+            else R[field] = value;
+            saveInboundSources();
+            showAppToast('배정 · 규칙을 저장했습니다.', 'green');
+        }
+        function renderInboundRules(host) {
+            const R = inboundSources.rules, ed = canEditInboundSources(), dis = ed ? '' : ' disabled';
+            const cls = 'p-2 text-sm border border-gray-300 rounded bg-white focus:outline-none focus:ring-2 focus:ring-rose-500' + (ed ? '' : ' bg-gray-100 text-gray-500');
+            const rule = (n, cond, to, note) => `<tr><td class="px-3 py-2.5 text-xs text-gray-400">${n}</td><td class="text-sm">${cond}</td><td>${to}</td><td class="text-xs text-gray-500 pr-3">${note}</td></tr>`;
+            host.innerHTML = `
+                ${ed ? '' : '<p class="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2 mb-3"><i class="fas fa-lock mr-1"></i>보기만 됩니다 — 고치려면 권한 관리에서 「수집 · 연결 설정」 권한이 필요합니다.</p>'}
+                ${inbCard(`<div class="px-4 pt-3 pb-1 font-bold text-sm text-gray-800">자동 배정 순서 <span class="font-normal text-xs text-gray-400">위에서부터 처음 맞는 규칙으로 — 홈페이지 폼 · 메일 · 빠른 등록에 적용 (블로그 · 카페 언급과 인스타는 미배정으로 들어옵니다)</span></div>
+                    <div class="overflow-x-auto"><table class="w-full min-w-[720px]"><thead class="bg-gray-50 text-xs text-gray-500 border-b"><tr><th class="text-left px-3 py-2 w-10">순서</th><th class="text-left">조건</th><th class="text-left">보낼 곳</th><th class="text-left pr-3">메모</th></tr></thead><tbody class="divide-y">
+                    ${rule(1, `같은 연락처로 <input type="number" min="1" max="365" value="${R.dupDays}" onchange="setInboundRule('dupDays', this.value)" class="w-16 ${cls}"${dis}/> 일 안에 들어온 건이 있음`, '<span class="px-2 py-0.5 rounded bg-amber-100 text-amber-800 text-xs">이전 건의 본부</span>', "'재문의' 표시 — 합칠지는 사람이 정합니다")}
+                    ${rule(2, `문의 내용 · 업체명에 아래 낱말이 있음<textarea rows="2" onchange="setInboundRule('opsKeywords', this.value)" class="mt-1 w-full ${cls}"${dis}>${escapeHtml((R.opsKeywords || []).join(', '))}</textarea>`, '<span class="px-2 py-0.5 rounded bg-violet-100 text-violet-800 text-xs">운영본부</span>', 'AS · 사용법 · 기존 고객 문의')}
+                    ${rule(3, '그 밖의 문의', `<select onchange="setInboundRule('defaultDept', this.value)" class="${cls}"${dis}>${[['영업', '영업본부'], ['운영', '운영본부'], ['', '미배정 (사람이 지정)']].map(([v, n]) => `<option value="${v}" ${R.defaultDept === v ? 'selected' : ''}>${n}</option>`).join('')}</select>`, '담당자는 본부에서 정합니다')}
+                    </tbody></table></div>`, 'mb-4')}
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                    ${inbCard(`<div class="p-4 text-sm space-y-2"><h4 class="font-bold text-gray-800">기준 시간</h4>
+                        <label class="flex items-center justify-between gap-2">배정까지 (분)<input type="number" min="1" value="${R.slaAssignMin}" onchange="setInboundRule('slaAssignMin', this.value)" class="w-24 text-right ${cls}"${dis}/></label>
+                        <label class="flex items-center justify-between gap-2">배정 뒤 1차 컨택까지 (분)<input type="number" min="1" value="${R.slaContactMin}" onchange="setInboundRule('slaContactMin', this.value)" class="w-24 text-right ${cls}"${dis}/></label>
+                        <label class="flex items-center justify-between gap-2">추가 컨택 중단 (회)<input type="number" min="1" max="20" value="${inboundMaxContact}" onchange="setInboundMaxContact(this.value)" class="w-24 text-right ${cls}"/></label>
+                        <p class="text-[11px] text-gray-400">들어온 시각이 있는 건만 잽니다 (예전 엑셀 건은 날짜만 있어 빠집니다). 영업시간 기준 계산은 다음 단계.</p></div>`)}
+                    ${inbCard(`<div class="p-4 text-sm"><h4 class="font-bold text-gray-800 mb-2">알림</h4>
+                        <p class="text-gray-600 text-xs leading-relaxed">지금은 사이드바 배지(미배정 수)와 현황판으로 알립니다. 배정 즉시 담당자 폰 푸시 · 단톡방 대체 수단은 정한 뒤 붙입니다 <span class="px-1.5 rounded bg-amber-100 text-amber-800">정할 것</span></p></div>`)}
+                    ${inbCard(`<div class="p-4 text-sm"><h4 class="font-bold text-gray-800 mb-2">누가 무엇을</h4>
+                        <table class="w-full text-xs"><thead class="text-gray-500 border-b"><tr><th class="text-left py-1">권한</th><th class="text-left">할 수 있는 것</th></tr></thead><tbody class="divide-y">
+                        <tr><td class="py-1.5 whitespace-nowrap">킹오더 담당자 작성</td><td>현황판 · 보드 · 분석 · 본부 · 담당 · 컨택 · 결과</td></tr>
+                        <tr><td class="py-1.5 whitespace-nowrap">외주업체 작성</td><td>인입 항목 등록 · 수정 (인입 담당에게도)</td></tr>
+                        <tr><td class="py-1.5 whitespace-nowrap">수집 · 연결 설정</td><td>소스 연결 · 가져오기 · 규칙 · 스팸 처리</td></tr>
+                        <tr><td class="py-1.5 whitespace-nowrap">관리자</td><td>위 전부 + 비밀 값(메일 비밀번호 · 토큰) 저장</td></tr></tbody></table></div>`)}
+                </div>`;
+        }
+
+        // ==================== 수집 · 연결 (소스별 테스트 페이지) ====================
+        let inbSrcTab = 'form';
+        let inbSrcStatus = null;        // /api/inbound/status
+        let inbSrcStatusError = '';
+        let inbSrcStatusAsked = false;  // 이 화면을 처음 열 때 한 번만 묻습니다
+        const inbSrcResult = {};        // 소스 → { items, log, error, at } 미리보기 결과
+        const inbSrcPicked = {};        // 소스 → Set(번호) 고른 줄
+        const INB_SRC_TABS = [
+            { id: 'form',  name: '홈페이지 폼',      icon: 'fa-globe' },
+            { id: 'mail',  name: '아임웹 알림 메일', icon: 'fa-envelope' },
+            { id: 'naver', name: '블로그 · 카페 검색', icon: 'fa-magnifying-glass' },
+            { id: 'blog',  name: '블로그 글 (RSS)',  icon: 'fa-blog' },
+            { id: 'insta', name: '인스타그램',       icon: 'fa-instagram', fab: true },
+            { id: 'sheet', name: '구글 시트 · 엑셀', icon: 'fa-file-excel' },
+            { id: 'quick', name: '빠른 등록',        icon: 'fa-pen-to-square' },
+            { id: 'auto',  name: '자동 수집',        icon: 'fa-clock-rotate-left' },
+        ];
+        function setInbSrcTab(id) { inbSrcTab = id; renderInboundCenter(); }
+        function inbIsRemote() { return !!(window.kobStorage && kobStorage.mode === 'supabase'); }
+        async function loadInbSrcStatus() {
+            if (!inbIsRemote()) { inbSrcStatus = null; inbSrcStatusError = '로컬 저장소 모드라 서버(/api)가 없습니다. 붙여넣기 · 엑셀 · 빠른 등록만 시험할 수 있습니다.'; return; }
+            try { inbSrcStatus = await kobAuth.call('/api/inbound/status', undefined, 'GET'); inbSrcStatusError = ''; }
+            catch (e) { inbSrcStatus = null; inbSrcStatusError = String((e && e.message) || e); }
+            if (inboundTab === 'sources') renderInboundCenter();
+        }
+        function setInbSrc(src, field, value, kind) {
+            if (!canEditInboundSources()) return;
+            const o = inboundSources[src];
+            if (kind === 'num') o[field] = Number(value) || 0;
+            else if (kind === 'list') o[field] = String(value || '').split(/[,\n]/).map(s => s.trim()).filter(Boolean);
+            else if (kind === 'bool') o[field] = !!value;
+            else o[field] = String(value || '').trim();
+        }
+        function toggleInbSrcList(src, field, v, on) {
+            const arr = inboundSources[src][field] || (inboundSources[src][field] = []);
+            const i = arr.indexOf(v);
+            if (on && i < 0) arr.push(v);
+            if (!on && i > -1) arr.splice(i, 1);
+        }
+        function saveInbSrcSettings() {
+            saveInboundSources();
+            showAppToast('연결 설정을 저장했습니다.', 'green');
+            renderInboundCenter();
+        }
+        async function saveInbSecret(name) {
+            const el = document.getElementById('inb-secret-' + name);
+            const v = el ? el.value : '';
+            if (!v && !confirm('비워서 저장하면 넣어 둔 값을 지웁니다. 지울까요?')) return;
+            try {
+                await kobAuth.call('/api/inbound/secret', { name, value: v });
+                if (el) el.value = '';
+                showAppToast(v ? '비밀 값을 서버에 저장했습니다.' : '비밀 값을 지웠습니다.', 'green');
+                loadInbSrcStatus();
+            } catch (e) { alert('저장하지 못했습니다: ' + ((e && e.message) || e)); }
+        }
+        function inbSecretBox(name) {
+            const st = inbSrcStatus && inbSrcStatus.secrets ? inbSrcStatus.secrets[name] : null;
+            const admin = isSystemAdmin();
+            const state = !st ? '<span class="text-gray-400">상태 모름</span>'
+                : st.from === 'env' ? `<span class="text-emerald-700"><i class="fas fa-circle-check mr-1"></i>Cloudflare 환경변수 ${escapeHtml(st.envName)} 사용 중</span>`
+                : st.set ? `<span class="text-emerald-700"><i class="fas fa-circle-check mr-1"></i>넣어 둠</span> <span class="text-gray-400">${escapeHtml((st.updatedAt || '').slice(0, 16).replace('T', ' '))} ${escapeHtml(st.updatedBy || '')}</span>`
+                : '<span class="text-rose-600"><i class="fas fa-circle-xmark mr-1"></i>아직 없음</span>';
+            const label = st ? st.label : name;
+            return `<div class="border border-gray-200 rounded p-3 bg-gray-50">
+                <div class="flex flex-wrap items-center justify-between gap-2 text-xs mb-2"><b class="text-gray-700"><i class="fas fa-key text-gray-400 mr-1"></i>${escapeHtml(label)}</b>${state}</div>
+                ${admin ? `<div class="flex gap-2"><input id="inb-secret-${name}" type="password" autocomplete="new-password" placeholder="새 값 넣기 — 저장하면 다시 보이지 않습니다" class="flex-1 p-2 text-sm border border-gray-300 rounded" />
+                    <button type="button" onclick="saveInbSecret('${name}')" ${inbIsRemote() ? '' : 'disabled'} class="px-3 py-2 text-sm rounded bg-gray-800 text-white hover:bg-gray-900 disabled:opacity-40">저장</button></div>
+                    <p class="text-[11px] text-gray-400 mt-1">서버 inbound_secrets 표(supabase/schema-v7.sql)에 보관합니다. 브라우저 · 화면 저장소에는 남지 않습니다.</p>`
+                : '<p class="text-[11px] text-gray-500">비밀 값은 관리자만 넣을 수 있습니다.</p>'}
+            </div>`;
+        }
+        const inbInput = (src, field, label, ph, kind, type) => {
+            const v = inboundSources[src][field];
+            const val = Array.isArray(v) ? v.join(', ') : (v === undefined || v === null ? '' : v);
+            return `<label class="block"><span class="block text-xs font-medium text-gray-600 mb-1">${escapeHtml(label)}</span>
+                <input type="${type || 'text'}" value="${escapeHtml(val)}" placeholder="${escapeHtml(ph || '')}" onchange="setInbSrc('${src}', '${field}', this.value, '${kind || ''}')" ${canEditInboundSources() ? '' : 'disabled'}
+                    class="w-full p-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-rose-500" /></label>`;
+        };
+        const inbGuide = (html) => `<div class="text-xs text-gray-600 bg-amber-50 border border-amber-200 rounded p-3 leading-relaxed">${html}</div>`;
+        const inbBtn = (label, onclick, cls, icon, disabled) => `<button type="button" onclick="${onclick}" ${disabled ? 'disabled' : ''} class="px-3 py-2 text-sm rounded transition-colors disabled:opacity-40 ${cls || 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'}"><i class="fas ${icon || 'fa-play'} mr-1"></i>${label}</button>`;
+
+        async function runInbSrcPreview(src) {
+            inbSrcResult[src] = { loading: true };
+            renderInboundCenter();
+            try {
+                const settings = {}; settings[src] = inboundSources[src]; settings.rules = inboundSources.rules;
+                const r = await kobAuth.call('/api/inbound/preview', { source: src, settings });
+                inbSrcResult[src] = r.ok === false ? { error: r.error } : r;
+            } catch (e) { inbSrcResult[src] = { error: String((e && e.message) || e) }; }
+            inbSrcPicked[src] = new Set();
+            ((inbSrcResult[src] || {}).items || []).forEach((it, i) => { if (!inboundExisting(it.record)) inbSrcPicked[src].add(i); });
+            renderInboundCenter();
+        }
+        function toggleInbPick(src, i, on) {
+            const s = inbSrcPicked[src] || (inbSrcPicked[src] = new Set());
+            if (on) s.add(i); else s.delete(i);
+            const b = document.getElementById('inb-pick-count-' + src); if (b) b.textContent = s.size;
+        }
+        function toggleInbPickAll(src, on) {
+            const items = (inbSrcResult[src] || {}).items || [];
+            inbSrcPicked[src] = new Set(on ? items.map((_, i) => i).filter(i => !inboundExisting(items[i].record)) : []);
+            renderInboundCenter();
+        }
+        function registerInbPicked(src) {
+            const items = (inbSrcResult[src] || {}).items || [];
+            const picked = Array.from(inbSrcPicked[src] || []).sort((a, b) => a - b).map(i => items[i]).filter(Boolean);
+            if (!picked.length) { alert('등록할 줄을 골라 주세요.'); return; }
+            const { added, skipped } = inboundAddRecords(picked.map(it => it.record));
+            inbSrcPicked[src] = new Set();
+            showAppToast(`${added}건을 인바운드에 등록했습니다${skipped ? ` · 이미 있는 ${skipped}건은 건너뜀` : ''}.`, 'green');
+            renderInboundCenter();
+        }
+        // 미리보기 표 — 소스마다 같은 모양
+        function inbPreviewHtml(src) {
+            const res = inbSrcResult[src];
+            if (!res) return '';
+            if (res.loading) return `<div class="mt-4 p-6 text-center text-sm text-gray-500"><i class="fas fa-spinner fa-spin mr-2"></i>가져오는 중…</div>`;
+            const logHtml = (res.log || []).length ? `<details class="mt-2 text-[11px] text-gray-500"><summary class="cursor-pointer">진행 기록 ${res.log.length}줄</summary><pre class="mt-1 p-2 bg-gray-900 text-gray-100 rounded overflow-x-auto">${escapeHtml(res.log.join('\n'))}</pre></details>` : '';
+            if (res.error) return `<div class="mt-4 p-3 rounded border border-red-200 bg-red-50 text-sm text-red-700"><i class="fas fa-triangle-exclamation mr-1"></i>${escapeHtml(res.error)}</div>${logHtml}`;
+            const items = res.items || [];
+            const picked = inbSrcPicked[src] || new Set();
+            const rows = items.map((it, i) => {
+                const rec = it.record, ex = inboundExisting(rec), same = !ex && inboundRecentSamePhone(rec);
+                const state = ex ? `<span class="px-1.5 rounded bg-gray-200 text-gray-600">이미 있음 ${escapeHtml(ex.id)}</span>`
+                    : same ? `<span class="px-1.5 rounded bg-amber-100 text-amber-800">재문의 ${escapeHtml(same.id)}</span>` : '<span class="px-1.5 rounded bg-emerald-100 text-emerald-700">새 건</span>';
+                return `<tr class="align-top ${ex ? 'opacity-50' : ''}">
+                    <td class="px-2 py-2"><input type="checkbox" ${picked.has(i) ? 'checked' : ''} ${ex ? 'disabled' : ''} onchange="toggleInbPick('${src}', ${i}, this.checked)" class="rounded border-gray-300 text-rose-600" /></td>
+                    <td class="py-2 text-[11px] whitespace-nowrap">${state}</td>
+                    <td class="py-2 pr-2 max-w-[260px]"><p class="font-medium text-gray-800 truncate" title="${escapeHtml(it.title || '')}">${escapeHtml(it.title || '')}</p><p class="text-[11px] text-gray-400 truncate">${escapeHtml(it.sub || '')}</p>
+                        ${it.link ? `<a href="${escapeHtml(it.link)}" target="_blank" rel="noopener" class="text-[11px] text-blue-600 hover:underline">원문 열기</a>` : ''}</td>
+                    <td class="py-2 pr-2 text-xs whitespace-nowrap">${escapeHtml(rec.inAt || '')}</td>
+                    <td class="py-2 pr-2 text-xs"><b>${escapeHtml(rec.company || '-')}</b><br>${escapeHtml(rec.name || '')}</td>
+                    <td class="py-2 pr-2 text-xs whitespace-nowrap">${escapeHtml(rec.phone || '')}${(rec.flags || []).includes('연락처 확인 필요') ? ' <span class="text-rose-600">⚠</span>' : ''}<br><span class="text-gray-400">${escapeHtml(rec.email || '')}</span></td>
+                    <td class="py-2 pr-2 text-xs">${escapeHtml(inboundListText(rec.services))}<br><span class="text-gray-400">${escapeHtml(inboundListText(rec.routes))}</span></td>
+                    <td class="py-2 pr-2 text-xs text-gray-600 max-w-[280px]"><div class="line-clamp-3 whitespace-pre-line">${escapeHtml(rec.requestNote || '') || '<span class="text-rose-500">(내용 없음)</span>'}</div></td>
+                    <td class="py-2 pr-2">${inboundDeptChip(rec)}</td></tr>`;
+            }).join('');
+            return `<div class="mt-4 border border-gray-200 rounded-lg overflow-hidden">
+                <div class="flex flex-wrap items-center justify-between gap-2 bg-gray-50 px-3 py-2 border-b border-gray-200">
+                    <span class="text-sm font-bold text-gray-700">미리보기 ${items.length}건 <span class="font-normal text-xs text-gray-400">${res.at ? '· ' + escapeHtml(new Date(res.at).toLocaleString('ko-KR')) : ''} · 아직 저장하지 않았습니다</span></span>
+                    <div class="flex items-center gap-2">
+                        <button type="button" onclick="toggleInbPickAll('${src}', true)" class="text-xs text-gray-600 hover:underline">새 건 모두 고르기</button>
+                        <button type="button" onclick="toggleInbPickAll('${src}', false)" class="text-xs text-gray-600 hover:underline">모두 풀기</button>
+                        <button type="button" onclick="registerInbPicked('${src}')" class="px-3 py-1.5 text-sm rounded bg-rose-600 text-white hover:bg-rose-700"><i class="fas fa-file-import mr-1"></i>고른 <span id="inb-pick-count-${src}">${picked.size}</span>건 등록</button>
+                    </div>
+                </div>
+                ${items.length ? `<div class="overflow-x-auto max-h-[520px] overflow-y-auto"><table class="w-full text-sm min-w-[1100px]"><thead class="sticky top-0 bg-white text-[11px] text-gray-500 border-b"><tr>
+                    <th class="px-2 py-1.5"></th><th class="text-left">상태</th><th class="text-left">원본</th><th class="text-left">들어온 시각</th><th class="text-left">업체 · 이름</th><th class="text-left">연락처</th><th class="text-left">서비스 · 경로</th><th class="text-left">문의 내용</th><th class="text-left">배정</th></tr></thead>
+                    <tbody class="divide-y">${rows}</tbody></table></div>` : '<p class="px-3 py-8 text-center text-sm text-gray-400">가져온 건이 없습니다. 조건(기간 · 보낸 사람 · 키워드)을 넓혀 보세요.</p>'}
+            </div>${logHtml}`;
+        }
+
+        function renderInboundSources(host) {
+            if (!inbSrcStatusAsked) { inbSrcStatusAsked = true; loadInbSrcStatus(); }
+            const S = inboundSources;
+            const remote = inbIsRemote();
+            const banner = inbSrcStatusError ? `<div class="mb-3 text-xs rounded border ${remote ? 'border-red-200 bg-red-50 text-red-700' : 'border-amber-200 bg-amber-50 text-amber-800'} px-3 py-2"><i class="fas fa-circle-info mr-1"></i>${escapeHtml(inbSrcStatusError)}
+                ${inbSrcStatus === null && remote ? ' <button onclick="loadInbSrcStatus()" class="underline ml-1">다시 확인</button>' : ''}</div>` : '';
+            const tableWarn = inbSrcStatus && inbSrcStatus.tableError ? `<div class="mb-3 text-xs rounded border border-amber-200 bg-amber-50 text-amber-800 px-3 py-2"><i class="fas fa-database mr-1"></i>${escapeHtml(inbSrcStatus.tableError)}</div>` : '';
+            const saveBtn = canEditInboundSources() ? inbBtn('설정 저장', 'saveInbSrcSettings()', 'bg-gray-800 text-white hover:bg-gray-900', 'fa-floppy-disk') : '';
+            const serverOnly = !remote ? ' (서버 필요)' : '';
+            let body = '';
+            const t = inbSrcTab;
+            if (t === 'form') {
+                const url = (inbSrcStatus && inbSrcStatus.formUrl) || (location.origin + '/api/inbound/form');
+                const sample = JSON.stringify({ site: 'kingorder', form: 'contact', page: '/contact', referrer: 'https://search.naver.com/', utm_source: 'naver', utm_medium: 'cpc', utm_campaign: '파워링크_테이블오더', keyword: '테이블오더 가격', device: '모바일',
+                    fields: { company: '시험식당', name: '홍길동', phone: '010-1234-5678', email: 'test@example.com', referral: ['검색광고'], interests: ['테이블오더', '포스 연동'], business_types: ['음식점/식당'], message: '[시험] 테이블 18개, OKPOS 연동 되나요?' }, submissionId: 'test-' + Date.now() }, null, 2);
+                body = `<div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                    <div class="space-y-3">
+                        <label class="flex items-center gap-2 text-sm"><input type="checkbox" ${S.form.enabled ? 'checked' : ''} onchange="setInbSrc('form', 'enabled', this.checked, 'bool')" ${canEditInboundSources() ? '' : 'disabled'} class="rounded border-gray-300 text-rose-600" />홈페이지 문의 받기 켜기</label>
+                        <label class="block"><span class="block text-xs font-medium text-gray-600 mb-1">받을 사이트 주소 (Origin) — 한 줄에 하나</span>
+                            <textarea rows="6" onchange="setInbSrc('form', 'origins', this.value, 'list')" ${canEditInboundSources() ? '' : 'disabled'} class="w-full p-2 text-xs font-mono border border-gray-300 rounded">${escapeHtml((S.form.origins || []).join('\n'))}</textarea></label>
+                        <div class="flex gap-2">${saveBtn}</div>
+                        ${inbGuide(`<b>받는 주소</b> <code class="bg-white px-1 rounded">${escapeHtml(url)}</code><br>
+                            킹오더닷컴 · 큐알킹 · 브랜드팩토리 새 사이트의 폼(<code>data-inquiry-form</code>)이 이 주소로 보냅니다. 로그인 없이 받으므로 <b>위 목록의 사이트만</b> 받고, 숨은 칸(<code>_hp</code>)을 채운 로봇은 버립니다.<br>
+                            ⚠ dev 주소는 Cloudflare Zero Trust(사내만)로 막혀 있으면 사이트에서 못 보냅니다 — Access 에서 <code>/api/inbound/form</code> 경로만 예외(Bypass)로 두어야 합니다.<br>
+                            같은 제출이 두 번 와도 <code>submissionId</code> 가 같으면 한 번만 들어갑니다.`)}
+                        <details class="text-xs"><summary class="cursor-pointer text-gray-600 font-medium">사이트 쪽 코드 (kingorder-sites 폼 5단계에 붙일 것)</summary>
+<pre class="mt-2 p-3 bg-gray-900 text-gray-100 rounded overflow-x-auto">// 처음 들어온 페이지의 UTM 을 기억해 두었다가 폼과 함께 보냅니다
+const q = new URLSearchParams(location.search);
+if (q.get('utm_source') && !sessionStorage.kobUtm) sessionStorage.kobUtm = JSON.stringify(Object.fromEntries(q));
+const utm = JSON.parse(sessionStorage.kobUtm || '{}');
+const fd = new FormData(form), fields = {};
+fd.forEach((v, k) => { k = k.replace('[]', ''); fields[k] = fields[k] ? [].concat(fields[k], v) : v; });
+await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ site: 'kingorder', form: form.dataset.formType, page: location.pathname,
+    landing: sessionStorage.kobLanding, referrer: document.referrer, ...utm,
+    keyword: utm.n_keyword || utm.utm_term, device: /Mobi/.test(navigator.userAgent) ? '모바일' : 'PC',
+    fields, _hp: fd.get('_hp') || '', submissionId: crypto.randomUUID() }) });</pre></details>
+                    </div>
+                    <div class="space-y-2">
+                        <span class="block text-xs font-medium text-gray-600">시험 전송 — 사이트가 보내는 모양 그대로 (고쳐서 보내도 됩니다)</span>
+                        <textarea id="inb-form-sample" rows="16" class="w-full p-2 text-xs font-mono border border-gray-300 rounded">${escapeHtml(sample)}</textarea>
+                        <div class="flex flex-wrap gap-2">
+                            ${inbBtn('시험 전송 — 저장 안 함' + serverOnly, 'testInbForm(true)', '', 'fa-flask', !remote)}
+                            ${inbBtn('실제로 보내 등록' + serverOnly, 'testInbForm(false)', 'bg-rose-600 text-white hover:bg-rose-700', 'fa-paper-plane', !remote)}
+                        </div>
+                        <div id="inb-form-result"></div>
+                    </div></div>`;
+            } else if (t === 'mail') {
+                body = `<div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                    <div class="space-y-3">
+                        <div class="flex flex-wrap gap-2 text-xs"><span class="text-gray-500 self-center">메일함 고르기</span>
+                            ${[['네이버 메일', 'imap.naver.com'], ['지메일', 'imap.gmail.com'], ['다음 메일', 'imap.daum.net']].map(([n, h]) => `<button type="button" onclick="setInbSrc('mail', 'host', '${h}'); setInbSrc('mail', 'port', 993, 'num'); renderInboundCenter();" class="px-2 py-1 rounded border ${S.mail.host === h ? 'bg-rose-50 border-rose-300 text-rose-700' : 'bg-white border-gray-300'}">${n}</button>`).join('')}</div>
+                        <div class="grid grid-cols-3 gap-2">${'<div class="col-span-2">' + inbInput('mail', 'host', '메일 서버 (IMAP)', 'imap.naver.com') + '</div>'}${inbInput('mail', 'port', '포트', '993', 'num', 'number')}</div>
+                        <div class="grid grid-cols-2 gap-2">${inbInput('mail', 'user', '메일 아이디', '알림을 받는 메일 주소')}${inbInput('mail', 'folder', '폴더', 'INBOX')}</div>
+                        <div class="grid grid-cols-2 gap-2">${inbInput('mail', 'from', '보낸 사람 (영문 주소 일부)', '예: imweb')}${inbInput('mail', 'subject', '제목에 든 낱말', '예: 입력폼')}</div>
+                        <div class="grid grid-cols-2 gap-2">${inbInput('mail', 'sinceDays', '최근 며칠', '7', 'num', 'number')}${inbInput('mail', 'limit', '최대 몇 통', '20', 'num', 'number')}</div>
+                        ${inbSecretBox('mailPassword')}
+                        <div class="flex flex-wrap gap-2">${saveBtn}${inbBtn('메일함에서 가져오기 시험' + serverOnly, "runInbSrcPreview('mail')", 'bg-rose-600 text-white hover:bg-rose-700', 'fa-download', !remote)}</div>
+                        ${inbGuide(`지금 아임웹 입력폼 알림은 <b>네이버 메일</b>로 옵니다(외주 회신 2-4). 회사 메일함으로 받는 주소를 바꾼 뒤 그 메일함을 넣습니다.<br>
+                            · 네이버: 메일 › 환경설정 › POP3/IMAP 설정 › <b>IMAP 사용</b>. 2단계 인증이면 네이버 › 보안설정 › <b>애플리케이션 비밀번호</b>를 만들어 넣습니다.<br>
+                            · 지메일: 구글 계정 › 보안 › 2단계 인증 › <b>앱 비밀번호</b>.<br>
+                            읽기만 하고 <b>읽음 표시도 바꾸지 않습니다</b>(BODY.PEEK). 같은 메일은 Message-ID 로 두 번 들어가지 않습니다.`)}
+                    </div>
+                    <div class="space-y-2">
+                        <span class="block text-xs font-medium text-gray-600">알림 메일 본문 붙여넣기 — 서버 없이 해석만 시험</span>
+                        <textarea id="inb-mail-paste" rows="14" class="w-full p-2 text-xs font-mono border border-gray-300 rounded" placeholder="메일 본문을 그대로 붙여 넣으세요">등록자 비회원
+등록위치 입력폼
+등록시각 2026-09-30 14:35
+
+응답
+개인정보 수집동의
+동의
+작성자
+신○○
+이메일
+62****@hospital.com
+연락처
+01050630889
+문의유형
+키오스크
+문의내용
+</textarea>
+                        ${inbBtn('본문에서 읽기', 'parseInbMailPaste()', '', 'fa-wand-magic-sparkles')}
+                    </div></div>`;
+            } else if (t === 'naver') {
+                body = `<div class="grid grid-cols-1 xl:grid-cols-2 gap-4"><div class="space-y-3">
+                        ${inbInput('naver', 'clientId', 'Client ID', 'developers.naver.com 애플리케이션의 Client ID')}
+                        ${inbSecretBox('naverClientSecret')}
+                        <div><span class="block text-xs font-medium text-gray-600 mb-1">찾을 곳</span><div class="flex gap-3 text-sm">
+                            ${[['cafearticle', '카페 글'], ['blog', '블로그 글']].map(([v, n]) => `<label class="flex items-center gap-1"><input type="checkbox" ${(S.naver.kinds || []).includes(v) ? 'checked' : ''} onchange="toggleInbSrcList('naver', 'kinds', '${v}', this.checked)" ${canEditInboundSources() ? '' : 'disabled'} class="rounded border-gray-300 text-rose-600" />${n}</label>`).join('')}</div></div>
+                        ${inbInput('naver', 'keywords', '키워드 (쉼표로)', '킹오더, 큐알킹, 킹오더 테이블오더', 'list')}
+                        ${inbInput('naver', 'exclude', '뺄 블로그 · 카페 (아이디 일부, 쉼표로)', 'kingorder_b', 'list')}
+                        ${inbInput('naver', 'display', '키워드마다 몇 건', '20', 'num', 'number')}
+                        <div class="flex flex-wrap gap-2">${saveBtn}${inbBtn('검색 시험' + serverOnly, "runInbSrcPreview('naver')", 'bg-rose-600 text-white hover:bg-rose-700', 'fa-magnifying-glass', !remote)}</div>
+                    </div><div>${inbGuide(`네이버는 블로그 · 카페 <b>댓글</b>을 읽어 오는 공개 API 를 주지 않습니다. 대신 <b>검색 API</b> 로 우리 이름이 들어간 새 글(질문 · 후기 · 비교 글)을 찾습니다.<br>
+                            · <a href="https://developers.naver.com/apps/#/register" target="_blank" rel="noopener" class="text-blue-600 underline">네이버 개발자센터</a> › 애플리케이션 등록 › 사용 API <b>검색</b> › 환경 <b>WEB</b>(서비스 URL 은 그룹웨어 주소) → Client ID · Secret.<br>
+                            · 하루 25,000번까지 무료. 언급 글은 문의가 아닐 수 있어 <b>미배정</b>으로 들어오고, 고른 것만 등록합니다.<br>
+                            · 우리 블로그 · 카페 글에 달린 댓글은 [블로그 글 (RSS)] 탭의 바로 가기로 확인 → [빠른 등록].`)}</div></div>`;
+            } else if (t === 'blog') {
+                const posts = (inbSrcResult.blog || {}).posts || [];
+                const base = 'https://xn--9m1bt07agwh.com/contact';
+                const slug = (s) => String(s || '').replace(/[^\w가-힣]+/g, '').slice(0, 20);
+                body = `<div class="space-y-3">
+                    <div class="flex flex-wrap items-end gap-2"><div class="w-64">${inbInput('blog', 'blogId', '블로그 아이디', 'kingorder_b')}</div>${saveBtn}${inbBtn('글 목록 불러오기' + serverOnly, "runInbSrcPreview('blog')", 'bg-rose-600 text-white hover:bg-rose-700', 'fa-rss', !remote)}</div>
+                    ${inbGuide(`블로그 글마다 상담 링크에 글 이름(UTM)을 붙이면, 댓글이 아니라 <b>폼으로 문의해도 어느 글에서 왔는지</b>가 자동으로 남습니다(경로 분석 › 글별 인입). 댓글 · 비밀댓글은 [댓글 보기] 로 열어 확인한 뒤 [빠른 등록] 으로 옮깁니다.`)}
+                    ${(inbSrcResult.blog || {}).error ? `<div class="p-3 rounded border border-red-200 bg-red-50 text-sm text-red-700">${escapeHtml(inbSrcResult.blog.error)}</div>` : ''}
+                    ${(inbSrcResult.blog || {}).loading ? '<p class="text-sm text-gray-500"><i class="fas fa-spinner fa-spin mr-1"></i>불러오는 중…</p>' : ''}
+                    ${posts.length ? inbCard(`<div class="overflow-x-auto"><table class="w-full text-sm min-w-[860px]"><thead class="bg-gray-50 text-xs text-gray-500 border-b"><tr><th class="text-left px-3 py-2">날짜</th><th class="text-left">글</th><th class="text-left">이 글에서 쓸 상담 링크</th><th></th></tr></thead><tbody class="divide-y">
+                        ${posts.map(p => { const link = `${base}?utm_source=blog&utm_medium=post&utm_campaign=${encodeURIComponent(slug(p.title) + '_' + p.date.slice(5).replace('-', ''))}`;
+                            return `<tr><td class="px-3 py-2 text-xs whitespace-nowrap">${escapeHtml(p.date)}</td><td class="py-2 pr-2"><p class="font-medium">${escapeHtml(p.title)}</p><p class="text-[11px] text-gray-400 line-clamp-1">${escapeHtml(p.text)}</p></td>
+                                <td class="py-2 pr-2"><code class="text-[11px] break-all text-gray-600">${escapeHtml(link)}</code></td>
+                                <td class="py-2 pr-3 whitespace-nowrap text-xs"><button type="button" onclick="navigator.clipboard && navigator.clipboard.writeText('${escapeHtml(link)}').then(() => showAppToast('링크를 복사했습니다.', 'green'))" class="text-blue-600 hover:underline mr-2">링크 복사</button><a href="${escapeHtml(p.link)}" target="_blank" rel="noopener" class="text-blue-600 hover:underline">댓글 보기</a></td></tr>`; }).join('')}
+                        </tbody></table></div>`) : ''}
+                </div>`;
+            } else if (t === 'insta') {
+                body = `<div class="grid grid-cols-1 xl:grid-cols-2 gap-4"><div class="space-y-3">
+                        <div class="grid grid-cols-2 gap-2">${inbInput('insta', 'igUserId', '인스타그램 비즈니스 계정 ID', '178414…')}${inbInput('insta', 'pageId', '연결된 페이스북 페이지 ID', 'DM 용')}</div>
+                        <div class="grid grid-cols-2 gap-2">${inbInput('insta', 'username', '우리 계정 이름 (답글 빼기)', 'k1ngorder')}${inbInput('insta', 'apiVersion', '그래프 API 판', 'v21.0')}</div>
+                        ${inbSecretBox('igAccessToken')}
+                        <div class="flex flex-wrap gap-2">${saveBtn}${inbBtn('댓글 · DM 가져오기 시험' + serverOnly, "runInbSrcPreview('insta')", 'bg-rose-600 text-white hover:bg-rose-700', 'fa-download', !remote)}</div>
+                    </div><div>${inbGuide(`<b>먼저 할 일</b> — 외주 회신 10-1 · 10-2: 인스타 계정 연결 정보와 메타 비즈니스 관리자 소유권을 회사로 옮겨야 토큰을 만들 수 있습니다.<br>
+                            · 메타 개발자 › 앱 만들기(비즈니스) › 인스타그램 그래프 API · Messenger 추가 → 권한 <code>instagram_basic</code> · <code>instagram_manage_comments</code> · <code>instagram_manage_messages</code> · <code>pages_show_list</code><br>
+                            · 그래프 API 탐색기에서 <b>장기(60일) 페이지 토큰</b>을 받아 넣습니다(시스템 사용자 토큰이면 만료 없음).<br>
+                            · 최근 게시물 10개의 댓글과 최근 대화 10개의 DM 을 가져옵니다. 문의가 아닐 수 있어 <b>미배정</b>으로 들어옵니다.`)}</div></div>`;
+            } else if (t === 'sheet') {
+                const res = inbSrcResult.sheet || {};
+                body = `<div class="space-y-3">
+                    <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                        <div class="space-y-2">${inbInput('sheet', 'url', '외주 구글 시트 주소', 'https://docs.google.com/spreadsheets/d/…/edit#gid=0')}
+                            <div class="flex flex-wrap gap-2">${saveBtn}${inbBtn('시트 불러오기' + serverOnly, 'runInbSheet()', 'bg-rose-600 text-white hover:bg-rose-700', 'fa-table', !remote)}</div>
+                            ${inbGuide('외주업체 계정의 시트입니다(회신 7-1). 10/16 전에 <b>[공유] › 링크가 있는 모든 사용자 · 뷰어</b> 로 바꿔 달라고 하거나, 회사 계정으로 사본을 만든 뒤 그 주소를 넣습니다.')}</div>
+                        <div class="space-y-2"><span class="block text-xs font-medium text-gray-600">또는 엑셀 파일 (킹오더브라더스 인바운드 인입 현황 관리.xlsx 모양)</span>
+                            <input type="file" accept=".xlsx" onchange="runInbExcel(this.files[0])" class="block w-full text-sm text-gray-600 file:mr-3 file:px-3 file:py-2 file:rounded file:border-0 file:bg-gray-800 file:text-white" />
+                            ${inbGuide('첫 줄 머리글 이름으로 칸을 찾습니다 — 인입일자 · 인입 경로 · 게시판 서비스 유형 · 업체명 · 이름 · 사업자등록번호 · 휴대전화 · 이메일 · 1차 컨택 일자 · 비고 요청사항 · 실제 고객 니즈 · 고객 컨택 일자 · 고객 영업 현황 · 진행 결과 · 실패사유. 빈 줄(업체명 · 연락처 · 날짜가 모두 없는 줄)은 건너뜁니다.')}</div>
+                    </div>
+                    ${res.summary ? `<div class="grid grid-cols-2 md:grid-cols-5 gap-2 text-center">${res.summary.map(([a, b, c]) => `<div class="${c} rounded p-2"><p class="text-[11px] text-gray-500">${a}</p><p class="text-lg font-bold">${b}</p></div>`).join('')}</div>` : ''}
+                    ${res.mapping ? `<p class="text-xs text-gray-500">찾은 칸: ${res.mapping.map(m => `<span class="inline-block px-1.5 rounded mr-1 mb-1 ${m.found ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-400 line-through'}">${escapeHtml(m.label)}</span>`).join('')}</p>` : ''}
+                    ${inbPreviewHtml('sheet')}
+                </div>`;
+            } else if (t === 'quick') {
+                const q = inbQuickDraft;
+                const cls = 'w-full p-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-rose-500';
+                const f = (k, label, ph) => `<label class="block"><span class="block text-xs font-medium text-gray-600 mb-1">${label}</span><input value="${escapeHtml(q[k] || '')}" oninput="inbQuickDraft['${k}'] = this.value" placeholder="${escapeHtml(ph || '')}" class="${cls}" /></label>`;
+                body = `<div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                    <div class="space-y-3">
+                        <div><span class="block text-xs font-medium text-gray-600 mb-1">① 어디서 받았나요</span><div class="flex flex-wrap gap-1.5">
+                            ${['blog', 'cafe', 'insta', 'phone', 'kakao', 'referral', 'etc'].map(k => `<button type="button" onclick="inbQuickDraft.channel='${k}'; renderInboundCenter();" class="px-2.5 py-1 rounded border text-xs ${q.channel === k ? 'bg-rose-600 border-rose-600 text-white' : 'bg-white border-gray-300 text-gray-700'}"><i class="${INBOUND_CHANNELS[k].icon} mr-1"></i>${escapeHtml(INBOUND_CHANNELS[k].name)}</button>`).join('')}</div></div>
+                        <label class="block"><span class="block text-xs font-medium text-gray-600 mb-1">② 원문 붙여넣기 (댓글 · DM · 통화 메모)</span>
+                            <textarea rows="7" oninput="inbQuickDraft.raw = this.value" class="${cls}" placeholder="[비밀댓글] 카페 오픈 준비 중이라 키오스크 렌탈 견적 받고 싶어요. 010-1234-5678 박○○">${escapeHtml(q.raw || '')}</textarea></label>
+                        ${f('url', '원문 링크', 'https://blog.naver.com/kingorder_b/…')}
+                        ${f('post', '출처 글 · 게시물 (경로 분석에 쓰임)', '예: 키오스크 렌탈 vs 구매')}
+                        ${inbBtn('원문에서 항목 채우기', 'fillInbQuick()', 'bg-indigo-50 border border-indigo-200 text-indigo-700 hover:bg-indigo-100', 'fa-wand-magic-sparkles')}
+                    </div>
+                    <div class="space-y-3">
+                        <span class="block text-xs font-medium text-gray-600">③ 확인하고 등록 — 원문은 고치지 않고 그대로 보관됩니다</span>
+                        <div class="grid grid-cols-2 gap-2">${f('company', '업체명')}${f('name', '이름')}${f('phone', '연락처', '010-0000-0000')}${f('email', '이메일')}</div>
+                        <div><span class="block text-xs font-medium text-gray-600 mb-1">관심 서비스</span><div class="flex flex-wrap gap-1.5">${INBOUND_SERVICES.map(s => `<label class="inline-flex items-center gap-1 px-2 py-1 rounded border text-xs ${(q.services || []).includes(s) ? 'bg-rose-50 border-rose-300' : 'bg-white border-gray-300'}"><input type="checkbox" ${(q.services || []).includes(s) ? 'checked' : ''} onchange="inbQuickToggle('${s}', this.checked)" class="rounded border-gray-300 text-rose-600" />${s}</label>`).join('')}</div></div>
+                        <label class="block"><span class="block text-xs font-medium text-gray-600 mb-1">문의 내용 (요약)</span><textarea rows="3" oninput="inbQuickDraft.message = this.value" class="${cls}">${escapeHtml(q.message || '')}</textarea></label>
+                        <div class="grid grid-cols-2 gap-2">${f('inAt', '받은 시각', 'YYYY-MM-DD HH:mm')}
+                            <label class="block"><span class="block text-xs font-medium text-gray-600 mb-1">본부</span><select onchange="inbQuickDraft.dept = this.value" class="${cls}">
+                                ${[['auto', '규칙대로 (' + (inbDeptByRules((q.message || '') + ' ' + (q.raw || '')) || '미배정') + ')'], ['영업', '영업본부'], ['운영', '운영본부'], ['', '미배정']].map(([v, n]) => `<option value="${v}" ${q.dept === v ? 'selected' : ''}>${n}</option>`).join('')}</select></label></div>
+                        <div class="flex gap-2">${inbBtn('등록', 'saveInbQuick()', 'bg-rose-600 text-white hover:bg-rose-700', 'fa-check')}${inbBtn('비우기', 'resetInbQuick()', '', 'fa-eraser')}</div>
+                    </div></div>
+                    <div class="mt-4">${inbGuide('<b>매일 확인 루틴</b> — 11:00 · 16:00: 블로그 댓글 · 비밀댓글 → 카페 댓글 · 쪽지 → 인스타 DM · 댓글 → 카카오톡 채널 → 대표전화 메모. 블로그 · 카페 · 인스타는 [수집 · 연결] 의 검색 · 가져오기로 먼저 훑으면 놓치는 것이 줄어듭니다.')}</div>`;
+            } else if (t === 'auto') {
+                const st = (inbSrcStatus && inbSrcStatus.auto) || {};
+                const row = (k, n) => { const s = st[k]; return `<tr><td class="px-3 py-2"><label class="flex items-center gap-2"><input type="checkbox" ${S.auto[k] ? 'checked' : ''} onchange="setInbSrc('auto', '${k}', this.checked, 'bool')" ${canEditInboundSources() ? '' : 'disabled'} class="rounded border-gray-300 text-rose-600" />${n}</label></td>
+                    <td class="text-xs">${s ? escapeHtml(new Date(s.at).toLocaleString('ko-KR')) : '<span class="text-gray-400">아직 없음</span>'}</td>
+                    <td class="text-xs pr-3">${!s ? '' : s.ok ? `<span class="text-emerald-700">새 ${s.added}건 · 이미 있음 ${s.skipped}건</span>` : `<span class="text-red-600">${escapeHtml(s.error || '실패')}</span>`}</td></tr>`; };
+                body = `<div class="space-y-3 max-w-3xl">
+                    ${inbCard(`<table class="w-full text-sm"><thead class="bg-gray-50 text-xs text-gray-500 border-b"><tr><th class="text-left px-3 py-2">자동으로 가져올 소스</th><th class="text-left">마지막 실행</th><th class="text-left pr-3">결과</th></tr></thead><tbody class="divide-y">
+                        ${row('mail', '아임웹 알림 메일 (메일함)')}${row('insta', '인스타그램 댓글 · DM')}
+                        <tr><td class="px-3 py-2 text-gray-500">홈페이지 폼</td><td colspan="2" class="text-xs text-gray-500 pr-3">자동 수집이 아니라 사이트가 보낼 때 바로 들어옵니다</td></tr></tbody></table>`)}
+                    <div class="flex items-end gap-2"><div class="w-40">${inbInput('auto', 'intervalMin', '간격 (분, 5 이상)', '10', 'num', 'number')}</div>${saveBtn}${remote ? inbBtn('결과 새로 보기', 'loadInbSrcStatus()', '', 'fa-rotate') : ''}</div>
+                    ${inbGuide('Cloudflare 가 1분마다 깨우면(worker.js 예약 실행) 켠 소스만 정한 간격으로 가져와 <b>바로 인바운드에 등록</b>합니다. 이미 넣은 메일 · 댓글은 다시 넣지 않습니다. <b>배포 전에는 돌지 않습니다</b> — 각 탭의 [가져오기 시험] 으로 먼저 확인한 뒤 켜세요.')}
+                </div>`;
+            }
+            const tabsHtml = INB_SRC_TABS.map(x => `<button type="button" onclick="setInbSrcTab('${x.id}')" class="px-3 py-1.5 rounded text-sm whitespace-nowrap ${x.id === t ? 'bg-gray-800 text-white' : 'text-gray-600 hover:bg-gray-100'}"><i class="${x.fab ? 'fab' : 'fas'} ${x.icon} mr-1"></i>${escapeHtml(x.name)}</button>`).join('');
+            host.innerHTML = `${banner}${tableWarn}
+                <div class="flex gap-1 overflow-x-auto mb-3 bg-white border border-gray-200 rounded-lg p-1.5">${tabsHtml}</div>
+                ${inbCard(`<div class="p-4">${body}${['mail', 'naver', 'insta'].includes(t) ? inbPreviewHtml(t) : ''}</div>`)}`;
+        }
+
+        // 홈페이지 폼 시험 전송 — 로그인 없이 받는 주소라 그대로 fetch
+        async function testInbForm(dry) {
+            const box = document.getElementById('inb-form-result');
+            let payload;
+            try { payload = JSON.parse(document.getElementById('inb-form-sample').value); }
+            catch (e) { box.innerHTML = '<p class="text-sm text-red-600">JSON 모양이 아닙니다.</p>'; return; }
+            box.innerHTML = '<p class="text-sm text-gray-500"><i class="fas fa-spinner fa-spin mr-1"></i>보내는 중…</p>';
+            try {
+                const base = (window.KOB_CONFIG && window.KOB_CONFIG.apiBase) || '';
+                const res = await fetch(base + '/api/inbound/form' + (dry ? '?dry=1' : ''), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+                const j = await res.json().catch(() => ({}));
+                if (!res.ok || j.ok === false) { box.innerHTML = `<p class="text-sm text-red-600">${res.status} · ${escapeHtml(j.error || '실패')}</p>`; return; }
+                if (dry) {
+                    const r = j.record;
+                    box.innerHTML = `<div class="text-xs border border-emerald-200 bg-emerald-50 rounded p-3 space-y-1"><b class="text-emerald-800">정리 결과 (저장 안 함)</b>
+                        <p>채널 <b>${escapeHtml(INBOUND_CHANNELS[r.channel] ? INBOUND_CHANNELS[r.channel].name : r.channel)}</b> · 경로 <b>${escapeHtml(inboundListText(r.routes))}</b> (고객 응답 ${escapeHtml(inboundListText(r.selfRoutes) || '-')}) · 서비스 <b>${escapeHtml(inboundListText(r.services))}</b> · 배정 <b>${escapeHtml(r.kob.dept || '미배정')}</b></p>
+                        <p>연락처 ${escapeHtml(r.phone)} · 검색어 ${escapeHtml((r.source || {}).keyword || '-')} · 표시 ${escapeHtml((r.flags || []).join(', ') || '없음')}</p>
+                        <details><summary class="cursor-pointer">전체 보기</summary><pre class="mt-1 whitespace-pre-wrap">${escapeHtml(JSON.stringify(r, null, 2))}</pre></details></div>`;
+                } else {
+                    box.innerHTML = `<p class="text-sm ${j.duplicate ? 'text-amber-700' : 'text-emerald-700'}">${j.duplicate ? '같은 제출(submissionId)이 이미 있어 넣지 않았습니다.' : `등록했습니다 — <b>${escapeHtml(j.id)}</b>. 인입 목록에 곧 나타납니다(실시간 반영).`}</p>`;
+                }
+            } catch (e) { box.innerHTML = `<p class="text-sm text-red-600">${escapeHtml(String(e.message || e))}</p>`; }
+        }
+        function parseInbMailPaste() {
+            const text = document.getElementById('inb-mail-paste').value;
+            const p = parseInboundNotifyText(text);
+            const rec = makeInboundRecord({ channel: 'mail', inAt: p.at, name: p.name, company: p.company, phone: p.phone, email: p.email, services: p.services,
+                message: [p.message, p.biz ? `(업종: ${p.biz})` : ''].filter(Boolean).join('\n'), selfRoutes: inbNormRoutes(p.self), route: inbNormRoutes(p.self)[0] || '기타',
+                source: { label: '아임웹 알림 메일 (붙여넣기)' }, raw: text, extKey: '' });
+            inbSrcResult.mail = { items: [{ title: '붙여넣은 알림 메일', sub: p.at ? '등록시각 ' + p.at : '등록시각 없음', record: rec }], log: [], at: new Date().toISOString() };
+            inbSrcPicked.mail = new Set(inboundExisting(rec) ? [] : [0]);
+            renderInboundCenter();
+        }
+        async function runInbSheet() {
+            inbSrcResult.sheet = { loading: true }; renderInboundCenter();
+            try {
+                const settings = { sheet: inboundSources.sheet };
+                const r = await kobAuth.call('/api/inbound/preview', { source: 'sheet', settings });
+                if (r.ok === false) throw new Error(r.error);
+                inbLoadTable(r.rows || [], 'sheet', '구글 시트');
+            } catch (e) { inbSrcResult.sheet = { error: String((e && e.message) || e) }; }
+            renderInboundCenter();
+        }
+        async function runInbExcel(file) {
+            if (!file) return;
+            inbSrcResult.sheet = { loading: true }; renderInboundCenter();
+            try { inbLoadTable(await readXlsxRows(file), 'xls', file.name); }
+            catch (e) { inbSrcResult.sheet = { error: String((e && e.message) || e) }; }
+            renderInboundCenter();
+        }
+        // 엑셀 · 시트 칸 → 인입 건 (INBOUND 시트 16칸)
+        const INB_IMPORT_COLS = [
+            { key: 'inDate', label: '인입일자', aliases: ['인입일자', '인입일', '접수일'] },
+            { key: 'routes', label: '인입 경로', aliases: ['인입경로', '경로'] },
+            { key: 'services', label: '서비스 유형', aliases: ['게시판서비스유형', '서비스유형', '문의유형'] },
+            { key: 'company', label: '업체명', aliases: ['업체명', '상호', '매장명'] },
+            { key: 'name', label: '이름', aliases: ['이름', '성함', '고객명'] },
+            { key: 'bizNo', label: '사업자등록번호', aliases: ['사업자등록번호', '사업자번호'] },
+            { key: 'phone', label: '휴대전화', aliases: ['휴대전화', '연락처', '전화번호', '휴대폰'] },
+            { key: 'email', label: '이메일', aliases: ['이메일', 'email'] },
+            { key: 'firstContactAt', label: '1차 컨택 일자', aliases: ['1차컨텍일자', '1차컨택일자', '1차컨택일'] },
+            { key: 'requestNote', label: '비고 요청사항', aliases: ['비고요청사항', '요청사항', '문의내용'] },
+            { key: 'needs', label: '실제 고객 니즈', aliases: ['실제고객니즈', '고객니즈'] },
+            { key: 'kobContactAt', label: '고객 컨택 일자', aliases: ['고객컨택일자(킹오더)', '고객컨택일자', '킹오더컨택일자'] },
+            { key: 'salesStatus', label: '고객 영업 현황', aliases: ['고객영업현황', '영업현황'] },
+            { key: 'result', label: '진행 결과', aliases: ['진행결과', '결과'] },
+            { key: 'failReason', label: '실패사유', aliases: ['실패사유', '실패 사유'] },
+        ];
+        function inbCellDate(v) {
+            const s = String(v || '').trim();
+            if (/^\d{5}(\.\d+)?$/.test(s)) { const d = new Date(Math.round((Number(s) - 25569) * 86400000)); return d.toISOString().slice(0, 10); }   // 엑셀 날짜 숫자
+            const m = s.match(/(\d{4})[-.\/\s]+(\d{1,2})[-.\/\s]+(\d{1,2})/);
+            return m ? `${m[1]}-${String(m[2]).padStart(2, '0')}-${String(m[3]).padStart(2, '0')}` : '';
+        }
+        function inbLoadTable(rows, kind, name) {
+            const norm = s => String(s || '').replace(/\s/g, '').toLowerCase();
+            const hi = rows.findIndex(r => r.some(c => ['인입일자', '업체명', '휴대전화'].includes(norm(c))));
+            if (hi < 0) throw new Error('머리글 줄(인입일자 · 업체명 · 휴대전화)을 찾지 못했습니다.');
+            const head = rows[hi].map(norm);
+            const idx = {};
+            INB_IMPORT_COLS.forEach(c => { idx[c.key] = head.findIndex(h => c.aliases.map(norm).includes(h)); });
+            const get = (r, k) => (idx[k] > -1 ? String(r[idx[k]] || '').trim() : '');
+            let empty = 0, fixedPhone = 0, badDate = 0;
+            const items = [];
+            rows.slice(hi + 1).forEach((r, n) => {
+                const inDate = inbCellDate(get(r, 'inDate'));
+                if (!inDate && !get(r, 'company') && !get(r, 'phone')) { empty++; return; }
+                const result = INBOUND_RESULTS.some(x => x.id === get(r, 'result')) ? get(r, 'result') : '';
+                const contactAt = inbCellDate(get(r, 'kobContactAt'));
+                if (contactAt && inDate && contactAt < inDate) badDate++;
+                const phoneRaw = get(r, 'phone');
+                const rec = makeInboundRecord({
+                    channel: 'sheet', inAt: (inDate || ymd(new Date())) + ' 00:00', routes: inbNormRoutes(get(r, 'routes')), services: get(r, 'services'),
+                    company: get(r, 'company'), name: get(r, 'name'), bizNo: get(r, 'bizNo'), phone: phoneRaw, email: get(r, 'email'),
+                    message: get(r, 'requestNote'), needs: inbNormServices(get(r, 'needs')), autoAssign: false,
+                    source: { label: kind === 'xls' ? '엑셀 이관 · ' + name : '구글 시트 이관' }, raw: '',
+                    extKey: `${kind}:${inDate}:${inbDigits(phoneRaw)}:${get(r, 'company')}`,
+                    kob: { contactAt, salesStatus: get(r, 'salesStatus'), result, failReason: result === '실패' ? get(r, 'failReason') : '', dept: (result || contactAt) ? '영업' : '' },
+                });
+                rec.inAt = '';                      // 날짜만 있는 예전 건 — 기준 시간 계산에서 뺍니다
+                rec.firstContactAt = inbCellDate(get(r, 'firstContactAt'));
+                rec.flags = rec.flags.filter(f => f !== '문의내용 없음');
+                if (rec.phone !== phoneRaw && phoneRaw) fixedPhone++;
+                items.push({ title: `${n + hi + 2}번째 줄`, sub: [rec.inDate, inboundListText(rec.routes)].filter(Boolean).join(' · '), record: rec });
+            });
+            const dup = items.filter(it => inboundExisting(it.record)).length;
+            inbSrcResult.sheet = {
+                items, at: new Date().toISOString(), log: [],
+                mapping: INB_IMPORT_COLS.map(c => ({ label: c.label, found: idx[c.key] > -1 })),
+                summary: [['가져올 줄', items.length, 'bg-gray-50'], ['빈 줄 건너뜀', empty, 'bg-gray-50'], ['이미 있음', dup, 'bg-gray-50'], ['연락처 형식 고침', fixedPhone, 'bg-amber-50'], ['컨택일 < 인입일', badDate, badDate ? 'bg-rose-50' : 'bg-gray-50']],
+            };
+            inbSrcPicked.sheet = new Set(items.map((_, i) => i).filter(i => !inboundExisting(items[i].record)));
+        }
+
+        // 빠른 등록
+        let inbQuickDraft = { channel: 'blog', raw: '', url: '', post: '', company: '', name: '', phone: '', email: '', services: [], message: '', inAt: '', dept: 'auto' };
+        function resetInbQuick() { inbQuickDraft = { channel: inbQuickDraft.channel, raw: '', url: '', post: '', company: '', name: '', phone: '', email: '', services: [], message: '', inAt: '', dept: 'auto' }; renderInboundCenter(); }
+        function inbQuickToggle(s, on) { const a = inbQuickDraft.services; const i = a.indexOf(s); if (on && i < 0) a.push(s); if (!on && i > -1) a.splice(i, 1); }
+        // 원문에서 연락처 · 이메일 · 이름 · 서비스를 찾아 비어 있는 칸만 채웁니다
+        function fillInbQuick() {
+            const q = inbQuickDraft, t = String(q.raw || '');
+            const phone = (t.match(/0\d{1,2}[-.\s]?\d{3,4}[-.\s]?\d{4}/) || [])[0];
+            const email = (t.match(/[\w.+-]+@[\w-]+\.[\w.-]+/) || [])[0];
+            const name = (t.match(/(?:이름|성함|담당자)\s*[:：]?\s*([가-힣○]{2,4})/) || t.match(/([가-힣]{1,3}[○*]{1,2}|[가-힣]{2,4})\s*(?:입니다|이에요|예요)/) || [])[1];
+            const company = (t.match(/(?:상호|매장명|업체명|가게)\s*[:：]?\s*([^\s,.\n]{2,20})/) || [])[1];
+            if (phone && !q.phone) q.phone = inbNormPhone(phone);
+            if (email && !q.email) q.email = email;
+            if (name && !q.name) q.name = name;
+            if (company && !q.company) q.company = company;
+            inbNormServices(t).forEach(s => { if (!q.services.includes(s)) q.services.push(s); });
+            if (!q.message) q.message = t.replace(/\s+/g, ' ').trim().slice(0, 300);
+            if (!q.inAt) q.inAt = inbNowStamp();
+            renderInboundCenter();
+        }
+        function saveInbQuick() {
+            const q = inbQuickDraft;
+            if (!String(q.raw || q.message || '').trim()) { alert('원문이나 문의 내용을 넣어 주세요.'); return; }
+            if (!String(q.phone || q.email || q.url || '').trim()) { alert('연락처 · 이메일 · 원문 링크 중 하나는 있어야 다시 찾아갈 수 있습니다.'); return; }
+            const ch = q.channel;
+            const route = { blog: '블로그', cafe: '카페', insta: 'SNS', referral: '주변소개' }[ch] || '기타';
+            const rec = makeInboundRecord({ channel: ch, inAt: /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(q.inAt) ? q.inAt : inbNowStamp(), route,
+                company: q.company, name: q.name, phone: q.phone, email: q.email, services: q.services, message: q.message || q.raw,
+                source: { label: INBOUND_CHANNELS[ch].name + ' · 빠른 등록', post: q.post, url: q.url, by: currentUserName || '' }, raw: q.raw,
+                extKey: q.url ? 'quick:' + q.url + ':' + inbDigits(q.phone) : '', autoAssign: q.dept === 'auto' });
+            if (q.dept !== 'auto') rec.kob.dept = q.dept;
+            const { added, skipped } = inboundAddRecords([rec]);
+            if (!added) { alert(skipped ? '같은 건이 이미 있습니다.' : '등록하지 못했습니다.'); return; }
+            showAppToast(`등록했습니다 — ${inboundRecords[0].id} · ${rec.kob.dept ? rec.kob.dept + '본부' : '미배정'}`, 'green');
+            resetInbQuick();
+        }
+
+        // 상세 팝업 — 원문 · 유입 정보 (수집된 건만)
+        function renderInboundOrigin(d) {
+            const wrap = document.getElementById('inbound-origin-wrap');
+            if (!wrap) return;
+            const src = d.source || {};
+            const has = d.channel || d.raw || Object.keys(src).length || (d.flags || []).length;
+            wrap.classList.toggle('hidden', !has);
+            if (!has) return;
+            const kv = (k, v) => v ? `<div class="flex text-xs py-0.5"><span class="w-24 shrink-0 text-gray-500">${k}</span><span class="flex-1 min-w-0 break-all text-gray-800">${v}</span></div>` : '';
+            const utm = [src.utm_source, src.utm_medium].filter(Boolean).join(' / ');
+            document.getElementById('inbound-origin-body').innerHTML = `
+                ${(d.flags || []).length ? `<div class="flex flex-wrap gap-1 mb-2">${d.flags.map(f => `<span class="px-1.5 py-0.5 rounded text-[11px] ${f.startsWith('재문의') ? 'bg-amber-100 text-amber-800 cursor-pointer' : 'bg-rose-50 text-rose-700'}" ${d.dupOf && f.startsWith('재문의') ? `onclick="openInboundModal('${escapeHtml(d.dupOf)}')" title="이전 건 열기"` : ''}>⚠ ${escapeHtml(f)}</span>`).join('')}</div>` : ''}
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>${kv('채널', `${inboundChannelChip(d)} ${escapeHtml(INBOUND_CHANNELS[inboundChannelOf(d)].name)}`)}${kv('들어온 시각', escapeHtml(d.inAt || d.inDate || ''))}
+                        ${kv('출처', escapeHtml(src.label || ''))}${kv('사이트 · 페이지', escapeHtml([src.site, src.page].filter(Boolean).join(' ')))}${kv('글 · 게시물', escapeHtml(src.post || ''))}
+                        ${src.url ? kv('원문 주소', `<a href="${escapeHtml(src.url)}" target="_blank" rel="noopener" class="text-blue-600 hover:underline">${escapeHtml(src.url)}</a>`) : ''}${kv('등록', escapeHtml(d.createdBy || ''))}</div>
+                    <div>${kv('실제 유입', escapeHtml(utm))}${kv('캠페인', escapeHtml(src.utm_campaign || ''))}${kv('검색어', src.keyword ? `<span class="px-1.5 rounded bg-green-100 text-green-800">${escapeHtml(src.keyword)}</span>` : '')}
+                        ${kv('처음 페이지', escapeHtml(src.landing || ''))}${kv('이전 페이지', escapeHtml(src.referrer || ''))}${kv('기기', escapeHtml(src.device || ''))}
+                        ${kv('고객 응답 경로', escapeHtml(inboundListText(d.selfRoutes)))}${kv('메일 제목', escapeHtml(src.mailSubject || ''))}</div>
+                </div>
+                ${d.raw ? `<details class="mt-2"><summary class="text-xs text-gray-600 cursor-pointer font-medium">원문 그대로 보기</summary><pre class="mt-1 p-2 text-xs bg-gray-50 border border-gray-200 rounded whitespace-pre-wrap max-h-60 overflow-y-auto">${escapeHtml(d.raw)}</pre></details>` : ''}
+                ${canEditInboundSources() && inboundEditId ? `<div class="mt-2 text-right"><button type="button" onclick="toggleInboundSpam()" class="text-xs ${d.spam ? 'text-blue-600' : 'text-gray-500'} hover:underline"><i class="fas fa-ban mr-1"></i>${d.spam ? '스팸 아님 — 되돌리기' : '스팸으로 옮기기'}</button></div>` : ''}`;
+        }
+        function toggleInboundSpam() {
+            const r = inboundRecords.find(x => x.id === inboundEditId);
+            if (!r) return;
+            r.spam = !r.spam;
+            saveInboundRecords();
+            showAppToast(r.spam ? '스팸으로 옮겼습니다 — 인입 목록 [스팸] 에서 볼 수 있습니다.' : '스팸에서 되돌렸습니다.', 'blue');
+            closeInboundModal();
+            renderInboundCenter();
+        }
+
+        // 인입 목록 위 빠른 거르기 칩 (2026-10-08)
+        function inboundQuickChipsHtml() {
+            const live = inboundLive();
+            const kob = canSeeInboundKob();
+            const chips = [['', '전체', live.length]];
+            if (kob) {
+                chips.push(['unassigned', '미배정', live.filter(r => !(r.kob || {}).dept && !(r.kob || {}).result).length]);
+                chips.push(['nocontact', '배정 · 미컨택', live.filter(r => (r.kob || {}).dept && !inboundHasContact(r) && !(r.kob || {}).result).length]);
+                chips.push(['late', '기준 시간 넘김', live.filter(r => inboundLate(r)).length]);
+                chips.push(['stop', `추가 컨택 ${inboundMaxContact}회`, live.filter(r => inboundStopped(r) && !(r.kob || {}).result).length]);
+            }
+            chips.push(['check', '확인 필요', live.filter(inboundNeedsCheck).length]);
+            if (canEditInboundSources()) chips.push(['spam', '스팸', inboundRecords.filter(r => r.spam).length]);
+            return chips.map(([id, n, c]) => `<button type="button" onclick="inboundFilter.quick='${id}'; renderInboundCenter();" class="px-2.5 py-1 rounded-full text-xs border ${inboundFilter.quick === id ? 'bg-rose-600 border-rose-600 text-white' : 'bg-white border-gray-300 text-gray-600 hover:bg-gray-50'}">${n} <b class="tabular-nums">${c}</b></button>`).join('');
         }
 
         // ==================== 이관 업무 (다른 부서 → 우리 부서) ====================
@@ -32172,10 +33223,12 @@ const QUOTE_TEMPLATES = [
             const sheet = dec.decode(files[sheetName]);
 
             const rows = [];
-            const rowXmls = sheet.match(/<row\b[\s\S]*?<\/row>|<row\b[^>]*\/>/g) || [];
+            // 빈 줄 · 빈 칸은 <row …/> · <c …/> 처럼 닫는 태그 없이 저장됩니다. 그것을 먼저 맞춰 봐야
+            // 다음 줄 · 칸까지 한 덩어리로 읽어 칸이 한 칸씩 밀리지 않습니다 (2026-10-08 인바운드 엑셀에서 발견)
+            const rowXmls = sheet.match(/<row\b[^>]*\/>|<row\b[^>]*>[\s\S]*?<\/row>/g) || [];
             rowXmls.forEach(rx => {
                 const cells = [];
-                const cellXmls = rx.match(/<c\b[\s\S]*?<\/c>|<c\b[^>]*\/>/g) || [];
+                const cellXmls = rx.match(/<c\b[^>]*\/>|<c\b[^>]*>[\s\S]*?<\/c>/g) || [];
                 cellXmls.forEach(cx => {
                     const ref = (cx.match(/\sr="([A-Z]+\d+)"/) || [])[1];
                     const type = (cx.match(/\st="([^"]+)"/) || [])[1] || 'n';

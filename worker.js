@@ -6,6 +6,7 @@
 // (context.request · context.env) 그대로라 두 방식 모두에서 같은 코드가 돕니다.
 import { onRequest } from './functions/api/[[route]].js';
 import { syncBoth } from './functions/api/_gcal.js';
+import { autoPull as inboundAutoPull } from './functions/api/_inbound.js';
 
 export default {
     async fetch(request, env, ctx) {
@@ -31,6 +32,15 @@ export default {
                 if (n) console.log('[구글캘린더]', JSON.stringify(r));
             } catch (e) {
                 console.error('[구글캘린더] 동기화 실패', e && e.message);
+            }
+        })());
+        // 인바운드 자동 수집 (2026-10-08) — 인바운드 관리 › 수집 · 연결에서 켠 소스만, 정한 간격마다 (기본은 모두 꺼짐)
+        ctx.waitUntil((async () => {
+            try {
+                const r = await inboundAutoPull(env);
+                if (r && r.ran) console.log('[인바운드 수집]', JSON.stringify(r.ran));
+            } catch (e) {
+                console.error('[인바운드 수집] 실패', e && e.message);
             }
         })());
     },

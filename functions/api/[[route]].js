@@ -58,6 +58,12 @@
  *
  * 폰 · PC 푸시 알림 (2026-09-29 · 9단계 — 판단 · 암호는 _push.js)
  *   GET /api/push/key · GET /api/push/status · POST /api/push/subscribe · unsubscribe · prefs · send
+ *
+ * 인바운드 수집 (2026-10-08 · 소스별 가져오기는 _inbound.js)
+ *   POST /api/inbound/form[?dry=1]  홈페이지 문의 폼이 보냅니다 — 로그인 없음 · 허용 사이트(Origin)만. dry=1 이면 저장하지 않고 정리 결과만
+ *   GET  /api/inbound/status        설정 · 비밀 값을 넣었는지 · 자동 수집 결과     (인바운드 수집 권한)
+ *   POST /api/inbound/preview       { source, settings? } 소스에서 가져와 미리보기 — 저장하지 않습니다 (인바운드 수집 권한)
+ *   POST /api/inbound/secret        { name, value } 비밀 값 저장 · value '' 이면 지움 (관리자)
  */
 
 import * as gcal from './_gcal.js';
@@ -66,6 +72,7 @@ import * as su from './_signup.js';
 import * as fs from './_files.js';
 import * as push from './_push.js';
 import * as hol from './_holidays.js';
+import * as inb from './_inbound.js';
 
 const ACTIVE_RESERVE_STATUSES = ['신청완료', '승인대기중', '승인완료', '반납요청'];
 const num = (v) => (v === '' || v === null || v === undefined ? 0 : Number(v) || 0);
@@ -322,6 +329,75 @@ export async function onRequest(context) {
                 }
                 return json(502, { ok: false, error: '공휴일을 받지 못했습니다: ' + e.message });
             }
+        }
+
+        // ---------- 인바운드 수집 (2026-10-08 · 소스별 가져오기는 _inbound.js) ----------
+        if (path.startsWith('/api/inbound/')) {
+            // 홈페이지 문의 폼 — 사이트(다른 주소)가 브라우저에서 바로 보내므로 CORS 를 엽니다. 허용 목록에 있는 사이트만.
+            if (path === '/api/inbound/form') {
+                const cfg = inb.withDefaults(await store.storeValue(inb.SOURCES_KEY));
+                const origin = str(request.headers.get('Origin'));
+                const sameSite = origin && origin === url.origin;
+                const allowed = !origin || sameSite || (cfg.form.origins || []).map(str).includes(origin);
+                const cors = allowed && origin ? { 'Access-Control-Allow-Origin': origin, 'Access-Control-Allow-Methods': 'POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type', 'Vary': 'Origin' } : {};
+                const reply = (status, obj) => new Response(JSON.stringify(obj), { status, headers: Object.assign({ 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }, cors) });
+                if (method === 'OPTIONS') return new Response(null, { status: allowed ? 204 : 403, headers: cors });
+                if (method !== 'POST') return reply(405, { ok: false, error: 'Method Not Allowed' });
+                if (!allowed) return reply(403, { ok: false, error: '허용되지 않은 사이트입니다: ' + origin });
+                if (!cfg.form.enabled) return reply(403, { ok: false, error: '홈페이지 문의 받기가 꺼져 있습니다.' });
+                if (Number(request.headers.get('Content-Length') || 0) > 20000) return reply(413, { ok: false, error: '내용이 너무 깁니다.' });
+                const input = await body();
+                if (str(input._hp)) return reply(200, { ok: true });                     // 숨은 칸을 채운 것은 로봇 — 받은 척만
+                const rec = inb.formToRecord(input, cfg.rules);
+                if (!str(rec.phone) && !str(rec.email)) return reply(400, { ok: false, error: '연락처나 이메일 중 하나는 있어야 합니다.' });
+                if (url.searchParams.get('dry') === '1') return reply(200, { ok: true, dry: true, record: rec });
+                const r = await inb.appendRecords(store, [rec], cfg.rules);
+                return reply(200, { ok: true, id: r.added[0] ? r.added[0].id : '', duplicate: !r.added.length });
+            }
+
+            // 비밀 값 저장 — 관리자만
+            if (path === '/api/inbound/secret' && method === 'POST') {
+                const ad = await requireAdmin(env, store, request);
+                if (ad.error) return ad.error;
+                const input = await body();
+                const name = str(input.name);
+                if (!inb.SECRETS[name]) return bad('알 수 없는 항목입니다: ' + name);
+                const ss = inb.secretStore(env);
+                if (str(input.value)) await ss.put(name, str(input.value), str(ad.me.email));
+                else await ss.drop(name);
+                return json(200, { ok: true });
+            }
+
+            // 여기부터는 인바운드 수집 권한 (관리자는 늘 통과)
+            const who = await requirePerm(env, store, request, ['inbound-sources']);
+            if (who.error) return who.error;
+
+            if (path === '/api/inbound/status' && method === 'GET') {
+                const sec = await inb.readSecrets(env);
+                const secrets = {};
+                Object.keys(inb.SECRETS).forEach(n => {
+                    secrets[n] = { label: inb.SECRETS[n].label, envName: inb.SECRETS[n].env, set: !!sec.from[n], from: sec.from[n],
+                        updatedAt: sec.from[n] === 'table' ? str(sec.table[n].updated_at) : '', updatedBy: sec.from[n] === 'table' ? str(sec.table[n].updated_by) : '' };
+                });
+                return json(200, { ok: true, secrets, tableError: sec.tableError, auto: (await store.storeValue(inb.AUTO_STATE_KEY)) || {}, formUrl: url.origin + '/api/inbound/form' });
+            }
+
+            if (path === '/api/inbound/preview' && method === 'POST') {
+                const input = await body();
+                // 화면에서 아직 저장하지 않은 설정으로도 시험할 수 있게, 보내 온 설정을 저장된 설정 위에 얹습니다
+                const saved = (await store.storeValue(inb.SOURCES_KEY)) || {};
+                const merged = Object.assign({}, saved);
+                if (input.settings && typeof input.settings === 'object') Object.keys(input.settings).forEach(k => { merged[k] = Object.assign({}, saved[k] || {}, input.settings[k]); });
+                const cfg = inb.withDefaults(merged);
+                const { values } = await inb.readSecrets(env);
+                try {
+                    const r = await inb.runSource(str(input.source), cfg, values, {});
+                    return json(200, Object.assign({ ok: true, source: str(input.source), at: new Date().toISOString() }, r));
+                } catch (e) {
+                    return json(200, { ok: false, source: str(input.source), error: String(e.message || e) });
+                }
+            }
+            return json(404, { ok: false, error: 'Not Found: ' + path });
         }
 
         // ---------- 폰 · PC 푸시 알림 (2026-09-29 · 9단계 — 판단 · 암호는 _push.js) ----------

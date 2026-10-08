@@ -63,7 +63,7 @@
 
 ### 2-2. Supabase (dev · prod 프로젝트 2개 — **지금은 dev 만**)
 1. https://supabase.com 에서 프로젝트를 만듭니다 — `kingorder-groupware-dev` (리전 Northeast Asia · Seoul). **dev 는 2026-09-16 에 만들어 연결돼 있습니다.** prod(`kingorder-groupware`)는 UAT 뒤에 만듭니다.
-2. SQL Editor 에 `supabase/schema.sql` → `schema-v2.sql` → `schema-v2-fix.sql` → `schema-v3.sql` → `schema-v4.sql` 을 **이 순서로** 붙여 넣고 Run. (dev 는 2026-09-17 까지 전부 실행됨. prod 를 만들 때 같은 순서로.)
+2. SQL Editor 에 `supabase/schema.sql` → `schema-v2.sql` → `schema-v2-fix.sql` → `schema-v3.sql` → `schema-v4.sql` 을 **이 순서로** 붙여 넣고 Run. (그 뒤 v5 · v6, 인바운드 수집을 쓰면 `schema-v7.sql` — 2026-10-08 · dev 에는 아직 실행 안 함) (dev 는 2026-09-17 까지 전부 실행됨. prod 를 만들 때 같은 순서로.)
 3. Settings › API 에서 **Project URL** · **anon public** 키 · **service_role** 키를 적어 둡니다.
    - anon → 브라우저 설정 (`config/app-config.js` / GitHub Secrets `SUPABASE_ANON_KEY_*`)
    - service_role → **Cloudflare Pages 환경변수에만** (`SUPABASE_SERVICE_ROLE_KEY`). 코드·GitHub 에 넣지 않습니다.
@@ -145,6 +145,23 @@ Supabase 설정이 비어 있으면(로컬 저장소 모드) 비밀번호를 브
 - 구성원의 이메일을 바꾸면 로그인 아이디도 함께 바뀌고, 구성원을 지우면 로그인 계정도 지워집니다.
 - 계정 만들기 · 초기화 · 삭제는 **관리자 그룹**으로 로그인한 사람만 됩니다 (서버가 로그인 토큰으로 확인).
 - 파트너센터 아이디(사외)는 이 절과 무관하게 전처럼 **파트너 ID 관리**에서 비밀번호를 직접 넣습니다.
+
+## 4-1. 인바운드 수집 (2026-10-08)
+
+인바운드 관리 › **수집 · 연결** 탭에서 소스마다 실제 자료를 가져와 미리 보고(저장 안 함) 고른 건만 등록합니다. 자세한 변경은 CHANGELOG 2026-10-08.
+
+| 소스 | 서버 주소 | 필요한 것 |
+|---|---|---|
+| 홈페이지 폼 | `POST /api/inbound/form` (로그인 없음) | 화면의 허용 사이트(Origin) 목록 · Cloudflare Access 에서 이 경로만 Bypass |
+| 아임웹 알림 메일 | `POST /api/inbound/preview` `{source:'mail'}` | 메일함 IMAP 켜기 + 앱 비밀번호 (`INBOUND_MAIL_PASSWORD` 또는 화면에서 저장) |
+| 블로그 · 카페 검색 | 〃 `naver` | 네이버 개발자센터 검색 API Client ID(화면) · Secret(`INBOUND_NAVER_CLIENT_SECRET`) |
+| 블로그 글 RSS | 〃 `blog` | 블로그 아이디 |
+| 인스타그램 | 〃 `insta` | 비즈니스 계정 ID · 페이지 ID(화면) · 토큰(`INBOUND_IG_ACCESS_TOKEN`) |
+| 구글 시트 | 〃 `sheet` | 시트 링크 공유(뷰어) |
+
+- 비밀 값은 Cloudflare 환경변수가 먼저, 없으면 `inbound_secrets` 표(**`supabase/schema-v7.sql` 먼저 실행**). 화면에서 저장은 관리자만, 값은 다시 보이지 않습니다.
+- 자동 수집(메일 · 인스타)은 화면에서 켜야 돕니다 — `worker.js` 1분 예약 실행이 간격을 봅니다.
+- 시험: `node tools/test-inbound.js` (npm run check 에 포함) · `node tools/e2e-inbound.js <엑셀 경로>` (헤드리스 크롬).
 
 ## 5. 작업 흐름
 
