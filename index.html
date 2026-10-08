@@ -6032,10 +6032,11 @@
                         <span id="schedule-attendee-count" class="text-xs text-gray-400"></span>
                     </div>
                     <input type="text" id="schedule-attendee-search" oninput="renderScheduleAttendeePicker()" placeholder="이름·부서로 검색" class="w-full p-2 mb-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                    <div id="schedule-attendee-picker" class="border border-gray-200 rounded max-h-40 overflow-y-auto divide-y divide-gray-50">
+                    <div id="schedule-attendee-picker" class="border border-gray-200 rounded max-h-64 overflow-y-auto divide-y divide-gray-50">
                         <!-- JS 동적 렌더링 -->
                     </div>
-                    <p class="text-xs text-gray-500 mt-1">초대한 사람에게는 <b>미응답</b> 상태로 전달되고, 상대가 상세에서 <b>수락·미정·거부</b>를 선택합니다.</p>
+                    <p class="text-xs text-gray-500 mt-1"><b>회사 전체 · 본부 · 팀</b>에 체크하면 그 아래 사람이 모두 선택됩니다. ▸ 를 누르면 펼쳐집니다.</p>
+                    <p class="text-xs text-gray-500 mt-0.5">초대한 사람에게는 <b>미응답</b> 상태로 전달되고, 상대가 상세에서 <b>수락·미정·거부</b>를 선택합니다.</p>
                 </div>
                 <div class="mb-4">
                     <label class="block text-sm font-medium text-gray-700 mb-1">상세 내용</label>
@@ -17855,13 +17856,100 @@ const QUOTE_TEMPLATES = [
             return localUsers.filter(u => u.name !== currentUserName);
         }
 
+        // ---- 계층형 고르기 (UAT 2026-10-08): 회사 전체 › 본부 › 팀 › 팀원 ----
+        // 위 단계에 체크하면 그 아래 사람이 모두 선택되고, 일부만 골랐으면 반쯤 체크(indeterminate)로 보입니다.
+        // 묶음은 조직도와 같은 orgGrouped() — 본부장은 본부 바로 아래, 팀이 없는 사람은 팀 묶음 뒤에 둡니다.
+        // 회사 전체에는 사외 계정 · 관리자 부서(ORG_HIDDEN_DEPTS)를 넣지 않습니다. 그 묶음은 따로 보이고 따로 고릅니다.
+        let attendeeTreeOpen = new Set();   // 펼친 묶음 키 ('d:영업본부id' · 't:본부id:팀이름')
+        function attendeeTree() {
+            return orgGrouped(inviteCandidates()).map(g => ({
+                g, key: 'd:' + g.dept, inCompany: ORG_HIDDEN_DEPTS.indexOf(g.dept) < 0,
+                teams: g.teams.map(t => ({ key: 't:' + g.dept + ':' + t.name, name: t.name, members: t.members }))
+            }));
+        }
+        function attendeeGroupMembers(key) {
+            const tree = attendeeTree();
+            if (key === 'all') return [].concat(...tree.filter(d => d.inCompany).map(d => d.g.members));
+            for (const d of tree) {
+                if (d.key === key) return d.g.members;
+                const t = d.teams.find(x => x.key === key);
+                if (t) return t.members;
+            }
+            return [];
+        }
+        function attendeePickState(members) {
+            const n = members.filter(u => scheduleDraftAttendees.some(a => a.name === u.name)).length;
+            return { n, total: members.length, all: members.length > 0 && n === members.length, some: n > 0 && n < members.length };
+        }
+        function toggleAttendeeGroup(key, checked) {
+            const members = attendeeGroupMembers(decodeURIComponent(key));
+            if (checked) {
+                members.forEach(u => { if (!scheduleDraftAttendees.some(a => a.name === u.name)) scheduleDraftAttendees.push({ name: u.name, status: 'pending' }); });
+            } else {
+                const names = new Set(members.map(u => u.name));
+                scheduleDraftAttendees = scheduleDraftAttendees.filter(a => !names.has(a.name));
+            }
+            renderScheduleAttendeePicker();
+        }
+        function toggleAttendeeTreeOpen(key) {
+            const k = decodeURIComponent(key);
+            if (attendeeTreeOpen.has(k)) attendeeTreeOpen.delete(k); else attendeeTreeOpen.add(k);
+            renderScheduleAttendeePicker();
+        }
+        function attendeePersonRow(u, depth) {
+            const picked = scheduleDraftAttendees.find(a => a.name === u.name);
+            // 이미 응답한 사람은 응답 상태를 함께 보여 준다 (수정 시)
+            const st = picked && picked.status && picked.status !== 'pending' ? attendeeStatusMeta(picked.status) : null;
+            const pad = depth === 2 ? 'pl-12' : depth === 1 ? 'pl-7' : 'px-2';
+            return `<label class="flex items-center gap-2 ${pad} pr-2 py-1.5 text-sm cursor-pointer hover:bg-gray-50">
+                    <input type="checkbox" onchange="toggleScheduleAttendee('${escapeHtml(u.name)}', this.checked)" ${picked ? 'checked' : ''} class="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+                    <span class="text-gray-800">${escapeHtml(u.name)}</span>
+                    <span class="text-xs text-gray-400">${depth ? '' : escapeHtml(deptNames[u.dept] || u.dept) + (u.rank ? ' · ' : '')}${u.rank ? escapeHtml(u.rank) : ''}</span>
+                    ${picked && picked.self ? '<span class="ml-auto px-1.5 py-0.5 rounded-full text-[10px] bg-sky-100 text-sky-700">참가</span>' : ''}
+                    ${st ? `<span class="${picked && picked.self ? '' : 'ml-auto '}px-1.5 py-0.5 rounded-full text-[10px] ${st.chip}">${st.name}</span>` : ''}
+                </label>`;
+        }
+        // 묶음 한 줄 — [▸] [체크] 이름 · 선택 n/전체
+        function attendeeGroupRow(key, label, members, opts) {
+            const o = opts || {};
+            const ps = attendeePickState(members);
+            const k = encodeURIComponent(key);
+            const open = attendeeTreeOpen.has(key);
+            const caret = o.noCaret ? '<span class="w-4"></span>'
+                : `<button type="button" onclick="toggleAttendeeTreeOpen('${k}')" class="w-4 text-gray-400 hover:text-gray-700" title="${open ? '접기' : '펼치기'}"><i class="fas fa-chevron-${open ? 'down' : 'right'} text-[10px]"></i></button>`;
+            return `<div class="flex items-center gap-2 ${o.pad || 'px-2'} pr-2 py-1.5 text-sm ${o.bg || 'bg-gray-50/60'}">
+                    ${caret}
+                    <label class="flex items-center gap-2 flex-1 min-w-0 cursor-pointer">
+                        <input type="checkbox" data-indeterminate="${ps.some ? '1' : ''}" onchange="toggleAttendeeGroup('${k}', this.checked)" ${ps.all ? 'checked' : ''} ${ps.total ? '' : 'disabled'} class="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+                        <span class="font-semibold text-gray-800 truncate">${o.icon ? `<i class="fas ${o.icon} mr-1 text-gray-400"></i>` : ''}${escapeHtml(label)}</span>
+                        <span class="ml-auto text-xs ${ps.n ? 'text-blue-600 font-medium' : 'text-gray-400'} whitespace-nowrap">${ps.n ? ps.n + ' / ' : ''}${ps.total}명</span>
+                    </label>
+                </div>`;
+        }
+        function attendeeTreeHtml() {
+            const tree = attendeeTree();
+            const rows = [attendeeGroupRow('all', '회사 전체', attendeeGroupMembers('all'), { noCaret: true, icon: 'fa-building', bg: 'bg-indigo-50/70' })];
+            tree.forEach(d => {
+                rows.push(attendeeGroupRow(d.key, d.g.name, d.g.members, { icon: 'fa-sitemap' }));
+                if (!attendeeTreeOpen.has(d.key)) return;
+                d.g.heads.forEach(u => rows.push(attendeePersonRow(u, 1)));
+                d.teams.forEach(t => {
+                    rows.push(attendeeGroupRow(t.key, t.name, t.members, { pad: 'pl-7', bg: 'bg-white', icon: 'fa-users' }));
+                    if (attendeeTreeOpen.has(t.key)) t.members.forEach(u => rows.push(attendeePersonRow(u, 2)));
+                });
+                // 팀을 쓰는 본부에서 팀이 없는 사람 · 팀을 안 쓰는 본부의 구성원
+                (d.g.hasTeams ? d.g.direct : d.g.rest).forEach(u => rows.push(attendeePersonRow(u, 1)));
+            });
+            return rows.join('');
+        }
+
         function renderScheduleAttendeePicker() {
             const box = document.getElementById('schedule-attendee-picker');
             if (!box) return;
             const term = (document.getElementById('schedule-attendee-search').value || '').trim().toLowerCase();
             const list = inviteCandidates().filter(u => {
                 if (!term) return true;
-                return `${u.name} ${deptNames[u.dept] || u.dept} ${u.rank || ''}`.toLowerCase().includes(term);
+                return `${u.name} ${deptNames[u.dept] || u.dept} ${u.rank || ''} ${u.team || ''}`.toLowerCase().includes(term);
             });
 
             const cnt = document.getElementById('schedule-attendee-count');
@@ -17872,21 +17960,14 @@ const QUOTE_TEMPLATES = [
                 : '';
 
             if (!list.length) {
-                box.innerHTML = '<p class="text-xs text-gray-400 text-center py-3">검색 결과가 없습니다.</p>';
+                box.innerHTML = `<p class="text-xs text-gray-400 text-center py-3">${term ? '검색 결과가 없습니다.' : '초대할 수 있는 사람이 없습니다.'}</p>`;
                 return;
             }
-            box.innerHTML = list.map(u => {
-                const picked = scheduleDraftAttendees.find(a => a.name === u.name);
-                // 이미 응답한 사람은 응답 상태를 함께 보여 준다 (수정 시)
-                const st = picked && picked.status && picked.status !== 'pending' ? attendeeStatusMeta(picked.status) : null;
-                return `<label class="flex items-center gap-2 px-2 py-1.5 text-sm cursor-pointer hover:bg-gray-50">
-                        <input type="checkbox" onchange="toggleScheduleAttendee('${escapeHtml(u.name)}', this.checked)" ${picked ? 'checked' : ''} class="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
-                        <span class="text-gray-800">${escapeHtml(u.name)}</span>
-                        <span class="text-xs text-gray-400">${escapeHtml(deptNames[u.dept] || u.dept)}${u.rank ? ' · ' + escapeHtml(u.rank) : ''}</span>
-                        ${picked && picked.self ? '<span class="ml-auto px-1.5 py-0.5 rounded-full text-[10px] bg-sky-100 text-sky-700">참가</span>' : ''}
-                        ${st ? `<span class="${picked && picked.self ? '' : 'ml-auto '}px-1.5 py-0.5 rounded-full text-[10px] ${st.chip}">${st.name}</span>` : ''}
-                    </label>`;
-            }).join('');
+            // 검색 중에는 찾은 사람만 한 줄씩, 아니면 조직 계층으로
+            const y = box.scrollTop;   // 체크 · 펼치기 뒤에도 보던 자리 그대로
+            box.innerHTML = term ? list.map(u => attendeePersonRow(u, 0)).join('') : attendeeTreeHtml();
+            box.scrollTop = y;
+            box.querySelectorAll('input[data-indeterminate="1"]').forEach(el => { el.indeterminate = true; });
         }
 
         function toggleScheduleAttendee(name, checked) {
@@ -17903,6 +17984,7 @@ const QUOTE_TEMPLATES = [
         function fillScheduleAttendees(schedule) {
             // 수정 시에는 기존 응답 상태를 유지한 채로 시작
             scheduleDraftAttendees = scheduleAttendees(schedule).map(a => ({ ...a }));
+            attendeeTreeOpen = new Set();
             const search = document.getElementById('schedule-attendee-search');
             if (search) search.value = '';
             renderScheduleAttendeePicker();
