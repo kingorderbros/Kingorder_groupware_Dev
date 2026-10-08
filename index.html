@@ -43759,7 +43759,9 @@ const QUOTE_TEMPLATES = [
 
             const cur = payTabs.find(t => t.id === payWcActiveTab) || payTabs[0];
             const descEl = document.getElementById('paywc-tab-desc');
-            if (descEl) descEl.innerText = cur ? cur.desc : '';
+            // 보완서류 제출함으로 들어왔으면 영업본부가 할 일로 설명합니다
+            if (descEl) descEl.innerText = (payWcViaSalesMenu && cur && cur.id === 'docs')
+                ? '결제본부가 요청한 보완서류를 확인하고, 고객사에서 받은 서류를 올려 회신합니다.' : (cur ? cur.desc : '');
 
             document.querySelectorAll('.paywc-tab-panel').forEach(el => el.classList.add('hidden'));
             if (!cur) return;
@@ -43932,8 +43934,12 @@ const QUOTE_TEMPLATES = [
         // ---------- 역할 판정 ----------
         // 결제본부(+관리자): 요청 등록 · 항목 확인/반려 · 취합 확인 완료
         // 영업본부(+관리자): 요청 확인 · 서류 업로드 · 제출
-        function payDocIsSales() { return currentUserDept === 'sales' || canManageAllData(); }
-        function payDocCanReview() { return currentUserDept === 'payment' || canManageAllData(); }
+        // '영업본부 › 보완서류 제출함' 으로 들어오면 관리자라도 **영업본부 화면**만 — 요청을 확인하고 서류를 올려 회신합니다 (UAT 2026-10-08).
+        // 요청 등록 · 서류 항목 관리 · 검토(확인 · 반려 · 취합 완료)는 '결제본부 › 결제업무센터' 로 들어올 때만 보입니다.
+        // 관리자는 들어온 메뉴에 따라 한쪽 역할만 — 제출함이면 영업(확인 · 회신), 결제업무센터면 결제(요청 · 검토). 영업본부 사람은 어디로 들어와도 올릴 수 있습니다(알림 링크 등)
+        function payDocIsSales() { return currentUserDept === 'sales' || (canManageAllData() && payWcViaSalesMenu); }
+        function payDocCanReview() { return !payWcViaSalesMenu && (currentUserDept === 'payment' || canManageAllData()); }
+        function payDocSalesView() { return payWcViaSalesMenu || currentUserDept === 'sales'; }
         // 팀 전체 요청은 영업본부 누구나, 담당자 지정 요청은 지정된 본인만 업로드할 수 있습니다.
         function payDocCanUpload(r) {
             if (!payDocIsSales()) return false;
@@ -44010,7 +44016,7 @@ const QUOTE_TEMPLATES = [
             const host = document.getElementById('paywc-panel-docs');
             if (!host) return;
 
-            const base = (currentUserDept === 'sales' && payDocFilter.scope === 'mine') ? payDocMyRequests() : payDocRequests;
+            const base = (payDocSalesView() && payDocFilter.scope === 'mine') ? payDocMyRequests() : payDocRequests;
             const count = (s) => base.filter(r => r.status === s).length;
             const stats = [
                 { key: 'all',       label: '전체',        value: base.length,                                        cls: 'border-gray-400',   text: 'text-gray-700' },
@@ -44028,7 +44034,7 @@ const QUOTE_TEMPLATES = [
                     <p class="text-2xl font-bold ${s.text} mt-1">${s.value}<span class="text-sm font-normal text-gray-400 ml-0.5">건</span></p>
                 </button>`).join('');
 
-            const scopeSwitch = currentUserDept === 'sales' ? `
+            const scopeSwitch = payDocSalesView() ? `
                 <div class="flex rounded border border-gray-300 overflow-hidden text-sm">
                     <button type="button" onclick="setPayDocFilter('scope','mine')" class="px-3 py-2 ${payDocFilter.scope === 'mine' ? 'bg-yellow-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}">나에게 온 요청</button>
                     <button type="button" onclick="setPayDocFilter('scope','all')" class="px-3 py-2 border-l border-gray-300 ${payDocFilter.scope === 'all' ? 'bg-yellow-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}">영업본부 전체</button>
@@ -44052,7 +44058,7 @@ const QUOTE_TEMPLATES = [
             const roleHint = payDocCanReview()
                 ? '<i class="fas fa-circle-info mr-1"></i>결제본부 화면입니다 — 보완요청을 발송하고, 제출된 서류를 항목별로 확인·반려한 뒤 취합 완료 처리합니다.'
                 : (payDocIsSales()
-                    ? '<i class="fas fa-circle-info mr-1"></i>영업본부 화면입니다 — 수신한 보완요청의 서류를 고객사에서 받아 항목별로 업로드한 뒤 제출하세요.'
+                    ? '<i class="fas fa-circle-info mr-1"></i>영업본부 화면입니다 — 결제본부가 보낸 보완요청을 열어 <b>[요청 확인]</b> 하고, 고객사에서 받은 서류를 항목별로 올린 뒤 <b>[회신 (보완서류 제출)]</b> 하세요.'
                     : '<i class="fas fa-circle-info mr-1"></i>조회 전용 화면입니다.');
 
             host.innerHTML = `
@@ -44662,11 +44668,11 @@ const QUOTE_TEMPLATES = [
             // 하단 액션바
             const btns = [];
             if (payDocCanUpload(r) && r.status === 'requested') {
-                btns.push(`<button onclick="payDocStart('${r.id}')" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded text-sm"><i class="fas fa-play mr-1"></i>보완 착수</button>`);
+                btns.push(`<button onclick="payDocStart('${r.id}')" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded text-sm" title="요청 내용을 확인했다고 결제본부에 알리고 보완을 시작합니다"><i class="fas fa-check mr-1"></i>요청 확인</button>`);
             }
             if (payDocCanUpload(r) && ['requested', 'uploading', 'returned'].includes(r.status)) {
                 const ok = payDocAllUploaded(r);
-                btns.push(`<button ${ok ? '' : 'disabled'} onclick="payDocSubmitDocs('${r.id}')" class="px-4 py-2 rounded text-sm text-white ${ok ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-gray-300 cursor-not-allowed'}"><i class="fas fa-paper-plane mr-1"></i>보완서류 제출</button>`);
+                btns.push(`<button ${ok ? '' : 'disabled'} onclick="payDocSubmitDocs('${r.id}')" class="px-4 py-2 rounded text-sm text-white ${ok ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-gray-300 cursor-not-allowed'}" title="${ok ? '' : '요청된 서류를 모두 올려야 회신할 수 있습니다'}"><i class="fas fa-paper-plane mr-1"></i>회신 (보완서류 제출)</button>`);
             }
             if (canReview && p.uploaded > 0) {
                 // 열람을 마친 건만 일괄 확인 대상 — 미열람이 남아 있으면 버튼에 표시합니다.
@@ -44713,7 +44719,8 @@ const QUOTE_TEMPLATES = [
                         + `<span class="block mt-1.5">${workScheduleActionHtml('paydoc', 'payment', r.id)}</span>`)}
                 </div>
 
-                ${r.memo ? `<div class="mb-4 text-sm bg-amber-50 border border-amber-200 rounded p-3 text-amber-800"><i class="fas fa-comment-dots mr-1"></i>${escapeHtml(r.memo)}</div>` : ''}
+                ${r.memo ? `<div class="mb-4 text-sm bg-amber-50 border border-amber-200 rounded p-3 text-amber-800"><p class="text-xs font-semibold text-amber-700 mb-0.5"><i class="fas fa-comment-dots mr-1"></i>결제본부 요청 내용</p>${escapeHtml(r.memo)}</div>` : ''}
+                ${r.replyMemo ? `<div class="mb-4 text-sm bg-indigo-50 border border-indigo-200 rounded p-3 text-indigo-800"><p class="text-xs font-semibold text-indigo-700 mb-0.5"><i class="fas fa-reply mr-1"></i>영업본부 회신</p>${escapeHtml(r.replyMemo)}</div>` : ''}
 
                 ${canReview && p.unseen ? `
                 <div class="mb-4 text-sm bg-blue-50 border border-blue-200 rounded p-3 text-blue-800">
@@ -44741,6 +44748,11 @@ const QUOTE_TEMPLATES = [
                     </table>
                 </div>
 
+                ${payDocCanUpload(r) && ['requested', 'uploading', 'returned'].includes(r.status) ? `
+                <div class="mb-3">
+                    <label class="block text-xs font-medium text-gray-600 mb-1"><i class="fas fa-reply mr-1 text-indigo-500"></i>회신 메모 <span class="text-gray-400 font-normal">(선택 — 결제본부에 남길 말)</span></label>
+                    <textarea id="paydoc-reply-memo" rows="2" class="w-full p-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="예: 통장사본은 법인 명의로 다시 받았습니다">${escapeHtml(r.replyMemo || '')}</textarea>
+                </div>` : ''}
                 <div class="flex flex-wrap justify-end gap-2 border-t border-gray-100 pt-4 mb-4">
                     <button type="button" onclick="closePayDocDetail()" class="px-4 py-2 bg-gray-200 text-gray-700 rounded text-sm hover:bg-gray-300">닫기</button>
                     ${btns.join('')}
@@ -44762,7 +44774,7 @@ const QUOTE_TEMPLATES = [
             if (!r || !payDocCanUpload(r)) return;
             r.status = 'uploading';
             if (!r.claimedBy) r.claimedBy = currentUserName || '영업본부';
-            payDocLog(r, '보완 착수');
+            payDocLog(r, '요청 확인 — 보완 착수');
             renderPayDocDetail();
         }
 
@@ -44841,10 +44853,13 @@ const QUOTE_TEMPLATES = [
             const r = payDocReq(id);
             if (!r || !payDocCanUpload(r)) return;
             if (!payDocAllUploaded(r)) { alert('요청된 서류를 모두 업로드해야 제출할 수 있습니다.'); return; }
+            // 회신 메모 — 결제본부에 남길 말 (선택 · UAT 2026-10-08)
+            const memo = String((document.getElementById('paydoc-reply-memo') || {}).value || '').trim();
             r.status = 'submitted';
             r.submittedAt = ymd(new Date());
             if (!r.claimedBy) r.claimedBy = currentUserName || '영업본부';
-            payDocLog(r, `보완서류 제출 (${r.items.length}건) — 결제본부 확인 요청`);
+            if (memo) r.replyMemo = memo;
+            payDocLog(r, `회신 — 보완서류 제출 (${r.items.length}건)${memo ? ` · ${memo}` : ''}`);
             renderPayDocDetail();
             alert('보완서류를 제출했습니다. 결제본부의 확인을 기다립니다.');
         }
