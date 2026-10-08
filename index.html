@@ -21493,12 +21493,17 @@ const QUOTE_TEMPLATES = [
 
         // 해당 고객·탭의 업무. 카테고리 탭이면 선택한 카테고리·관리유형까지 좁힙니다.
         // opts.allCategories — 탭 배지처럼 탭 전체 건수가 필요할 때 카테고리 필터를 건너뜁니다.
+        // 영업업무센터 › 영업활동 등록은 기존 고객이 아니라 **신규 고객**을 다룹니다 (UAT 2026-10-08).
+        // 위 고객조회는 참고용일 뿐 — 조회한 고객을 폼에 넣지 않고, 고르지 않아도 등록 · 이력 · 진행업무가 보입니다.
+        // 상호 · 연락처는 폼에서 직접 적습니다(intake-prospect-*). 목록은 고객과 상관없이 이 탭의 건을 모두 보여 줍니다.
+        function wcIgnoresCustomer(key, typeId) { return key === 'sales' && typeId === 'activity'; }
         function wcWorksOf(key, customerId, typeId, opts) {
             const t = wcType(key, typeId);
             const st = wcState[key];
             const narrow = t.categorized && !(opts && opts.allCategories);
+            const free = wcIgnoresCustomer(key, typeId);
             return wcDef(key).works.filter(w => {
-                if (w.customerId !== customerId || w.type !== typeId) return false;
+                if ((!free && w.customerId !== customerId) || w.type !== typeId) return false;
                 if (!narrow) return true;
                 if (st.category && w.category !== st.category) return false;
                 if (st.sub && w.sub !== st.sub) return false;
@@ -21517,6 +21522,18 @@ const QUOTE_TEMPLATES = [
                             <div>
                                 <label class="block text-xs font-medium text-gray-600 mb-1">제목 <span class="text-red-500">*</span></label>
                                 <input type="text" id="${wcId(key, 'intake-title')}" required class="${inputCls}" placeholder="요청/활동 내용을 한 줄로" />
+                            </div>
+                            <!-- 영업활동 등록 전용 — 신규 고객이라 상호 · 연락처를 직접 적습니다 (위 고객조회는 참고용 · UAT 2026-10-08) -->
+                            <div id="${wcId(key, 'intake-prospect')}" class="hidden grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <div>
+                                    <label class="block text-xs font-medium text-gray-600 mb-1">상호 (고객사명) <span class="text-red-500">*</span></label>
+                                    <input type="text" id="${wcId(key, 'intake-prospect-name')}" class="${inputCls}" placeholder="예: 맛있는김밥 역삼점" />
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-medium text-gray-600 mb-1">담당자 · 연락처</label>
+                                    <input type="text" id="${wcId(key, 'intake-prospect-contact')}" class="${inputCls}" placeholder="예: 김대표 010-1234-5678" />
+                                </div>
+                                <p class="sm:col-span-2 text-[11px] text-gray-400 -mt-1"><i class="fas fa-circle-info mr-1"></i>위 고객조회는 참고용입니다 — 조회한 고객과 상관없이 여기 적은 상호로 등록됩니다.</p>
                             </div>
                             <div id="${wcId(key, 'intake-fields')}" class="grid grid-cols-1 sm:grid-cols-2 gap-3"></div>
                             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -22915,7 +22932,7 @@ const QUOTE_TEMPLATES = [
             if (t.panel === 'contract') { statsEl.innerHTML = ctPipeStatsHtml(key); return; }
             if (t.panel === 'meeting') { statsEl.innerHTML = meetingStatsChipsHtml(); return; }
             if (t.panel === 'issue') { statsEl.innerHTML = issueStatsChipsHtml(); return; }
-            if (!st.customerId) { statsEl.innerHTML = '<span class="text-gray-400">고객 미선택</span>'; return; }
+            if (!st.customerId && !wcIgnoresCustomer(key, st.activeType)) { statsEl.innerHTML = '<span class="text-gray-400">고객 미선택</span>'; return; }
             const list = wcWorksOf(key, st.customerId, st.activeType);
             statsEl.innerHTML = WC_STATUS_FLOW
                 .map(s => `<span class="px-2 py-0.5 rounded-full ${WC_STATUS_STYLE[s].chip}">${escapeHtml(wcStatusName(key, s))} ${list.filter(w => w.status === s).length}</span>`).join('');
@@ -22938,8 +22955,9 @@ const QUOTE_TEMPLATES = [
 
             const chips = cats.map(c => {
                 const on = c.id === st.category;
-                const cnt = st.customerId
-                    ? wcDef(key).works.filter(w => w.customerId === st.customerId && w.type === t.id && w.category === c.id).length : 0;
+                const free = wcIgnoresCustomer(key, t.id);   // 영업활동 등록은 고객과 상관없이 셉니다
+                const cnt = (st.customerId || free)
+                    ? wcDef(key).works.filter(w => (free || w.customerId === st.customerId) && w.type === t.id && w.category === c.id).length : 0;
                 return `<button type="button" onclick="setWorkCategory('${key}', '${c.id}')" class="px-3 py-1.5 rounded-full text-sm font-medium transition-colors whitespace-nowrap ${on ? 'bg-sky-600 text-white shadow-sm' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}">
                             <i class="fas ${c.icon} mr-1"></i>${escapeHtml(c.name)}
                             <span class="ml-1 px-1.5 rounded-full text-[10px] ${on ? 'bg-white/25' : 'bg-white text-gray-500'}">${cnt}</span>
@@ -25621,7 +25639,8 @@ const QUOTE_TEMPLATES = [
         function workHistoryWorks(key) {
             const st = wcState[key];
             const f = st.historyFilter || 'current';
-            const mine = wcDef(key).works.filter(w => w.customerId === st.customerId);
+            // 영업활동 등록 건은 고객과 상관없이 함께 봅니다 (wcIgnoresCustomer)
+            const mine = wcDef(key).works.filter(w => w.customerId === st.customerId || wcIgnoresCustomer(key, w.type));
             if (f === 'all') return mine;
             if (f.startsWith('c:')) {
                 const [, ty, cat] = f.split(':');
@@ -26092,7 +26111,7 @@ const QUOTE_TEMPLATES = [
                 Array.from(tableEl.classList).filter(c => c.startsWith('min-w-[')).forEach(c => tableEl.classList.remove(c));
                 tableEl.classList.add(spec.minW);
             }
-            if (!st.customerId) {
+            if (!st.customerId && !wcIgnoresCustomer(key, st.activeType)) {
                 countEl.innerText = '(고객 미선택)';
                 body.innerHTML = `<tr><td colspan="${span}" class="px-4 py-6 text-center text-sm text-gray-400">고객을 조회하면 이력이 표시됩니다.</td></tr>`;
                 return;
@@ -26107,7 +26126,8 @@ const QUOTE_TEMPLATES = [
 
             const scope = workHistoryScopeLabel(key);
             const statusLabel = statusFilter === 'all' ? '' : `${wcStatusName(key, statusFilter)} `;
-            countEl.innerText = `· ${wcCustomer(key, st.customerId).name} / ${scope} ${statusLabel}${list.length}건`;
+            const custName = wcIgnoresCustomer(key, st.activeType) ? '전체 고객' : (wcCustomer(key, st.customerId) || {}).name;
+            countEl.innerText = `· ${custName} / ${scope} ${statusLabel}${list.length}건`;
 
             if (!list.length) {
                 body.innerHTML = `<tr><td colspan="${span}" class="px-4 py-6 text-center text-sm text-gray-400">${statusFilter === 'all' ? '이 조건에 해당하는 이력이 없습니다.' : `${wcStatusName(key, statusFilter)} 상태인 건이 없습니다.`}</td></tr>`;
@@ -26157,6 +26177,8 @@ const QUOTE_TEMPLATES = [
         function renderWorkIntakeFields(key) {
             const st = wcState[key];
             const t = wcType(key, st.activeType);
+            const prospect = wcEl(key, 'intake-prospect');
+            if (prospect) prospect.classList.toggle('hidden', !wcIgnoresCustomer(key, st.activeType));
             const cls = `w-full p-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 ${wcDef(key).accent.ring}`;
             const mk = f => {
                 const inputId = wcId(key, `extra-${f.id}`);
@@ -27061,7 +27083,14 @@ const QUOTE_TEMPLATES = [
         function submitWorkIntake(event, key) {
             event.preventDefault();
             const st = wcState[key];
-            if (!st.customerId) { alert('먼저 고객을 조회해 주세요.'); return; }
+            const free = wcIgnoresCustomer(key, st.activeType);   // 영업활동 등록 — 고객조회와 상관없이 (UAT 2026-10-08)
+            if (!free && !st.customerId) { alert('먼저 고객을 조회해 주세요.'); return; }
+            const prospectName = free ? String((wcEl(key, 'intake-prospect-name') || {}).value || '').trim() : '';
+            if (free && !prospectName) {
+                alert('상호(고객사명)를 입력해 주세요.\n영업활동 등록은 위 고객조회와 상관없이 여기 적은 상호로 등록됩니다.');
+                const el = wcEl(key, 'intake-prospect-name'); if (el) el.focus();
+                return;
+            }
 
             const c = wcDef(key);
             const t = wcType(key, st.activeType);
@@ -27097,7 +27126,7 @@ const QUOTE_TEMPLATES = [
             const subEl = wcEl(key, 'intake-sub');
             const contactEl = wcEl(key, 'intake-contact');
             const transferEl = wcEl(key, 'intake-transfer');
-            const cust = wcCustomer(key, st.customerId);
+            const cust = free ? null : wcCustomer(key, st.customerId);
             // 업무이관 — 본부(또는 본부·팀)까지 고릅니다. 'ops' / 'ops:설치팀' 모양이라 나눠 담습니다.
             const xferPick = xferParse(transferEl ? transferEl.value : (WORK_CENTER_DEPT[key] || ''));
             // 접수일·접수시간·접수자는 화면 입력을 쓰지 않고 등록하는 이 순간의 값으로 찍습니다.
@@ -27105,9 +27134,10 @@ const QUOTE_TEMPLATES = [
 
             const work = {
                 id: c.seqPrefix + String(c.seq++).padStart(4, '0'),
-                customerId: st.customerId,
-                company: cust ? cust.name : '',                             // 상호명 (조회한 고객)
-                contact: contactEl ? contactEl.value.trim() : '',           // 연락처
+                customerId: free ? '' : st.customerId,
+                company: free ? prospectName : (cust ? cust.name : ''),     // 상호명 (조회한 고객 · 영업활동은 직접 적은 상호)
+                contact: free ? String((wcEl(key, 'intake-prospect-contact') || {}).value || '').trim()
+                              : (contactEl ? contactEl.value.trim() : ''),  // 연락처
                 transferDept: xferPick.dept,                                // 업무이관 — 본부
                 transferTeam: xferPick.team,                                // 업무이관 — 팀 (안 고르면 빈 값 = 본부 전체)
                 visitDateAtIntake: extra.visitDate || '',                   // 접수 때 받은 방문 예정일 — 업무처리에서 고쳐도 처음 값은 남깁니다
@@ -27171,6 +27201,7 @@ const QUOTE_TEMPLATES = [
             renderWorkIntakeFields(key);
             renderWorkTypeTabs(key);
             renderWorkTypeHeader(key);
+            renderWorkCategoryBar(key);           // 카테고리 칩의 건수도 바로 갱신
             renderWorkHistory(key);
             renderWorkProcess(key);
             renderWorkCustomerSummary(key);
@@ -27254,7 +27285,7 @@ const QUOTE_TEMPLATES = [
                     </p>`;
                 return;
             }
-            if (!st.customerId) {
+            if (!st.customerId && !wcIgnoresCustomer(key, st.activeType)) {
                 el.innerHTML = '<p class="text-sm text-gray-400 text-center py-10">고객을 조회하면 처리할 업무가 표시됩니다.</p>';
                 return;
             }
@@ -27373,6 +27404,7 @@ const QUOTE_TEMPLATES = [
                         <div class="flex items-start justify-between gap-2">
                             <div class="min-w-0">
                                 <p class="text-sm font-semibold text-gray-800 truncate">${w.quoteId ? '<i class="fas fa-file-invoice-dollar text-emerald-600 mr-1" title="견적서에서 자동 생성"></i>' : ''}${w.caseId ? '<i class="fas fa-headset text-cyan-600 mr-1" title="상담 내역에서 자동 생성"></i>' : ''}${w.sub ? `<span class="inline-block mr-1 px-1.5 py-0.5 text-[10px] rounded bg-sky-100 text-sky-700 align-middle">${escapeHtml(w.sub)}</span>` : ''}${escapeHtml(w.title)}</p>
+                                ${wcIgnoresCustomer(key, w.type) && w.company ? `<p class="text-xs text-gray-700 mt-0.5"><i class="fas fa-store text-gray-400 mr-1"></i>${escapeHtml(w.company)}</p>` : ''}
                                 <p class="text-xs text-gray-400 mt-0.5 font-mono">${escapeHtml(w.id)} · 접수 ${escapeHtml(w.receivedAt || '-')}${w.receivedTime ? ' ' + escapeHtml(w.receivedTime) : ''} · ${escapeHtml(w.channel)} · 접수자 ${escapeHtml(w.receiver)}</p>
                                 ${w.transferDept || w.contact ? `<p class="text-xs text-gray-500 mt-0.5">
                                     ${w.transferDept ? `<span class="inline-block mr-2 whitespace-nowrap"><i class="fas fa-people-arrows text-gray-400 mr-1"></i>이관 <b class="text-gray-700">${escapeHtml(xferName(w.transferDept, w.transferTeam))}</b></span>` : ''}
