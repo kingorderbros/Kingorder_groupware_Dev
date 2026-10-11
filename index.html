@@ -10586,7 +10586,7 @@ const QUOTE_TEMPLATES = [
                             { id: 'inbound-vendor', name: '외주업체 작성 항목' },
                             { id: 'inbound-kob', name: '킹오더 담당자 작성 항목' },
                             // 홈페이지 · 메일 · 블로그 · 인스타 수집 연결과 가져오기 · 배정 규칙 (2026-10-08)
-                            { id: 'inbound-sources', name: '수집 · 연결 설정' }
+                            { id: 'inbound-sources', name: '수집 · 연결 설정 (쓰지 않음)', note: '2026-10-12 부터 수집 · 연결 · 경로 분석 · 배정 규칙은 관리자 전용' }
                         ]
                     },
                     {
@@ -25158,12 +25158,13 @@ const QUOTE_TEMPLATES = [
               desc: '모든 채널의 인입 건입니다. 줄을 누르면 원문 · 유입 정보 · 컨택 기록이 열립니다.' },
             { id: 'board',    name: '본부 보드',   icon: 'fa-table-columns',   show: () => canSeeInboundKob(),
               desc: '영업본부 · 운영본부가 단계별로 처리 현황을 봅니다. 카드를 누르면 상세가 열립니다.' },
-            { id: 'sources',  name: '수집 · 연결', icon: 'fa-plug',            show: () => canSeePage('inbound-sources'),
+            // 수집 · 연결 / 경로 분석 / 배정 · 규칙 은 관리자만 들어가 고칩니다 (UAT 2026-10-12 · 서버 /api/inbound/status · preview 도 관리자만)
+            { id: 'sources',  name: '수집 · 연결', icon: 'fa-plug',            show: () => isSystemAdmin(),
               desc: '소스마다 실제 자료를 가져와 미리 보고(저장 안 함), 고른 건만 등록합니다. 연결 설정과 자동 수집도 여기서 합니다.' },
-            { id: 'analysis', name: '경로 분석',   icon: 'fa-chart-column',    show: () => canSeeInboundKob(),
+            { id: 'analysis', name: '경로 분석',   icon: 'fa-chart-column',    show: () => isSystemAdmin(),
               desc: '어느 채널 · 검색어 · 블로그 글의 문의가 수주로 이어지는지 봅니다.' },
-            { id: 'rules',    name: '배정 · 규칙', icon: 'fa-sliders',         show: () => canSeeInboundKob(),
-              desc: '자동 배정 규칙 · 기준 시간 · 추가 컨택 중단 횟수입니다. 고치기는 수집 · 연결 권한이 있어야 합니다.' },
+            { id: 'rules',    name: '배정 · 규칙', icon: 'fa-sliders',         show: () => isSystemAdmin(),
+              desc: '자동 배정 규칙 · 기준 시간 · 추가 컨택 중단 횟수입니다. 관리자만 보고 고칩니다.' },
         ];
         function setInboundTab(id) { inboundTab = id; renderInboundCenter(); }
 
@@ -25221,7 +25222,7 @@ const QUOTE_TEMPLATES = [
         function saveInboundSources() {
             try { kobStorage.setItem(INBOUND_SOURCES_KEY, JSON.stringify(inboundSources)); return true; } catch (e) { return false; }
         }
-        function canEditInboundSources() { return canSeePage('inbound-sources'); }
+        function canEditInboundSources() { return isSystemAdmin(); }   // 관리자 전용 (2026-10-12 — 전에는 '수집 · 연결 설정' 권한)
 
         // ---------- 값 다듬기 (서버 _inbound.js 와 같은 규칙) ----------
         const inbDigits = (v) => String(v || '').replace(/\D/g, '');

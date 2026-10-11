@@ -61,8 +61,8 @@
  *
  * 인바운드 수집 (2026-10-08 · 소스별 가져오기는 _inbound.js)
  *   POST /api/inbound/form[?dry=1]  홈페이지 문의 폼이 보냅니다 — 로그인 없음 · 허용 사이트(Origin)만. dry=1 이면 저장하지 않고 정리 결과만
- *   GET  /api/inbound/status        설정 · 비밀 값을 넣었는지 · 자동 수집 결과     (인바운드 수집 권한)
- *   POST /api/inbound/preview       { source, settings? } 소스에서 가져와 미리보기 — 저장하지 않습니다 (인바운드 수집 권한)
+ *   GET  /api/inbound/status        설정 · 비밀 값을 넣었는지 · 자동 수집 결과     (관리자)
+ *   POST /api/inbound/preview       { source, settings? } 소스에서 가져와 미리보기 — 저장하지 않습니다 (관리자)
  *   POST /api/inbound/secret        { name, value } 비밀 값 저장 · value '' 이면 지움 (관리자)
  */
 
@@ -368,8 +368,8 @@ export async function onRequest(context) {
                 return json(200, { ok: true });
             }
 
-            // 여기부터는 인바운드 수집 권한 (관리자는 늘 통과)
-            const who = await requirePerm(env, store, request, ['inbound-sources']);
+            // 여기부터는 관리자만 — 수집 · 연결 / 경로 분석 / 배정 규칙은 관리자 전용 (UAT 2026-10-12, 전에는 'inbound-sources' 권한)
+            const who = await requireAdmin(env, store, request);
             if (who.error) return who.error;
 
             if (path === '/api/inbound/status' && method === 'GET') {
