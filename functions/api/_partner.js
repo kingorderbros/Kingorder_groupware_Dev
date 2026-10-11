@@ -311,7 +311,7 @@ function appended(serverArr, incomingArr, max, okEntry) {
 }
 const DEV_PARTNER_STEPS = ['received', 'working', 'hold', 'review'];
 const INBOUND_VENDOR_FIELDS = ['inDate', 'routes', 'services', 'company', 'name', 'bizNo', 'phone', 'email', 'firstContactAt', 'requestNote', 'needs'];
-const INTAKE_STAFF_FIELDS = ['rejectKind', 'rejectAlt', 'holdReason', 'payStatus', 'taxInvoice', 'payMemo', 'method', 'deptWork', 'siteConfirm',
+const INTAKE_STAFF_FIELDS = ['rejectKind', 'rejectAlt', 'holdReason', 'payStatus', 'taxInvoice', 'payMemo', 'method', 'deptWork', 'siteConfirm', 'salesApproval',
                              'workId', 'workAt', 'adminEditedAt', 'adminEditedBy'];
 
 function mergeExisting(key, server, incoming, me) {

@@ -52678,19 +52678,14 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             '저축은행', '미래에셋증권', '한국투자증권', 'NH투자증권', 'KB증권', '삼성증권', '키움증권'
         ];
         const PARTNER_CMS_FIELDS = [
-            // 종이 신청서의 머리말과 **수납업체 고정정보** — 받는 값이 아니라 보여 주는 것입니다
-            { key: 'cmsHead', label: '유지보수 관리비 CMS자동이체 신청서', type: 'note',
-              sub: '기존 종이 신청서와 <b>같은 항목</b>입니다 — 여기서 접수하면 현장에서 따로 받지 않습니다.',
-              rows: [['수납업체', '주식회사 킹오더브라더스'], ['사업자번호', '685-88-01297'],
-                     ['대표자명', '송기진'], ['수납목적', '하드웨어 및 서버 유지보수'],
-                     ['주소', '서울시 용산구 한강대로 109, 19층']],
-              showIf: PARTNER_CMS_ONLY },
+            // 2026-10-12 UAT — CMS 청구 대상을 고르면 **이용 요금(월, 기본)을 먼저** 적고, 배달연동은 그 아래에서 고릅니다.
+            // 요금 · 배달연동 · 월 청구액을 신청서 머리말(수납업체 정보)보다 위로 올렸습니다.
+            { key: 'cmsFee', label: '이용 요금(월, 기본)', type: 'number', required: true, noSum: true,
+              min: 0, placeholder: '11000', showIf: PARTNER_CMS_ONLY },
             { key: 'cmsDelivery', label: '배달연동 서비스', type: 'radio', required: true, noSum: true,
               reloadFields: true,
               options: [{ id: 'yes', name: '신청 (월 10,000원 가산)' }, { id: 'no', name: '미신청' }],
               showIf: PARTNER_CMS_ONLY },
-            { key: 'cmsFee', label: '이용 요금(월, 기본)', type: 'number', required: true, noSum: true,
-              min: 0, placeholder: '11000', showIf: PARTNER_CMS_ONLY },
             // 실제 청구액 — 기본 요금에 배달연동을 더한 값이 그대로 빠져나갑니다.
             // 사람이 또 계산해 적게 두면 틀립니다.
             { key: 'cmsFeeTotal', label: '월 청구액', type: 'calc', noSum: true,
@@ -52703,6 +52698,13 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                            text: sum ? `월 ${partnerWon(sum)}원` : '기본 요금을 입력해 주세요',
                            note: add ? `기본 ${partnerWon(base)} + 배달연동 ${partnerWon(add)}` : '' };
               } },
+            // 종이 신청서의 머리말과 **수납업체 고정정보** — 받는 값이 아니라 보여 주는 것입니다
+            { key: 'cmsHead', label: '유지보수 관리비 CMS자동이체 신청서', type: 'note',
+              sub: '기존 종이 신청서와 <b>같은 항목</b>입니다 — 여기서 접수하면 현장에서 따로 받지 않습니다.',
+              rows: [['수납업체', '주식회사 킹오더브라더스'], ['사업자번호', '685-88-01297'],
+                     ['대표자명', '송기진'], ['수납목적', '하드웨어 및 서버 유지보수'],
+                     ['주소', '서울시 용산구 한강대로 109, 19층']],
+              showIf: PARTNER_CMS_ONLY },
             { key: 'cmsApplicant', label: '신청인', type: 'text', required: true, noSum: true,
               showIf: PARTNER_CMS_ONLY },
             { key: 'cmsApplicantTel', label: '신청인 연락처', type: 'tel', required: true, noSum: true,
@@ -58697,6 +58699,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                             <button type="button" onclick="assignPartnerIntakeToMe('${x.id}')" class="px-3 py-2 bg-white border border-teal-300 text-teal-700 rounded text-sm font-semibold">내가 처리</button>
                         </div>
                     </div>
+                    ${partnerDonateApprovalHtml(x)}
                     ${partnerSiteConfirmHtml(x)}
                     ${partnerInstallRequestHtml(x)}
                     ${partnerMethodPickHtml(x)}
@@ -59031,8 +59034,66 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             return { id: `ox-${cust.id}`, cust };
         }
 
+        // ---------- 무상 장비 지원 — 영업본부 확인 (UAT 2026-10-12) ----------
+        // 무상 지원은 장비비용 · 위약금을 우리가 떠안는 건이라, 영업본부가 내용(지원 비율 · 사유)을 확인해야 운영본부로 넘어갑니다.
+        // x.salesApproval = { by, at, memo } — 없으면 [운영본부에 설치 요청] 을 막습니다. 운영으로 넘기기 전에는 확인을 거둘 수 있습니다.
+        // 서버(_partner.js)는 이 값을 파트너가 못 쓰게 직원 전용 칸(INTAKE_STAFF_FIELDS)에 넣었습니다.
+        function partnerNeedsSalesApproval(x) { return !!x && x.dept === 'sales' && x.type === 'donate'; }
+        function partnerDonateApprovalHtml(x) {
+            if (!partnerNeedsSalesApproval(x)) return '';
+            const ap = x.salesApproval;
+            const mine = canHandlePartnerIntake('sales');
+            if (ap) {
+                return `<div class="rounded border border-blue-200 bg-blue-50/60 p-3">
+                    <p class="text-blue-800 font-semibold"><i class="fas fa-circle-check mr-1"></i>영업본부 확인 완료 <span class="text-xs font-normal text-gray-500">— ${escapeHtml(ap.by || '')} · ${escapeHtml(ap.at || '')}</span></p>
+                    ${ap.memo ? `<p class="text-sm text-gray-700 mt-1">${escapeHtml(ap.memo)}</p>` : ''}
+                    ${mine && !x.workId ? `<div class="flex justify-end mt-1"><button type="button" onclick="cancelDonateApproval('${x.id}')" class="text-xs text-gray-500 hover:text-red-600 underline">확인 취소</button></div>` : ''}
+                </div>`;
+            }
+            return `<div class="rounded border border-amber-300 bg-amber-50 p-3">
+                <p class="text-amber-900 font-semibold"><i class="fas fa-user-check mr-1"></i>영업본부 확인 필요</p>
+                <p class="text-xs text-amber-800 mt-0.5 mb-2">무상 장비 지원은 <b>영업본부가 지원 비율 · 사유를 확인한 뒤</b> 운영본부로 넘어갑니다. 확인 전에는 설치 요청을 할 수 없습니다.</p>
+                ${mine ? `<div class="flex flex-wrap gap-2">
+                    <input type="text" id="pi-donate-memo" class="flex-1 min-w-[200px] p-2 border border-gray-300 rounded text-sm" placeholder="확인 메모 (선택) — 예: 장비비 100% 지원 승인, 3년 약정 확인" />
+                    <button type="button" onclick="approveDonateIntake('${x.id}')" class="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded text-sm font-semibold whitespace-nowrap"><i class="fas fa-check mr-1"></i>영업본부 확인 완료</button>
+                </div>
+                <p class="text-[11px] text-gray-500 mt-1">지원이 어려우면 위쪽 상태에서 반려해 주세요.</p>` : '<p class="text-[11px] text-gray-500">영업본부 담당자만 확인할 수 있습니다.</p>'}
+            </div>`;
+        }
+        function approveDonateIntake(id) {
+            const x = partnerIntakeById(id);
+            if (!partnerNeedsSalesApproval(x)) return;
+            if (!canHandlePartnerIntake('sales')) { alert('영업본부 담당자만 확인할 수 있습니다.'); return; }
+            const memo = String((document.getElementById('pi-donate-memo') || {}).value || '').trim();
+            x.salesApproval = { by: currentUserName || '', at: partnerNowStamp(), memo };
+            if (x.status === 'received') x.status = 'working';
+            (x.history = x.history || []).push({ at: partnerNowStamp(), by: currentUserName || '', text: '영업본부 확인 완료 — 무상 장비 지원' + (memo ? ` · ${memo}` : '') });
+            if (!savePartnerIntakes()) return;
+            refreshPartnerCenterViews();
+            openPartnerIntakeModal(id);
+            showAppToast('영업본부 확인을 남겼습니다. 이제 운영본부에 설치 요청을 할 수 있습니다.', 'green');
+        }
+        function cancelDonateApproval(id) {
+            const x = partnerIntakeById(id);
+            if (!x || !x.salesApproval || x.workId) return;
+            if (!canHandlePartnerIntake('sales')) return;
+            if (!confirm('영업본부 확인을 취소할까요? 다시 확인하기 전까지 운영본부에 설치 요청을 할 수 없습니다.')) return;
+            delete x.salesApproval;
+            (x.history = x.history || []).push({ at: partnerNowStamp(), by: currentUserName || '', text: '영업본부 확인 취소' });
+            if (!savePartnerIntakes()) return;
+            refreshPartnerCenterViews();
+            openPartnerIntakeModal(id);
+        }
+
         function partnerInstallRequestHtml(x) {
             if (!partnerCanRequestInstall(x)) return '';
+            // 무상 장비 지원은 영업본부 확인 뒤에만 (UAT 2026-10-12)
+            if (partnerNeedsSalesApproval(x) && !x.salesApproval && !x.workId) {
+                return `<div class="rounded border border-gray-200 bg-gray-50 p-3">
+                    <p class="text-gray-600 font-semibold mb-1"><i class="fas fa-gears mr-1"></i>운영본부 설치 요청</p>
+                    <p class="text-xs text-gray-500"><i class="fas fa-lock mr-1"></i>영업본부 확인을 마치면 요청할 수 있습니다.</p>
+                </div>`;
+            }
             const done = !!x.workId;
             const rows = partnerSiteRowsOf(x);
             const miss = rows.filter(r => !r.ok).length;
@@ -59060,6 +59121,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             if (!x || !partnerCanRequestInstall(x)) return;
             if (!canHandleIntake(x)) { alert('이 접수를 처리할 권한이 없습니다.'); return; }
             if (x.workId) { alert(`이미 ${x.workId} 로 넘긴 접수입니다.`); return; }
+            if (partnerNeedsSalesApproval(x) && !x.salesApproval) { alert('무상 장비 지원은 영업본부 확인을 마친 뒤 운영본부로 넘길 수 있습니다.'); return; }
             const ex = x.extra || {};
             const devices = partnerInstallDevicesText(x) || '장비';
             const rows = partnerSiteRowsOf(x);

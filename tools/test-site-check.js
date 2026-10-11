@@ -143,7 +143,9 @@ console.log('\n[9] 넘긴 업무가 업무센터에서 실제로 보이는지 (�
     ok(/customerIdCounter\+\+/.test(seg), '고객 번호를 이어서 쓴다');
 
     const ri = html.indexOf('function requestInstallFromIntake(');
-    const rSeg = html.slice(ri, ri + 3500);
+    // 함수 끝까지 읽습니다 (고정 길이로 자르면 앞에 줄이 늘 때 뒤쪽 확인이 빠집니다 — 2026-10-12)
+    const rEnd = html.indexOf('\n        function ', ri + 10);
+    const rSeg = html.slice(ri, rEnd > ri ? rEnd : ri + 6000);
     ok(/const link = linkIntakeCustomer\(x\)/.test(rSeg), '업무를 만들기 전에 고객을 잇는다');
     ok(/customerId: link\.id/.test(rSeg), '업무에 그 고객을 연결한다 (이게 비면 조회가 안 됨)');
     ok(/if \(!link\.id\)/.test(rSeg), '가맹점명·사업자번호가 없으면 넘기지 않고 알려 준다');
