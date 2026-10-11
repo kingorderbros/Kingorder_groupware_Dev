@@ -14271,11 +14271,13 @@ const QUOTE_TEMPLATES = [
                         ${transferBtn}
                     </div>`;
             } else if (mode === 'inbox' && req.status === 'hold') {
-                // 보류 중인 건도 다른 담당자/부서로 넘길 수 있게 합니다
-                actions = transferBtn ? `<div class="flex flex-wrap gap-1.5 mt-3 pt-3 border-t border-dashed border-gray-200 items-center">
+                // 보류 → 수락 · 거절 · 이관으로 바꿀 수 있고, 내용을 고칠 수 있습니다 (UAT 2026-10-12)
+                actions = `<div class="flex flex-wrap gap-1.5 mt-3 pt-3 border-t border-dashed border-gray-200 items-center">
+                        <button type="button" onclick="openCollabAcceptModal('${req.id}')" class="px-3 py-1 bg-green-500 hover:bg-green-600 text-white rounded text-xs font-semibold">✓ ${isDirective(req) ? '지시 확인' : '수락'}</button>
+                        <button type="button" onclick="openCollabReasonModal('${req.id}', 'reject')" class="px-3 py-1 bg-red-500 hover:bg-red-600 text-white rounded text-xs font-semibold">✕ 거절</button>
                         ${transferBtn}
-                        <span class="text-xs text-gray-400">보류 중 · 담당 변경이 필요하면 이관하세요</span>
-                    </div>` : '';
+                        ${collabHoldEditButtons(req)}
+                    </div>`;
             } else if (mode === 'inbox' && req.status === 'accepted') {
                 // 요청받은 부서: 완료 처리 버튼 + (지연 확인요청이 오면) 지연사유 답변 버튼
                 let delayBtn = '';
@@ -14308,6 +14310,12 @@ const QUOTE_TEMPLATES = [
                         ${transferBtn}
                         ${delayBtn}
                         ${dueNote}
+                    </div>`;
+            } else if (mode === 'outbox' && req.status === 'hold') {
+                // 요청자 — 보류된 요청의 내용을 고쳐 다시 판단을 받습니다 (UAT 2026-10-12)
+                actions = `<div class="flex flex-wrap gap-1.5 mt-3 pt-3 border-t border-dashed border-gray-200 items-center">
+                        ${collabHoldEditButtons(req)}
+                        <span class="text-xs text-gray-400">보류 중 · 보류 사유를 보고 내용을 고치면 수신자에게 알림이 갑니다</span>
                     </div>`;
             } else if (mode === 'outbox' && (overdue || hasPendingScheduleChange(req))) {
                 // 요청한 부서: ① 지연된 요청에 지연사유 확인요청 ② 담당자가 올린 일정 변경 요청 확인
@@ -15937,6 +15945,7 @@ const QUOTE_TEMPLATES = [
                 html += `<div class="${boxCls} border rounded p-3">
                     <p class="${txtCls} font-semibold mb-1">${req.status === 'rejected' ? '거절' : '보류'} 사유</p>
                     <p class="text-gray-800 whitespace-pre-line">${escapeHtml(req.reason)}</p>
+                    ${req.status === 'hold' ? `<div class="flex flex-wrap gap-1.5 mt-2">${collabHoldEditButtons(req)}</div>` : ''}
                 </div>`;
             } else if (req.status === 'pending') {
                 const aged = (req.ageDays || 0) >= 3;
@@ -16203,6 +16212,110 @@ const QUOTE_TEMPLATES = [
         function collabTransferBadge(req) {
             const n = (req.transfers || []).length;
             return n ? `<span class="text-[11px] font-semibold rounded px-1.5 py-0.5 bg-indigo-50 text-indigo-600 border border-indigo-100"><i class="fas fa-share-from-square mr-0.5"></i>이관 ${n}회</span>` : '';
+        }
+
+        // ==================== 보류 중인 요청 — 내용 수정 · 수정 이력 (UAT 2026-10-12) ====================
+        // 보류된 요청은 요청자(발행한 사람)와 수신자(담당자, 담당자가 없으면 수신 부서)가 제목 · 내용을 고칠 수 있습니다.
+        // 고칠 때마다 req.edits 에 { at, by, role, changes: [{ label, from, to }] } 로 남기고, 상대에게 알립니다.
+        // 보류 상태는 받은 요청 카드에서 수락 · 거절 · 이관으로 바꿉니다.
+        function collabRoleOf(req) {
+            if (!req) return '';
+            if (req.assignee && req.assignee === currentUserName) return 'requester';
+            if (req.assigneeUser ? req.assigneeUser === currentUserName : currentUserDept === req.targetDept) return 'receiver';
+            return canManageAllData() ? 'admin' : '';
+        }
+        function canEditCollabHold(req) { return !!req && req.status === 'hold' && !!collabRoleOf(req); }
+        function collabHoldEditButtons(req) {
+            const n = (req.edits || []).length;
+            return (canEditCollabHold(req) ? `<button type="button" onclick="event.stopPropagation(); openCollabEditModal('${req.id}')" class="px-3 py-1 bg-white border border-yellow-400 text-yellow-800 hover:bg-yellow-50 rounded text-xs font-semibold">✏️ 내용 수정</button>` : '')
+                + (n ? `<button type="button" onclick="event.stopPropagation(); openCollabEditHistory('${req.id}')" class="px-3 py-1 bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 rounded text-xs">🕘 수정 이력 ${n}</button>` : '');
+        }
+        function ensureCollabEditModals() {
+            if (document.getElementById('collab-edit-modal')) return;
+            document.body.insertAdjacentHTML('beforeend', `
+                <div id="collab-edit-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4">
+                    <form onsubmit="submitCollabEdit(event)" class="bg-white w-full max-w-lg rounded-lg shadow-xl p-5 max-h-[90vh] overflow-y-auto">
+                        <div class="flex items-center justify-between mb-3">
+                            <h3 class="text-lg font-bold text-gray-800"><i class="fas fa-pen-to-square text-yellow-500 mr-1"></i>보류 요청 내용 수정</h3>
+                            <button type="button" onclick="closeCollabEditModal()" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times"></i></button>
+                        </div>
+                        <input type="hidden" id="collab-edit-id" />
+                        <div id="collab-edit-reason" class="mb-3 text-sm bg-yellow-50 border border-yellow-200 rounded p-2.5 text-yellow-900"></div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">제목</label>
+                        <input type="text" id="collab-edit-title" required class="w-full p-2 mb-3 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-yellow-500" />
+                        <label class="block text-sm font-medium text-gray-700 mb-1">요청 내용</label>
+                        <textarea id="collab-edit-desc" rows="6" class="w-full p-2 mb-3 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-yellow-500"></textarea>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">수정 메모 <span class="text-gray-400 font-normal">(무엇을 왜 고쳤는지 · 선택)</span></label>
+                        <input type="text" id="collab-edit-note" class="w-full p-2 mb-4 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-yellow-500" placeholder="예: 대상 매장 2곳 추가, 일정은 다음 주로 조정" />
+                        <div class="flex justify-end gap-2">
+                            <button type="button" onclick="closeCollabEditModal()" class="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 text-sm">닫기</button>
+                            <button type="submit" class="px-4 py-2 bg-yellow-500 hover:bg-yellow-600 text-white rounded text-sm font-semibold">수정 저장</button>
+                        </div>
+                    </form>
+                </div>
+                <div id="collab-history-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4" onclick="if(event.target===this)this.classList.add('hidden')">
+                    <div class="bg-white w-full max-w-lg rounded-lg shadow-xl p-5 max-h-[85vh] overflow-y-auto">
+                        <div class="flex items-center justify-between mb-3">
+                            <h3 class="text-lg font-bold text-gray-800"><i class="fas fa-clock-rotate-left text-gray-500 mr-1"></i>수정 이력</h3>
+                            <button type="button" onclick="document.getElementById('collab-history-modal').classList.add('hidden')" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times"></i></button>
+                        </div>
+                        <div id="collab-history-body"></div>
+                    </div>
+                </div>`);
+        }
+        function openCollabEditModal(id) {
+            const req = collabRequests.find(r => r.id === id);
+            if (!canEditCollabHold(req)) { alert('보류 중인 요청의 요청자 · 수신자만 내용을 고칠 수 있습니다.'); return; }
+            ensureCollabEditModals();
+            document.getElementById('collab-edit-id').value = id;
+            document.getElementById('collab-edit-title').value = req.title || '';
+            document.getElementById('collab-edit-desc').value = req.description || '';
+            document.getElementById('collab-edit-note').value = '';
+            document.getElementById('collab-edit-reason').innerHTML = `<b>보류 사유</b> · ${escapeHtml(req.reason || '-')}`;
+            document.getElementById('collab-edit-modal').classList.remove('hidden');
+        }
+        function closeCollabEditModal() { const m = document.getElementById('collab-edit-modal'); if (m) m.classList.add('hidden'); }
+        function submitCollabEdit(event) {
+            event.preventDefault();
+            const req = collabRequests.find(r => r.id === document.getElementById('collab-edit-id').value);
+            if (!canEditCollabHold(req)) { alert('수정 권한이 없습니다.'); return; }
+            const next = { title: document.getElementById('collab-edit-title').value.trim(), description: document.getElementById('collab-edit-desc').value };
+            const note = document.getElementById('collab-edit-note').value.trim();
+            const changes = [['title', '제목'], ['description', '요청 내용']]
+                .filter(([k]) => String(req[k] || '') !== String(next[k] || ''))
+                .map(([k, label]) => ({ field: k, label, from: String(req[k] || ''), to: String(next[k] || '') }));
+            if (!changes.length && !note) { alert('바뀐 내용이 없습니다.'); return; }
+            const now = new Date();
+            const role = collabRoleOf(req);
+            changes.forEach(c => { req[c.field] = c.to; });
+            (req.edits = req.edits || []).push({ at: `${ymd(now)} ${hhmm(now)}`, by: currentUserName || '', role, changes, note });
+            // 상대에게 알림 — 요청자가 고쳤으면 수신자에게, 수신자가 고쳤으면 요청자에게
+            const toReceiver = role !== 'receiver';
+            pushNotification({
+                id: 'cnoti_' + collabNotiIdCounter++, type: 'collab-requested', ticketId: req.id, title: req.title,
+                toUser: toReceiver ? (req.assigneeUser || '') : (req.assignee || ''), toDept: toReceiver ? req.targetDept : req.sourceDept,
+                detail: `보류 중인 요청을 ${currentUserName || ''} 님이 고쳤습니다${changes.length ? ' (' + changes.map(c => c.label).join(' · ') + ')' : ''}${note ? ' — ' + note : ''}`,
+                date: ymd(now)
+            });
+            closeCollabEditModal();
+            renderCollabCenter();
+            if (typeof showAppToast === 'function') showAppToast('보류 요청의 내용을 고쳤습니다. 상대에게 알림이 갔습니다.', 'green');
+        }
+        function openCollabEditHistory(id) {
+            const req = collabRequests.find(r => r.id === id);
+            if (!req) return;
+            ensureCollabEditModals();
+            const roleName = { requester: '요청자', receiver: '수신자', admin: '관리자' };
+            const list = (req.edits || []).slice().reverse();
+            document.getElementById('collab-history-body').innerHTML = `<p class="text-sm text-gray-600 mb-3"><b>${escapeHtml(req.title)}</b>${req.reason ? ` · 보류 사유: ${escapeHtml(req.reason)}` : ''}</p>`
+                + (list.length ? list.map(e => `<div class="border border-gray-200 rounded p-3 mb-2">
+                        <p class="text-xs text-gray-500 mb-1.5"><b class="text-gray-700">${escapeHtml(e.by)}</b> (${roleName[e.role] || '-'}) · ${escapeHtml(e.at)}</p>
+                        ${e.note ? `<p class="text-sm text-gray-800 mb-1.5"><i class="fas fa-comment-dots text-gray-400 mr-1"></i>${escapeHtml(e.note)}</p>` : ''}
+                        ${(e.changes || []).map(c => `<div class="text-xs mb-1"><p class="font-semibold text-gray-600">${escapeHtml(c.label)}</p>
+                            <p class="text-red-700 bg-red-50 rounded px-2 py-1 line-through whitespace-pre-line">${escapeHtml(c.from || '(비어 있음)')}</p>
+                            <p class="text-green-800 bg-green-50 rounded px-2 py-1 mt-0.5 whitespace-pre-line">${escapeHtml(c.to || '(비어 있음)')}</p></div>`).join('')}
+                    </div>`).join('') : '<p class="text-sm text-gray-400">수정 이력이 없습니다.</p>');
+            document.getElementById('collab-history-modal').classList.remove('hidden');
         }
 
         function openCollabReasonModal(id, type) { document.getElementById('collab-reason-modal').classList.remove('hidden'); document.getElementById('reason-task-id').value = id; document.getElementById('reason-type').value = type; document.getElementById('reason-modal-title').innerText = type === 'reject' ? '협업 요청 거절' : '협업 요청 보류'; }
