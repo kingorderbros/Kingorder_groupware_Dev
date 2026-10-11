@@ -38962,6 +38962,80 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             saveOrgRemovedSeedIds(); saveOrgDepts();
             syncOrgAll();
         }
+        // ==================== 본부 코드 정리 (1회용 · 2026-10-12) ====================
+        // dev 조직에서 기본 IT본부 자리(코드 'it')의 이름을 '관리본부' 로 바꿔 쓰고, IT본부를 새 코드(dept1)로 만든 상태를
+        // 원래대로 되돌립니다:  it(관리본부) → mgmt(관리본부) ,  dept1(IT본부) → it(IT본부)
+        // 코드 'it' · 'mgmt' 에 묶인 기능(개발요청 담당 · 관리본부 기능 isMgmtDept · IT 그룹 기본값)이 제 본부를 가리키게 됩니다.
+        // 콘솔에서  kobFixDeptCodes()  → 미리보기(바뀔 것 목록), 확인 후  kobFixDeptCodes(true)  → 실제로 바꾸고 저장.
+        // 개발요청 알림(dev-*)의 toDept 'it' 는 원래 IT본부 뜻이라 그대로 둡니다.
+        function kobFixDeptCodes(apply) {
+            const itD = orgFindDept('it'), d1 = orgFindDept('dept1');
+            if (!itD || !d1 || !/관리/.test(itD.name) || !/IT/i.test(d1.name)) {
+                return `정리할 상태가 아닙니다 — it: ${itD ? itD.name : '없음'} · dept1: ${d1 ? d1.name : '없음'} (it=관리본부 · dept1=IT본부 일 때만 동작)`;
+            }
+            if (apply && !isSystemAdmin()) return '관리자만 실행할 수 있습니다.';
+            const MAP = { it: 'mgmt', dept1: 'it' };
+            const stores = [
+                ['구성원', () => localUsers, saveLocalUsers], ['팀', () => orgTeams, saveOrgTeams],
+                ['일정', () => schedules, saveSchedules], ['프로젝트', () => projects, saveProjects],
+                ['협업요청', () => collabRequests, saveCollabRequests], ['알림', () => collabNotifications, saveNotifications],
+                ['자부서 업무', () => localTasks, saveLocalTasks], ['할 일', () => myTodos, saveMyTodos],
+                ['일정 조회 예외', () => calendarUserOverrides, saveCalendarPermissions], ['협업 조회 예외', () => collabUserOverrides, saveCollabPermissions],
+                ['업무센터 업무', () => Object.values(WORK_CENTERS).flatMap(c => c.works || []), saveWorks]
+            ];
+            const changes = [];
+            const label = (o) => (o && (o.name || o.title || o.id)) || '';
+            const walk = (o, store, top, isNoti) => {
+                if (Array.isArray(o)) { o.forEach(x => walk(x, store, top || x, isNoti)); return; }
+                if (!o || typeof o !== 'object') return;
+                const dev = isNoti && /^dev/.test(String(o.type || ''));
+                Object.keys(o).forEach(k => {
+                    const v = o[k];
+                    if (/dept/i.test(k)) {
+                        const conv = (x) => (typeof x === 'string' && MAP[x] && !(dev && x === 'it')) ? MAP[x] : x;
+                        if (Array.isArray(v)) {
+                            const nv = v.map(conv);
+                            if (nv.some((x, i) => x !== v[i])) { changes.push(`${store} · ${label(top)} · ${k}: [${v}] → [${nv}]`); if (apply) o[k] = nv; }
+                        } else if (conv(v) !== v) {
+                            changes.push(`${store} · ${label(top)} · ${k}: ${v} → ${conv(v)}`); if (apply) o[k] = conv(v);
+                        }
+                    }
+                    if (v && typeof v === 'object') walk(v, store, top, isNoti);
+                });
+            };
+            const touched = new Set();
+            stores.forEach(([name, get, save]) => {
+                const before = changes.length;
+                const data = get();
+                if (Array.isArray(data)) data.forEach(x => walk(x, name, x, name === '알림'));
+                else walk(data, name, null, false);
+                if (changes.length > before) touched.add(save);
+            });
+            changes.unshift(`본부: it '${itD.name}' → mgmt '${itD.name}' (관리본부 되살림) · dept1 '${d1.name}' → it '${d1.name}' · dept1 지움`);
+            changes.push(`일정 구분: mgmt ← 관리 업무 구분 · it ← dept1 의 구분 · dept1 지움`);
+            if (!apply) {
+                console.log('[본부 코드 정리 미리보기]\n' + changes.join('\n'));
+                return `바뀔 것 ${changes.length}건 — 위 목록을 확인하고 kobFixDeptCodes(true) 로 실행하세요.`;
+            }
+            // 본부 마스터
+            const mgmtSeed = ORG_DEPT_SEED.find(d => d.id === 'mgmt') || { id: 'mgmt', order: 5, style: 'rose', system: true };
+            const newMgmt = Object.assign({}, itD, { id: 'mgmt', order: mgmtSeed.order, style: itD.style === 'cyan' ? mgmtSeed.style : itD.style, system: true });
+            const newIt = Object.assign({}, d1, { id: 'it', system: true, order: (ORG_DEPT_SEED.find(d => d.id === 'it') || {}).order || 6 });
+            orgDepts = orgDepts.filter(d => d.id !== 'it' && d.id !== 'dept1' && d.id !== 'mgmt').concat([newMgmt, newIt]);
+            orgRemovedSeedIds = orgRemovedSeedIds.filter(x => x !== 'mgmt' && x !== 'it');
+            // 일정 구분
+            const d1Types = scheduleTypesByDept.dept1;
+            scheduleTypesByDept.mgmt = (scheduleTypesByDept.mgmt && scheduleTypesByDept.mgmt.length) ? scheduleTypesByDept.mgmt : JSON.parse(JSON.stringify(DEFAULT_SCHEDULE_TYPES.mgmt));
+            scheduleTypesByDept.it = (d1Types && d1Types.length) ? d1Types : JSON.parse(JSON.stringify(DEFAULT_SCHEDULE_TYPES.it));
+            delete scheduleTypesByDept.dept1;
+            saveOrgRemovedSeedIds(); saveOrgDepts(); saveScheduleTypes();
+            touched.forEach(fn => { try { fn(); } catch (e) { console.error('[본부 코드 정리] 저장 실패', e); } });
+            rebuildDeptNames();
+            syncOrgAll();
+            if (typeof applyMenuPermissions === 'function') applyMenuPermissions();
+            console.log('[본부 코드 정리 완료]\n' + changes.join('\n'));
+            return `완료 — ${changes.length}건을 바꿨습니다. 관리본부 · IT본부 직원은 다시 로그인하면 바뀐 소속이 적용됩니다. 구글 캘린더 연동을 쓰면 [구글 캘린더 준비] 를 한 번 눌러 팀별 캘린더를 맞춰 주세요.`;
+        }
         function deleteOrgTeam(id) {
             const t = orgFindTeam(id);
             if (!t) return;
