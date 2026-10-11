@@ -6009,6 +6009,48 @@
                     </div>
                     <p id="schedule-time-hint" class="text-xs text-gray-500 mt-1">5분 단위로 시·분을 지정합니다. 시작 시간만 입력해도 됩니다.</p>
                 </div>
+                <!-- 반복 (2026-10-12) — 매일 · 평일 · 매주(요일) · 매월 · 매년, 간격 · 종료(없음 · 날짜 · 횟수) -->
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-1"><i class="fas fa-repeat mr-1 text-indigo-500"></i>반복</label>
+                    <select id="schedule-recur" onchange="onScheduleRecurChange()" class="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <option value="">반복 안 함</option>
+                        <option value="daily">매일</option>
+                        <option value="weekdays">평일마다 (월~금)</option>
+                        <option value="weekly">매주</option>
+                        <option value="monthly">매월</option>
+                        <option value="yearly">매년</option>
+                    </select>
+                    <div id="schedule-recur-opts" class="hidden mt-2 rounded border border-indigo-100 bg-indigo-50/40 p-3 space-y-2.5">
+                        <div id="schedule-recur-interval-row" class="flex items-center gap-2 text-sm text-gray-700">
+                            <span>매</span>
+                            <input type="number" id="schedule-recur-interval" min="1" max="99" value="1" oninput="updateScheduleRecurSummary()" class="w-16 p-1.5 border border-gray-300 rounded text-center" />
+                            <span id="schedule-recur-unit">일</span><span>마다</span>
+                        </div>
+                        <div id="schedule-recur-days-row" class="hidden">
+                            <p class="text-xs text-gray-500 mb-1">요일</p>
+                            <div id="schedule-recur-days" class="flex gap-1">
+                                <label class="cursor-pointer"><input type="checkbox" value="0" onchange="updateScheduleRecurSummary()" class="peer sr-only" /><span class="inline-flex w-8 h-8 items-center justify-center rounded-full border border-gray-300 bg-white text-sm text-red-500 peer-checked:bg-indigo-600 peer-checked:text-white peer-checked:border-indigo-600">일</span></label>
+                                <label class="cursor-pointer"><input type="checkbox" value="1" onchange="updateScheduleRecurSummary()" class="peer sr-only" /><span class="inline-flex w-8 h-8 items-center justify-center rounded-full border border-gray-300 bg-white text-sm text-gray-700 peer-checked:bg-indigo-600 peer-checked:text-white peer-checked:border-indigo-600">월</span></label>
+                                <label class="cursor-pointer"><input type="checkbox" value="2" onchange="updateScheduleRecurSummary()" class="peer sr-only" /><span class="inline-flex w-8 h-8 items-center justify-center rounded-full border border-gray-300 bg-white text-sm text-gray-700 peer-checked:bg-indigo-600 peer-checked:text-white peer-checked:border-indigo-600">화</span></label>
+                                <label class="cursor-pointer"><input type="checkbox" value="3" onchange="updateScheduleRecurSummary()" class="peer sr-only" /><span class="inline-flex w-8 h-8 items-center justify-center rounded-full border border-gray-300 bg-white text-sm text-gray-700 peer-checked:bg-indigo-600 peer-checked:text-white peer-checked:border-indigo-600">수</span></label>
+                                <label class="cursor-pointer"><input type="checkbox" value="4" onchange="updateScheduleRecurSummary()" class="peer sr-only" /><span class="inline-flex w-8 h-8 items-center justify-center rounded-full border border-gray-300 bg-white text-sm text-gray-700 peer-checked:bg-indigo-600 peer-checked:text-white peer-checked:border-indigo-600">목</span></label>
+                                <label class="cursor-pointer"><input type="checkbox" value="5" onchange="updateScheduleRecurSummary()" class="peer sr-only" /><span class="inline-flex w-8 h-8 items-center justify-center rounded-full border border-gray-300 bg-white text-sm text-gray-700 peer-checked:bg-indigo-600 peer-checked:text-white peer-checked:border-indigo-600">금</span></label>
+                                <label class="cursor-pointer"><input type="checkbox" value="6" onchange="updateScheduleRecurSummary()" class="peer sr-only" /><span class="inline-flex w-8 h-8 items-center justify-center rounded-full border border-gray-300 bg-white text-sm text-blue-500 peer-checked:bg-indigo-600 peer-checked:text-white peer-checked:border-indigo-600">토</span></label>
+                            </div>
+                        </div>
+                        <div class="text-sm text-gray-700">
+                            <p class="text-xs text-gray-500 mb-1">종료</p>
+                            <div class="flex flex-wrap items-center gap-x-4 gap-y-1.5">
+                                <label class="inline-flex items-center gap-1 cursor-pointer"><input type="radio" name="schedule-recur-end" value="never" checked onchange="updateScheduleRecurSummary()" />계속</label>
+                                <label class="inline-flex items-center gap-1 cursor-pointer"><input type="radio" name="schedule-recur-end" value="until" onchange="updateScheduleRecurSummary()" />날짜까지
+                                    <input type="date" id="schedule-recur-until" onchange="document.querySelector('[name=schedule-recur-end][value=until]').checked = true; updateScheduleRecurSummary()" class="p-1 border border-gray-300 rounded text-sm" /></label>
+                                <label class="inline-flex items-center gap-1 cursor-pointer"><input type="radio" name="schedule-recur-end" value="count" onchange="updateScheduleRecurSummary()" />
+                                    <input type="number" id="schedule-recur-count" min="1" max="999" value="10" oninput="document.querySelector('[name=schedule-recur-end][value=count]').checked = true; updateScheduleRecurSummary()" class="w-16 p-1 border border-gray-300 rounded text-center text-sm" />회</label>
+                            </div>
+                        </div>
+                        <p id="schedule-recur-summary" class="text-xs font-medium text-indigo-700"></p>
+                    </div>
+                </div>
                 <div class="mb-4">
                     <label class="block text-sm font-medium text-gray-700 mb-1">부서</label>
                     <select id="schedule-dept" onchange="onScheduleDeptChange()" class="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-500">
@@ -12071,7 +12113,7 @@ const QUOTE_TEMPLATES = [
             // 오늘 날짜 일정 — 기본은 본인 부서, 전사/크로스체크 범위(대표·본부장·관리자)면 전 부서
             const dashScope = getCalendarScopeFor(currentUserName, currentUserDept, currentUserLevel).scope;
             const seesAllDepts = dashScope === 'all' || dashScope === 'cross' || isSystemAdmin();
-            const todays = schedules
+            const todays = scheduleInstances()
                 // 캘린더 공유 규칙(개인 일정 비공개 / 공유 캘린더는 전 직원)을 먼저 적용
                 .filter(s => canViewSchedule(s))
                 .filter(s => s.date === today && (scheduleCalendar(s).share === 'all' || seesAllDepts || (s.dept || 'sales') === currentUserDept))
@@ -12227,7 +12269,7 @@ const QUOTE_TEMPLATES = [
             members.forEach(m => {
                 openTodoCnt += myTodos.filter(t => t.owner === m.name && !t.done).length;
                 // 팀원의 개인 캘린더 일정은 통합현황에서 제외 (본인만 조회 가능)
-                todaySchedCnt += schedules.filter(s => canViewSchedule(s) && s.salesperson === m.name && (s.dept || 'sales') === m.dept && s.date === todayStr).length;
+                todaySchedCnt += scheduleInstances().filter(s => canViewSchedule(s) && s.salesperson === m.name && (s.dept || 'sales') === m.dept && s.date === todayStr).length;
             });
             if (summary) {
                 summary.innerHTML = `
@@ -12254,7 +12296,7 @@ const QUOTE_TEMPLATES = [
                     return new Date(a.dueDate || '9999-12-31') - new Date(b.dueDate || '9999-12-31');
                 });
                 // 팀원별 예정 일정 (본인 부서 일정, 오늘 이후, 날짜순)
-                const scheds = schedules.filter(s => canViewSchedule(s) && s.salesperson === m.name && (s.dept || 'sales') === m.dept && s.date >= todayStr)
+                const scheds = scheduleInstances().filter(s => canViewSchedule(s) && s.salesperson === m.name && (s.dept || 'sales') === m.dept && s.date >= todayStr)
                     .slice().sort((a, b) => (new Date(a.date) - new Date(b.date)) || compareScheduleTime(a, b));
                 // 부서에서 할당된 진행중 업무 요청
                 const tasks = localTasks.filter(t => t.assignee === m.name && t.type === 'task' && t.status !== 'done');
@@ -16415,7 +16457,7 @@ const QUOTE_TEMPLATES = [
 
             // --- 오늘 일정 ---
             const today = ymd(new Date());
-            set('sdash-today-schedule', `${schedules.filter(s => canViewSchedule(s) && s.date === today && (s.dept || 'sales') === 'sales').length}건`);
+            set('sdash-today-schedule', `${scheduleInstances().filter(s => canViewSchedule(s) && s.date === today && (s.dept || 'sales') === 'sales').length}건`);
 
             // --- 갱신 임박 계약 ---
             const renewalEl = document.getElementById('sdash-renewal-list');
@@ -17066,7 +17108,7 @@ const QUOTE_TEMPLATES = [
         // 조회 범위에 따라 볼 수 있는 일정 목록. scopeInfo = { scope, depts }
         // 구성원 생일(전사일정)도 함께 넣습니다 (2026-09-28).
         function getVisibleSchedules(scopeInfo) {
-            return schedules.filter(s => canViewSchedule(s, scopeInfo)).concat(birthdaySchedules());
+            return scheduleInstances().filter(s => canViewSchedule(s, scopeInfo)).concat(birthdaySchedules());   // 반복 일정은 회차별로 (2026-10-12)
         }
 
         // ---------- 구성원 생일 → 전사일정 (2026-09-28) ----------
@@ -17103,9 +17145,108 @@ const QUOTE_TEMPLATES = [
             });
             return out;
         }
+        // ---------- 반복 일정 (2026-10-12) ----------
+        // 일정 한 줄에 s.recur = { freq, interval, days, end, until, count, exdates } 를 두고, 화면에 보일 때만 날짜별로 펼칩니다.
+        //   freq    : daily(매일) · weekdays(평일 월~금) · weekly(매주, days = 요일 0~6) · monthly(매월 같은 날) · yearly(매년 같은 날)
+        //   interval: n 일/주/월/년마다 (평일은 1 고정)
+        //   end     : never(계속) · until(그 날까지) · count(시작일 포함 n회)
+        //   exdates : 이 날짜만 지운 회차
+        // 펼친 회차의 id 는 '원래id~YYYY-MM-DD'. 수정은 반복 전체, 삭제는 '이 날만 / 전체' 를 고릅니다.
+        // 매월 31일처럼 그 달에 없는 날은 건너뜁니다(구글 캘린더와 같은 규칙). 2월 29일 매년은 윤년에만.
+        const RECUR_SEP = '~';
+        const RECUR_FREQS = { daily: '매일', weekdays: '평일마다', weekly: '매주', monthly: '매월', yearly: '매년' };
+        function scheduleMasterId(id) { const t = String(id || ''); const i = t.indexOf(RECUR_SEP); return i > 0 ? t.slice(0, i) : t; }
+        function isRecurring(s) { return !!(s && s.recur && RECUR_FREQS[s.recur.freq]); }
+        function recurLabel(r) {
+            if (!r || !RECUR_FREQS[r.freq]) return '';
+            const n = Math.max(1, Number(r.interval) || 1);
+            const unit = { daily: '일', weekly: '주', monthly: '개월', yearly: '년' }[r.freq];
+            let t = r.freq === 'weekdays' ? '평일마다 (월~금)' : (n > 1 ? `${n}${unit}마다` : RECUR_FREQS[r.freq]);
+            if (r.freq === 'weekly' && (r.days || []).length) t += ' ' + r.days.slice().sort().map(d => '일월화수목금토'[d]).join('·');
+            if (r.end === 'until' && r.until) t += ` · ${r.until}까지`;
+            else if (r.end === 'count' && r.count) t += ` · ${r.count}회`;
+            return t;
+        }
+        // from ~ to 사이의 회차 날짜들 (시작일 포함, 지운 날 제외)
+        function recurDates(s, from, to) {
+            const r = s.recur;
+            if (!isRecurring(s) || !s.date) return [];
+            const out = [];
+            const pad = n => String(n).padStart(2, '0');
+            const key = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+            const [y0, m0, d0] = s.date.split('-').map(Number);
+            const start = new Date(y0, m0 - 1, d0);
+            const n = r.freq === 'weekdays' ? 1 : Math.max(1, Number(r.interval) || 1);
+            const until = r.end === 'until' && r.until ? r.until : '';
+            const maxCount = r.end === 'count' ? Math.max(1, Number(r.count) || 1) : Infinity;
+            const ex = new Set(r.exdates || []);
+            const days = (r.freq === 'weekly' && (r.days || []).length) ? r.days.map(Number) : [start.getDay()];
+            let count = 0, guard = 0;
+            const push = (d) => {                    // 회차 하나 — 횟수는 지운 날도 셉니다(구글과 같음)
+                const k = key(d);
+                if (k < s.date) return true;
+                if (until && k > until) return false;
+                if (count >= maxCount) return false;
+                count++;
+                if (k > to) return false;
+                if (k >= from && !ex.has(k)) out.push(k);
+                return true;
+            };
+            if (r.freq === 'daily' || r.freq === 'weekdays') {
+                for (let d = new Date(start); guard++ < 20000; d.setDate(d.getDate() + n)) {
+                    if (r.freq === 'weekdays' && (d.getDay() === 0 || d.getDay() === 6)) continue;
+                    if (!push(new Date(d))) break;
+                }
+            } else if (r.freq === 'weekly') {
+                const week0 = new Date(start); week0.setDate(start.getDate() - start.getDay());   // 시작 주의 일요일
+                outer: for (let w = 0; guard++ < 5000; w += n) {
+                    for (const wd of days.slice().sort((a, b) => a - b)) {
+                        const d = new Date(week0); d.setDate(week0.getDate() + w * 7 + wd);
+                        if (!push(d)) break outer;
+                    }
+                }
+            } else if (r.freq === 'monthly' || r.freq === 'yearly') {
+                const step = r.freq === 'monthly' ? n : n * 12;
+                for (let i = 0; guard++ < 3000; i += step) {
+                    const d = new Date(y0, m0 - 1 + i, d0);
+                    if (d.getDate() !== d0) continue;     // 그 달에 없는 날(31일 · 2월 29일)은 건너뜀
+                    if (!push(d)) break;
+                }
+            }
+            return out;
+        }
+        // 화면에 펼칠 기간 — 오늘과 지금 보는 달 앞뒤로 넉넉히
+        function recurWindow() {
+            const pad = n => String(n).padStart(2, '0');
+            const k = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+            const base = [new Date(), (typeof currentDate !== 'undefined' && currentDate) ? new Date(currentDate) : new Date()];
+            const a = new Date(Math.min(...base.map(Number))); a.setDate(a.getDate() - 400);
+            const b = new Date(Math.max(...base.map(Number))); b.setDate(b.getDate() + 400);
+            return { from: k(a), to: k(b) };
+        }
+        function recurInstance(s, date) {
+            return date === s.date ? s : Object.assign({}, s, { id: s.id + RECUR_SEP + date, date, recurOf: s.id });
+        }
+        // 반복 일정을 날짜별로 펼친 목록 (반복이 아니면 그대로)
+        function expandRecurring(list) {
+            const w = recurWindow();
+            const out = [];
+            (list || []).forEach(s => {
+                if (!isRecurring(s)) { out.push(s); return; }
+                recurDates(s, w.from, w.to).forEach(d => out.push(recurInstance(s, d)));
+            });
+            return out;
+        }
+        function scheduleInstances() { return expandRecurring(schedules); }
         function findScheduleForView(id) {
+            const t = String(id || '');
+            if (t.indexOf(RECUR_SEP) > 0) {           // 반복 일정의 한 회차
+                const m = schedules.find(s => s.id === scheduleMasterId(t));
+                const date = t.slice(t.indexOf(RECUR_SEP) + 1);
+                return m ? recurInstance(m, date) : null;
+            }
             return schedules.find(s => s.id === id)
-                || (String(id).indexOf(BIRTHDAY_ID_PREFIX) === 0 ? birthdaySchedules().find(s => s.id === id) : null)
+                || (t.indexOf(BIRTHDAY_ID_PREFIX) === 0 ? birthdaySchedules().find(s => s.id === id) : null)
                 || null;
         }
 
@@ -17176,7 +17317,7 @@ const QUOTE_TEMPLATES = [
                 : `<span class="inline-block w-1.5 h-1.5 rounded-full mr-1 align-middle ${calendarDeptDot(s.dept)}"></span>`;
             const size = o.large ? 'px-2 py-1 text-xs sm:text-sm' : 'px-1.5 py-0.5 text-[10px] sm:text-xs';
             // 날짜 셀 전체가 '하루 요약' 클릭 영역이므로, 칩 클릭은 상세 모달만 열리도록 전파를 막는다
-            return `<div onclick="event.stopPropagation(); openScheduleDetailModal('${s.id}')" class="rounded truncate cursor-pointer hover:opacity-80 ${size} ${cal.chip}${dim}" title="${escapeHtml(tooltip)}">${timeHtml}${inviteIcon}${escapeHtml(s.title)}${isBirthdaySchedule(s) ? '' : ` <span class="opacity-70">(${escapeHtml(s.salesperson || '미지정')})</span>`}</div>`;
+            return `<div onclick="event.stopPropagation(); openScheduleDetailModal('${s.id}')" class="rounded truncate cursor-pointer hover:opacity-80 ${size} ${cal.chip}${dim}" title="${escapeHtml(tooltip)}">${timeHtml}${inviteIcon}${isRecurring(s) ? '<i class="fas fa-repeat text-[9px] opacity-60 mr-0.5" title="반복 일정"></i>' : ''}${escapeHtml(s.title)}${isBirthdaySchedule(s) ? '' : ` <span class="opacity-70">(${escapeHtml(s.salesperson || '미지정')})</span>`}</div>`;
         }
 
         // ==================== 하루 일정 요약 모달 ====================
@@ -18156,12 +18297,54 @@ const QUOTE_TEMPLATES = [
                 endTime: `${String((nextHour + 1) % 24).padStart(2, '0')}:00`
             });
             fillScheduleAttendees(null);
+            fillScheduleRecur(null);
         }
         function closeScheduleModal() {
             document.getElementById('schedule-modal').classList.add('hidden');
             document.getElementById('schedule-form').reset();
             document.getElementById('edit-schedule-id').value = '';
             scheduleDraftAttendees = [];
+        }
+        // ---------- 반복 입력칸 ----------
+        function onScheduleRecurChange() {
+            const f = document.getElementById('schedule-recur').value;
+            document.getElementById('schedule-recur-opts').classList.toggle('hidden', !f);
+            document.getElementById('schedule-recur-interval-row').classList.toggle('hidden', f === 'weekdays');
+            document.getElementById('schedule-recur-days-row').classList.toggle('hidden', f !== 'weekly');
+            document.getElementById('schedule-recur-unit').textContent = { daily: '일', weekly: '주', monthly: '개월', yearly: '년' }[f] || '';
+            // 매주를 처음 고르면 시작일의 요일을 켜 둡니다
+            if (f === 'weekly' && !document.querySelector('#schedule-recur-days input:checked')) {
+                const d = document.getElementById('schedule-date').value;
+                if (d) { const [y, m, dd] = d.split('-').map(Number); const box = document.querySelector(`#schedule-recur-days input[value="${new Date(y, m - 1, dd).getDay()}"]`); if (box) box.checked = true; }
+            }
+            updateScheduleRecurSummary();
+        }
+        function readScheduleRecur() {
+            const f = document.getElementById('schedule-recur').value;
+            if (!f) return null;
+            const end = (document.querySelector('[name="schedule-recur-end"]:checked') || {}).value || 'never';
+            const r = { freq: f, interval: f === 'weekdays' ? 1 : Math.min(99, Math.max(1, parseInt(document.getElementById('schedule-recur-interval').value, 10) || 1)), end };
+            if (f === 'weekly') r.days = Array.from(document.querySelectorAll('#schedule-recur-days input:checked')).map(x => Number(x.value));
+            if (end === 'until') r.until = document.getElementById('schedule-recur-until').value || '';
+            if (end === 'count') r.count = Math.min(999, Math.max(1, parseInt(document.getElementById('schedule-recur-count').value, 10) || 1));
+            return r;
+        }
+        function updateScheduleRecurSummary() {
+            const el = document.getElementById('schedule-recur-summary');
+            if (!el) return;
+            const r = readScheduleRecur();
+            el.textContent = r ? '🔁 ' + recurLabel(r) : '';
+        }
+        function fillScheduleRecur(s) {
+            const r = (s && s.recur) || null;
+            document.getElementById('schedule-recur').value = r ? r.freq : '';
+            document.getElementById('schedule-recur-interval').value = r ? (r.interval || 1) : 1;
+            document.querySelectorAll('#schedule-recur-days input').forEach(x => { x.checked = !!(r && (r.days || []).indexOf(Number(x.value)) > -1); });
+            const end = r ? (r.end || 'never') : 'never';
+            document.querySelectorAll('[name="schedule-recur-end"]').forEach(x => { x.checked = x.value === end; });
+            document.getElementById('schedule-recur-until').value = r && r.until ? r.until : '';
+            document.getElementById('schedule-recur-count').value = r && r.count ? r.count : 10;
+            onScheduleRecurChange();
         }
         function submitSchedule(event) {
             event.preventDefault();
@@ -18196,6 +18379,15 @@ const QUOTE_TEMPLATES = [
                 description: document.getElementById('schedule-description').value,
                 attendees: scheduleDraftAttendees.map(a => ({ ...a }))
             };
+            // 반복 — 확인하고 담습니다 (수정이면 지워 둔 회차는 그대로 이어 갑니다)
+            const recur = readScheduleRecur();
+            if (recur) {
+                if (recur.freq === 'weekly' && !(recur.days || []).length) { alert('매주 반복할 요일을 하나 이상 골라 주세요.'); return; }
+                if (recur.end === 'until' && (!recur.until || recur.until < data.date)) { alert('반복 종료일은 일정 날짜보다 뒤여야 합니다.'); return; }
+                const before = id ? schedules.find(s => s.id === id) : null;
+                if (before && before.recur && before.recur.exdates && before.date === data.date) recur.exdates = before.recur.exdates.slice();
+            }
+            data.recur = recur;
             if (id) {
                 const schedule = schedules.find(s => s.id === id);
                 if (schedule && !canEditSchedule(schedule)) { alert('등록한 사람 · 관리자 · 일정 대리 수정 권한자만 수정할 수 있습니다.'); return; }
@@ -18213,7 +18405,7 @@ const QUOTE_TEMPLATES = [
             const schedule = findScheduleForView(id);
             if (!schedule) return;
             document.getElementById('detail-schedule-title').innerText = schedule.title;
-            document.getElementById('detail-schedule-date').innerText = `${schedule.date} · ${scheduleTimeLabel(schedule)}`;
+            document.getElementById('detail-schedule-date').innerText = `${schedule.date} · ${scheduleTimeLabel(schedule)}` + (isRecurring(schedule) ? `\n🔁 ${recurLabel(schedule.recur)} (시작 ${(schedules.find(x => x.id === scheduleMasterId(schedule.id)) || schedule).date})` : '');
             // 캘린더 구성 + 진행상황
             const sCal = scheduleCalendar(schedule);
             document.getElementById('detail-schedule-calendar').innerHTML =
@@ -18256,7 +18448,7 @@ const QUOTE_TEMPLATES = [
         // 상세 모달의 참석자 목록 + 내 응답 영역
         let detailScheduleId = '';
         function renderScheduleAttendeeDetail(schedule) {
-            detailScheduleId = schedule.id;
+            detailScheduleId = scheduleMasterId(schedule.id);   // 반복 회차면 원래 일정에 응답합니다
             const list = scheduleAttendees(schedule);
             const row = document.getElementById('detail-schedule-attendees-row');
             const box = document.getElementById('detail-schedule-attendees');
@@ -18357,6 +18549,7 @@ const QUOTE_TEMPLATES = [
         function closeScheduleDetailModal() { document.getElementById('schedule-detail-modal').classList.add('hidden'); }
         function editSchedule(id) {
             closeScheduleDetailModal();
+            id = scheduleMasterId(id);                 // 반복 회차를 눌렀어도 반복 전체를 고칩니다
             const schedule = schedules.find(s => s.id === id);
             if (!schedule) return;
             if (!canEditSchedule(schedule)) { alert('조회 권한만 있는 일정입니다. 수정할 수 없습니다.'); return; }
@@ -18374,12 +18567,35 @@ const QUOTE_TEMPLATES = [
             applyScheduleDeptUi(dept);
             document.getElementById('schedule-reminder').value = schedule.reminder || 'none';
             document.getElementById('schedule-description').value = schedule.description || '';
-            document.getElementById('schedule-modal-title').innerText = '일정 수정';
+            fillScheduleRecur(schedule);
+            document.getElementById('schedule-modal-title').innerText = isRecurring(schedule) ? '반복 일정 수정 (전체 회차)' : '일정 수정';
             document.getElementById('schedule-modal').classList.remove('hidden');
         }
         function deleteSchedule(id) {
+            const occDate = String(id).indexOf(RECUR_SEP) > 0 ? String(id).slice(String(id).indexOf(RECUR_SEP) + 1) : '';
+            id = scheduleMasterId(id);
             const schedule = schedules.find(s => s.id === id);
             if (schedule && !canEditSchedule(schedule)) { alert('조회 권한만 있는 일정입니다. 삭제할 수 없습니다.'); return; }
+            // 반복 일정 — 이 날만 지울지, 반복 전체를 지울지 고릅니다 (2026-10-12)
+            if (isRecurring(schedule)) {
+                const day = occDate || schedule.date;
+                if (confirm(`반복 일정입니다 (${recurLabel(schedule.recur)}).\n\n[확인] ${day} 이 날만 삭제\n[취소] 다음 단계 (반복 전체 삭제)`)) {
+                    schedule.recur.exdates = Array.from(new Set((schedule.recur.exdates || []).concat([day]))).sort();
+                    saveSchedules();
+                    renderCalendar();
+                    if (typeof renderTodaySchedule === 'function') renderTodaySchedule(currentUserName);
+                    closeScheduleDetailModal();
+                    return;
+                }
+                if (!confirm('반복 일정의 모든 회차를 삭제할까요?')) return;
+                unlinkWorkFromSchedule(schedule);
+                schedules = schedules.filter(s => s.id !== id);
+                saveSchedules();
+                renderCalendar();
+                if (typeof renderTodaySchedule === 'function') renderTodaySchedule(currentUserName);
+                closeScheduleDetailModal();
+                return;
+            }
             if (confirm('정말 이 일정을 삭제하시겠습니까?')) {
                 // 업무센터에서 올린 일정이면 업무 쪽 연결도 함께 끊는다
                 unlinkWorkFromSchedule(schedule);

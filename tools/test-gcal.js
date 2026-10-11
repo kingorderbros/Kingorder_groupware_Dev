@@ -147,6 +147,22 @@ const fakeStore = { storeValue: async () => USERS, calendars: async () => CALS }
         ok('옛 이름(킹오더 일정 – · 킹오더 전사일정 …)이 서버에 남아 있지 않다', !/'킹오더 (일정|전사일정|설치·A\/S|영업일정·진행상황)/.test(route));
     }
 
+    console.log('\n[7] 반복 일정 → 구글 반복 규칙 (2026-10-12)');
+    {
+        const R = (recur, extra) => G.recurrenceOf(Object.assign({ date: '2026-10-12', startTime: '10:00', recur }, extra || {}), !(extra && extra.startTime !== undefined) ? false : false);
+        eq('반복 없음', JSON.stringify(G.recurrenceOf({ date: '2026-10-12' }, true)), '[]');
+        eq('매일', G.recurrenceOf({ recur: { freq: 'daily', interval: 1, end: 'never' } }, true)[0], 'RRULE:FREQ=DAILY');
+        eq('평일', G.recurrenceOf({ recur: { freq: 'weekdays', end: 'never' } }, true)[0], 'RRULE:FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR');
+        eq('2주마다 월·수 · 10회', G.recurrenceOf({ recur: { freq: 'weekly', interval: 2, days: [3, 1], end: 'count', count: 10 } }, true)[0], 'RRULE:FREQ=WEEKLY;INTERVAL=2;BYDAY=MO,WE;COUNT=10');
+        eq('매월 · 날짜까지(종일)', G.recurrenceOf({ recur: { freq: 'monthly', end: 'until', until: '2026-12-31' } }, true)[0], 'RRULE:FREQ=MONTHLY;UNTIL=20261231');
+        eq('매년', G.recurrenceOf({ recur: { freq: 'yearly', end: 'never' } }, true)[0], 'RRULE:FREQ=YEARLY');
+        const ex = G.recurrenceOf({ startTime: '10:00', recur: { freq: 'daily', end: 'never', exdates: ['2026-10-14'] } }, false);
+        eq('시간 일정의 지운 회차', ex[1], 'EXDATE;TZID=Asia/Seoul:20261014T100000');
+        const ev = G.toGoogleEvent({ id: 'sR', title: '주간회의', date: '2026-10-12', startTime: '10:00', endTime: '11:00', calendar: 'team', dept: 'sales', recur: { freq: 'weekly', days: [1], end: 'never' } }, ctx);
+        ok('구글 일정에 recurrence 가 붙는다', Array.isArray(ev.recurrence) && ev.recurrence[0] === 'RRULE:FREQ=WEEKLY;BYDAY=MO');
+        void R;
+    }
+
     console.log(`\n=========== 통과 ${pass} · 실패 ${fail} ===========`);
     process.exit(fail ? 1 : 0);
 })().catch(e => { console.error(e); process.exit(1); });

@@ -331,7 +331,37 @@ export function toGoogleEvent(s, ctx) {
         .map(a => ({ email: ctx.googleOf(a.name), displayName: str(a.name), responseStatus: TO_GOOGLE_RSVP[str(a.status)] || 'needsAction' }))
         .filter(a => a.email);
     if (atts.length) ev.attendees = atts;
+    const rule = recurrenceOf(s, allDay);
+    if (rule.length) ev.recurrence = rule;
     return ev;
+}
+
+// 반복 일정 → 구글 반복 규칙 (2026-10-12). 그룹웨어 s.recur 와 같은 뜻으로 옮깁니다.
+//   매일 · 평일(월~금) · 매주(요일) · 매월 · 매년, 간격, 종료(날짜 · 횟수), 이 날만 지운 회차(EXDATE)
+const BYDAY = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'];
+export function recurrenceOf(s, allDay) {
+    const r = s && s.recur;
+    if (!r || !r.freq) return [];
+    const parts = [];
+    if (r.freq === 'weekdays') parts.push('FREQ=WEEKLY', 'BYDAY=MO,TU,WE,TH,FR');
+    else {
+        const F = { daily: 'DAILY', weekly: 'WEEKLY', monthly: 'MONTHLY', yearly: 'YEARLY' }[r.freq];
+        if (!F) return [];
+        parts.push('FREQ=' + F);
+        const n = Math.max(1, Number(r.interval) || 1);
+        if (n > 1) parts.push('INTERVAL=' + n);
+        if (r.freq === 'weekly' && Array.isArray(r.days) && r.days.length) parts.push('BYDAY=' + r.days.slice().sort().map(d => BYDAY[d]).join(','));
+    }
+    if (r.end === 'until' && str(r.until)) parts.push('UNTIL=' + str(r.until).replace(/-/g, '') + (allDay ? '' : 'T145959Z'));
+    else if (r.end === 'count' && Number(r.count) > 0) parts.push('COUNT=' + Number(r.count));
+    const out = ['RRULE:' + parts.join(';')];
+    const ex = (Array.isArray(r.exdates) ? r.exdates : []).filter(Boolean);
+    if (ex.length) {
+        out.push(allDay
+            ? 'EXDATE;VALUE=DATE:' + ex.map(d => d.replace(/-/g, '')).join(',')
+            : 'EXDATE;TZID=Asia/Seoul:' + ex.map(d => d.replace(/-/g, '') + 'T' + str(s.startTime).replace(':', '') + '00').join(','));
+    }
+    return out;
 }
 
 // 구글 일정 → 그룹웨어 일정 (있던 값은 지키고 바뀐 것만 덮습니다)
@@ -465,6 +495,27 @@ export async function syncPull(env, store, ctx) {
             }
 
             for (const ev of res.items) {
+                // 반복 일정의 회차(singleEvents 로 펼쳐져 옴) — 우리가 보낸 반복이면 원래 일정을 덮지 않습니다 (2026-10-12).
+                // 폰에서 한 회차만 지웠으면 그 날을 원래 일정의 '지운 회차' 로 남깁니다.
+                if (ev.recurringEventId) {
+                    const masterLink = await store.linkByEvent(calId, ev.recurringEventId);
+                    if (masterLink) {
+                        if (str(ev.status) === 'cancelled' && ev.originalStartTime) {
+                            const m = await store.schedule(masterLink.kob_id);
+                            const day = ev.originalStartTime.date ? str(ev.originalStartTime.date) : seoulParts(ev.originalStartTime.dateTime).date;
+                            if (m && m.recur && day && (m.recur.exdates || []).indexOf(day) < 0) {
+                                const data = Object.assign({}, m, { recur: Object.assign({}, m.recur, { exdates: (m.recur.exdates || []).concat([day]).sort() }) });
+                                delete data.__rev;
+                                await store.saveSchedule(masterLink.kob_id, data, '구글 캘린더');
+                                await store.saveLink(Object.assign({}, masterLink, { content_hash: hashOf(toGoogleEvent(data, ctx)), last_dir: 'pull' }));
+                                out.updated++;
+                                continue;
+                            }
+                        }
+                        out.skipped++;
+                        continue;
+                    }
+                }
                 const link = await store.linkByEvent(calId, ev.id);
 
                 if (str(ev.status) === 'cancelled') {                  // 폰에서 지웠습니다
