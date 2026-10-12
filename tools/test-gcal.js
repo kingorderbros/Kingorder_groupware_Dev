@@ -163,6 +163,30 @@ const fakeStore = { storeValue: async () => USERS, calendars: async () => CALS }
         void R;
     }
 
+    console.log('\n[8] 개발환경 구글 캘린더 이름에 [DEV] (2026-10-12)');
+    {
+        const fs = require('fs'), path = require('path');
+        const route = fs.readFileSync(path.join(__dirname, '../functions/api/[[route]].js'), 'utf8');
+        const pick = name => route.slice(route.indexOf('function ' + name), route.indexOf('\n}\n', route.indexOf('function ' + name)) + 2);
+        const str = v => (v == null ? '' : String(v)).trim();
+        const GCAL_LABELS = eval('(' + route.match(/const GCAL_LABELS = (\{[^\n]*\});/)[1] + ')');
+        const GCAL_HIDDEN_DEPTS = [];
+        const googleAddrOf = u => u.googleEmail || u.email;
+        const gcalNamePrefix = eval('(' + route.match(/function gcalNamePrefix[^\n]*\}/)[0] + ')');   // 한 줄 함수
+        const calendarPlan = eval('(' + pick('calendarPlan') + ')');
+        const users = [{ name: '홍길동', email: 'hong@kingorder.co.kr', dept: 'sales' }];
+        const depts = [{ id: 'sales', name: '영업본부' }];
+        const dev = calendarPlan(users, depts, { KOB_ENV: 'dev' }).wanted.map(w => w.label);
+        const prod = calendarPlan(users, depts, { KOB_ENV: 'prod' }).wanted.map(w => w.label);
+        const none = calendarPlan(users, depts, {}).wanted.map(w => w.label);
+        ok('dev — 모든 캘린더 앞에 [DEV]', dev.length === 5 && dev.every(l => l.startsWith('[DEV]')));
+        eq('dev — 전사일정', dev[0], '[DEV]전사일정');
+        eq('dev — 팀별', dev[3], '[DEV]팀별 – 영업본부');
+        ok('prod — 접두어 없음 (화면 이름 그대로)', prod[0] === '전사일정' && prod.every(l => !l.startsWith('[DEV]')));
+        ok('KOB_ENV 가 비면 dev 로 봄 (/api/health 와 같게)', none.every(l => l.startsWith('[DEV]')));
+        ok('상태 · 준비 두 곳 모두 env 를 넘긴다', (route.match(/calendarPlan\(who\.users,[^\n]*, env\);/g) || []).length === 2);
+    }
+
     console.log(`\n=========== 통과 ${pass} · 실패 ${fail} ===========`);
     process.exit(fail ? 1 : 0);
 })().catch(e => { console.error(e); process.exit(1); });

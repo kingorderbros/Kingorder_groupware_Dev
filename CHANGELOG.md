@@ -2136,3 +2136,8 @@ test-files 41(주입 경로 거절 · 폴더 겹침 · 로그아웃 · 목록에
 - `config/app-config.js` 를 `<head>` 맨 앞(PWA 스크립트 전)에서 읽도록 옮김. 파트너센터가 나중에 바꾸는 창 제목에도 같은 접두어(`PARTNER_TITLE_PREFIX`)
 - 이미 홈 화면에 담아 둔 아이콘 이름은 저절로 안 바뀔 수 있음 — 지우고 다시 담기
 - 검증: 로컬 헤드리스로 dev/prod 설정 × 세 화면 이름 · manifest 확인, npm run check · 전 화면 E2E 51개 오류 0
+
+## 2026-10-12 — 개발환경 구글 캘린더 이름에 [DEV]
+- dev · prod 가 같은 구글 계정에 연결돼도 구분되게, 서버 환경변수 `KOB_ENV` 가 prod 가 아니면 구글 캘린더 이름 앞에 **[DEV]** (예: `[DEV]전사일정` · `[DEV]팀별 – 영업본부` · `[DEV]개인 – 홍길동`). prod 는 그룹웨어 화면 이름 그대로
+- 이미 만든 dev 캘린더는 그룹웨어 › 구글 캘린더 연동 › **[구글 캘린더 준비]** 를 누르면 이름이 바뀜(기존 이름 맞춤 기능 그대로)
+- `gcalNamePrefix(env)` · `calendarPlan(users, depts, env)`. 시험 `tools/test-gcal.js` [8] 추가 (77 통과)

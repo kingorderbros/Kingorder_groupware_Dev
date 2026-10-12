@@ -232,19 +232,24 @@ const GCAL_HIDDEN_DEPTS = ['vendor', 'admin', 'company'];
 // 팀별 · 개인은 구글에 여러 개가 생기므로 그룹웨어 이름 뒤에 부서명 · 이름만 붙여 구분합니다.
 const GCAL_LABELS = { company: '전사일정', 'sales-share': '킹오더 영업일정 및 진행상황 공유', 'install-as': '설치 및 A/S 일정 공유', team: '팀별', personal: '개인' };
 const googleAddrOf = (u) => str(u && u.googleEmail).toLowerCase();
-function calendarPlan(users, depts) {
+// 개발환경(KOB_ENV 가 prod 가 아닌 곳)은 구글 캘린더 이름 앞에 [DEV] 를 붙입니다 (2026-10-12).
+// dev · prod 가 같은 구글 계정에 연결돼도 캘린더가 두 벌로 구분되게 — [구글 캘린더 준비] 를 누르면 이미 만든 dev 캘린더 이름도 바뀝니다.
+function gcalNamePrefix(env) { return (str((env || {}).KOB_ENV) || 'dev') === 'prod' ? '' : '[DEV]'; }
+
+function calendarPlan(users, depts, env) {
+    const pre = gcalNamePrefix(env);
     const people = (users || []).filter(u => str(u.dept) !== 'vendor');
     const everyone = people.map(googleAddrOf).filter(Boolean);
     const missingGoogle = people.filter(u => !googleAddrOf(u)).map(u => ({ name: str(u.name), email: str(u.email) }));
     const wanted = [
-        { key: 'cal:company', kind: 'company', label: GCAL_LABELS.company, shareTo: everyone },
-        { key: 'cal:sales-share', kind: 'sales-share', label: GCAL_LABELS['sales-share'], shareTo: everyone },
-        { key: 'cal:install-as', kind: 'install-as', label: GCAL_LABELS['install-as'], shareTo: everyone }
+        { key: 'cal:company', kind: 'company', label: pre + GCAL_LABELS.company, shareTo: everyone },
+        { key: 'cal:sales-share', kind: 'sales-share', label: pre + GCAL_LABELS['sales-share'], shareTo: everyone },
+        { key: 'cal:install-as', kind: 'install-as', label: pre + GCAL_LABELS['install-as'], shareTo: everyone }
     ];
     (depts || []).filter(d => !GCAL_HIDDEN_DEPTS.includes(str(d.id))).forEach(d => {
         wanted.push({
             key: 'cal:team:' + str(d.id), kind: 'team', dept: str(d.id),
-            label: GCAL_LABELS.team + ' – ' + str(d.name),
+            label: pre + GCAL_LABELS.team + ' – ' + str(d.name),
             shareTo: people.filter(u => str(u.dept) === str(d.id)).map(googleAddrOf).filter(Boolean)
         });
     });
@@ -253,7 +258,7 @@ function calendarPlan(users, depts) {
         if (!addr) return;
         wanted.push({
             key: 'cal:personal:' + str(u.email).toLowerCase(), kind: 'personal', member: str(u.email).toLowerCase(),
-            label: GCAL_LABELS.personal + ' – ' + str(u.name), shareTo: [addr]
+            label: pre + GCAL_LABELS.personal + ' – ' + str(u.name), shareTo: [addr]
         });
     });
     return { wanted, missingGoogle };
@@ -1037,7 +1042,7 @@ export async function onRequest(context) {
                     catch (e) { /* 못 읽어도 연결 자체는 쓸 수 있습니다 */ }
                 }
                 const cals = (await g.calendars()) || [];
-                const plan = calendarPlan(who.users, (await store.storeValue('gwOrgDepts.v1')) || []);
+                const plan = calendarPlan(who.users, (await store.storeValue('gwOrgDepts.v1')) || [], env);
                 const madeKeys = new Set(cals.filter(c => c.google_calendar_id).map(c => c.key));
                 const labelOf = new Map(cals.map(c => [c.key, str(c.label)]));
                 return json(200, {
@@ -1078,7 +1083,7 @@ export async function onRequest(context) {
                 const input = await body();
                 const budget = Math.min(Math.max(parseInt(input.limit, 10) || 25, 1), 60);
                 const depts = (await store.storeValue('gwOrgDepts.v1')) || [];
-                const plan = calendarPlan(who.users, depts);
+                const plan = calendarPlan(who.users, depts, env);
                 const existing = new Map(((await g.calendars()) || []).map(c => [c.key, c]));
 
                 const made = [], renamed = [], shared = [], failed = [];
