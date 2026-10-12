@@ -43158,8 +43158,27 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
         async function gcalSetup() {
             if (gcalBusy) return;
             gcalBusy = 'setup'; drawGcalAdmin();
+            // 서버는 한 번에 Cloudflare 한도(바깥 호출 50번) 안에서만 하고 남은 수를 돌려줍니다.
+            // 남은 게 있으면 저절로 이어서 부릅니다 — 더 나아가지 않으면(같은 남은 수 · 새 결과 없음) 멈춥니다 (2026-10-12)
             let r = null, err = '';
-            try { r = await kobAuth.call('/api/calendar/setup', { limit: 25 }); }
+            const sum = { made: [], renamed: [], shared: [], failed: [], remaining: 0 };
+            try {
+                let from = 0;
+                for (let round = 0; round < 20; round++) {
+                    const x = await kobAuth.call('/api/calendar/setup', { limit: 30, from });
+                    sum.made.push(...(x.made || [])); sum.renamed.push(...(x.renamed || [])); sum.shared.push(...(x.shared || []));
+                    sum.failed.push(...(x.failed || [])); sum.remaining = x.remaining || 0;
+                    // 서버가 돌려준 '다음 시작 자리' 가 앞으로 나아갔거나, 같은 캘린더라도 만들기 · 이름 · 공유가 진행됐으면 이어서
+                    // (캘린더 하나에 공유할 사람이 많으면 같은 자리에서 여러 번 이어집니다) — 아무것도 안 됐으면 멈춥니다
+                    const did = (x.made || []).length + (x.renamed || []).length + (x.shared || []).length;
+                    const progressed = x.next != null && (x.next > from || did > 0);
+                    if (!sum.remaining || !progressed) break;
+                    from = x.next;
+                    const out0 = document.getElementById('gcal-setup-result');
+                    if (out0) out0.innerHTML = `<p class="text-sm text-gray-600"><i class="fas fa-spinner fa-spin mr-1"></i>이어서 진행 중 — 지금까지 만든 캘린더 ${sum.made.length} · 이름 바꿈 ${sum.renamed.length} · 공유 ${sum.shared.length}, 남은 ${sum.remaining}</p>`;
+                }
+                r = sum;
+            }
             catch (e) { err = String((e && e.message) || e); }
             gcalBusy = '';
             await loadGcalStatus();

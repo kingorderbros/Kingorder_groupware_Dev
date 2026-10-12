@@ -1081,23 +1081,32 @@ export async function onRequest(context) {
             // 캘린더 만들기 · 직원에게 공유하기 — 한 번에 다 하지 않고 나눠서 합니다
             if (path === '/api/calendar/setup' && method === 'POST') {
                 const input = await body();
-                const budget = Math.min(Math.max(parseInt(input.limit, 10) || 25, 1), 60);
+                // Cloudflare 는 요청 한 번에 바깥 호출(subrequest)을 50번까지만 허용합니다(무료 요금제).
+                // 구글 호출뿐 아니라 Supabase 저장도 하나씩 세고, 앞의 로그인 확인 · 목록 읽기 몫(약 6번)을 남겨 36 까지만 씁니다.
+                // 남은 일은 remaining 으로 돌려주고 화면이 저절로 다시 부릅니다 (2026-10-12 — dev 캘린더 19개 이름 바꾸다 한도 초과)
+                const budget = Math.min(Math.max(parseInt(input.limit, 10) || 30, 1), 36);
                 const depts = (await store.storeValue('gwOrgDepts.v1')) || [];
                 const plan = calendarPlan(who.users, depts, env);
                 const existing = new Map(((await g.calendars()) || []).map(c => [c.key, c]));
 
                 const made = [], renamed = [], shared = [], failed = [];
-                let used = 0, remaining = 0;
+                let used = 0, remaining = 0, next = null;
+                // 어디서부터 이어서 할지 (화면이 앞 응답의 next 를 돌려줍니다). 매번 처음부터 훑으면
+                // 이미 끝난 앞쪽 캘린더의 공유 확인에 한도를 다 써서 뒤쪽에 영영 닿지 못합니다 (2026-10-12 시험에서 확인)
+                const start = Math.min(Math.max(parseInt(input.from, 10) || 0, 0), plan.wanted.length);
 
-                for (const want of plan.wanted) {
-                    if (used >= budget) { remaining++; continue; }
+                for (let i = start; i < plan.wanted.length; i++) {
+                    const want = plan.wanted[i];
+                    if (used >= budget) { next = i; remaining = plan.wanted.length - i; break; }
                     let row = existing.get(want.key);
+                    let cut = false;                       // 이 캘린더의 공유를 다 못 하고 한도에 닿음 — 다음에 이 캘린더부터
                     try {
                         if (!row || !row.google_calendar_id) {
                             const cal = await gcal.createCalendar(env, g, want.label, '킹오더브라더스 그룹웨어가 관리하는 캘린더입니다. 그룹웨어 일정캘린더와 양쪽으로 맞춰집니다.');
                             used++;
                             row = { key: want.key, kind: want.kind, label: want.label, dept: want.dept || null, member_email: want.member || null, google_calendar_id: cal.id, share_state: 'none', last_error: null };
                             await g.saveCalendar(row);
+                            used++;
                             existing.set(want.key, row);
                             made.push({ key: want.key, label: want.label });
                         } else if (str(row.label) !== want.label && used < budget) {
@@ -1105,6 +1114,7 @@ export async function onRequest(context) {
                             await gcal.renameCalendar(env, g, row.google_calendar_id, want.label);
                             used++;
                             await g.patchCalendar(want.key, { label: want.label });
+                            used++;
                             row = Object.assign({}, row, { label: want.label });
                             existing.set(want.key, row);
                             renamed.push({ key: want.key, label: want.label });
@@ -1115,25 +1125,29 @@ export async function onRequest(context) {
                             used++;
                             const have = new Set(((acl && acl.items) || []).map(i => str(i.scope && i.scope.value).toLowerCase()));
                             for (const em of want.shareTo) {
-                                if (used >= budget) { remaining++; break; }
                                 if (have.has(em.toLowerCase())) continue;
+                                if (used >= budget) { cut = true; break; }
                                 await gcal.shareCalendar(env, g, row.google_calendar_id, em, 'writer');
                                 used++;
                                 shared.push({ key: want.key, email: em });
                             }
-                            await g.patchCalendar(want.key, { share_state: 'ok', last_error: null });
+                            if (!cut) { await g.patchCalendar(want.key, { share_state: 'ok', last_error: null }); used++; }
+                        } else if (want.shareTo.length) {
+                            cut = true;                    // 공유 확인을 못 했습니다 — 다음에 이 캘린더부터
                         }
                     } catch (e) {
                         if (e.code === 'not-connected') return json(409, { ok: false, error: '먼저 [구글 캘린더 연결] 을 눌러 주세요.' });
                         failed.push({ key: want.key, error: e.message });
+                        used += 2;                                // 실패한 구글 호출 + 아래 오류 기록
                         // 이미 있는 줄은 오류만 적습니다 — 이름까지 덮으면 구글 이름을 못 바꿨는데도 바뀐 것으로 남습니다
                         try {
                             if (existing.has(want.key)) await g.patchCalendar(want.key, { last_error: e.message });
                             else await g.saveCalendar({ key: want.key, kind: want.kind, label: want.label, last_error: e.message });
                         } catch (e2) { /* 기록 실패는 넘어갑니다 */ }
                     }
+                    if (cut) { next = i; remaining = plan.wanted.length - i; break; }
                 }
-                return json(200, { ok: true, made, renamed, shared, failed, remaining, missingGoogle: plan.missingGoogle, done: remaining === 0 && !failed.length });
+                return json(200, { ok: true, made, renamed, shared, failed, remaining, next, total: plan.wanted.length, missingGoogle: plan.missingGoogle, done: remaining === 0 && !failed.length });
             }
 
             // 받아오기 — 관리자가 손으로 확인할 때 씁니다
