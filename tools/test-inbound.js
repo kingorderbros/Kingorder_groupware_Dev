@@ -170,6 +170,17 @@ function fakeConnect({ hostname }) {
         ok(!I.parseNotifyText('카페\n블로그\n무인 냉장고').name, '값 줄(카페 · 블로그)을 항목 이름으로 오해하지 않는다');
     }
 
+    // 큐알킹 폼 알림 — 매장명 · 매장 구분 · 서비스 문의 · 기타 문의사항 (2026-10-12 dev 실제 메일 구조, 값은 가짜)
+    {
+        const q = ['큐알킹', '새 입력폼 응답이 접수되었습니다.', '등록자', '비회원', '등록위치', '이름 없는 입력폼#5', '등록시각', '2026-10-08 17:38', '응답', '개인정보 수집동의', '동의',
+            '이름', '김시험', '연락처', '01011112222', '매장명', '시험매장', '이메일', 'q@example.com', '매장 구분', '일반 매장', '서비스 문의', '테이블오더', '기타 문의사항', '배달팁 오류 문의', '© 큐알킹'].join('\n');
+        const r = I.notifyToRecord(q, { messageId: 'q1', subject: '[큐알킹] 이름 없는 입력폼#5에 새 응답이 접수되었습니다.' }, {});
+        ok(r.company === '시험매장' && r.name === '김시험' && r.phone === '010-1111-2222', '큐알킹 — 매장명 · 이름 · 연락처');
+        ok(/배달팁 오류/.test(r.requestNote) && /일반 매장/.test(r.requestNote), '기타 문의사항 → 문의 내용 · 매장 구분 → (업종: 일반 매장)');
+        ok(r.services.includes('테이블오더'), '서비스 문의 → 관심 서비스');
+        ok(r.name === '김시험', '등록위치 값 「이름 없는 입력폼#5」를 이름으로 오해하지 않는다');
+    }
+
     console.log('\n[4] 네이버 검색 · 블로그 RSS · 인스타 · 구글 시트');
     const nv = await I.runSource('naver', cfg, { naverClientSecret: 'nsecret' }, {});
     ok(nv.items.length === 2 && !nv.items.some(x => x.link.includes('kingorder_b')), '자사 블로그(kingorder_b)는 빼고 · 키워드가 달라도 같은 글은 한 번');   // 블로그 2(자사 1 제외) + 카페 1
