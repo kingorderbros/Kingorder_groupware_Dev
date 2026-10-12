@@ -25675,12 +25675,20 @@ const QUOTE_TEMPLATES = [
                 loadInbSrcStatus();
             } catch (e) { alert('저장하지 못했습니다: ' + ((e && e.message) || e)); }
         }
+        function inbKstText(iso) {
+            const d = iso ? new Date(iso) : null;
+            if (!d || isNaN(d)) return '';
+            const k = new Date(d.getTime() + 9 * 3600000);
+            const p = n => String(n).padStart(2, '0');
+            return `${k.getUTCFullYear()}-${p(k.getUTCMonth() + 1)}-${p(k.getUTCDate())} ${p(k.getUTCHours())}:${p(k.getUTCMinutes())}`;
+        }
         function inbSecretBox(name) {
             const st = inbSrcStatus && inbSrcStatus.secrets ? inbSrcStatus.secrets[name] : null;
             const admin = isSystemAdmin();
             const state = !st ? '<span class="text-gray-400">상태 모름</span>'
                 : st.from === 'env' ? `<span class="text-emerald-700"><i class="fas fa-circle-check mr-1"></i>Cloudflare 환경변수 ${escapeHtml(st.envName)} 사용 중</span>`
-                : st.set ? `<span class="text-emerald-700"><i class="fas fa-circle-check mr-1"></i>넣어 둠</span> <span class="text-gray-400">${escapeHtml((st.updatedAt || '').slice(0, 16).replace('T', ' '))} ${escapeHtml(st.updatedBy || '')}</span>`
+                // 저장 시각은 서버가 UTC 로 줍니다 — 한국 시각으로 바꿔 '저장 · 저장한 사람' 으로 분명히 보여 줍니다 (2026-10-12 · 메일 아이디로 오해)
+                : st.set ? `<span class="text-emerald-700"><i class="fas fa-circle-check mr-1"></i>넣어 둠</span> <span class="text-gray-400">· 저장 ${escapeHtml(inbKstText(st.updatedAt))}${st.updatedBy ? ` · 저장한 그룹웨어 계정 ${escapeHtml(st.updatedBy)}` : ''}</span>`
                 : '<span class="text-rose-600"><i class="fas fa-circle-xmark mr-1"></i>아직 없음</span>';
             const label = st ? st.label : name;
             return `<div class="border border-gray-200 rounded p-3 bg-gray-50">
