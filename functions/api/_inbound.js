@@ -594,9 +594,10 @@ export async function runSource(source, cfg, secrets, deps) {
         if (!secrets.mailPassword) throw new Error('메일 비밀번호(앱 비밀번호)를 먼저 넣어 주세요.');
         const connectFn = deps.connect || await cfConnect();
         const mails = await imapFetch({ host: m.host, port: m.port, user: m.user, password: secrets.mailPassword, folder: m.folder, from: m.from, sinceDays: m.sinceDays, limit: m.limit }, connectFn, log);
-        const subj = str(m.subject);
+        // 제목 조건 — 쉼표로 여러 낱말을 넣으면 그중 하나라도 든 메일을 고릅니다 (2026-10-12 · 아임웹 알림 제목이 여러 가지)
+        const subjs = str(m.subject).split(/[,，]/).map(t => t.trim()).filter(Boolean);
         const fromNonAscii = str(m.from) && !/^[\x20-\x7e]+$/.test(m.from) ? str(m.from) : '';
-        const picked = mails.filter(x => (!subj || x.subject.includes(subj)) && (!fromNonAscii || x.from.includes(fromNonAscii)));
+        const picked = mails.filter(x => (!subjs.length || subjs.some(t => x.subject.includes(t))) && (!fromNonAscii || x.from.includes(fromNonAscii)));
         if (picked.length !== mails.length) log.push(`제목 · 보낸 사람 조건으로 ${mails.length}통 중 ${picked.length}통`);
         return { log, items: picked.reverse().map(x => ({ title: x.subject, sub: `${x.from} · ${x.date ? kstStamp(x.date) : ''}`, text: x.text, record: notifyToRecord(x.text, x, cfg.rules) })) };
     }

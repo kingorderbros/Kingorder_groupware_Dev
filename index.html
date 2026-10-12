@@ -25834,7 +25834,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                             ${[['네이버 메일', 'imap.naver.com'], ['지메일', 'imap.gmail.com'], ['다음 메일', 'imap.daum.net']].map(([n, h]) => `<button type="button" onclick="setInbSrc('mail', 'host', '${h}'); setInbSrc('mail', 'port', 993, 'num'); renderInboundCenter();" class="px-2 py-1 rounded border ${S.mail.host === h ? 'bg-rose-50 border-rose-300 text-rose-700' : 'bg-white border-gray-300'}">${n}</button>`).join('')}</div>
                         <div class="grid grid-cols-3 gap-2">${'<div class="col-span-2">' + inbInput('mail', 'host', '메일 서버 (IMAP)', 'imap.naver.com') + '</div>'}${inbInput('mail', 'port', '포트', '993', 'num', 'number')}</div>
                         <div class="grid grid-cols-2 gap-2">${inbInput('mail', 'user', '메일 아이디', '알림을 받는 메일 주소')}${inbInput('mail', 'folder', '폴더', 'INBOX')}</div>
-                        <div class="grid grid-cols-2 gap-2">${inbInput('mail', 'from', '보낸 사람 (영문 주소 일부)', '예: imweb')}${inbInput('mail', 'subject', '제목에 든 낱말', '예: 입력폼')}</div>
+                        <div class="grid grid-cols-2 gap-2">${inbInput('mail', 'from', '보낸 사람 (영문 주소 일부)', '예: imweb')}${inbInput('mail', 'subject', '제목에 든 낱말 (여러 개는 쉼표로 · 하나라도 들면 가져옴)', '예: 문의, 상담 신청, 입력폼')}</div>
                         <div class="grid grid-cols-2 gap-2">${inbInput('mail', 'sinceDays', '최근 며칠', '7', 'num', 'number')}${inbInput('mail', 'limit', '최대 몇 통', '20', 'num', 'number')}</div>
                         ${inbSecretBox('mailPassword')}
                         <div class="flex flex-wrap gap-2">${saveBtn}${inbBtn('메일함에서 가져오기 시험' + serverOnly, "runInbSrcPreview('mail')", 'bg-rose-600 text-white hover:bg-rose-700', 'fa-download', !remote)}</div>

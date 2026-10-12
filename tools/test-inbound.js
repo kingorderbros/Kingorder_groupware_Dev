@@ -129,6 +129,13 @@ function fakeConnect({ hostname }) {
 
     const cfg = I.withDefaults({ mail: { user: 'kob', subject: '입력폼' }, naver: { clientId: 'nid' }, insta: { igUserId: 'ig1', pageId: 'pg1' }, sheet: { url: 'https://docs.google.com/spreadsheets/d/AbC_1/edit#gid=77' } });
     const run = await I.runSource('mail', cfg, { mailPassword: 'apppw' }, { connect: fakeConnect });
+    // 제목 조건 여러 개 — 쉼표로 넣으면 하나라도 들면 가져옴 (2026-10-12)
+    const cfgMulti = I.withDefaults({ mail: { user: 'kob', subject: '없는말, 입력폼' } });
+    const runMulti = await I.runSource('mail', cfgMulti, { mailPassword: 'apppw' }, { connect: fakeConnect });
+    ok(runMulti.items.length === run.items.length && run.items.length > 0, '제목 조건 여러 개(쉼표) 중 하나만 맞아도 가져온다');
+    const cfgNone = I.withDefaults({ mail: { user: 'kob', subject: '없는말, 또없는말' } });
+    const runNone = await I.runSource('mail', cfgNone, { mailPassword: 'apppw' }, { connect: fakeConnect });
+    ok(runNone.items.length === 0, '어느 것도 안 맞으면 가져오지 않는다');
     ok(run.items.length === 1 && run.items[0].record.name === '신○○' && run.items[0].record.requestNote.includes('병원 접수용'), '제목 조건으로 알림 메일만 · 인입 건으로');
 
     console.log('\n[4] 네이버 검색 · 블로그 RSS · 인스타 · 구글 시트');
