@@ -375,8 +375,23 @@ export async function imapFetch(opt, connectFn, log) {
         const found = await cmd(`UID SEARCH ${crit}`);
         const uids = [];
         found.forEach(x => { const m = x.line.match(/^\* SEARCH\s*(.*)$/i); if (m) m[1].split(/\s+/).filter(Boolean).forEach(u => uids.push(u)); });
-        const pick = uids.slice(-(Number(opt.limit) || 20));
-        say(`검색 ${uids.length}통 · 가져올 것 ${pick.length}통`);
+        const limit = Number(opt.limit) || 20;
+        let pick = uids.slice(-limit);
+        // 제목 · 보낸 사람 조건(opt.match)이 있으면 — 최근 500통의 머리(제목 · 보낸 사람)만 먼저 읽어 맞는 것을 고른 뒤
+        // 그중 최근 limit 통의 본문을 받습니다 (2026-10-12 · 전에는 최근 20통을 받고 나서 걸러, 광고 메일에 밀린 알림을 놓쳤음)
+        if (typeof opt.match === 'function' && uids.length) {
+            const scan = uids.slice(-500);
+            const heads = await cmd(`UID FETCH ${scan.join(',')} (UID BODY.PEEK[HEADER.FIELDS (SUBJECT FROM)])`, `UID FETCH (${scan.length}통) (UID BODY.PEEK[HEADER.FIELDS (SUBJECT FROM)])`);
+            const matched = [];
+            heads.forEach(x => {
+                if (!x.lit) return;
+                const uid = (x.line.match(/UID (\d+)/i) || [])[1] || '';
+                const { h } = splitHead(latin1(x.lit));
+                if (uid && opt.match(decodeHeader(h.subject), decodeHeader(h.from))) matched.push(uid);
+            });
+            pick = matched.slice(-limit);
+            say(`검색 ${uids.length}통${uids.length > scan.length ? ` (최근 ${scan.length}통만 확인)` : ''} · 제목 · 보낸 사람이 맞는 것 ${matched.length}통 · 가져올 것 ${pick.length}통`);
+        } else say(`검색 ${uids.length}통 · 가져올 것 ${pick.length}통`);
         const out = [];
         if (pick.length) {
             const got = await cmd(`UID FETCH ${pick.join(',')} (UID BODY.PEEK[])`);
@@ -599,12 +614,14 @@ export async function runSource(source, cfg, secrets, deps) {
         if (!str(m.host) || !str(m.user)) throw new Error('메일 서버와 아이디를 먼저 넣어 주세요.');
         if (!secrets.mailPassword) throw new Error('메일 비밀번호(앱 비밀번호)를 먼저 넣어 주세요.');
         const connectFn = deps.connect || await cfConnect();
-        const mails = await imapFetch({ host: m.host, port: m.port, user: m.user, password: secrets.mailPassword, folder: m.folder, from: m.from, sinceDays: m.sinceDays, limit: m.limit }, connectFn, log);
         // 제목 조건 — 쉼표로 여러 낱말을 넣으면 그중 하나라도 든 메일을 고릅니다 (2026-10-12 · 아임웹 알림 제목이 여러 가지)
         const subjs = str(m.subject).split(/[,，]/).map(t => t.trim()).filter(Boolean);
         const fromNonAscii = str(m.from) && !/^[\x20-\x7e]+$/.test(m.from) ? str(m.from) : '';
-        const picked = mails.filter(x => (!subjs.length || subjs.some(t => x.subject.includes(t))) && (!fromNonAscii || x.from.includes(fromNonAscii)));
-        if (picked.length !== mails.length) log.push(`제목 · 보낸 사람 조건으로 ${mails.length}통 중 ${picked.length}통`);
+        const match = (subject, from) => (!subjs.length || subjs.some(t => str(subject).includes(t))) && (!fromNonAscii || str(from).includes(fromNonAscii));
+        // 조건은 메일 서버에서 머리만 읽어 먼저 거릅니다(imapFetch opt.match) — 본문은 맞는 메일만 받습니다
+        const mails = await imapFetch({ host: m.host, port: m.port, user: m.user, password: secrets.mailPassword, folder: m.folder, from: m.from, sinceDays: m.sinceDays, limit: m.limit,
+            match: (subjs.length || fromNonAscii) ? match : null }, connectFn, log);
+        const picked = mails.filter(x => match(x.subject, x.from));
         return { log, items: picked.reverse().map(x => ({ title: x.subject, sub: `${x.from} · ${x.date ? kstStamp(x.date) : ''}`, text: x.text, record: notifyToRecord(x.text, x, cfg.rules) })) };
     }
     if (source === 'naver') {

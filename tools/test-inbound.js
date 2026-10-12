@@ -85,10 +85,18 @@ function fakeConnect({ hostname }) {
         if (/^LOGIN/.test(c)) return send(c.includes('"apppw"') ? `${tag} OK LOGIN done\r\n` : `${tag} NO [AUTHENTICATIONFAILED] Invalid credentials\r\n`);
         if (/^SELECT/.test(c)) return send(`* 2 EXISTS\r\n${tag} OK [READ-WRITE] SELECT done\r\n`);
         if (/^UID SEARCH/.test(c)) return send(`* SEARCH 11 12\r\n${tag} OK SEARCH done\r\n`);
+        if (/^UID FETCH/.test(c) && /HEADER\.FIELDS/.test(c)) {     // 머리(제목 · 보낸 사람)만
+            const hd = (raw) => Buffer.from(raw.split(/\r?\n\r?\n/)[0] + '\r\n\r\n', 'utf8');
+            const a = hd(MAIL), b = hd(OTHER);
+            send(`* 1 FETCH (UID 11 BODY[HEADER.FIELDS (SUBJECT FROM)] {${a.length}}\r\n`); send(a); send(')\r\n');
+            send(`* 2 FETCH (UID 12 BODY[HEADER.FIELDS (SUBJECT FROM)] {${b.length}}\r\n`); send(b); send(')\r\n');
+            return send(`${tag} OK FETCH done\r\n`);
+        }
         if (/^UID FETCH/.test(c)) {
             const a = Buffer.from(MAIL, 'utf8'), b = Buffer.from(OTHER, 'utf8');
-            send(`* 1 FETCH (UID 11 BODY[] {${a.length}}\r\n`); send(a); send(')\r\n');
-            send(`* 2 FETCH (UID 12 BODY[] {${b.length}}\r\n`); send(b); send(')\r\n');
+            const want = (c.match(/^UID FETCH ([\d,]+)/) || [])[1] || '';
+            if (want.split(',').includes('11')) { send(`* 1 FETCH (UID 11 BODY[] {${a.length}}\r\n`); send(a); send(')\r\n'); }
+            if (want.split(',').includes('12')) { send(`* 2 FETCH (UID 12 BODY[] {${b.length}}\r\n`); send(b); send(')\r\n'); }
             return send(`${tag} OK FETCH done\r\n`);
         }
     } });
@@ -129,6 +137,16 @@ function fakeConnect({ hostname }) {
 
     const cfg = I.withDefaults({ mail: { user: 'kob', subject: '입력폼' }, naver: { clientId: 'nid' }, insta: { igUserId: 'ig1', pageId: 'pg1' }, sheet: { url: 'https://docs.google.com/spreadsheets/d/AbC_1/edit#gid=77' } });
     const run = await I.runSource('mail', cfg, { mailPassword: 'apppw' }, { connect: fakeConnect });
+    // 머리만 먼저 읽어 거름 — 맞는 메일 본문만 받는다 (2026-10-12 · 최근 20통에 광고만 있어 알림을 놓치던 것)
+    {
+        imapLog.length = 0;
+        const lg = [];
+        const r = await I.runSource('mail', cfg, { mailPassword: 'apppw' }, { connect: fakeConnect, log: lg });
+        ok(imapLog.some(l => /HEADER\.FIELDS \(SUBJECT FROM\)/.test(l)), '제목 조건이 있으면 머리(제목 · 보낸 사람)를 먼저 읽는다');
+        ok(imapLog.some(l => /^K\d+ UID FETCH 11 \(UID BODY\.PEEK\[\]\)/.test(l)), '본문은 조건에 맞는 메일(11)만 받는다');
+        ok(r.items.length === 1, '맞는 메일 1통');
+        ok((r.log || []).some(l => /맞는 것 1통/.test(l)), '기록에 맞는 메일 수');
+    }
     // 제목 조건 여러 개 — 쉼표로 넣으면 하나라도 들면 가져옴 (2026-10-12)
     const cfgMulti = I.withDefaults({ mail: { user: 'kob', subject: '없는말, 입력폼' } });
     const runMulti = await I.runSource('mail', cfgMulti, { mailPassword: 'apppw' }, { connect: fakeConnect });
