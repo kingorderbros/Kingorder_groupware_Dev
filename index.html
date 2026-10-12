@@ -17,6 +17,8 @@
     <meta name="format-detection" content="telephone=no">
     <link rel="icon" type="image/png" sizes="192x192" href="assets/pwa/icon-192.png">
     <link rel="apple-touch-icon" href="assets/pwa/apple-touch-icon.png">
+    <!-- 실행 환경 설정 — 아래 홈 화면 이름(dev 는 [DEV] 붙임)이 env 를 보므로 여기서 먼저 읽습니다 -->
+    <script src="config/app-config.js"></script>
     <script>
         (function () {
             // manifest 는 **여기서 만들어 답니다.** (2026-09-05 고침)
@@ -52,6 +54,11 @@
                     : m === 'mobile'
                     ? { f: 'mobile.webmanifest',    t: '킹오더브라더스 운행일지',     s: '운행기록',     c: '#4f46e5' }
                     : { f: 'groupware.webmanifest', t: '킹오더브라더스 그룹웨어',     s: '그룹웨어',     c: '#1e293b' };
+                // 개발환경(env: 'dev')은 홈 화면 · 창 이름 앞에 [DEV] 를 붙여 운영과 헷갈리지 않게 합니다 (2026-10-12).
+                // manifest 는 정적 파일이라 dev 전용(dev-*.webmanifest)을 따로 둡니다. prod 는 설정이 'prod' 라 원래 이름 그대로.
+                if ((window.KOB_CONFIG || {}).env === 'dev') {
+                    app = { f: 'dev-' + app.f, t: '[DEV]' + app.t, s: '[DEV]' + ({ '운행기록': '운행일지' }[app.s] || app.s), c: app.c };
+                }
                 // 인바운드 접수는 2026-09-08 부터 그룹웨어 안(파트너센터 › 영업본부 › 인바운드 관리)으로 들어왔습니다.
                 // 별도 주소(?mode=inbound)와 그 홈 화면 이름은 더 쓰지 않습니다.
             } catch (e) {
@@ -9777,8 +9784,8 @@ const QUOTE_TEMPLATES = [
 ];
 
 </script>
-    <!-- 개발환경 — 설정 · 저장소 부트스트랩. 저장소(Supabase 또는 로컬)를 먼저 불러온 뒤 아래 본체를 실행합니다. -->
-    <script src="config/app-config.js"></script>
+    <!-- 개발환경 — 설정 · 저장소 부트스트랩. 저장소(Supabase 또는 로컬)를 먼저 불러온 뒤 아래 본체를 실행합니다.
+         설정(config/app-config.js)은 홈 화면 이름에 env 를 써야 해서 <head> 맨 앞에서 읽습니다 (2026-10-12). -->
     <script src="js/kob-auth.js"></script>
     <script src="js/kob-db.js"></script>
     <script src="js/kob-store.js"></script>
@@ -9790,6 +9797,8 @@ const QUOTE_TEMPLATES = [
         // 같은 서버(server.js)에서 HTML을 서빙하면 상대경로로 동작.
         // 별도 호스팅 시 아래 API_BASE를 서버 주소로 지정 (예: 'https://api.example.com').
         const API_BASE = (window.KOB_CONFIG && window.KOB_CONFIG.apiBase) || '';   // 개발환경 — config/app-config.js
+        // 개발환경은 파트너센터 창 제목에도 [DEV] 를 붙입니다 — 홈 화면 이름과 맞춤 (2026-10-12)
+        const PARTNER_TITLE_PREFIX = (window.KOB_CONFIG || {}).env === 'dev' ? '[DEV]' : '';
         const VEHICLE_LOG_API = API_BASE + '/api/vehicle-logs';
         // 법인차량 · 운행일지 서버 호출 — 로그인 토큰을 붙입니다 (2026-09-28 · 4단계: 서버가 로그인한 직원만 받음)
         async function apiFetch(url, opts) {
@@ -55890,7 +55899,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             document.getElementById('app-view').classList.add('hidden');
             document.getElementById('mobile-view').classList.add('hidden');
             document.getElementById('partner-view').classList.remove('hidden');
-            document.title = '킹오더브라더스 파트너센터';
+            document.title = PARTNER_TITLE_PREFIX + '킹오더브라더스 파트너센터';
             loadPartnerIntakes();
             loadInboundRecords();        // 영업본부 › 인바운드 접수도 같은 자료를 씁니다 (2026-09-08)
 
@@ -56062,7 +56071,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             if (n) n.textContent = '';
             const ct = document.getElementById('pc-cust-type');
             if (ct) ct.innerHTML = '';
-            document.title = '킹오더브라더스 파트너센터';
+            document.title = PARTNER_TITLE_PREFIX + '킹오더브라더스 파트너센터';
         }
 
         // ---------- 상단 메뉴 (2026-09-14 업무 중심으로 바꿨습니다) ----------
@@ -56572,7 +56581,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             if (TAB_KO[partnerTab]) {
                 const [ic, nm] = TAB_KO[partnerTab];
                 b.innerHTML = `킹오더브라더스 파트너센터 <span class="text-indigo-300 font-normal mx-1">|</span> <i class="fas ${ic} mr-1"></i>${nm}`;
-                document.title = `킹오더브라더스 파트너센터 | ${nm}`;
+                document.title = PARTNER_TITLE_PREFIX + `킹오더브라더스 파트너센터 | ${nm}`;
                 return;
             }
             // 접수 폼을 보고 있으면 **업무 이름**을 적습니다 (본부 이름이 아니라)
@@ -56580,26 +56589,26 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                 const t = partnerTaskDef(`${partnerPickedDept}:${partnerFormType}`);
                 if (t) {
                     b.innerHTML = `킹오더브라더스 파트너센터 <span class="text-indigo-300 font-normal mx-1">|</span> <i class="fas ${t.icon} mr-1"></i>${escapeHtml(t.name)}`;
-                    document.title = `킹오더브라더스 파트너센터 | ${t.name}`;
+                    document.title = PARTNER_TITLE_PREFIX + `킹오더브라더스 파트너센터 | ${t.name}`;
                     return;
                 }
             }
             // 인바운드 접수는 영업본부 아래 메뉴라 접수 구분과 자리가 달라 따로 적어 줍니다 (2026-09-08)
             if (partnerTab === 'inbound') {
                 b.innerHTML = `킹오더브라더스 파트너센터 <span class="text-indigo-300 font-normal mx-1">|</span> <i class="fas fa-inbox mr-1"></i>인바운드 접수`;
-                document.title = '킹오더브라더스 파트너센터 | 인바운드 접수';
+                document.title = PARTNER_TITLE_PREFIX + '킹오더브라더스 파트너센터 | 인바운드 접수';
                 return;
             }
             // IT본부(개발요청)는 접수 본부 목록에 없으므로 따로 적어 줍니다
             if (partnerTab === 'dev' || partnerPickedDept === 'it') {
                 b.innerHTML = `킹오더브라더스 파트너센터 <span class="text-indigo-300 font-normal mx-1">|</span> <i class="fas fa-laptop-code mr-1"></i>받은 개발의뢰`;
-                document.title = '킹오더브라더스 파트너센터 | 받은 개발의뢰';
+                document.title = PARTNER_TITLE_PREFIX + '킹오더브라더스 파트너센터 | 받은 개발의뢰';
                 return;
             }
-            if (!partnerPickedDept) { b.textContent = '킹오더브라더스 파트너센터'; document.title = '킹오더브라더스 파트너센터'; return; }
+            if (!partnerPickedDept) { b.textContent = '킹오더브라더스 파트너센터'; document.title = PARTNER_TITLE_PREFIX + '킹오더브라더스 파트너센터'; return; }
             const d = partnerDeptDef(partnerPickedDept);
             b.innerHTML = `킹오더브라더스 파트너센터 <span class="text-indigo-300 font-normal mx-1">|</span> <i class="fas ${d.icon} mr-1"></i>${escapeHtml(d.name)}`;
-            document.title = `킹오더브라더스 파트너센터 | ${d.name}`;
+            document.title = PARTNER_TITLE_PREFIX + `킹오더브라더스 파트너센터 | ${d.name}`;
         }
 
         // 로그인 직후 — 아직 본부를 안 골랐을 때의 안내.
