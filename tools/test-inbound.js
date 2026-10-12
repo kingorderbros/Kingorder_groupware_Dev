@@ -138,6 +138,20 @@ function fakeConnect({ hostname }) {
     ok(runNone.items.length === 0, '어느 것도 안 맞으면 가져오지 않는다');
     ok(run.items.length === 1 && run.items[0].record.name === '신○○' && run.items[0].record.requestNote.includes('병원 접수용'), '제목 조건으로 알림 메일만 · 인입 건으로');
 
+    // 킹오더닷컴 '문의하기' 폼 알림 — 항목 이름 앞에 번호 · 뒤에 괄호 설명 (2026-10-12 dev 실제 메일 구조, 값은 가짜)
+    {
+        const kod = ['킹오더브라더스 ｜ 스마트 오더의 새로운 기준', '새 입력폼 응답이 접수되었습니다.', '등록자', '비회원', '등록위치', '문의하기', '등록시각', '2026-10-12 09:41',
+            '응답', '개인정보 수집동의', '동의', '1. 업체명', '시험상회', '2. 이름', '홍길동', '3. 이메일', 'test@example.com', '4. 연락처(휴대폰번호)', '01012345678',
+            '5. 알게된 경로', '블로그', '6. 업종선택 (복수 선택 가능)', '카페', '7. 관심 있는 솔루션 (복수 선택 가능)', '무인 냉장고',
+            '8. 기타 요청 사항 또는 문의 내용', '견적 문의 유선 상담 원합니다', '입력폼 관리하기', '© 킹오더브라더스'].join('\n');
+        const r = I.notifyToRecord(kod, { messageId: 'k1', subject: '[킹오더브라더스 ｜ 스마트 오더의 새로운 기준] 문의하기에 새 응답이 접수되었습니다.' }, {});
+        ok(r.company === '시험상회' && r.name === '홍길동' && r.phone === '010-1234-5678' && r.email === 'test@example.com', '번호 붙은 항목(1. 업체명 …) · 괄호 설명(연락처(휴대폰번호))도 읽는다');
+        ok(r.routes[0] === '블로그' && r.inAt === '2026-10-12 09:41', '알게된 경로 → 경로 블로그 · 등록시각');
+        ok(/견적 문의/.test(r.requestNote) && /카페/.test(r.requestNote), '기타 요청 사항 → 문의 내용 · 업종선택 → (업종: 카페)');
+        ok(r.source && r.source.site === '킹오더닷컴', '제목으로 홈페이지 구분 — 킹오더닷컴');
+        ok(!I.parseNotifyText('카페\n블로그\n무인 냉장고').name, '값 줄(카페 · 블로그)을 항목 이름으로 오해하지 않는다');
+    }
+
     console.log('\n[4] 네이버 검색 · 블로그 RSS · 인스타 · 구글 시트');
     const nv = await I.runSource('naver', cfg, { naverClientSecret: 'nsecret' }, {});
     ok(nv.items.length === 2 && !nv.items.some(x => x.link.includes('kingorder_b')), '자사 블로그(kingorder_b)는 빼고 · 키워드가 달라도 같은 글은 한 번');   // 블로그 2(자사 1 제외) + 카페 1

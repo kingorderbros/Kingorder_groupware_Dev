@@ -188,15 +188,21 @@ const NOTIFY_FIELDS = [
     ['company', ['업체명', '매장명', '상호', '상호명', '회사명', '기관명']],
     ['phone', ['연락처', '휴대폰', '휴대전화', '전화번호', '핸드폰', '휴대폰번호']],
     ['email', ['이메일', '이메일 주소', 'E-mail', 'email']],
-    ['services', ['문의유형', '문의 유형', '관심 서비스', '관심서비스', '관심 제품', '상담 희망 제품', '관심 있는 서비스']],
+    ['services', ['문의유형', '문의 유형', '관심 서비스', '관심서비스', '관심 제품', '상담 희망 제품', '관심 있는 서비스', '관심 있는 솔루션']],
     ['self', ['알게 된 경로', '어떻게 알게 되셨나요', '유입경로', '유입 경로', '방문 경로']],
-    ['biz', ['업종', '매장형태', '매장 형태', '업태']],
+    ['biz', ['업종', '업종선택', '매장형태', '매장 형태', '업태']],
     ['message', ['문의내용', '문의 내용', '문의사항', '내용', '요청사항', '메시지']],
     ['_skip', ['등록자', '등록위치', '응답', '개인정보 수집동의', '개인정보 수집 및 이용 동의', '개인정보 수집 및 이용에 동의합니다']],
 ];
 const NOTIFY_LABELS = new Map();
 NOTIFY_FIELDS.forEach(([k, list]) => list.forEach(l => NOTIFY_LABELS.set(l.replace(/\s/g, '').toLowerCase(), k)));
-const labelKey = (line) => NOTIFY_LABELS.get(str(line).replace(/[\s:：]/g, '').toLowerCase());
+const NOTIFY_PREFIX = [['기타요청사항', 'message'], ['문의및요청', 'message'], ['관심있는', 'services'], ['업종선택', 'biz'], ['알게된경로', 'self'], ['알게되신경로', 'self']];
+const labelKey = (line) => {
+    // 「1. 업체명」 · 「4) 연락처(휴대폰번호)」 · 「업종선택 (복수 선택 가능)」 — 앞 번호와 괄호 설명을 떼고 봅니다 (2026-10-12 · 킹오더닷컴 문의하기 폼)
+    const t = String(line == null ? '' : line).trim().replace(/^\d{1,2}\s*[.)．]\s*/, '').replace(/\s*[(（][^)）]*[)）]?\s*$/, '').replace(/[\s:：]/g, '').toLowerCase();
+    if (!t || t.length > 30) return undefined;
+    return NOTIFY_LABELS.get(t) || NOTIFY_PREFIX.find(([p]) => t.startsWith(p))?.[1];
+};
 export function parseNotifyText(text) {
     const lines = str(text).replace(/\r/g, '').split('\n').map(s => s.trim()).filter(Boolean);
     const out = { at: '', name: '', company: '', phone: '', email: '', services: '', self: '', biz: '', message: '' };
