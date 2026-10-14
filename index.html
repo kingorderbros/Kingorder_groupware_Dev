@@ -7508,6 +7508,24 @@
     </div>
 
     <!-- ==================== 계약 상세 모달 — 계약관리에서 줄을 누르면 열립니다 (읽기 전용) ==================== -->
+    <!-- 첨부 계약서 미리보기 (2026-10-14) — 이름을 누르면 먼저 여기서 보고, 내려받기는 골라서 -->
+    <div id="contract-attach-preview" class="hidden fixed inset-0 bg-black bg-opacity-60 flex items-start justify-center z-[70] p-4 overflow-y-auto" onclick="if(event.target===this)closeContractAttachPreview()">
+        <div class="bg-gray-50 w-full max-w-5xl rounded-lg shadow-xl my-6">
+            <div class="flex justify-between items-start gap-3 p-4 border-b border-gray-200 bg-white rounded-t-lg">
+                <div class="min-w-0">
+                    <h3 id="cap-title" class="text-base font-bold text-gray-800 truncate"></h3>
+                    <p id="cap-sub" class="text-xs text-gray-500 mt-0.5 truncate"></p>
+                </div>
+                <div class="flex items-center gap-2 shrink-0">
+                    <a id="cap-open" href="#" target="_blank" rel="noopener" class="px-3 py-1.5 text-xs rounded border border-gray-300 text-gray-700 bg-white hover:bg-gray-50"><i class="fas fa-up-right-from-square mr-1"></i>새 창</a>
+                    <a id="cap-download" href="#" class="px-3 py-1.5 text-xs rounded bg-blue-600 text-white hover:bg-blue-700"><i class="fas fa-download mr-1"></i>내려받기</a>
+                    <button type="button" onclick="closeContractAttachPreview()" class="text-gray-400 hover:text-gray-600 ml-1" title="닫기"><i class="fas fa-times text-lg"></i></button>
+                </div>
+            </div>
+            <div id="cap-body" class="p-3"></div>
+        </div>
+    </div>
+
     <div id="contract-detail-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onclick="if(event.target===this)closeContractDetailModal()">
         <div class="bg-white w-full max-w-3xl rounded-lg shadow-xl max-h-[90vh] overflow-y-auto">
             <div class="p-6">
@@ -36255,11 +36273,52 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             return { hasNewFile, fileName: hasNewFile ? fileInput.files[0].name : '', noAttach, reason,
                      file: d && d.meta ? d.meta : null, busy: !!(d && d.busy), failed: !!(hasNewFile && (!d || d.failed)) };
         }
-        // 첨부된 계약서 이름 — 파일이 있으면 내려받기 링크로
+        // 첨부된 계약서 이름 — 누르면 먼저 미리보기 창으로 엽니다. 내려받기는 그 창에서 고릅니다 (2026-10-14)
         function contractAttachLinkHtml(c) {
             const name = escapeHtml(c.attachmentName || '');
             if (!c.attachment || !kobFiles.has(c.attachment)) return name;
-            return `<a href="${escapeHtml(kobFiles.src(c.attachment, { download: true }))}" download="${name}" onclick="event.stopPropagation()" class="underline hover:text-blue-700" title="계약서 내려받기">${name}</a>`;
+            return `<a href="#" onclick="event.preventDefault(); event.stopPropagation(); openContractAttachPreview('${escapeHtml(c.id)}')" class="underline hover:text-blue-700" title="계약서 보기">${name}</a>`;
+        }
+        // 화면에서 바로 열 수 있는 형식 — 서버도 이 형식만 화면 열기로 보냅니다 (functions/api/_files.js inlineSafe)
+        function contractAttachKind(c) {
+            const a = c.attachment || {};
+            const t = String(a.type || '').toLowerCase();
+            const n = String(c.attachmentName || a.name || '').toLowerCase();
+            if (/^image\/(png|jpe?g|gif|webp|bmp)$/.test(t) || /\.(png|jpe?g|gif|webp|bmp)$/.test(n)) return 'image';
+            if (t === 'application/pdf' || /\.pdf$/.test(n)) return 'pdf';
+            return '';
+        }
+        function openContractAttachPreview(contractId) {
+            const c = contracts.find(x => x.id === contractId);
+            if (!c || !c.attachment || !kobFiles.has(c.attachment)) return;
+            const name = c.attachmentName || c.attachment.name || '계약서';
+            const viewUrl = kobFiles.src(c.attachment);
+            const dlUrl = kobFiles.src(c.attachment, { download: true });
+            const size = c.attachment.size ? ` · ${gwFileSizeText(c.attachment.size)}` : '';
+            document.getElementById('cap-title').textContent = name;
+            document.getElementById('cap-sub').textContent = `${c.id} · ${c.name || ''}${size}`;
+            const open = document.getElementById('cap-open');
+            open.href = viewUrl;
+            const dl = document.getElementById('cap-download');
+            dl.href = dlUrl;
+            dl.setAttribute('download', name);
+            const kind = contractAttachKind(c);
+            const body = document.getElementById('cap-body');
+            if (kind === 'pdf') {
+                open.classList.remove('hidden');
+                body.innerHTML = `<iframe src="${escapeHtml(viewUrl)}#view=FitH" class="w-full h-[78vh] bg-white rounded border border-gray-200" title="${escapeHtml(name)}"></iframe>`;
+            } else if (kind === 'image') {
+                open.classList.remove('hidden');
+                body.innerHTML = `<div class="bg-white rounded border border-gray-200 p-2 flex justify-center"><img src="${escapeHtml(viewUrl)}" alt="${escapeHtml(name)}" class="max-w-full h-auto" style="max-height:78vh" /></div>`;
+            } else {
+                open.classList.add('hidden');
+                body.innerHTML = `<div class="bg-white rounded border border-gray-200 p-10 text-center text-sm text-gray-500"><i class="fas fa-file mr-1"></i>이 형식은 화면에서 미리 볼 수 없습니다. <b>[내려받기]</b>로 받아서 열어 주세요.</div>`;
+            }
+            document.getElementById('contract-attach-preview').classList.remove('hidden');
+        }
+        function closeContractAttachPreview() {
+            document.getElementById('contract-attach-preview').classList.add('hidden');
+            document.getElementById('cap-body').innerHTML = '';     // 보던 문서를 닫습니다 (PDF 뷰어가 남지 않게)
         }
 
         // ==================== 계약서 일괄 첨부 (2026-10-14) ====================
