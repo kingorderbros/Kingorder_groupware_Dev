@@ -3111,6 +3111,8 @@
                             </div>
                             <div class="flex flex-wrap gap-2">
                                 <button onclick="openContractImport()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded text-sm transition-colors whitespace-nowrap"><i class="fas fa-file-excel mr-1"></i>엑셀 업로드</button>
+                                <button onclick="openContractBulkAttach()" class="bg-white border border-emerald-300 text-emerald-700 hover:bg-emerald-50 px-4 py-2 rounded text-sm transition-colors whitespace-nowrap" title="파일 이름이 계약명과 같은 계약에 계약서를 한꺼번에 붙입니다"><i class="fas fa-paperclip mr-1"></i>계약서 일괄 첨부</button>
+                                <input type="file" id="ctr-bulk-attach-file" multiple accept=".pdf,image/*" class="hidden" onchange="runContractBulkAttach(this)" />
                                 <button onclick="openContractModal()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded text-sm transition-colors whitespace-nowrap">+ 신규 계약 등록</button>
                             </div>
                         </div>
@@ -36249,6 +36251,72 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             const name = escapeHtml(c.attachmentName || '');
             if (!c.attachment || !kobFiles.has(c.attachment)) return name;
             return `<a href="${escapeHtml(kobFiles.src(c.attachment, { download: true }))}" download="${name}" onclick="event.stopPropagation()" class="underline hover:text-blue-700" title="계약서 내려받기">${name}</a>`;
+        }
+
+        // ==================== 계약서 일괄 첨부 (2026-10-14) ====================
+        // 파일 이름(확장자 뺀 것)이 계약명과 같은 계약에 계약서를 붙입니다. 엑셀로 올린 계약에 서명된 계약서를 한꺼번에 붙일 때 씁니다.
+        //   · 이미 계약서가 붙은 계약은 덮어쓰지 않고 건너뜁니다
+        //   · 같은 계약명이 둘 이상이면 어느 계약인지 알 수 없어 건너뜁니다
+        //   · 맥에서 고른 파일 이름은 한글 자모가 풀려 있을 수 있어 NFC 로 맞춰 비교합니다
+        function contractAttachKey(v) { return String(v || '').normalize('NFC').replace(/\s+/g, ' ').trim(); }
+        function openContractBulkAttach() {
+            const el = document.getElementById('ctr-bulk-attach-file');
+            if (!el) return;
+            el.value = '';
+            el.click();
+        }
+        // 파일들을 계약과 짝짓습니다 — 올리기 전에 몇 건이 붙는지 먼저 보여 주려고 따로 둡니다
+        function planContractBulkAttach(files) {
+            const byName = new Map();
+            contracts.forEach(c => {
+                const k = contractAttachKey(c.name);
+                if (!byName.has(k)) byName.set(k, []);
+                byName.get(k).push(c);
+            });
+            const plan = [], noMatch = [], dup = [], already = [];
+            files.forEach(f => {
+                const list = byName.get(contractAttachKey(String(f.name || '').replace(/\.[^.]+$/, ''))) || [];
+                if (!list.length) noMatch.push(f.name);
+                else if (list.length > 1) dup.push(f.name);
+                else if (list[0].attachment) already.push(f.name);
+                else plan.push({ file: f, contract: list[0] });
+            });
+            return { plan, noMatch, dup, already };
+        }
+        async function runContractBulkAttach(input) {
+            const files = Array.from(input.files || []);
+            input.value = '';
+            if (!files.length) return;
+            if (!window.kobFiles) { alert('파일 저장소에 연결되지 않아 첨부할 수 없습니다.'); return; }
+            const { plan, noMatch, dup, already } = planContractBulkAttach(files);
+            const some = list => list.slice(0, 8).join('\n· ') + (list.length > 8 ? `\n· … 외 ${list.length - 8}건` : '');
+            const skipped = []
+                .concat(already.length ? [`이미 계약서가 있어 건너뜀 ${already.length}건`] : [])
+                .concat(dup.length ? [`같은 계약명이 여럿이라 건너뜀 ${dup.length}건:\n· ${some(dup)}`] : [])
+                .concat(noMatch.length ? [`계약명이 같은 계약이 없음 ${noMatch.length}건:\n· ${some(noMatch)}`] : []);
+            if (!plan.length) { alert('붙일 계약서가 없습니다.\n\n' + skipped.join('\n\n')); return; }
+            if (!confirm(`계약서 ${plan.length}건을 계약에 붙입니다.` + (skipped.length ? '\n\n' + skipped.join('\n\n') : ''))) return;
+
+            const max = kobFiles.MAX_BYTES || 20 * 1024 * 1024;
+            const failed = [];
+            let done = 0;
+            gwUploadBusyCount++;
+            try {
+                for (let i = 0; i < plan.length; i++) {
+                    const { file, contract } = plan[i];
+                    if ((file.size || 0) > max) { failed.push(`${file.name} (${gwFileSizeText(file.size)} — 한 파일 ${gwFileSizeText(max)} 까지)`); continue; }
+                    gwUploadBusy(`계약서 붙이는 중… (${i + 1}/${plan.length})`);
+                    try {
+                        const meta = await kobFiles.upload(file);
+                        meta.name = file.name;
+                        Object.assign(contract, { attachment: meta, attachmentName: file.name, noAttachment: false, noAttachmentReason: '' });
+                        done++;
+                        if (done % 20 === 0) saveContracts();      // 중간에 창을 닫아도 붙인 것까지는 남도록
+                    } catch (e) { failed.push(`${file.name} (${(e && e.message) || '올리지 못함'})`); }
+                }
+            } finally { gwUploadBusyCount--; gwUploadBusy(''); }
+            renderContracts();
+            alert(`계약서 ${done}건을 붙였습니다.` + (failed.length ? `\n\n올리지 못함 ${failed.length}건:\n· ${some(failed)}` : '') + (skipped.length ? '\n\n' + skipped.join('\n\n') : ''));
         }
 
         // 계약 모달 고객사 드롭다운 변경: '+ 고객사 생성 바로가기' 선택 시
