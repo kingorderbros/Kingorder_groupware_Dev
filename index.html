@@ -17404,14 +17404,14 @@ const QUOTE_TEMPLATES = [
         }
 
         // 범례 — 캘린더별 건수를 보여주고, 클릭하면 해당 캘린더만 필터링합니다.
-        function renderCalendarLegend(visibleSchedules, activeId) {
+        // 건수는 **지금 보고 있는 달**(ym = 'YYYY-MM')의 일정만 셉니다 — 전체 누적이 아니라 그 달 누적 (2026-10-14)
+        //   (생일은 앞뒤 해까지 만들어 두지만 달로 거르면 그 해 것만 남습니다)
+        function renderCalendarLegend(visibleSchedules, activeId, ym) {
             const el = document.getElementById('calendar-legend');
             if (!el) return;
+            const inMonth = visibleSchedules.filter(s => String(s.date || '').slice(0, 7) === ym);
             const chips = CALENDARS.map(c => {
-                // 생일은 앞뒤 해까지 만들어 두므로 올해 것만 셉니다 (2026-09-28)
-                const thisYear = String(new Date().getFullYear());
-                const count = visibleSchedules.filter(s => scheduleCalendarId(s) === c.id
-                    && (!isBirthdaySchedule(s) || String(s.date).slice(0, 4) === thisYear)).length;
+                const count = inMonth.filter(s => scheduleCalendarId(s) === c.id).length;
                 const on = activeId === c.id;
                 const ring = on ? 'ring-2 ring-offset-1 ring-gray-400' : 'opacity-90 hover:opacity-100';
                 return `<button type="button" onclick="filterCalendarBy('${c.id}')" title="${escapeHtml(c.desc)}" class="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition-all ${c.chip} ${ring}">
@@ -17420,15 +17420,14 @@ const QUOTE_TEMPLATES = [
                         </button>`;
             }).join('');
             // '전체 보기' — 맨 왼쪽에 항상 둡니다. 어느 캘린더를 골랐든 누르면 전체 캘린더로 (UAT 2026-10-08)
-            // 건수는 올해 생일만 세는 위 칩과 같은 기준으로 합칩니다.
-            const thisYear = String(new Date().getFullYear());
-            const total = visibleSchedules.filter(s => !isBirthdaySchedule(s) || String(s.date).slice(0, 4) === thisYear).length;
+            // 건수는 위 칩과 같은 기준(그 달 일정)으로 합칩니다.
+            const total = inMonth.length;
             const allRing = activeId ? 'bg-white text-gray-600 border border-gray-300 hover:bg-gray-50' : 'bg-gray-700 text-white ring-2 ring-offset-1 ring-gray-400';
-            const all = `<button type="button" onclick="filterCalendarBy('')" title="모든 캘린더의 일정을 함께 봅니다" class="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition-all ${allRing}">
+            const all = `<button type="button" onclick="filterCalendarBy('')" title="모든 캘린더의 일정을 함께 봅니다 (숫자는 ${Number(ym.slice(5))}월 일정 수)" class="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition-all ${allRing}">
                             <i class="fas fa-layer-group"></i>전체 보기
                             <span class="${activeId ? 'bg-gray-100 text-gray-700' : 'bg-white/25 text-white'} rounded-full px-1.5">${total}</span>
                         </button>`;
-            el.innerHTML = `<span class="text-xs font-semibold text-gray-500 mr-1">캘린더</span>${all}${chips}`;
+            el.innerHTML = `<span class="text-xs font-semibold text-gray-500 mr-1">캘린더 <span class="font-normal text-gray-400">· ${Number(ym.slice(5))}월</span></span>${all}${chips}`;
         }
 
         // 범례 클릭 → 필터 셀렉트와 동기화
@@ -17937,8 +17936,8 @@ const QUOTE_TEMPLATES = [
             const calFilter = (document.getElementById('calendar-filter-cal') || {}).value || '';
             const visible = getVisibleSchedules(scopeInfo).filter(s => !deptFilter || (s.dept || 'sales') === deptFilter);
             const deptSchedules = visible.filter(s => !calFilter || scheduleCalendarId(s) === calFilter);
-            // 범례 건수는 부서 필터까지 반영한 값 (캘린더 필터는 제외 — 클릭 전환용)
-            renderCalendarLegend(visible, calFilter);
+            // 범례 건수는 부서 필터까지 반영한 값 (캘린더 필터는 제외 — 클릭 전환용) · 보고 있는 달의 일정만 (2026-10-14)
+            renderCalendarLegend(visible, calFilter, `${year}-${String(month + 1).padStart(2, '0')}`);
 
             // '구분 관리' 버튼은 편집 권한이 있는 사용자에게만 노출
             const typeBtn = document.getElementById('calendar-type-manage-btn');
