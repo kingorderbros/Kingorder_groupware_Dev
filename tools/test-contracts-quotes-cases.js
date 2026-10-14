@@ -17,8 +17,8 @@ function slice(a, b, label) {
 
 const KINDS = [
     { label: '계약', var: 'contracts', table: 'contracts', fn: 'Contracts', counter: 'contractIdCounter', start: 8, prefix: 'CTR-',
-      code: slice('let contracts = (window.kobDb', 'let contractIdCounter', '계약 저장'),
-      sample: (id) => ({ id, name: '킹오더식당 POS 3대', customerId: 'c3', status: '초안', approvalStatus: '미제출' }) },
+      code: slice('function normalizeContractApproval', 'let contractIdCounter', '계약 저장'),   // 승인 상태 맞추기(2026-10-14)부터
+      sample: (id) => ({ id, name: '킹오더식당 POS 3대', customerId: 'c3', status: '초안', approvalStatus: '미승인' }) },
     { label: '견적', var: 'quotes', table: 'quotes', fn: 'Quotes', counter: 'quoteIdCounter', start: 6, prefix: 'QT-',
       code: slice('let quotes = (window.kobDb', 'let quoteIdCounter', '견적 저장'),
       sample: (id) => ({ id, name: '킹오더식당 견적', customerId: 'c3', status: '작성중', lines: [] }) },

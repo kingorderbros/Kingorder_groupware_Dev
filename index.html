@@ -6901,9 +6901,9 @@
                     <ul class="mt-2 text-[11px] text-gray-500 list-disc list-inside space-y-0.5">
                         <li><b>계약명 · 고객사</b> 두 열은 있어야 합니다. 나머지는 있는 것만 반영합니다.</li>
                         <li><b>고객사</b>는 <b>업체 관리에 등록된 곳</b>에만 붙습니다 — 없으면 그 줄은 건너뛰고 이름을 알려 줍니다. <b>업체 관리 업로드를 먼저</b> 해 주세요.</li>
-                        <li><b>계약번호</b>를 입력하면 그 계약을 <b>갱신</b>하고, 비워 두면 <b>새 계약</b>을 만듭니다 (초안 · 미승인 · 결재선 생성).</li>
+                        <li><b>계약번호</b>를 입력하면 그 계약을 <b>갱신</b>하고, 비워 두면 <b>새 계약</b>을 만듭니다 (초안 · 미승인 · 결재선 생성). 계약번호가 없어도 <b>계약명 · 고객사가 같은 계약</b>이 이미 있으면 그 계약을 갱신하므로, 같은 파일을 다시 올려도 중복이 생기지 않습니다.</li>
                         <li><b>계약상태가 활성</b>인 계약의 고객사는 거래상태가 <b>거래중</b>으로 바뀝니다 (PG정산 은 그대로).</li>
-                        <li><b>승인상태</b>에 <i>승인됨</i>(서명된 계약서 있음)을 적으면 결재선을 거치지 않고 <b>승인됨</b>으로, 비우거나 <i>미승인</i>이면 <b>미승인</b>으로 올라갑니다.</li>
+                        <li><b>승인상태</b>에 <i>승인완료</i>(서명된 계약서 있음)를 적으면 결재선을 거치지 않고 <b>승인완료</b>로, 비우거나 <i>미승인</i>이면 <b>미승인</b>으로 올라갑니다.</li>
                         <li><b>파트너사</b>는 이름으로 찾습니다. 못 찾으면 비워 두고 계약만 올립니다.</li>
                         <li><b>계약상태</b>는 초안 · 승인대기 · 활성 · 만료 · 해지, <b>납부조건</b>은 일시불 · 월납 · 분기납 · 연납.</li>
                         <li>품목 · 계약서 첨부 · 결재 진행은 <b>계약 상세</b>에서 이어서 합니다.</li>
@@ -26746,8 +26746,8 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             if (c.status === '해지') return 'lost';
             if (c.status === '활성' || c.status === '만료') return 'done';
             if (c.approvalStatus === '승인대기') return 'approval';
+            if (c.approvalStatus === '승인완료' && c.approvedBySignature) return 'done';   // 서명된 계약서로 올린 계약 — 날인까지 끝남 (2026-10-14)
             if (c.approvalStatus === '승인완료') return 'sign';        // 결재가 끝났으면 날인만 남습니다
-            if (c.approvalStatus === '승인됨') return 'done';          // 서명된 계약서로 올린 계약 — 날인까지 끝남 (2026-10-14)
             return 'nego';
         }
         // 추적값을 꺼냅니다. 없으면 그 자리에서 만들어 붙입니다.
@@ -35744,7 +35744,18 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
         // ---------- 저장 (2026-09-17) ----------
         // 계약은 Supabase 'contracts' 표에 한 건 = 한 줄로 둡니다 (js/kob-db.js).
         // 화면 코드는 지금까지처럼 contracts 배열을 다루고, 바꾼 뒤에 save 함수만 부릅니다.
-        let contracts = (window.kobDb ? kobDb.rows('contracts') : []);
+        // 승인 상태는 '승인완료' · '미승인' 두 가지로 보여 줍니다 (2026-10-14)
+        //   · 예전 '미제출'(상신 전) → '미승인' · 엑셀 업로드 첫 판의 '승인됨'(서명 계약서) → '승인완료' + approvedBySignature
+        //   · 불러올 때 화면용으로만 맞추고, 그 계약을 다시 저장할 때 새 값으로 남습니다
+        function normalizeContractApproval(list) {
+            (list || []).forEach(c => {
+                if (!c) return;
+                if (!c.approvalStatus || c.approvalStatus === '미제출') c.approvalStatus = '미승인';
+                else if (c.approvalStatus === '승인됨') { c.approvalStatus = '승인완료'; c.approvedBySignature = true; }
+            });
+            return list;
+        }
+        let contracts = normalizeContractApproval(window.kobDb ? kobDb.rows('contracts') : []);
         let contractsSaved = new Map(contracts.map(x => [x.id, JSON.stringify(x)]));
 
         function saveContracts() {
@@ -35777,7 +35788,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
 
         function reloadContractsFromDb() {
             if (!window.kobDb) return;
-            contracts = kobDb.rows('contracts');
+            contracts = normalizeContractApproval(kobDb.rows('contracts'));
             contractsSaved = new Map(contracts.map(x => [x.id, JSON.stringify(x)]));
             syncContractsIdCounter();
             // 계약에서 파생되는 업무이력·파이프라인도 다시 만듭니다.
@@ -35847,15 +35858,13 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
         };
 
         const approvalStatusBadge = {
-            '미제출': 'bg-gray-100 text-gray-600',
-            '미승인': 'bg-orange-50 text-orange-700',      // 엑셀로 올린 계약 — 서명 확인 전 (2026-10-14)
+            '미승인': 'bg-orange-50 text-orange-700',      // 상신 전 · 서명 확인 전 (예전 '미제출') (2026-10-14)
             '승인대기': 'bg-yellow-100 text-yellow-700',
             '승인완료': 'bg-green-100 text-green-700',
-            '승인됨': 'bg-green-100 text-green-700',        // 엑셀로 올린 계약 — 서명된 계약서라 승인으로 봄 (2026-10-14)
             '반려': 'bg-red-100 text-red-700'
         };
-        // 결재를 마친 것으로 보는 상태 — 결재선으로 끝낸 '승인완료' 와 서명 계약서로 올린 '승인됨'
-        const isContractApproved = c => c.approvalStatus === '승인완료' || c.approvalStatus === '승인됨';
+        // 결재를 마친 계약 — 결재선으로 끝냈거나, 서명된 계약서로 올려 승인으로 본 것(approvedBySignature)
+        const isContractApproved = c => c.approvalStatus === '승인완료';
 
         // 결재선 초기화 (신규/재상신 시)
         function buildApprovalSteps() {
@@ -35958,7 +35967,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                 const periodBadge = renewalDue
                     ? `<span class="block text-xs text-yellow-600 font-bold mt-0.5"><i class="fas fa-sync-alt mr-1"></i>D-${daysLeft} 갱신임박</span>`
                     : (c.autoRenew && c.status === '활성' ? '<span class="block text-xs text-blue-500 mt-0.5"><i class="fas fa-sync-alt mr-1"></i>자동갱신</span>' : '');
-                const appStatus = c.approvalStatus || '미제출';
+                const appStatus = c.approvalStatus || '미승인';
                 const appProgress = (appStatus === '승인대기')
                     ? `<span class="block text-[10px] text-gray-400 mt-0.5">${contractApprovalLine.length}단계 중 ${c.currentStep || 0}단계</span>` : '';
                 return `
@@ -36008,7 +36017,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             const customer = customers.find(cu => cu.id === c.customerId);
             const partner = partners.find(pt => pt.id === c.partnerId);
             const daysLeft = getContractDaysLeft(c);
-            const appStatus = c.approvalStatus || '미제출';
+            const appStatus = c.approvalStatus || '미승인';
             const steps = c.approvalSteps || [];
 
             document.getElementById('cdet-name').innerText = c.name || '(계약명 없음)';
@@ -36436,12 +36445,12 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                 renderContractApproval(id);
                 renderContracts();
             } else {
-                // 신규 계약서 작성 → 초안/미제출 상태, 결재선 생성
+                // 신규 계약서 작성 → 초안/미승인 상태, 결재선 생성
                 const newId = 'CTR-' + String(contractIdCounter++).padStart(4, '0');
                 contracts.unshift({
                     id: newId, ...data,
                     status: '초안',
-                    approvalStatus: '미제출',
+                    approvalStatus: '미승인',
                     currentStep: 0,
                     approvalSteps: buildApprovalSteps()
                 });
@@ -36462,7 +36471,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
         function renderContractApproval(contractId) {
             const c = contracts.find(x => x.id === contractId);
             if (!c) return;
-            if (!c.approvalSteps) { c.approvalSteps = buildApprovalSteps(); c.currentStep = 0; c.approvalStatus = c.approvalStatus || '미제출'; }
+            if (!c.approvalSteps) { c.approvalSteps = buildApprovalSteps(); c.currentStep = 0; c.approvalStatus = c.approvalStatus || '미승인'; }
 
             // 상단 배지
             const badge = document.getElementById('contract-approval-badge');
@@ -36504,9 +36513,9 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
 
             // 액션 영역
             const actionsEl = document.getElementById('contract-approval-actions');
-            if (c.approvalStatus === '미제출' || c.approvalStatus === '미승인') {
+            if (c.approvalStatus === '미승인') {
                 actionsEl.innerHTML = `
-                    <p class="text-sm text-gray-600 mb-2">${c.approvalStatus === '미승인' ? '엑셀로 올린 계약입니다. 서명된 계약서를 확인하지 못해 <b>미승인</b>으로 두었습니다. ' : ''}작성된 계약서를 결재선에 상신합니다.</p>
+                    <p class="text-sm text-gray-600 mb-2">${/엑셀 업로드/.test(c.noAttachmentReason || '') ? '엑셀로 올린 계약입니다. 서명된 계약서를 확인하지 못해 <b>미승인</b>으로 두었습니다. ' : ''}작성된 계약서를 결재선에 상신합니다.</p>
                     <button type="button" onclick="submitContractForApproval('${c.id}')" class="px-4 py-2 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 transition-colors"><i class="fas fa-paper-plane mr-1"></i>승인 상신</button>
                 `;
             } else if (c.approvalStatus === '승인대기') {
@@ -36519,10 +36528,10 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                         <button type="button" onclick="rejectContractStep('${c.id}')" class="px-4 py-2 bg-red-500 text-white rounded text-sm hover:bg-red-600 transition-colors"><i class="fas fa-times mr-1"></i>반려</button>
                     </div>
                 `;
+            } else if (c.approvalStatus === '승인완료' && c.approvedBySignature) {
+                actionsEl.innerHTML = `<p class="text-sm text-green-700 font-medium"><i class="fas fa-file-signature mr-1"></i>서명된 계약서가 있어 <b>승인완료</b>로 보고 엑셀로 올린 계약입니다. 결재선은 거치지 않았습니다.</p>`;
             } else if (c.approvalStatus === '승인완료') {
                 actionsEl.innerHTML = `<p class="text-sm text-green-700 font-medium"><i class="fas fa-check-circle mr-1"></i>모든 결재가 완료되어 계약이 <b>활성</b> 상태로 전환되었습니다.</p>`;
-            } else if (c.approvalStatus === '승인됨') {
-                actionsEl.innerHTML = `<p class="text-sm text-green-700 font-medium"><i class="fas fa-file-signature mr-1"></i>서명된 계약서가 있어 <b>승인된 것으로</b> 보고 엑셀로 올린 계약입니다. 결재선은 거치지 않았습니다.</p>`;
             } else if (c.approvalStatus === '반려') {
                 actionsEl.innerHTML = `
                     <p class="text-sm text-red-600 mb-2 font-medium"><i class="fas fa-undo mr-1"></i>계약서가 반려되었습니다. 내용 보완 후 재상신하세요.</p>
@@ -41323,7 +41332,8 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
         //   · 계약번호를 입력하면 그 계약을 갱신하고, 비워 두면 새 계약을 만듭니다.
         //   · 새로 만드는 계약은 계약관리에서 [신규 계약 등록] 한 것과 같은 모양입니다
         //     (초안 · 미승인 · 결재선 생성). 품목·첨부는 계약 상세에서 채웁니다.
-        //   · 승인상태 칸이 '승인됨'(서명된 계약서 있음)이면 결재선을 모두 승인으로 채워 '승인됨' 으로 둡니다 (2026-10-14).
+        //   · 승인상태 칸이 '승인완료'(서명된 계약서 있음)이면 결재선을 모두 승인으로 채워 '승인완료' 로 둡니다 (2026-10-14).
+        //   · 계약번호가 비어도 계약명 · 고객사가 같은 계약이 하나 있으면 새로 만들지 않고 그 계약을 갱신합니다 (같은 파일을 다시 올려도 중복 안 생김).
         const CONTRACT_STATUSES = ['초안', '승인대기', '활성', '만료', '해지'];
         const CONTRACT_PAY_TERMS = ['일시불', '월납', '분기납', '연납'];
 
@@ -41346,15 +41356,15 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             { key: 'discountRate', label: '할인율(%)',     aliases: ['할인율', '할인율(%)', '할인', 'discount'], number: true },
             { key: 'specialType', label: '특수계약종류',   aliases: ['특수계약종류', '특수계약', '특수 계약 종류', '계약종류'] },
             { key: 'memo',        label: '비고',           aliases: ['비고', '메모', '특이사항'] },
-            // 승인 — 서명된 계약서가 있으면 '승인됨', 아니면 '미승인' (비우면 새 계약은 미승인) (2026-10-14)
+            // 승인 — 서명된 계약서가 있으면 '승인완료', 아니면 '미승인' (비우면 새 계약은 미승인) (2026-10-14)
             { key: 'approvalStatus', label: '승인상태',    aliases: ['승인상태', '승인 상태', '결재상태', '서명여부', '계약서서명'] }
         ];
-        // 승인상태 칸 → 값. 승인됨 · 서명 · Y 는 승인됨, 미승인 · N 은 미승인, 모르면 ''
+        // 승인상태 칸 → 값. 승인완료 · 승인됨 · 서명 · Y 는 승인완료, 미승인 · 미제출 · N 은 미승인, 모르면 ''
         function parseContractImportApproval(v) {
             const t = String(v || '').replace(/\s+/g, '').toLowerCase();
             if (!t) return '';
-            if (/^(미승인|미서명|n|no|x|아니오)$/.test(t)) return '미승인';
-            if (/^(승인됨|승인|승인완료|서명|서명완료|날인|y|yes|o|예)$/.test(t)) return '승인됨';
+            if (/^(미승인|미제출|미서명|n|no|x|아니오)$/.test(t)) return '미승인';
+            if (/^(승인완료|승인됨|승인|서명|서명완료|날인|y|yes|o|예)$/.test(t)) return '승인완료';
             return '';
         }
         // 서명된 계약서로 승인한 계약 — 결재선의 모든 단계를 '승인' 으로 채워 둡니다 (계약 상세의 결재 표시와 맞도록)
@@ -41363,7 +41373,8 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             c.approvalSteps = (c.approvalSteps && c.approvalSteps.length ? c.approvalSteps : buildApprovalSteps())
                 .map(s => Object.assign({}, s, { state: '승인', approver: s.approver || '계약서 서명', date: s.date || today, comment: s.comment || '서명된 계약서로 승인 간주 (엑셀 업로드)' }));
             c.currentStep = c.approvalSteps.length;
-            c.approvalStatus = '승인됨';
+            c.approvalStatus = '승인완료';
+            c.approvedBySignature = true;
         }
 
         function openContractImport() {
@@ -41383,7 +41394,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             const head = CONTRACT_IMPORT_COLUMNS.map(c => c.label);
             const s1 = { id: '', name: '알파소프트 - 연간 솔루션 공급 계약', customer: '알파소프트', customerBiz: '123-45-67890',
                          partner: '오케팅홀딩스', bizType: 'BtoB', owner: '김영업', value: 45000000, start: '2026-01-01', end: '2026-12-31',
-                         status: '활성', paymentTerm: '연납', autoRenew: 'Y', discountRate: 5, specialType: '', memo: '연 1회 자동 갱신 조건', approvalStatus: '승인됨' };
+                         status: '활성', paymentTerm: '연납', autoRenew: 'Y', discountRate: 5, specialType: '', memo: '연 1회 자동 갱신 조건', approvalStatus: '승인완료' };
             const s2 = { id: '', name: '베타컴퍼니 - 추가 라이선스 계약', customer: '베타컴퍼니', customerBiz: '234-56-78901',
                          partner: '', bizType: 'BtoC', owner: '박대리', value: 5000000, start: '2026-06-01', end: '2027-05-31',
                          status: '초안', paymentTerm: '월납', autoRenew: 'N', memo: '내부 품의 진행 중', approvalStatus: '미승인' };
@@ -41437,7 +41448,9 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                 });
 
                 const id = cell(r, 'id');
-                const existing = id ? contracts.find(c => c.id === id) : null;
+                // 계약번호가 없으면 계약명 · 고객사가 같은 계약 하나를 찾아 갱신합니다 — 같은 파일을 다시 올려도 중복이 생기지 않게 (2026-10-14)
+                const sameName = id ? [] : contracts.filter(c => c.customerId === cust.id && contractAttachKey(c.name) === contractAttachKey(name));
+                const existing = id ? contracts.find(c => c.id === id) : (sameName.length === 1 ? sameName[0] : null);
                 const approval = parseContractImportApproval(cell(r, 'approvalStatus'));
                 // 거래 구분 — 적어 왔으면 그 값을 씁니다. 안 적었으면 **새 계약만** 파트너사 지정
                 // 여부로 채우고, 이미 있는 계약은 적어 둔 값을 그대로 둡니다. (2026-09-08)
@@ -41447,8 +41460,8 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                 if (existing) {
                     Object.assign(existing, data);
                     // 승인상태를 적어 왔을 때만 바꿉니다. 결재선으로 진행 중 · 끝난 계약은 미승인으로 되돌리지 않습니다
-                    if (approval === '승인됨' && !isContractApproved(existing)) markContractApprovedBySignature(existing);
-                    else if (approval === '미승인' && existing.approvalStatus === '미제출') existing.approvalStatus = '미승인';
+                    if (approval === '승인완료' && !isContractApproved(existing)) markContractApprovedBySignature(existing);
+                    stat.approved += approval === '승인완료' ? 1 : 0;
                     stat.updated++;
                 } else {
                     const newId = 'CTR-' + String(contractIdCounter++).padStart(4, '0');
@@ -41458,8 +41471,8 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                         attachmentName: '', noAttachment: true, noAttachmentReason: '엑셀 업로드로 등록 — 계약서 첨부 예정',
                         approvalStatus: '미승인', currentStep: 0, approvalSteps: buildApprovalSteps()
                     }, data));
-                    if (approval === '승인됨') markContractApprovedBySignature(contracts[0]);
-                    stat.approved += approval === '승인됨' ? 1 : 0;
+                    if (approval === '승인완료') markContractApprovedBySignature(contracts[0]);
+                    stat.approved += approval === '승인완료' ? 1 : 0;
                     stat.added++;
                 }
                 if (preview.length < 5) preview.push(Object.assign({ name: name, customer: cust.name, partner: pName }, data));
@@ -41473,7 +41486,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             if (typeof renderWorkCenter === 'function' && document.getElementById('sec-sales-work-center')) renderWorkCenter('sales');
 
             box.innerHTML = importResultBox(
-                `계약 올리기 완료 — 신규 ${stat.added}건(승인됨 ${stat.approved} · 미승인 ${stat.added - stat.approved}) · 갱신 ${stat.updated}건`,
+                `계약 올리기 완료 — 신규 ${stat.added}건 · 갱신 ${stat.updated}건 (승인완료 ${stat.approved} · 미승인 ${stat.added + stat.updated - stat.approved})`,
                 [`건너뜀 ${stat.noName + stat.noCustomer}건 (계약명 없음 ${stat.noName} · 등록되지 않은 고객사 ${stat.noCustomer})`,
                  `현재 계약 <b>${contracts.length}</b>건`].concat(traded.size ? [`활성 계약이 있어 거래상태를 <b>거래중</b>으로 바꾼 업체 ${traded.size}곳`] : []),
                 usedCols, unknownHeads(rows, found, CONTRACT_IMPORT_COLUMNS), preview, usedCols.slice(0, 8))
@@ -43618,7 +43631,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                 listEl.innerHTML = list.map(c => {
                     const partner = partners.find(p => p.id === c.partnerId);
                     const statusBadge = `<span class="px-2 py-1 text-xs rounded-full font-medium ${contractStatusBadge[c.status] || 'bg-gray-100 text-gray-700'}">${escapeHtml(c.status)}</span>`;
-                    const appStatus = c.approvalStatus || '미제출';
+                    const appStatus = c.approvalStatus || '미승인';
                     const appBadge = `<span class="px-2 py-1 text-xs rounded-full font-medium ${approvalStatusBadge[appStatus] || 'bg-gray-100 text-gray-600'}">${escapeHtml(appStatus)}</span>`;
                     const daysLeft = getContractDaysLeft(c);
                     const renewalDue = isContractRenewalDue(c);
