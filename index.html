@@ -41521,6 +41521,9 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                     // 승인상태를 적어 왔을 때만 바꿉니다. 결재선으로 진행 중 · 끝난 계약은 미승인으로 되돌리지 않습니다
                     if (approval === '승인완료' && !isContractApproved(existing)) markContractApprovedBySignature(existing);
                     stat.approved += approval === '승인완료' ? 1 : 0;
+                    // 영업 단계(closing)가 처음 자동으로 잡힌 그대로면 지워서 바뀐 상태로 다시 잡게 합니다 — 손으로 옮긴 단계는 그대로 둡니다 (2026-10-14)
+                    const cg = existing.closing;
+                    if (cg && (cg.history || []).length <= 1 && /기존 계약 내용에서 단계를 잡았습니다/.test(((cg.history || [])[0] || {}).note || '')) delete existing.closing;
                     stat.updated++;
                 } else {
                     const newId = 'CTR-' + String(contractIdCounter++).padStart(4, '0');
