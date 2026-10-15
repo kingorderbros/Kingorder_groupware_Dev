@@ -12882,11 +12882,21 @@ const QUOTE_TEMPLATES = [
         //   · 파일 하나하나의 열람·수정 권한은 **넥스트클라우드 계정 권한**을 따릅니다.
         //     그룹웨어가 보는 것은 '자료실 메뉴에 들어올 수 있는가' 하나뿐입니다.
         //     (나중에 폴더별 노출까지 그룹웨어에서 잠그려면 folders[].dept 를 권한과 묶으면 됩니다)
+        //   · 2026-10-15 — 우선 사내망(http)만 씁니다. 외부 접속은 [외부 접속 사용] 을 켜야 쓰입니다.
+        //     계정은 본부 공용(아이디만 보여 줌) → 나중에 개인 계정(아이디 = 로그인 이메일)으로 바꿀 수 있습니다.
         const ARCHIVE_KEY = 'gwArchive.v1';
         const ARCHIVE_SEED = {
             lanUrl: '',              // 사내망 주소   예) http://192.168.0.50
             wanUrl: '',              // 바깥 주소     예) https://cloud.kingorder.co.kr
-            mode: 'auto',            // auto(자동) · lan(사내망만) · wan(바깥만)
+            mode: 'auto',            // auto(자동) · lan(사내망만) · wan(바깥만) — 외부 접속을 켰을 때만 씁니다
+            // 외부 접속 (2026-10-15) — 끄면 사내망 주소 하나만 씁니다. 바깥 주소를 마련한 뒤 켭니다.
+            wanEnabled: false,
+            // 파일서버 계정 방식 (2026-10-15)
+            //   dept     — 본부마다 공용 계정 하나 (deptAccounts[본부 id] = { loginId, memo })
+            //   personal — 사람마다 계정 (아이디 = 그룹웨어 로그인 이메일)
+            // 비밀번호는 여기에 두지 않습니다 — 이 설정은 로그인한 모든 직원 브라우저에 내려갑니다.
+            account: 'dept',
+            deptAccounts: {},
             folders: [
                 { id: 'af1', name: '공통자료',   path: '/공통자료', dept: '전사',     memo: '전 직원이 함께 보는 자료' },
                 { id: 'af2', name: '영업본부',   path: '/영업본부', dept: '영업본부', memo: '제안서 · 견적 양식 · 거래처 자료' },
@@ -12902,10 +12912,23 @@ const QUOTE_TEMPLATES = [
             if (saved && typeof saved === 'object') {
                 ['lanUrl', 'wanUrl', 'mode'].forEach(k => { if (typeof saved[k] === 'string') out[k] = saved[k]; });
                 if (Array.isArray(saved.folders)) out.folders = saved.folders;
+                // 예전 설정(외부 접속 칸이 생기기 전)은 바깥 주소를 쓰고 있었으면 켜진 것으로 봅니다
+                out.wanEnabled = typeof saved.wanEnabled === 'boolean' ? saved.wanEnabled
+                    : (!!archiveTrim(saved.wanUrl) && saved.mode !== 'lan');
+                if (saved.account === 'dept' || saved.account === 'personal') out.account = saved.account;
+                if (saved.deptAccounts && typeof saved.deptAccounts === 'object' && !Array.isArray(saved.deptAccounts)) out.deptAccounts = saved.deptAccounts;
             }
             return out;
         })();
         function saveArchiveConf() { return saveJsonStore(ARCHIVE_KEY, archiveConf); }
+        // 지금 실제로 쓰는 접속 방식 — 외부 접속이 꺼져 있으면 늘 사내망만
+        function archiveMode() { return archiveConf.wanEnabled ? (archiveConf.mode || 'auto') : 'lan'; }
+        // 이 사람이 쓸 파일서버 아이디 — 본부 공용이면 본부 계정, 개인이면 로그인 이메일
+        function archiveMyAccount() {
+            if (archiveConf.account === 'personal') return { loginId: String(currentUserEmail || ''), memo: '' };
+            const a = (archiveConf.deptAccounts || {})[currentUserDept] || {};
+            return { loginId: String(a.loginId || ''), memo: String(a.memo || '') };
+        }
 
         // 주소 끝의 '/' 를 떼어 둡니다 — 뒤에 경로를 붙일 때 '//' 가 되지 않도록.
         function archiveTrim(url) { return String(url || '').trim().replace(/\/+$/, ''); }
@@ -13027,14 +13050,26 @@ const QUOTE_TEMPLATES = [
         // 어느 주소로 보낼지 정합니다.
         //   자동     — 사내망을 먼저 두드려 보고, 닿으면 사내망 / 안 닿으면 바깥 주소
         //   사내망만 · 바깥만 — 적어 둔 그 주소만 씁니다
+        //   사내망 주소가 http 인데 그룹웨어가 https 면 브라우저가 미리 확인하는 것을 막습니다.
+        //   그래도 새 창으로 여는 것은 됩니다 — 그때는 확인을 건너뛰고(nocheck) 그 주소로 엽니다 (2026-10-15)
         function archiveResolve() {
-            const lan = archiveTrim(archiveConf.lanUrl), wan = archiveTrim(archiveConf.wanUrl);
+            const mode = archiveMode();
+            const lan = archiveTrim(archiveConf.lanUrl);
+            const wan = archiveConf.wanEnabled ? archiveTrim(archiveConf.wanUrl) : '';
             if (!lan && !wan) { archiveLink = { state: 'unset', via: '', url: '' }; return Promise.resolve(archiveLink); }
-            if (archiveConf.mode === 'lan') {
+            if (mode === 'lan') {
+                if (!lan) { archiveLink = { state: 'unset', via: '', url: '' }; return Promise.resolve(archiveLink); }
+                if (archiveMixedBlocked(lan)) { archiveLink = { state: 'nocheck', via: 'lan', url: lan }; return Promise.resolve(archiveLink); }
                 return archiveProbe(lan).then(ok => (archiveLink = { state: ok ? 'ok' : 'down', via: 'lan', url: lan }));
             }
-            if (archiveConf.mode === 'wan') {
+            if (mode === 'wan') {
                 return archiveProbe(wan).then(ok => (archiveLink = { state: ok ? 'ok' : 'down', via: 'wan', url: wan }));
+            }
+            // 자동 — 사내망을 확인할 수 없으면 바깥을 확인하고, 바깥도 안 되면 사내망으로 열어 봅니다
+            if (lan && archiveMixedBlocked(lan)) {
+                if (!wan) { archiveLink = { state: 'nocheck', via: 'lan', url: lan }; return Promise.resolve(archiveLink); }
+                return archiveProbe(wan).then(ok2 => (archiveLink = ok2 ? { state: 'ok', via: 'wan', url: wan }
+                                                                         : { state: 'nocheck', via: 'lan', url: lan }));
             }
             return archiveProbe(lan).then(ok => {
                 if (ok) { archiveLink = { state: 'ok', via: 'lan', url: lan }; return archiveLink; }
@@ -13047,9 +13082,11 @@ const QUOTE_TEMPLATES = [
         // 닿는지와 상관없이 한 곳은 늘 돌려줍니다.
         function archiveTargetBase() {
             if (archiveLink.url) return archiveLink.url;
-            const lan = archiveTrim(archiveConf.lanUrl), wan = archiveTrim(archiveConf.wanUrl);
-            if (archiveConf.mode === 'lan') return lan;
-            if (archiveConf.mode === 'wan') return wan;
+            const lan = archiveTrim(archiveConf.lanUrl);
+            const wan = archiveConf.wanEnabled ? archiveTrim(archiveConf.wanUrl) : '';
+            const mode = archiveMode();
+            if (mode === 'lan') return lan;
+            if (mode === 'wan') return wan;
             return lan || wan;
         }
         // 넥스트클라우드 파일 화면 주소. 폴더 경로를 주면 그 폴더가 열린 채로 들어갑니다.
@@ -13384,10 +13421,16 @@ const QUOTE_TEMPLATES = [
 
             // ---------- 연결 상태 ----------
             const tone = st === 'ok' ? { box: 'border-emerald-200 bg-emerald-50', dot: 'bg-emerald-500', text: 'text-emerald-800' }
+                       : st === 'nocheck' ? { box: 'border-sky-200 bg-sky-50', dot: 'bg-sky-500', text: 'text-sky-800' }
                        : st === 'checking' ? { box: 'border-gray-200 bg-gray-50', dot: 'bg-gray-400 animate-pulse', text: 'text-gray-600' }
                        : { box: 'border-amber-200 bg-amber-50', dot: 'bg-amber-500', text: 'text-amber-800' };
             let headline, detail;
-            if (st === 'checking') {
+            if (st === 'nocheck') {
+                headline = '사내망 파일서버로 엽니다 — 사무실 안에서만 열립니다';
+                detail = escapeHtml(archiveLink.url)
+                    + '<br>사내망 주소(http)는 브라우저 보안 때문에 미리 연결을 확인하지 않습니다. '
+                    + '<b>자료실 열기</b> 를 누르면 바로 열립니다. 밖(외근 · 재택)에서는 열리지 않습니다.';
+            } else if (st === 'checking') {
                 headline = '연결 확인 중…';
                 detail = '파일서버에 닿는지 알아보고 있습니다.';
             } else if (st === 'unset') {
@@ -13423,9 +13466,42 @@ const QUOTE_TEMPLATES = [
                                 <i class="fas fa-rotate mr-1"></i>다시 확인</button>
                             <button type="button" onclick="openArchive('')" ${canOpen ? '' : 'disabled'}
                                     class="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-sm font-semibold shadow-sm disabled:opacity-40 disabled:cursor-not-allowed">
-                                <i class="fas fa-arrow-up-right-from-square mr-1"></i>${st === 'ok' ? '자료실 열기' : '그래도 열기'}</button>
+                                <i class="fas fa-arrow-up-right-from-square mr-1"></i>${st === 'ok' || st === 'nocheck' ? '자료실 열기' : '그래도 열기'}</button>
                         </div>
                     </div>
+                </div>`;
+
+            // ---------- 내 파일서버 계정 (2026-10-15) ----------
+            const personal = archiveConf.account === 'personal';
+            const mine = archiveMyAccount();
+            const copyBtn = (v) => `<button type="button" data-id="${escapeHtml(v)}" onclick="archiveCopyId(this.dataset.id)"
+                    class="ml-1 text-xs text-gray-500 border border-gray-300 rounded px-1.5 py-0.5 hover:bg-gray-50"><i class="far fa-copy mr-0.5"></i>복사</button>`;
+            let accountBody;
+            if (personal) {
+                accountBody = mine.loginId
+                    ? `<p class="text-sm text-gray-700">본인 계정 <span class="font-mono font-semibold">${escapeHtml(mine.loginId)}</span>${copyBtn(mine.loginId)}</p>
+                       <p class="text-xs text-gray-500 mt-1">그룹웨어 로그인 이메일과 같은 아이디입니다. 처음 비밀번호는 관리자에게 받으세요.</p>`
+                    : `<p class="text-sm text-gray-500">로그인 이메일을 찾지 못했습니다. 관리자에게 문의해 주세요.</p>`;
+            } else if (admin && !archiveDeptOptions().some(d => d.id === currentUserDept && d.id !== ARCHIVE_DEPT_ALL)) {
+                // 본부가 없는 관리자 — 내 계정 대신 등록 현황을 보여 줍니다
+                const list = archiveDeptOptions().filter(d => d.id !== ARCHIVE_DEPT_ALL);
+                const done = list.filter(d => ((archiveConf.deptAccounts || {})[d.id] || {}).loginId);
+                accountBody = `<p class="text-sm text-gray-700">본부 공용 계정 <b>${done.length}</b> / ${list.length} 본부 등록됨
+                        ${done.length ? '— ' + done.map(d => `${escapeHtml(d.name)} <span class="font-mono">${escapeHtml(archiveConf.deptAccounts[d.id].loginId)}</span>`).join(' · ') : ''}</p>
+                    <p class="text-xs text-gray-500 mt-1">아래 <b>파일서버 계정 방식</b> 에서 본부마다 아이디를 넣어 주세요. 직원에게는 자기 본부 아이디만 보입니다.</p>`;
+            } else if (mine.loginId) {
+                accountBody = `<p class="text-sm text-gray-700"><b>${escapeHtml(deptName(currentUserDept))}</b> 공용 계정
+                        <span class="font-mono font-semibold">${escapeHtml(mine.loginId)}</span>${copyBtn(mine.loginId)}</p>
+                    <p class="text-xs text-gray-500 mt-1">${mine.memo ? escapeHtml(mine.memo) : '비밀번호는 본부장 또는 관리자에게 받으세요.'}
+                        처음 로그인할 때 <b>로그인 상태 유지</b> 를 켜 두면 다음부터는 바로 열립니다.</p>`;
+            } else {
+                accountBody = `<p class="text-sm text-gray-500">${escapeHtml(deptName(currentUserDept))} 의 파일서버 계정이 아직 등록되지 않았습니다.
+                    ${admin ? '아래 <b>본부 공용 계정</b> 에 등록해 주세요.' : '관리자에게 등록을 요청해 주세요.'}</p>`;
+            }
+            const accountHtml = `
+                <div class="bg-white rounded-lg border border-gray-200 p-4 mb-4">
+                    <p class="text-sm font-bold text-gray-800 mb-2"><i class="fas fa-user-lock mr-1 text-amber-500"></i>내 파일서버 계정</p>
+                    ${accountBody}
                 </div>`;
 
             // ---------- 폴더 바로가기 ----------
@@ -13463,33 +13539,78 @@ const QUOTE_TEMPLATES = [
                     <input type="radio" name="archive-mode" value="${val}" class="mt-1" ${archiveConf.mode === val ? 'checked' : ''}>
                     <span><b>${label}</b><br><span class="text-xs text-gray-500">${hint}</span></span>
                 </label>`;
+            const inputCls = 'w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-amber-500 focus:outline-none';
+            const acctRadio = (val, label, hint) => `
+                <label class="flex items-start gap-2 text-sm text-gray-700">
+                    <input type="radio" name="archive-account" value="${val}" class="mt-1" ${archiveConf.account === val ? 'checked' : ''}
+                           onchange="archiveToggleBox('archive-dept-box', this.value === 'dept')">
+                    <span><b>${label}</b><br><span class="text-xs text-gray-500">${hint}</span></span>
+                </label>`;
+            const deptRows = archiveDeptOptions().filter(d => d.id !== ARCHIVE_DEPT_ALL).map(d => {
+                const a = (archiveConf.deptAccounts || {})[d.id] || {};
+                return `
+                    <tr class="border-b border-gray-100 last:border-0">
+                        <td class="p-1.5 text-sm text-gray-700 whitespace-nowrap">${escapeHtml(d.name)}</td>
+                        <td class="p-1.5"><input type="text" data-dept="${escapeHtml(d.id)}" data-field="loginId" value="${escapeHtml(a.loginId || '')}"
+                            placeholder="파일서버 아이디" class="archive-dept-acc w-full border border-gray-300 rounded px-2 py-1.5 text-sm font-mono"></td>
+                        <td class="p-1.5"><input type="text" data-dept="${escapeHtml(d.id)}" data-field="memo" value="${escapeHtml(a.memo || '')}"
+                            placeholder="예) 비밀번호는 본부장에게" class="archive-dept-acc w-full border border-gray-300 rounded px-2 py-1.5 text-sm"></td>
+                    </tr>`;
+            }).join('');
             const settingHtml = !admin ? '' : `
                 <div class="bg-white rounded-lg border border-gray-200 p-4 mb-4">
                     <p class="text-sm font-bold text-gray-800 mb-3"><i class="fas fa-server mr-1 text-gray-500"></i>접속 주소
                         <span class="text-xs font-normal text-gray-400 ml-1">— 관리자만 고칠 수 있습니다</span></p>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        <label class="block">
-                            <span class="block text-xs font-medium text-gray-600 mb-1">사내망 주소</span>
-                            <input id="archive-lan" type="text" value="${escapeHtml(archiveConf.lanUrl || '')}"
-                                   placeholder="예) http://192.168.0.50"
-                                   class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-amber-500 focus:outline-none">
-                        </label>
+                    <label class="block">
+                        <span class="block text-xs font-medium text-gray-600 mb-1">사내망 주소</span>
+                        <input id="archive-lan" type="text" value="${escapeHtml(archiveConf.lanUrl || '')}"
+                               placeholder="예) http://192.168.0.50" class="${inputCls}">
+                        <span class="block text-xs text-gray-400 mt-1">사무실 안에서 파일서버에 들어가는 주소입니다. http 주소도 됩니다 (연결 확인만 건너뜁니다).</span>
+                    </label>
+
+                    <label class="flex items-start gap-2 text-sm text-gray-700 mt-4">
+                        <input id="archive-wan-on" type="checkbox" class="mt-1" ${archiveConf.wanEnabled ? 'checked' : ''}
+                               onchange="archiveToggleBox('archive-wan-box', this.checked)">
+                        <span><b>외부 접속 사용</b><br>
+                            <span class="text-xs text-gray-500">바깥(외근 · 재택)에서도 쓰려면 켭니다. 파일서버에 https 바깥 주소를 마련한 뒤에 켜세요.</span></span>
+                    </label>
+                    <div id="archive-wan-box" class="${archiveConf.wanEnabled ? '' : 'hidden'} mt-3 pl-6 border-l-2 border-gray-100">
                         <label class="block">
                             <span class="block text-xs font-medium text-gray-600 mb-1">바깥 주소</span>
                             <input id="archive-wan" type="text" value="${escapeHtml(archiveConf.wanUrl || '')}"
-                                   placeholder="예) https://cloud.kingorder.co.kr"
-                                   class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-amber-500 focus:outline-none">
+                                   placeholder="예) https://cloud.kingorder.co.kr" class="${inputCls}">
                         </label>
+                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-3">
+                            ${modeRadio('auto', '자동', '사내망을 먼저 두드려 보고, 닿으면 사내망 · 안 닿으면 바깥 주소로 보냅니다.')}
+                            ${modeRadio('lan', '사내망만', '바깥 주소는 적어 두기만 하고 사무실 안에서만 씁니다.')}
+                            ${modeRadio('wan', '바깥만', '한 도메인으로 안팎을 함께 쓰는 구성이면 이쪽입니다.')}
+                        </div>
                     </div>
-                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-3">
-                        ${modeRadio('auto', '자동', '사내망을 먼저 두드려 보고, 닿으면 사내망 · 안 닿으면 바깥 주소로 보냅니다.')}
-                        ${modeRadio('lan', '사내망만', '사무실 안에서만 씁니다.')}
-                        ${modeRadio('wan', '바깥만', '한 도메인으로 안팎을 함께 쓰는 구성이면 이쪽입니다.')}
+
+                    <p class="text-sm font-bold text-gray-800 mt-5 mb-2"><i class="fas fa-user-lock mr-1 text-gray-500"></i>파일서버 계정 방식</p>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        ${acctRadio('dept', '본부 공용 계정', '본부마다 파일서버 계정 하나를 만들어 함께 씁니다.')}
+                        ${acctRadio('personal', '개인 계정', '사람마다 계정을 만듭니다. 아이디 = 그룹웨어 로그인 이메일.')}
                     </div>
-                    <div class="flex justify-end gap-2 mt-3">
+                    <div id="archive-dept-box" class="${archiveConf.account === 'personal' ? 'hidden' : ''} mt-3">
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-sm min-w-[520px]">
+                                <thead><tr class="text-xs text-gray-500 border-b border-gray-200">
+                                    <th class="p-1.5 text-left font-medium w-28">본부</th>
+                                    <th class="p-1.5 text-left font-medium w-48">파일서버 아이디</th>
+                                    <th class="p-1.5 text-left font-medium">안내 문구 (직원에게 보임)</th>
+                                </tr></thead>
+                                <tbody>${deptRows || '<tr><td colspan="3" class="p-3 text-gray-400 text-sm">조직도에 본부가 없습니다.</td></tr>'}</tbody>
+                            </table>
+                        </div>
+                        <p class="text-xs text-red-500 mt-2"><i class="fas fa-triangle-exclamation mr-1"></i>
+                            비밀번호는 여기에 적지 마세요 — 이 설정은 로그인한 모든 직원에게 내려갑니다. 비밀번호는 본부장에게 따로 전달해 주세요.</p>
+                    </div>
+
+                    <div class="flex justify-end gap-2 mt-4">
                         <button type="button" onclick="saveArchiveSettings()"
                                 class="px-4 py-2 bg-gray-800 hover:bg-gray-900 text-white rounded-lg text-sm font-semibold">
-                            <i class="fas fa-floppy-disk mr-1"></i>주소 저장하고 확인</button>
+                            <i class="fas fa-floppy-disk mr-1"></i>저장하고 확인</button>
                     </div>
                 </div>`;
 
@@ -13498,22 +13619,36 @@ const QUOTE_TEMPLATES = [
                 <div class="bg-white rounded-lg border border-gray-200 p-4">
                     <p class="text-sm font-bold text-gray-800 mb-2"><i class="fas fa-circle-question mr-1 text-gray-400"></i>확인 사항</p>
                     <ul class="text-xs text-gray-600 space-y-1.5 list-disc pl-4">
-                        <li><b>계정은 파일서버 것을 씁니다.</b> 그룹웨어 계정과 따로입니다 — 처음 들어가면 파일서버 로그인 화면이 뜹니다.</li>
+                        <li><b>계정은 파일서버 것을 씁니다.</b> 그룹웨어 계정과 따로입니다 — 처음 들어가면 파일서버 로그인 화면이 뜹니다.
+                            위 <b>내 파일서버 계정</b> 의 아이디로 로그인하세요.</li>
                         <li><b>어떤 폴더를 볼 수 있는지도 파일서버가 정합니다.</b> 그룹웨어는 자료실 메뉴에 들어올 수 있는지까지만 봅니다.
                             자료실 메뉴 자체를 부서별로 닫으려면 <b>사용자/권한관리 › 권한 관리</b> 에서 그룹별로 끄시면 됩니다.</li>
-                        <li><b>사내망 · 바깥 주소를 따로 등록해 둡니다.</b> 자동으로 두었으면 지금 닿는 쪽으로 알아서 보냅니다 —
-                            사무실에서는 사내망으로 빠르게, 밖에서는 바깥 주소로 들어갑니다.</li>
+                        <li>${archiveConf.wanEnabled
+                            ? '<b>사내망 · 바깥 주소를 따로 등록해 둡니다.</b> 자동으로 두었으면 지금 닿는 쪽으로 알아서 보냅니다 — 사무실에서는 사내망으로 빠르게, 밖에서는 바깥 주소로 들어갑니다.'
+                            : '<b>지금은 사무실 안(사내망)에서만 열립니다.</b> 외근 · 재택에서 쓰려면 관리자가 외부 접속을 켜야 합니다.'}</li>
                         <li>파일은 그룹웨어에 남지 않습니다. <b>전부 파일서버에 있습니다.</b></li>
                     </ul>
                 </div>`;
 
-            host.innerHTML = statusHtml + shortcutHtml + settingHtml + guideHtml;
+            host.innerHTML = statusHtml + accountHtml + shortcutHtml + settingHtml + guideHtml;
         }
 
-        // ---------- 주소 저장 ----------
+        // 설정 화면에서 칸을 접고 펴기 — 다시 그리지 않으니 적던 값이 지워지지 않습니다
+        function archiveToggleBox(id, show) {
+            const el = document.getElementById(id);
+            if (el) el.classList.toggle('hidden', !show);
+        }
+        function archiveCopyId(v) {
+            const done = () => showAppToast('아이디를 복사했습니다.', 'green');
+            if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(v).then(done, () => prompt('아래 아이디를 복사하세요.', v));
+            else prompt('아래 아이디를 복사하세요.', v);
+        }
+
+        // ---------- 주소 · 계정 저장 ----------
         function saveArchiveSettings() {
             const lan = archiveTrim((document.getElementById('archive-lan') || {}).value);
             const wan = archiveTrim((document.getElementById('archive-wan') || {}).value);
+            const wanOn = !!(document.getElementById('archive-wan-on') || {}).checked;
             const bad = [lan, wan].filter(Boolean).find(u => !/^https?:\/\/.+/i.test(u));
             if (bad) {
                 alert('주소는 http:// 또는 https:// 로 시작해야 합니다.\n\n받은 값 : ' + bad);
@@ -13521,12 +13656,29 @@ const QUOTE_TEMPLATES = [
             }
             const picked = document.querySelector('input[name="archive-mode"]:checked');
             const mode = picked ? picked.value : 'auto';
-            if (mode === 'lan' && !lan) { alert('사내망만 쓰려면 사내망 주소를 입력해 주세요.'); return; }
-            if (mode === 'wan' && !wan) { alert('바깥만 쓰려면 바깥 주소를 입력해 주세요.'); return; }
+            if (wanOn) {
+                if (!wan) { alert('외부 접속을 쓰려면 바깥 주소를 입력해 주세요.'); return; }
+                if (mode === 'lan' && !lan) { alert('사내망만 쓰려면 사내망 주소를 입력해 주세요.'); return; }
+            }
+            const acc = document.querySelector('input[name="archive-account"]:checked');
+            const deptAccounts = {};
+            document.querySelectorAll('.archive-dept-acc').forEach(el => {
+                const d = el.dataset.dept, f = el.dataset.field, v = String(el.value || '').trim();
+                if (!d || !v) return;
+                (deptAccounts[d] = deptAccounts[d] || {})[f] = v;
+            });
+            // 화면에 없는 본부(조직도에서 지운 본부 등)의 계정은 그대로 둡니다
+            Object.keys(archiveConf.deptAccounts || {}).forEach(d => {
+                if (!document.querySelector(`.archive-dept-acc[data-dept="${CSS.escape(d)}"]`)) deptAccounts[d] = archiveConf.deptAccounts[d];
+            });
             archiveConf.lanUrl = lan;
             archiveConf.wanUrl = wan;
             archiveConf.mode = mode;
-            if (!saveArchiveConf()) alert('주소를 이 브라우저에 저장하지 못했습니다 (저장 공간). 이번 접속에만 적용됩니다.');
+            archiveConf.wanEnabled = wanOn;
+            archiveConf.account = acc ? acc.value : 'dept';
+            archiveConf.deptAccounts = deptAccounts;
+            archiveLink = { state: 'idle', via: '', url: '' };   // 예전 주소로 열리지 않도록
+            if (!saveArchiveConf()) alert('설정을 저장하지 못했습니다 (저장 공간). 이번 접속에만 적용됩니다.');
             renderArchive();
         }
 
