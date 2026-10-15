@@ -405,6 +405,48 @@ export async function onRequest(context) {
             return json(404, { ok: false, error: 'Not Found: ' + path });
         }
 
+        // ---------- 자료실 파일서버 — 본부 공용 계정 비밀번호 (2026-10-15) ----------
+        // 비밀번호는 app_store(로그인한 모든 직원에게 내려감)가 아니라 서버 전용 표(inbound_secrets · RLS 정책 없음)에
+        // 'archivePw:<본부 id>' 이름으로 둡니다. 아이디 · 안내 문구는 그대로 gwArchive.v1 에 있습니다.
+        //   · 저장 · 현황 : 전체 자료 권한(data-admin) — 화면 canManageAllData 와 같은 기준
+        //   · 받기       : 로그인한 직원은 자기 본부 것만, 전체 자료 권한은 아무 본부나
+        if (path === '/api/archive/password' || path === '/api/archive/password/status') {
+            const ARC_PW = 'archivePw:';
+            const ss = inb.secretStore(env);
+            if (path === '/api/archive/password' && method === 'POST') {
+                const pr = await requirePerm(env, store, request, ['data-admin']);
+                if (pr.error) return pr.error;
+                const input = await body();
+                const dept = str(input.dept);
+                if (!/^[\w-]{1,40}$/.test(dept)) return bad('본부가 올바르지 않습니다.');
+                if (str(input.value)) await ss.put(ARC_PW + dept, str(input.value), str(pr.me.email));
+                else await ss.drop(ARC_PW + dept);
+                return json(200, { ok: true });
+            }
+            if (path === '/api/archive/password/status' && method === 'GET') {
+                const pr = await requirePerm(env, store, request, ['data-admin']);
+                if (pr.error) return pr.error;
+                const all = await ss.all();
+                const set = {};
+                Object.keys(all).filter(n => n.indexOf(ARC_PW) === 0)
+                    .forEach(n => { set[n.slice(ARC_PW.length)] = { updatedAt: str(all[n].updated_at), updatedBy: str(all[n].updated_by) }; });
+                return json(200, { ok: true, set });
+            }
+            if (path === '/api/archive/password' && method === 'GET') {
+                const st = await requireStaff(env, store, request);
+                if (st.error) return st.error;
+                const mine = str(st.rec.dept);
+                const want = str(url.searchParams.get('dept')) || mine;
+                if (want !== mine && !st.can(['data-admin'])) return json(403, { ok: false, error: '다른 본부의 비밀번호는 볼 수 없습니다.' });
+                const conf = await store.storeValue('gwArchive.v1');
+                if (conf && conf.account === 'personal') return json(409, { ok: false, error: '개인 계정 방식에서는 본부 공용 비밀번호를 쓰지 않습니다.' });
+                const all = await ss.all();
+                const r = all[ARC_PW + want];
+                return json(200, { ok: true, dept: want, value: r ? str(r.value) : '' });
+            }
+            return json(405, { ok: false, error: 'Method Not Allowed' });
+        }
+
         // ---------- 폰 · PC 푸시 알림 (2026-09-29 · 9단계 — 판단 · 암호는 _push.js) ----------
         if (path.startsWith('/api/push/')) {
             if (path === '/api/push/key' && method === 'GET') {

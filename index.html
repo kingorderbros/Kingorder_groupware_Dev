@@ -13413,10 +13413,11 @@ const QUOTE_TEMPLATES = [
             const host = document.getElementById('archive-body');
             if (!host) return;
             // 파일서버 입구는 그 탭일 때만 그립니다 (2026-09-14)
-            if (archiveTab !== 'server') { host.innerHTML = ''; return; }
+            if (archiveTab !== 'server') { host.innerHTML = ''; archivePwShown = ''; return; }
             archiveLink = { state: 'checking', via: archiveLink.via, url: archiveLink.url };
             drawArchive();
             archiveResolve().then(drawArchive);
+            if (canManageAllData() && archiveServerOn()) archiveLoadPwStatus().then(drawArchive);
         }
 
         function drawArchive() {
@@ -13499,8 +13500,14 @@ const QUOTE_TEMPLATES = [
             } else if (mine.loginId) {
                 accountBody = `<p class="text-sm text-gray-700"><b>${escapeHtml(deptName(currentUserDept))}</b> 공용 계정
                         <span class="font-mono font-semibold">${escapeHtml(mine.loginId)}</span>${copyBtn(mine.loginId)}</p>
-                    <p class="text-xs text-gray-500 mt-1">${mine.memo ? escapeHtml(mine.memo) : '비밀번호는 본부장 또는 관리자에게 받으세요.'}
-                        처음 로그인할 때 <b>로그인 상태 유지</b> 를 켜 두면 다음부터는 바로 열립니다.</p>`;
+                    <p class="text-sm text-gray-700 mt-1.5">비밀번호
+                        <span id="archive-pw-view" class="font-mono font-semibold">${archivePwShown ? escapeHtml(archivePwShown) : '••••••••'}</span>
+                        <button type="button" onclick="archivePwToggle()" class="ml-1 text-xs text-gray-500 border border-gray-300 rounded px-1.5 py-0.5 hover:bg-gray-50">
+                            <i class="far ${archivePwShown ? 'fa-eye-slash' : 'fa-eye'} mr-0.5"></i>${archivePwShown ? '가리기' : '보기'}</button>
+                        <button type="button" onclick="archivePwCopy()" class="ml-1 text-xs text-gray-500 border border-gray-300 rounded px-1.5 py-0.5 hover:bg-gray-50">
+                            <i class="far fa-copy mr-0.5"></i>복사</button></p>
+                    <p class="text-xs text-gray-500 mt-1">${mine.memo ? escapeHtml(mine.memo) + ' ' : ''}
+                        처음 로그인할 때 <b>로그인 상태 유지</b> 를 켜 두면 다음부터는 비밀번호 없이 바로 열립니다.</p>`;
             } else {
                 accountBody = `<p class="text-sm text-gray-500">${escapeHtml(deptName(currentUserDept))} 의 파일서버 계정이 아직 등록되지 않았습니다.
                     ${admin ? '아래 <b>본부 공용 계정</b> 에 등록해 주세요.' : '관리자에게 등록을 요청해 주세요.'}</p>`;
@@ -13556,15 +13563,23 @@ const QUOTE_TEMPLATES = [
                            onchange="archiveToggleBox('archive-dept-box', this.value === 'dept')">
                     <span><b>${label}</b><br><span class="text-xs text-gray-500">${hint}</span></span>
                 </label>`;
+            const pwOn = canManageAllData() && archiveServerOn();   // 비밀번호는 서버에 두므로 전체 자료 권한 + 서버 모드에서만
             const deptRows = archiveDeptOptions().filter(d => d.id !== ARCHIVE_DEPT_ALL).map(d => {
                 const a = (archiveConf.deptAccounts || {})[d.id] || {};
+                const pwSet = !!(archivePwStatus && archivePwStatus[d.id]);
                 return `
                     <tr class="border-b border-gray-100 last:border-0">
                         <td class="p-1.5 text-sm text-gray-700 whitespace-nowrap">${escapeHtml(d.name)}</td>
                         <td class="p-1.5"><input type="text" data-dept="${escapeHtml(d.id)}" data-field="loginId" value="${escapeHtml(a.loginId || '')}"
                             placeholder="파일서버 아이디" class="archive-dept-acc w-full border border-gray-300 rounded px-2 py-1.5 text-sm font-mono"></td>
                         <td class="p-1.5"><input type="text" data-dept="${escapeHtml(d.id)}" data-field="memo" value="${escapeHtml(a.memo || '')}"
-                            placeholder="예) 비밀번호는 본부장에게" class="archive-dept-acc w-full border border-gray-300 rounded px-2 py-1.5 text-sm"></td>
+                            placeholder="예) 영업본부 공용 — 외부 공유 금지" class="archive-dept-acc w-full border border-gray-300 rounded px-2 py-1.5 text-sm"></td>
+                        ${pwOn ? `<td class="p-1.5"><div class="flex items-center gap-1">
+                            <input type="password" autocomplete="new-password" data-dept="${escapeHtml(d.id)}"
+                                placeholder="${pwSet ? '저장됨 — 바꿀 때만 입력' : '비밀번호'}" class="archive-dept-pw w-full border ${pwSet ? 'border-emerald-300 bg-emerald-50/40' : 'border-gray-300'} rounded px-2 py-1.5 text-sm font-mono">
+                            ${pwSet ? `<button type="button" data-dept="${escapeHtml(d.id)}" onclick="archivePwClear(this.dataset.dept)" title="저장된 비밀번호 지우기"
+                                class="w-8 h-8 shrink-0 rounded border border-gray-300 text-gray-500 hover:bg-red-50 hover:text-red-600 hover:border-red-200"><i class="fas fa-eraser"></i></button>` : ''}
+                        </div></td>` : ''}
                     </tr>`;
             }).join('');
             const settingHtml = !admin ? '' : `
@@ -13609,12 +13624,15 @@ const QUOTE_TEMPLATES = [
                                     <th class="p-1.5 text-left font-medium w-28">본부</th>
                                     <th class="p-1.5 text-left font-medium w-48">파일서버 아이디</th>
                                     <th class="p-1.5 text-left font-medium">안내 문구 (직원에게 보임)</th>
+                                    ${pwOn ? '<th class="p-1.5 text-left font-medium w-56">비밀번호</th>' : ''}
                                 </tr></thead>
                                 <tbody>${deptRows || '<tr><td colspan="3" class="p-3 text-gray-400 text-sm">조직도에 본부가 없습니다.</td></tr>'}</tbody>
                             </table>
                         </div>
-                        <p class="text-xs text-red-500 mt-2"><i class="fas fa-triangle-exclamation mr-1"></i>
-                            비밀번호는 여기에 적지 마세요 — 이 설정은 로그인한 모든 직원에게 내려갑니다. 비밀번호는 본부장에게 따로 전달해 주세요.</p>
+                        <p class="text-xs text-gray-500 mt-2"><i class="fas fa-shield-halved mr-1"></i>
+                            ${pwOn ? '비밀번호는 <b>서버에만</b> 저장됩니다. 직원은 <b>자기 본부 비밀번호만</b> [보기] · [복사] 할 수 있습니다. 넥스트클라우드에서 비밀번호를 바꾸면 여기도 같이 바꿔 주세요.'
+                                   : archiveServerOn() ? '비밀번호 칸은 전체 자료 권한이 있는 관리자에게만 보입니다.'
+                                   : '로컬 모드(서버 없음)에서는 비밀번호를 저장하지 않습니다.'}</p>
                     </div>
 
                     <div class="flex justify-end gap-2 mt-4">
@@ -13688,8 +13706,53 @@ const QUOTE_TEMPLATES = [
             archiveConf.account = acc ? acc.value : 'dept';
             archiveConf.deptAccounts = deptAccounts;
             archiveLink = { state: 'idle', via: '', url: '' };   // 예전 주소로 열리지 않도록
+            const pws = Array.from(document.querySelectorAll('.archive-dept-pw'))
+                .map(el => ({ dept: el.dataset.dept, value: String(el.value || '') })).filter(x => x.dept && x.value);
             if (!saveArchiveConf()) alert('설정을 저장하지 못했습니다 (저장 공간). 이번 접속에만 적용됩니다.');
-            renderArchive();
+            archivePwShown = '';
+            if (!pws.length) { renderArchive(); return; }
+            Promise.all(pws.map(x => kobAuth.call('/api/archive/password', x)))
+                .then(() => showAppToast(`비밀번호 ${pws.length}건을 서버에 저장했습니다.`, 'green'))
+                .catch(e => alert('비밀번호를 저장하지 못했습니다.\n\n' + (e && e.message || e)))
+                .then(renderArchive);
+        }
+
+        // ---------- 본부 공용 계정 비밀번호 (2026-10-15) ----------
+        // 비밀번호는 gwArchive.v1(모든 직원에게 내려감)이 아니라 서버(/api/archive/password)에만 둡니다.
+        // 직원은 자기 본부 것만 받아 올 수 있습니다 — 서버가 로그인 토큰으로 본부를 확인합니다.
+        let archivePwStatus = null;   // { 본부 id: { updatedAt, updatedBy } } — 관리자 화면용
+        let archivePwShown = '';      // [보기] 로 받아 온 내 본부 비밀번호 (이 화면 메모리에만)
+        function archiveServerOn() { return !!(window.kobAuth && kobAuth.mode === 'supabase'); }
+        function archiveLoadPwStatus() {
+            return kobAuth.call('/api/archive/password/status', undefined, 'GET')
+                .then(r => { archivePwStatus = (r && r.set) || {}; })
+                .catch(e => { archivePwStatus = {}; console.warn('[자료실] 비밀번호 현황을 못 읽었습니다', e && e.message); });
+        }
+        function archiveFetchPw() {
+            if (!archiveServerOn()) return Promise.reject(new Error('서버에 연결된 환경에서만 비밀번호를 받을 수 있습니다.'));
+            return kobAuth.call('/api/archive/password', undefined, 'GET').then(r => {
+                const v = String((r && r.value) || '');
+                if (!v) throw new Error('이 본부의 비밀번호가 아직 등록되지 않았습니다. 관리자에게 요청해 주세요.');
+                return v;
+            });
+        }
+        function archivePwToggle() {
+            if (archivePwShown) { archivePwShown = ''; drawArchive(); return; }
+            archiveFetchPw().then(v => { archivePwShown = v; drawArchive(); }).catch(e => alert(e && e.message || e));
+        }
+        function archivePwCopy() {
+            const done = () => showAppToast('비밀번호를 복사했습니다. 파일서버 로그인 칸에 붙여 넣으세요.', 'green');
+            (archivePwShown ? Promise.resolve(archivePwShown) : archiveFetchPw()).then(v => {
+                if (navigator.clipboard && navigator.clipboard.writeText) return navigator.clipboard.writeText(v).then(done, () => prompt('아래 비밀번호를 복사하세요.', v));
+                prompt('아래 비밀번호를 복사하세요.', v);
+            }).catch(e => alert(e && e.message || e));
+        }
+        function archivePwClear(dept) {
+            if (!confirm(`${deptName(dept)} 의 저장된 비밀번호를 지울까요?\n직원들이 [보기] 로 받아 갈 수 없게 됩니다.`)) return;
+            kobAuth.call('/api/archive/password', { dept, value: '' })
+                .then(() => showAppToast('비밀번호를 지웠습니다.', 'blue'))
+                .catch(e => alert('지우지 못했습니다.\n\n' + (e && e.message || e)))
+                .then(renderArchive);
         }
 
         // ---------- 폴더 바로가기 편집 (관리자) ----------
