@@ -276,7 +276,7 @@
          */
         save(t, row) {
             if (!row || row.id === undefined || row.id === null || row.id === '') {
-                return Promise.reject(new Error('id 가 없는 자료는 저장할 수 없습니다: ' + t));
+                return Promise.reject(new Error('id가 없는 데이터는 저장할 수 없습니다: ' + t));
             }
             const id = String(row.id);
             const m = tbl(t);
@@ -349,7 +349,7 @@
                     failedTables.push(t);
                 }
             }
-            if (failedTables.length) fire('kob-db-error', { table: failedTables.join(', '), message: '자료를 받지 못했습니다.' });
+            if (failedTables.length) fire('kob-db-error', { table: failedTables.join(', '), message: '데이터를 불러올 수 없습니다.' });
             hookAuth();                       // 로그인이 끝나면 다시 받아 옵니다
 
             // 못 보낸 것이 있으면 창을 닫기 전에 한 번 더 시도합니다.

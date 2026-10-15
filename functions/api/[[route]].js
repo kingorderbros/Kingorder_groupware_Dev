@@ -114,7 +114,7 @@ function db(env) {
         insertRow: (table, id, data, by) => call('POST', table, [{ id, data, rev: 1, updated_at: new Date().toISOString(), updated_by: by || null }], { Prefer: 'return=minimal' }),
         patchRow: async (table, id, data, rev, by) => {
             const r = await call('PATCH', `${table}?id=eq.${encodeURIComponent(id)}&rev=eq.${Number(rev) || 0}`, { data, rev: (Number(rev) || 0) + 1, updated_at: new Date().toISOString(), updated_by: by || null }, { Prefer: 'return=representation' });
-            if (!r || !r.length) throw new Error('그사이 다른 사람이 이 업체를 고쳤습니다. 다시 시도해 주세요.');
+            if (!r || !r.length) throw new Error('다른 사용자가 이 업체 정보를 먼저 수정했습니다. 다시 시도해 주세요.');
             return r[0];
         },
         setStore: (key, value) => call('POST', 'app_store?on_conflict=key', [{ key, value, updated_at: new Date().toISOString() }], { Prefer: 'resolution=merge-duplicates,return=minimal' })
@@ -207,7 +207,7 @@ async function requirePerm(env, store, request, perms) {
         const g = groups.find(x => x && x.id === rec.groupId);
         ok = !!(g && Array.isArray(g.permissions) && perms.some(p => g.permissions.includes(p)));
     }
-    if (!ok) return { error: json(403, { ok: false, error: '고치거나 지울 권한이 없습니다.' }) };
+    if (!ok) return { error: json(403, { ok: false, error: '수정 또는 삭제 권한이 없습니다.' }) };
     return { me, rec };
 }
 // 관리자 그룹 · 소속없는 관리자 · 직책 관리자 · 겸직 관리자 — /api/auth/users 와 같은 기준 (2026-09-21)
@@ -217,7 +217,7 @@ async function requireAdmin(env, store, request) {
     const users = (await store.storeValue('gwUsers.v1')) || [];
     const rec = (Array.isArray(users) ? users : []).find(u => str(u.email).toLowerCase() === str(me.email).toLowerCase());
     const ok = rec && (rec.groupId === 'admin' || rec.dept === 'admin' || rec.level === 'admin' || rec.isAdmin === true);
-    if (!ok) return { error: json(403, { ok: false, error: '관리자만 할 수 있습니다.' }) };
+    if (!ok) return { error: json(403, { ok: false, error: '관리자만 사용할 수 있는 기능입니다.' }) };
     return { me, rec, users: Array.isArray(users) ? users : [] };
 }
 
@@ -323,7 +323,7 @@ export async function onRequest(context) {
                 const res = await fetch(hol.ICS_URL, { headers: { 'User-Agent': 'kingorder-groupware' } });
                 if (!res.ok) throw new Error('구글 공휴일 캘린더 ' + res.status);
                 const days = hol.parseIcs(await res.text());
-                if (Object.keys(days).length < 10) throw new Error('공휴일이 너무 적게 읽혔습니다');
+                if (Object.keys(days).length < 10) throw new Error('공휴일 데이터가 비정상적으로 적습니다');
                 const value = { updatedAt: new Date().toISOString(), source: 'google-ko-holiday', days };
                 await store.setStore(hol.KEY, value);
                 return json(200, { ok: true, cached: false, value });
@@ -332,7 +332,7 @@ export async function onRequest(context) {
                     try { await store.setStore(hol.KEY, Object.assign({}, cur, { failedAt: new Date().toISOString() })); } catch (e2) { /* 무시 */ }
                     return json(200, { ok: true, cached: true, stale: true, value: cur, error: e.message });
                 }
-                return json(502, { ok: false, error: '공휴일을 받지 못했습니다: ' + e.message });
+                return json(502, { ok: false, error: '공휴일 정보를 불러올 수 없습니다: ' + e.message });
             }
         }
 
@@ -349,12 +349,12 @@ export async function onRequest(context) {
                 if (method === 'OPTIONS') return new Response(null, { status: allowed ? 204 : 403, headers: cors });
                 if (method !== 'POST') return reply(405, { ok: false, error: 'Method Not Allowed' });
                 if (!allowed) return reply(403, { ok: false, error: '허용되지 않은 사이트입니다: ' + origin });
-                if (!cfg.form.enabled) return reply(403, { ok: false, error: '홈페이지 문의 받기가 꺼져 있습니다.' });
+                if (!cfg.form.enabled) return reply(403, { ok: false, error: '홈페이지 문의 접수가 비활성화되어 있습니다.' });
                 if (Number(request.headers.get('Content-Length') || 0) > 20000) return reply(413, { ok: false, error: '내용이 너무 깁니다.' });
                 const input = await body();
                 if (str(input._hp)) return reply(200, { ok: true });                     // 숨은 칸을 채운 것은 로봇 — 받은 척만
                 const rec = inb.formToRecord(input, cfg.rules);
-                if (!str(rec.phone) && !str(rec.email)) return reply(400, { ok: false, error: '연락처나 이메일 중 하나는 있어야 합니다.' });
+                if (!str(rec.phone) && !str(rec.email)) return reply(400, { ok: false, error: '연락처 또는 이메일 중 하나를 입력해 주세요.' });
                 if (url.searchParams.get('dry') === '1') return reply(200, { ok: true, dry: true, record: rec });
                 const r = await inb.appendRecords(store, [rec], cfg.rules);
                 return reply(200, { ok: true, id: r.added[0] ? r.added[0].id : '', duplicate: !r.added.length });
@@ -439,7 +439,7 @@ export async function onRequest(context) {
                 const want = str(url.searchParams.get('dept')) || mine;
                 if (want !== mine && !st.can(['data-admin'])) return json(403, { ok: false, error: '다른 본부의 비밀번호는 볼 수 없습니다.' });
                 const conf = await store.storeValue('gwArchive.v1');
-                if (conf && conf.account === 'personal') return json(409, { ok: false, error: '개인 계정 방식에서는 본부 공용 비밀번호를 쓰지 않습니다.' });
+                if (conf && conf.account === 'personal') return json(409, { ok: false, error: '개인 계정 방식에서는 본부 공용 비밀번호를 사용하지 않습니다.' });
                 const all = await ss.all();
                 const r = all[ARC_PW + want];
                 return json(200, { ok: true, dept: want, value: r ? str(r.value) : '' });
@@ -476,7 +476,7 @@ export async function onRequest(context) {
                                    prefs: Object.fromEntries(push.CATEGORIES.map(c => [c.id, push.wants(rec, c.id)])), categories: push.CATEGORIES });
             }
             if (path === '/api/push/subscribe' && method === 'POST') {
-                if (!push.validSubscription(input.subscription)) return bad('알림 받기 정보가 올바르지 않습니다.');
+                if (!push.validSubscription(input.subscription)) return bad('알림 구독 정보가 올바르지 않습니다.');
                 const ep = input.subscription.endpoint;
                 // 같은 기기를 전에 다른 사람이 쓰고 있었으면 그 사람 기록에서 뺍니다 (그 사람 알림이 이 기기로 오지 않게)
                 for (const r of await store.storeLike(push.PREFIX)) {
@@ -495,7 +495,7 @@ export async function onRequest(context) {
             }
             if (path === '/api/push/send' && method === 'POST') {
                 const nid = str(input.id || (input.n && input.n.id));
-                if (!nid) return bad('보낼 알림이 없습니다.');
+                if (!nid) return bad('발송할 알림이 없습니다.');
                 if (!push.keysReady(env)) return json(200, { ok: true, sent: 0, skipped: 'VAPID 키가 설정되지 않았습니다.' });
                 // 요청 본문을 믿지 않고 저장된 알림을 다시 읽습니다 — 화면이 저장을 막 보내는 중일 수 있어 잠깐 기다려 가며
                 let row = null;
@@ -503,10 +503,10 @@ export async function onRequest(context) {
                     row = await store.rowRaw('notifications', nid);
                     if (!row) await new Promise(r => setTimeout(r, 600));
                 }
-                if (!row) return json(404, { ok: false, error: '알림을 찾지 못했습니다.' });
+                if (!row) return json(404, { ok: false, error: '알림을 찾을 수 없습니다.' });
                 const age = Date.now() - new Date(row.updated_at).getTime();
                 if (row.rev !== 1 || str(row.updated_by).toLowerCase() !== str(st.me.email).toLowerCase() || !(age < 10 * 60 * 1000)) {
-                    return json(403, { ok: false, error: '방금 내가 만든 알림만 보낼 수 있습니다.' });
+                    return json(403, { ok: false, error: '본인이 방금 생성한 알림만 발송할 수 있습니다.' });
                 }
                 const n = Object.assign({}, row.data || {}, { id: row.id });
                 const users = (await store.storeValue('gwUsers.v1')) || [];
@@ -531,7 +531,7 @@ export async function onRequest(context) {
                 for (const g of gone) await store.setStore(g.key, push.removeSub(recs[g.key], g.ep));
                 return json(200, { ok: true, sent, targets: total, skipped: total - targets.length, removed: gone.length });
             }
-            return json(404, { ok: false, error: '없는 주소입니다: ' + path });
+            return json(404, { ok: false, error: '존재하지 않는 경로입니다: ' + path });
         }
 
         // ---------- 첨부파일 (2026-09-29 · 3단계 — 판단은 _files.js) ----------
@@ -570,7 +570,7 @@ export async function onRequest(context) {
                     'Set-Cookie': `${fs.COOKIE}=; Path=/api/files; HttpOnly; SameSite=Lax; Max-Age=0${url.protocol === 'https:' ? '; Secure' : ''}` } });
             }
             const who = await fs.readCookieValue(secret, fs.cookieFrom(request));
-            if (!who) return json(401, { ok: false, error: '다시 로그인해 주세요 (파일 확인 시간이 지났습니다).' });
+            if (!who) return json(401, { ok: false, error: '파일 접근 인증이 만료되었습니다. 다시 로그인해 주세요.' });
             // 직원도 그사이 직원 목록에서 빠졌는지 한 번 더 봅니다
             if (who.k === 'staff') {
                 const users = (await store.storeValue('gwUsers.v1')) || [];
@@ -587,22 +587,22 @@ export async function onRequest(context) {
                 const name = str(url.searchParams.get('name')).slice(0, 200) || 'file';
                 const type = str(url.searchParams.get('type')).slice(0, 100) || 'application/octet-stream';
                 const len = Number(request.headers.get('Content-Length') || 0);
-                if (len > fs.MAX_BYTES) return json(413, { ok: false, error: '한 파일 20MB 까지 올릴 수 있습니다.' });
+                if (len > fs.MAX_BYTES) return json(413, { ok: false, error: '파일당 최대 20MB까지 업로드할 수 있습니다.' });
                 const buf = await request.arrayBuffer();
                 if (!buf.byteLength) return bad('빈 파일입니다.');
-                if (buf.byteLength > fs.MAX_BYTES) return json(413, { ok: false, error: '한 파일 20MB 까지 올릴 수 있습니다.' });
+                if (buf.byteLength > fs.MAX_BYTES) return json(413, { ok: false, error: '파일당 최대 20MB까지 업로드할 수 있습니다.' });
                 const p = fs.newPath(who, name);
                 const res = await fetch(objUrl(p), { method: 'POST', headers: Object.assign({ 'Content-Type': type, 'x-upsert': 'false' }, skey), body: buf });
-                if (!res.ok) return json(502, { ok: false, error: '파일 저장소에 올리지 못했습니다 (' + res.status + ').', detail: (await res.text()).slice(0, 300) });
+                if (!res.ok) return json(502, { ok: false, error: '파일 저장소 업로드에 실패했습니다 (' + res.status + ').', detail: (await res.text()).slice(0, 300) });
                 return json(200, { ok: true, file: { path: p, name, type, size: buf.byteLength } });
             }
             if (path === '/api/files/get' && method === 'GET') {
                 const p = str(url.searchParams.get('p'));
                 if (!fs.validPath(p)) return bad('파일 주소가 올바르지 않습니다.');
-                if (who.k === 'partner' && !fs.partnerMayRead(p, who, pview, pc.SHARED_KEYS)) return json(403, { ok: false, error: '볼 수 없는 파일입니다.' });
+                if (who.k === 'partner' && !fs.partnerMayRead(p, who, pview, pc.SHARED_KEYS)) return json(403, { ok: false, error: '열람 권한이 없는 파일입니다.' });
                 const res = await fetch(objUrl(p), { headers: skey });
-                if (res.status === 404 || res.status === 400) return json(404, { ok: false, error: '파일이 없습니다 (지워졌을 수 있습니다).' });
-                if (!res.ok) return json(502, { ok: false, error: '파일 저장소에서 받지 못했습니다 (' + res.status + ').' });
+                if (res.status === 404 || res.status === 400) return json(404, { ok: false, error: '파일이 존재하지 않습니다 (삭제되었을 수 있습니다).' });
+                if (!res.ok) return json(502, { ok: false, error: '파일 저장소에서 파일을 불러올 수 없습니다 (' + res.status + ').' });
                 const type = res.headers.get('Content-Type') || 'application/octet-stream';
                 const dl = url.searchParams.get('dl') === '1' || !fs.inlineSafe(type);
                 return new Response(res.body, {
@@ -615,7 +615,7 @@ export async function onRequest(context) {
                     }
                 });
             }
-            return json(404, { ok: false, error: '없는 주소입니다: ' + path });
+            return json(404, { ok: false, error: '존재하지 않는 경로입니다: ' + path });
         }
 
         // ---------- 파트너센터 (2026-09-28 · 자료 보호 2단계 — 판단은 _partner.js · 2026-10-05 보안 · 회원가입 — 판단은 _signup.js) ----------
@@ -650,15 +650,15 @@ export async function onRequest(context) {
                 const signups = (await store.storeValue(su.SIGNUP_KEY)) || [];
                 const list = Array.isArray(signups) ? signups : [];
                 const i = list.findIndex(x => x && x.id === sid);
-                if (i < 0) return { error: '가입 신청을 찾지 못했습니다.' };
+                if (i < 0) return { error: '가입 신청을 찾을 수 없습니다.' };
                 const rec = list[i];
                 if (rec.status !== 'pending') return { error: '이미 처리된 신청입니다.' };
                 const accounts = (await store.storeValue('gwPartnerAccounts.v1')) || [];
-                if ((Array.isArray(accounts) ? accounts : []).some(a => str(a.loginId).toLowerCase() === rec.loginId)) return { error: `'${rec.loginId}' 는 그사이 다른 곳에서 쓰기 시작한 아이디입니다. 반려하고 다시 신청하게 해 주세요.` };
+                if ((Array.isArray(accounts) ? accounts : []).some(a => str(a.loginId).toLowerCase() === rec.loginId)) return { error: `'${rec.loginId}'는 이미 다른 계정에서 사용 중인 아이디입니다. 반려 후 재신청을 안내해 주세요.` };
                 let existing = null;
                 if (opts.linkCompanyId) {
                     const raw = await store.rowRaw('customers', opts.linkCompanyId);
-                    if (!raw) return { error: '연결할 업체를 찾지 못했습니다.' };
+                    if (!raw) return { error: '연결할 업체를 찾을 수 없습니다.' };
                     existing = Object.assign({}, raw.data, { id: raw.id });
                     if (opts.parentOnly && str(existing.parentId) !== str(rec.parentId)) return { error: '다른 소속의 업체에는 연결할 수 없습니다. 킹오더 담당자에게 문의해 주세요.' };
                     existing.__rev = raw.rev;
@@ -681,7 +681,7 @@ export async function onRequest(context) {
                 const signups = (await store.storeValue(su.SIGNUP_KEY)) || [];
                 const list = Array.isArray(signups) ? signups : [];
                 const rec = list.find(x => x && x.id === sid);
-                if (!rec) return { error: '가입 신청을 찾지 못했습니다.' };
+                if (!rec) return { error: '가입 신청을 찾을 수 없습니다.' };
                 if (rec.status !== 'pending') return { error: '이미 처리된 신청입니다.' };
                 if (parentOnly && str(rec.parentId) !== str(parentOnly)) return { error: '우리 업체 소속 신청이 아닙니다.' };
                 await store.setStore(su.SIGNUP_KEY, list.map(x => (x && x.id === sid ? su.rejectSignup(rec, reason, by, nowMs) : x)));
@@ -698,7 +698,7 @@ export async function onRequest(context) {
                 const permAll = (await store.storeValue('gwPartnerAdminPerm.v1')) || {};
                 const myPerm = ((permAll && permAll.users) || {})[by] || {};
                 const need = path === '/api/partner-admin/signup-decide' ? 'signups' : 'ids';
-                if (!st.admin && myPerm[need] !== true) return json(403, { ok: false, error: need === 'signups' ? '가입 승인 권한이 없습니다. 그룹웨어 관리자에게 파트너센터 권한을 받아 주세요.' : '파트너센터 아이디 관리 권한이 없습니다. 그룹웨어 관리자에게 파트너센터 권한을 받아 주세요.' });
+                if (!st.admin && myPerm[need] !== true) return json(403, { ok: false, error: need === 'signups' ? '가입 승인 권한이 없습니다. 그룹웨어 관리자에게 파트너센터 권한을 요청해 주세요.' : '파트너센터 아이디 관리 권한이 없습니다. 그룹웨어 관리자에게 파트너센터 권한을 요청해 주세요.' });
                 const input = method === 'POST' ? await body() : {};
                 // 임시 비밀번호 — 서버가 만들어 바로 암호화하고, 화면에는 이번 한 번만 돌려줍니다 (72시간 · 첫 로그인 때 바꾸게)
                 if (path === '/api/partner-admin/temp-password' && method === 'POST') {
@@ -710,7 +710,7 @@ export async function onRequest(context) {
                         x.mustChangePw = true; x.tempPwUntil = new Date(nowMs + su.TEMP_HOURS * 3600000).toISOString();
                         x.tempIssuedAt = new Date(nowMs).toISOString(); x.tempIssuedBy = by;
                     });
-                    if (!a) return json(404, { ok: false, error: '아이디를 찾지 못했습니다.' });
+                    if (!a) return json(404, { ok: false, error: '아이디를 찾을 수 없습니다.' });
                     await store.setStore(su.GUARD_KEY, su.guardClear(await store.storeValue(su.GUARD_KEY), loginId));
                     await logAudit({ action: 'temp-password', loginId, by, ok: true });
                     return json(200, { ok: true, password: pw, account: a, hours: su.TEMP_HOURS });
@@ -725,10 +725,10 @@ export async function onRequest(context) {
                     const sid = str(input.id);
                     const r = input.decision === 'approve'
                         ? await approve(sid, { by, linkCompanyId: str(input.linkCompanyId) })
-                        : (input.decision === 'reject' ? await reject(sid, input.reason, by) : { error: '승인 또는 반려를 골라 주세요.' });
+                        : (input.decision === 'reject' ? await reject(sid, input.reason, by) : { error: '승인 또는 반려를 선택해 주세요.' });
                     return r.error ? json(400, { ok: false, error: r.error }) : json(200, r);
                 }
-                return json(404, { ok: false, error: '없는 주소입니다: ' + path });
+                return json(404, { ok: false, error: '존재하지 않는 경로입니다: ' + path });
             }
 
             // ===== 로그인 없이 — 회원가입 =====
@@ -757,12 +757,12 @@ export async function onRequest(context) {
                     if (!okBot) {
                         // 원인을 가릴 수 있게 Cloudflare 가 준 오류 코드를 함께 돌려줍니다 (비밀 값은 들어 있지 않음 · 2026-10-05)
                         console.warn('[signup] Turnstile 실패', codes.join(','), str(input.turnstileToken) ? '토큰 있음' : '토큰 없음');
-                        return json(400, { ok: false, botCodes: codes, error: '자동 가입 방지 확인에 실패했습니다. 확인 칸을 다시 눌러 주세요.' + (codes.length ? ` (${codes.join(', ')})` : '') });
+                        return json(400, { ok: false, botCodes: codes, error: '자동 가입 방지 확인에 실패했습니다. 확인란을 다시 선택해 주세요.' + (codes.length ? ` (${codes.join(', ')})` : '') });
                     }
                 }
                 const rate = su.rateCheck(await store.storeValue(su.RATE_KEY), ip, nowMs);
                 await store.setStore(su.RATE_KEY, rate.rate);
-                if (!rate.ok) return json(429, { ok: false, error: '가입 신청이 너무 잦습니다. 1시간 뒤 다시 시도해 주세요.' });
+                if (!rate.ok) return json(429, { ok: false, error: '가입 신청 횟수가 제한을 초과했습니다. 1시간 후 다시 시도해 주세요.' });
                 const v = await store.storeValues(['gwPartnerAccounts.v1', su.SIGNUP_KEY]);
                 const signups = Array.isArray(v[su.SIGNUP_KEY]) ? v[su.SIGNUP_KEY] : [];
                 const parentId = str(input.parentId);
@@ -793,7 +793,7 @@ export async function onRequest(context) {
                 const g = su.guardState(guard, loginId, nowMs);
                 if (loginId && g.locked) {
                     await logAudit({ action: 'login', loginId, ok: false, note: '잠김' });
-                    return json(200, { ok: false, locked: true, error: `비밀번호를 ${su.LOCK_FAILS}번 틀려 잠겼습니다. ${Math.ceil((g.until - nowMs) / 60000)}분 뒤 다시 시도하거나 킹오더브라더스 담당자에게 잠금 해제를 요청해 주세요.` });
+                    return json(200, { ok: false, locked: true, error: `비밀번호를 ${su.LOCK_FAILS}회 잘못 입력하여 계정이 잠겼습니다. ${Math.ceil((g.until - nowMs) / 60000)}분 후 다시 시도하거나 킹오더브라더스 담당자에게 잠금 해제를 요청해 주세요.` });
                 }
                 const f = loginId && pw ? await pc.resolvePartner(partnerIo(store), loginId) : null;
                 const chk = f ? await pc.checkPassword(f.acct, pw) : { ok: false };
@@ -802,24 +802,24 @@ export async function onRequest(context) {
                     if (!f && loginId && pw) {
                         const sl = (await store.storeValue(su.SIGNUP_KEY)) || [];
                         const mine = (Array.isArray(sl) ? sl : []).filter(x => x && x.loginId === loginId).pop();
-                        if (mine && mine.status === 'pending' && mine.pwHash && (await pc.checkPassword(mine, pw)).ok) return json(200, { ok: false, pending: true, error: '가입 승인을 기다리고 있습니다. 승인되면 이 아이디로 로그인할 수 있습니다.' });
-                        if (mine && mine.status === 'rejected') return json(200, { ok: false, error: '가입 신청이 반려되었습니다' + (mine.reason ? ` — ${mine.reason}` : '') + '. 다시 신청하거나 킹오더브라더스 담당자에게 문의해 주세요.' });
+                        if (mine && mine.status === 'pending' && mine.pwHash && (await pc.checkPassword(mine, pw)).ok) return json(200, { ok: false, pending: true, error: '가입 승인 대기 중입니다. 승인 후 이 아이디로 로그인할 수 있습니다.' });
+                        if (mine && mine.status === 'rejected') return json(200, { ok: false, error: '가입 신청이 반려되었습니다' + (mine.reason ? ` (사유: ${mine.reason})` : '') + '. 다시 신청하거나 킹오더브라더스 담당자에게 문의해 주세요.' });
                     }
                     if (f) {
                         const r = su.guardFail(guard, loginId, nowMs);
                         await store.setStore(su.GUARD_KEY, r.guard);
                         await logAudit({ action: 'login', loginId, ok: false, note: `${r.fails}번째 실패${r.locked ? ' · 잠금' : ''}` });
-                        if (r.locked) return json(200, { ok: false, locked: true, error: `비밀번호를 ${su.LOCK_FAILS}번 틀려 ${su.LOCK_MINUTES}분 동안 잠겼습니다.` });
-                        return json(200, { ok: false, error: `아이디 또는 비밀번호가 맞지 않습니다. (${r.fails}/${su.LOCK_FAILS} — ${su.LOCK_FAILS}번 틀리면 ${su.LOCK_MINUTES}분 잠깁니다)` });
+                        if (r.locked) return json(200, { ok: false, locked: true, error: `비밀번호를 ${su.LOCK_FAILS}회 잘못 입력하여 ${su.LOCK_MINUTES}분 동안 계정이 잠겼습니다.` });
+                        return json(200, { ok: false, error: `아이디 또는 비밀번호가 일치하지 않습니다. (${r.fails}/${su.LOCK_FAILS}, ${su.LOCK_FAILS}회 실패 시 ${su.LOCK_MINUTES}분간 잠금)` });
                     }
-                    return json(200, { ok: false, error: '아이디 또는 비밀번호가 맞지 않습니다.' });
+                    return json(200, { ok: false, error: '아이디 또는 비밀번호가 일치하지 않습니다.' });
                 }
                 if (f.acct.active === false) return json(200, { ok: false, error: '사용이 중지된 아이디입니다. 킹오더브라더스 담당자에게 문의해 주세요.' });
                 // 업체 통합 (2026-10-05) — 업체 관리에서 업체가 지워졌으면 아이디도 쓸 수 없습니다
                 if (f.missing) return json(200, { ok: false, error: '이 아이디의 업체가 등록되어 있지 않습니다. 킹오더브라더스 담당자에게 문의해 주세요.' });
                 if (f.acct.mustChangePw && f.acct.tempPwUntil && Date.parse(f.acct.tempPwUntil) < nowMs) {
                     await logAudit({ action: 'login', loginId, ok: false, note: '임시 비밀번호 기간 지남' });
-                    return json(200, { ok: false, error: `임시 비밀번호의 사용 기간(${su.TEMP_HOURS}시간)이 지났습니다. 킹오더브라더스 담당자에게 새 임시 비밀번호를 요청해 주세요.` });
+                    return json(200, { ok: false, error: `임시 비밀번호의 사용 기간(${su.TEMP_HOURS}시간)이 만료되었습니다. 킹오더브라더스 담당자에게 새 임시 비밀번호를 요청해 주세요.` });
                 }
                 if (g.fails) await store.setStore(su.GUARD_KEY, su.guardClear(guard, loginId));
                 if (chk.needUpgrade) {
@@ -845,18 +845,18 @@ export async function onRequest(context) {
                 const cur = String(input.current === undefined ? '' : input.current), next = String(input.next === undefined ? '' : input.next);
                 if (!(await pc.checkPassword(rp.acct, cur)).ok) {
                     await logAudit({ action: 'password-change', loginId: me.loginId, ok: false, note: '지금 비밀번호 틀림' });
-                    return json(400, { ok: false, error: '지금 비밀번호가 맞지 않습니다.' });
+                    return json(400, { ok: false, error: '현재 비밀번호가 일치하지 않습니다.' });
                 }
                 const err = su.passwordProblem(next, me.loginId);
                 if (err) return json(400, { ok: false, error: err });
-                if (cur === next) return json(400, { ok: false, error: '지금과 다른 비밀번호로 정해 주세요.' });
+                if (cur === next) return json(400, { ok: false, error: '현재 비밀번호와 다른 비밀번호를 입력해 주세요.' });
                 const h = await pc.hashPassword(next);
                 await updateAccount(me.loginId, (a) => { Object.assign(a, h); delete a.pw; a.mustChangePw = false; delete a.tempPwUntil; a.pwChangedAt = new Date(nowMs).toISOString(); });
                 await logAudit({ action: 'password-change', loginId: me.loginId, by: me.loginId, ok: true });
                 return json(200, { ok: true });
             }
             // 임시 비밀번호로 들어왔으면 바꾸기 전에는 다른 일을 못 합니다 (S4)
-            if (me.mustChangePw) return json(403, { ok: false, mustChange: true, session, error: '임시 비밀번호입니다. 먼저 새 비밀번호로 바꿔 주세요.' });
+            if (me.mustChangePw) return json(403, { ok: false, mustChange: true, session, error: '임시 비밀번호로 로그인했습니다. 새 비밀번호로 변경해 주세요.' });
             // 상위업체 승인 — 전체 스위치 · 업체 설정 · 업체관리자 아이디가 모두 켜져 있을 때만
             const pv = await store.storeValues([su.POLICY_KEY, 'gwUsers.v1']);
             const staff = Array.isArray(pv['gwUsers.v1']) ? pv['gwUsers.v1'] : [];
@@ -883,20 +883,20 @@ export async function onRequest(context) {
                 // 상위업체가 승인하면 그 업체 아래에만 · 유형도 신청 그대로 (기존 업체 연결은 같은 소속일 때만)
                 const r = input.decision === 'approve'
                     ? await approve(rec.id, { by, linkCompanyId: rec.existingCompanyId || '', parentOnly: true })
-                    : (input.decision === 'reject' ? await reject(rec.id, input.reason, by, me.partnerId) : { error: '승인 또는 반려를 골라 주세요.' });
+                    : (input.decision === 'reject' ? await reject(rec.id, input.reason, by, me.partnerId) : { error: '승인 또는 반려를 선택해 주세요.' });
                 return r.error ? json(400, { ok: false, error: r.error }) : json(200, r);
             }
             if (path === '/api/partner/save' && method === 'POST') {
                 const input = await body();
                 const key = str(input.key);
-                if (!pc.WRITE_KEYS.includes(key)) return json(403, { ok: false, error: '저장할 수 없는 자료입니다.' });
+                if (!pc.WRITE_KEYS.includes(key)) return json(403, { ok: false, error: '저장할 수 없는 데이터입니다.' });
                 const cur = await store.storeValue(key);
                 const r = pc.applyPartnerWrite(key, cur, input.upserts, input.removes, me);
                 await store.setStore(key, r.list);
                 const view = pc.partnerView({ [key]: r.list }, me)[key];
                 return json(200, { ok: true, value: view, renamed: r.renamed, rejected: r.rejected });
             }
-            return json(404, { ok: false, error: '없는 주소입니다: ' + path });
+            return json(404, { ok: false, error: '존재하지 않는 경로입니다: ' + path });
         }
 
         // ---------- 로그인 계정 ----------
@@ -919,7 +919,7 @@ export async function onRequest(context) {
                     ? list.filter(u => str(u.email).toLowerCase() === typed)
                     : list.filter(u => localPart(u.email) === typed);
                 if (hits.length > 1) return json(200, { ok: false, error: `'${typed}' 로 시작하는 계정이 ${hits.length}개 있습니다. 이메일 전체를 입력해 주세요.` });
-                if (!hits.length) return json(200, { ok: false, error: '등록되지 않은 계정입니다. 관리자에게 계정 발급을 요청하세요.' });
+                if (!hits.length) return json(200, { ok: false, error: '등록되지 않은 계정입니다. 관리자에게 계정 발급을 요청해 주세요.' });
                 return json(200, { ok: true, email: str(hits[0].email).toLowerCase() });
             }
             if (path === '/api/auth/bootstrap' && method === 'POST') {
@@ -927,7 +927,7 @@ export async function onRequest(context) {
                 const input = await body();
                 const email = str(input.email).toLowerCase();
                 if (!validEmail(email)) return bad('이메일 형식이 아닙니다.');
-                if (!(await auth.isEmpty())) return json(409, { ok: false, error: '처음 설정은 이미 끝났습니다. 로그인해 주세요.' });
+                if (!(await auth.isEmpty())) return json(409, { ok: false, error: '초기 설정이 이미 완료되었습니다. 로그인해 주세요.' });
                 const users = (await store.storeValue('gwUsers.v1')) || [];
                 let rec = (Array.isArray(users) ? users : []).find(u => str(u.email).toLowerCase() === email);
                 // 완전히 새 환경(운영 첫 설정 등) — 직원 목록이 서버에 아직 없습니다. 화면은 로그인 전에는 저장하지 않으므로
@@ -937,7 +937,7 @@ export async function onRequest(context) {
                             duty: '시스템 관리', phone: '', mobile: '', birthday: '', joinedAt: '', note: '처음 설정에서 만든 관리자 계정' };
                     await store.setStore('gwUsers.v1', [rec]);
                 }
-                if (!rec || rec.groupId !== 'admin') return json(403, { ok: false, error: '관리자 그룹 계정의 이메일만 처음 설정에 쓸 수 있습니다.' });
+                if (!rec || rec.groupId !== 'admin') return json(403, { ok: false, error: '초기 설정에는 관리자 그룹 계정의 이메일만 사용할 수 있습니다.' });
                 const password = tempPassword();
                 await auth.call('POST', '/admin/users', { email, password, email_confirm: true, user_metadata: { name: str(rec.name), must_change_password: true } });
                 return json(200, { ok: true, password });
@@ -985,19 +985,19 @@ export async function onRequest(context) {
                     const patch = { user_metadata: Object.assign({}, existing.user_metadata, { name: str(input.name) }) };
                     if (newEmail && newEmail !== email) {
                         if (!validEmail(newEmail)) return bad('새 이메일 형식이 아닙니다.');
-                        if (await auth.findByEmail(newEmail)) return bad('이미 다른 계정이 쓰는 이메일입니다.');
+                        if (await auth.findByEmail(newEmail)) return bad('이미 다른 계정에서 사용 중인 이메일입니다.');
                         patch.email = newEmail; patch.email_confirm = true;
                     }
                     await auth.call('PUT', `/admin/users/${existing.id}`, patch);
                     return json(200, { ok: true, existed: true });
                 }
                 if (method === 'DELETE') {
-                    if (str(me.email).toLowerCase() === email) return bad('지금 로그인한 본인 계정은 지울 수 없습니다.');
+                    if (str(me.email).toLowerCase() === email) return bad('현재 로그인한 본인 계정은 삭제할 수 없습니다.');
                     if (existing) await auth.call('DELETE', `/admin/users/${existing.id}`);
                     return json(200, { ok: true, existed: !!existing });
                 }
             }
-            return json(404, { ok: false, error: '없는 주소입니다: ' + path });
+            return json(404, { ok: false, error: '존재하지 않는 경로입니다: ' + path });
         }
 
         // ---------- 구글 캘린더 연동 (2026-09-23) ----------
@@ -1018,19 +1018,19 @@ export async function onRequest(context) {
                     { status: ok ? 200 : 400, headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' } });
 
                 const err = url.searchParams.get('error');
-                if (err) return page('연결하지 못했습니다', `구글에서 허용하지 않았습니다 (${escapeForHtml(err)}). 그룹웨어에서 다시 눌러 주세요.`, false);
+                if (err) return page('연결에 실패했습니다', `구글에서 권한이 거부되었습니다 (${escapeForHtml(err)}). 그룹웨어에서 다시 시도해 주세요.`, false);
                 const code = str(url.searchParams.get('code'));
                 const state = str(url.searchParams.get('state'));
-                if (!code || !state) return page('연결하지 못했습니다', '필요한 값이 오지 않았습니다. 그룹웨어에서 다시 눌러 주세요.', false);
+                if (!code || !state) return page('연결에 실패했습니다', '필수 값이 전달되지 않았습니다. 그룹웨어에서 다시 시도해 주세요.', false);
 
                 const saved = await g.takeState();
-                if (!saved || saved.refresh_token !== state) return page('연결하지 못했습니다', '연결 요청을 확인하지 못했습니다. 그룹웨어에서 다시 눌러 주세요.', false);
-                if (Date.now() - new Date(saved.connected_at).getTime() > 10 * 60 * 1000) return page('시간이 지났습니다', '연결 요청은 10분 안에 끝내야 합니다. 그룹웨어에서 다시 눌러 주세요.', false);
+                if (!saved || saved.refresh_token !== state) return page('연결에 실패했습니다', '연결 요청을 확인할 수 없습니다. 그룹웨어에서 다시 시도해 주세요.', false);
+                if (Date.now() - new Date(saved.connected_at).getTime() > 10 * 60 * 1000) return page('요청 시간이 만료되었습니다', '연결 요청은 10분 이내에 완료해야 합니다. 그룹웨어에서 다시 시도해 주세요.', false);
 
                 let tok;
                 try { tok = await gcal.exchangeCode(env, gcal.redirectUriOf(request), code); }
-                catch (e) { return page('연결하지 못했습니다', escapeForHtml(e.message), false); }
-                if (!tok.refresh_token) return page('연결하지 못했습니다', '구글이 다시 들어갈 증서를 주지 않았습니다. 구글 계정 › 보안 › 서드파티 앱에서 이 앱의 권한을 지운 뒤 다시 시도해 주세요.', false);
+                catch (e) { return page('연결에 실패했습니다', escapeForHtml(e.message), false); }
+                if (!tok.refresh_token) return page('연결에 실패했습니다', '구글에서 갱신 토큰(refresh token)이 발급되지 않았습니다. 구글 계정 › 보안 › 서드파티 앱에서 이 앱의 권한을 삭제한 후 다시 시도해 주세요.', false);
 
                 // 어느 계정으로 허용했는지 확인합니다
                 let who = '';
@@ -1041,7 +1041,7 @@ export async function onRequest(context) {
 
                 await g.saveAccount({ google_email: who, refresh_token: tok.refresh_token, scope: str(tok.scope), connected_by: str(saved.connected_by), connected_at: new Date().toISOString(), last_error: null });
                 gcal.forgetToken();
-                return page('구글 캘린더에 연결되었습니다', `${escapeForHtml(who || '구글 계정')} 으로 연결했습니다. 이 창을 닫고 그룹웨어로 돌아가 주세요.`, true);
+                return page('구글 캘린더에 연결되었습니다', `${escapeForHtml(who || '구글 계정')}(으)로 연결되었습니다. 이 창을 닫고 그룹웨어로 돌아가 주세요.`, true);
             }
 
             // 보내기 — 관리자만이 아니라 **로그인한 사람이면** 됩니다. 일정을 저장한 직후 화면이 부릅니다.
@@ -1055,7 +1055,7 @@ export async function onRequest(context) {
                 const input = await body();
                 try { return json(200, Object.assign({ ok: true }, await gcal.syncBoth(env, { minGapMs: input.force ? 0 : 20000 }))); }
                 catch (e) {
-                    if (e.code === 'not-connected') return json(409, { ok: false, error: '먼저 [구글 캘린더 연결] 을 눌러 주세요.' });
+                    if (e.code === 'not-connected') return json(409, { ok: false, error: '먼저 [구글 캘린더 연결]을 클릭해 주세요.' });
                     return json(500, { ok: false, error: e.message });
                 }
             }
@@ -1106,7 +1106,7 @@ export async function onRequest(context) {
             // 연결 시작 — 허용 화면 주소를 만들어 돌려줍니다 (화면이 새 창으로 엽니다)
             if (path === '/api/calendar/connect' && method === 'POST') {
                 if (!str(env.GOOGLE_CLIENT_ID) || !str(env.GOOGLE_CLIENT_SECRET)) {
-                    return json(500, { ok: false, error: 'GOOGLE_CLIENT_ID · GOOGLE_CLIENT_SECRET 환경변수가 아직 없습니다. Cloudflare 설정에 넣어 주세요.' });
+                    return json(500, { ok: false, error: 'GOOGLE_CLIENT_ID · GOOGLE_CLIENT_SECRET 환경변수가 설정되지 않았습니다. Cloudflare 설정에 등록해 주세요.' });
                 }
                 const state = crypto.randomUUID();
                 await g.saveState(state, str(who.me.email));
@@ -1144,7 +1144,7 @@ export async function onRequest(context) {
                     let cut = false;                       // 이 캘린더의 공유를 다 못 하고 한도에 닿음 — 다음에 이 캘린더부터
                     try {
                         if (!row || !row.google_calendar_id) {
-                            const cal = await gcal.createCalendar(env, g, want.label, '킹오더브라더스 그룹웨어가 관리하는 캘린더입니다. 그룹웨어 일정캘린더와 양쪽으로 맞춰집니다.');
+                            const cal = await gcal.createCalendar(env, g, want.label, '킹오더브라더스 그룹웨어에서 관리하는 캘린더입니다. 그룹웨어 일정캘린더와 양방향으로 동기화됩니다.');
                             used++;
                             row = { key: want.key, kind: want.kind, label: want.label, dept: want.dept || null, member_email: want.member || null, google_calendar_id: cal.id, share_state: 'none', last_error: null };
                             await g.saveCalendar(row);
@@ -1178,7 +1178,7 @@ export async function onRequest(context) {
                             cut = true;                    // 공유 확인을 못 했습니다 — 다음에 이 캘린더부터
                         }
                     } catch (e) {
-                        if (e.code === 'not-connected') return json(409, { ok: false, error: '먼저 [구글 캘린더 연결] 을 눌러 주세요.' });
+                        if (e.code === 'not-connected') return json(409, { ok: false, error: '먼저 [구글 캘린더 연결]을 클릭해 주세요.' });
                         failed.push({ key: want.key, error: e.message });
                         used += 2;                                // 실패한 구글 호출 + 아래 오류 기록
                         // 이미 있는 줄은 오류만 적습니다 — 이름까지 덮으면 구글 이름을 못 바꿨는데도 바뀐 것으로 남습니다
@@ -1198,12 +1198,12 @@ export async function onRequest(context) {
                     const ctx = await gcal.buildContext(env, g);
                     return json(200, { ok: true, pull: await gcal.syncPull(env, g, ctx) });
                 } catch (e) {
-                    if (e.code === 'not-connected') return json(409, { ok: false, error: '먼저 [구글 캘린더 연결] 을 눌러 주세요.' });
+                    if (e.code === 'not-connected') return json(409, { ok: false, error: '먼저 [구글 캘린더 연결]을 클릭해 주세요.' });
                     return json(500, { ok: false, error: e.message });
                 }
             }
 
-            return json(404, { ok: false, error: '없는 주소입니다: ' + path });
+            return json(404, { ok: false, error: '존재하지 않는 경로입니다: ' + path });
         }
 
         // ---------- 법인차량 · 운행일지 — 로그인한 직원만 (2026-09-28 · 4단계) ----------
@@ -1237,7 +1237,7 @@ export async function onRequest(context) {
             if (gate.error) return gate.error;
             const input = await body();
             const from = str(input.from), to = str(input.to);
-            if (!from || !to || from === to) return bad('바꿀 차량 이름이 필요합니다.');
+            if (!from || !to || from === to) return bad('변경할 차량 이름이 필요합니다.');
             let changed = 0;
             for (const table of ['vehicle_reservations', 'vehicle_logs']) {
                 for (const row of await store.rows(table)) {
@@ -1311,7 +1311,7 @@ export async function onRequest(context) {
             const mine = str(r.applicant) === str(staff.rec.name);
             const managerOnly = ['approve', 'handover', 'return-confirm'].includes(action);
             if ((managerOnly && !carManager()) || (!managerOnly && !mine && !carManager())) {
-                return json(403, { ok: false, error: managerOnly ? '승인 · 차키 전달 · 반납 확인은 차량 담당자만 할 수 있습니다.' : '본인이 신청한 예약만 처리할 수 있습니다.' });
+                return json(403, { ok: false, error: managerOnly ? '승인, 차키 전달, 반납 확인은 차량 담당자만 처리할 수 있습니다.' : '본인이 신청한 예약만 처리할 수 있습니다.' });
             }
             const now = new Date().toISOString();
             if (action === 'approve') {
@@ -1323,8 +1323,8 @@ export async function onRequest(context) {
             } else if (action === 'return-request') {
                 if (r.status !== '승인완료') return bad('승인완료(사용중)인 예약만 반납 요청할 수 있습니다.');
                 const startKm = num(input.startKm), endKm = num(input.endKm);
-                if (!(startKm >= 0)) return bad('처음 키로수를 입력하세요.');
-                if (!(endKm > 0)) return bad('최종 키로수를 입력하세요.');
+                if (!(startKm >= 0)) return bad('처음 키로수를 입력해 주세요.');
+                if (!(endKm > 0)) return bad('최종 키로수를 입력해 주세요.');
                 if (endKm < startKm) return bad('최종 키로수는 처음 키로수보다 작을 수 없습니다.');
                 r.returnInfo = { startKm, endKm, purpose: str(input.purpose), fuel: num(input.fuel), requestedAt: now };
                 r.status = '반납요청';
@@ -1341,10 +1341,10 @@ export async function onRequest(context) {
             const input = await body();
             const id = str(input.id), endKm = num(input.endKm);
             if (!id) return bad('완료할 운행일지 id가 필요합니다.');
-            if (!(endKm > 0)) return bad('도착 주행거리를 입력하세요.');
+            if (!(endKm > 0)) return bad('도착 주행거리를 입력해 주세요.');
             const log = (await store.rows('vehicle_logs')).find(l => l.id === id);
             if (!log) return bad('해당 운행일지를 찾을 수 없습니다.');
-            if (str(log.driver) !== str(staff.rec.name) && !carManager()) return json(403, { ok: false, error: '본인 운행일지만 마칠 수 있습니다.' });
+            if (str(log.driver) !== str(staff.rec.name) && !carManager()) return json(403, { ok: false, error: '본인 운행일지만 완료 처리할 수 있습니다.' });
             if (endKm < num(log.startKm)) return bad('도착 주행거리는 출발보다 작을 수 없습니다.');
             log.endKm = endKm;
             if (input.fuel !== undefined && str(input.fuel) !== '') log.fuel = num(input.fuel);

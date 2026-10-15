@@ -340,7 +340,7 @@ export async function imapFetch(opt, connectFn, log) {
     let buf = new Uint8Array(0);
     const more = async () => {
         const { value, done } = await reader.read();
-        if (done) throw new Error('메일 서버가 연결을 끊었습니다.');
+        if (done) throw new Error('메일 서버와의 연결이 종료되었습니다.');
         const n = new Uint8Array(buf.length + value.length); n.set(buf); n.set(value, buf.length); buf = n;
     };
     const readLine = async () => {
@@ -393,8 +393,8 @@ export async function imapFetch(opt, connectFn, log) {
                 if (uid && opt.match(decodeHeader(h.subject), decodeHeader(h.from))) matched.push(uid);
             });
             pick = matched.slice(-limit);
-            say(`검색 ${uids.length}통${uids.length > scan.length ? ` (최근 ${scan.length}통만 확인)` : ''} · 제목 · 보낸 사람이 맞는 것 ${matched.length}통 · 가져올 것 ${pick.length}통`);
-        } else say(`검색 ${uids.length}통 · 가져올 것 ${pick.length}통`);
+            say(`검색 ${uids.length}통${uids.length > scan.length ? ` (최근 ${scan.length}통만 확인)` : ''}, 제목·발신자 일치 ${matched.length}통, 불러올 메일 ${pick.length}통`);
+        } else say(`검색 ${uids.length}통, 불러올 메일 ${pick.length}통`);
         const out = [];
         if (pick.length) {
             const got = await cmd(`UID FETCH ${pick.join(',')} (UID BODY.PEEK[])`);
@@ -407,7 +407,7 @@ export async function imapFetch(opt, connectFn, log) {
         try { await writer.write(enc.encode('Z LOGOUT\r\n')); } catch (e) { /* 끝 */ }
         return out;
     })();
-    const timeout = new Promise((_, rej) => setTimeout(() => rej(new Error('메일 서버 응답이 20초 넘게 없습니다.')), 20000));
+    const timeout = new Promise((_, rej) => setTimeout(() => rej(new Error('메일 서버 응답 시간(20초)이 초과되었습니다.')), 20000));
     try { return await Promise.race([run, timeout]); }
     finally { try { sock.close(); } catch (e) { /* 이미 닫힘 */ } }
 }
@@ -421,10 +421,10 @@ export async function cfConnect() {
 // ============================================================================
 const stripTags = (s) => htmlToText(str(s).replace(/<\/?b>/g, ''));
 export async function naverSearch(cfg, secret, fetchFn) {
-    if (!str(cfg.clientId) || !secret) throw new Error('네이버 검색 API 의 Client ID · Client Secret 을 먼저 넣어 주세요.');
+    if (!str(cfg.clientId) || !secret) throw new Error('네이버 검색 API의 Client ID와 Client Secret을 먼저 입력해 주세요.');
     const kinds = (cfg.kinds || []).filter(k => k === 'blog' || k === 'cafearticle');
     const words = (cfg.keywords || []).map(str).filter(Boolean);
-    if (!kinds.length || !words.length) throw new Error('검색할 종류(블로그 · 카페)와 키워드를 하나 이상 골라 주세요.');
+    if (!kinds.length || !words.length) throw new Error('검색 유형(블로그, 카페)과 키워드를 각각 하나 이상 지정해 주세요.');
     const exclude = (cfg.exclude || []).map(s => str(s).toLowerCase()).filter(Boolean);
     const items = [], seen = new Set();
     for (const kind of kinds) for (const q of words) {
@@ -467,13 +467,13 @@ export function parseRss(xml) {
 }
 export async function blogRss(blogId, fetchFn) {
     const id = str(blogId).replace(/[^A-Za-z0-9_-]/g, '');
-    if (!id) throw new Error('블로그 아이디를 넣어 주세요 (blog.naver.com/ 다음 글자).');
+    if (!id) throw new Error('블로그 아이디를 입력해 주세요 (blog.naver.com/ 뒤의 문자열).');
     const res = await fetchFn(`https://rss.blog.naver.com/${id}.xml`, { headers: { 'User-Agent': 'kingorder-groupware' } });
     if (!res.ok) throw new Error('블로그 RSS ' + res.status);
     return parseRss(await res.text());
 }
 export async function instagramPull(cfg, token, fetchFn) {
-    if (!token) throw new Error('인스타그램(메타) 액세스 토큰을 먼저 넣어 주세요.');
+    if (!token) throw new Error('인스타그램(메타) 액세스 토큰을 먼저 입력해 주세요.');
     const v = str(cfg.apiVersion) || 'v21.0', base = `https://graph.facebook.com/${v}`;
     const call = async (path) => {
         const res = await fetchFn(`${base}/${path}${path.includes('?') ? '&' : '?'}access_token=${encodeURIComponent(token)}`);
@@ -489,7 +489,7 @@ export async function instagramPull(cfg, token, fetchFn) {
             if (me && str(c.username).toLowerCase() === me) return;          // 우리가 단 답글은 뺍니다
             items.push({ kind: 'comment', id: c.id, who: c.username, text: c.text, at: c.timestamp, post: str(m.caption).slice(0, 40), link: m.permalink });
         }));
-    } else notes.push('인스타그램 비즈니스 계정 ID 가 없어 댓글은 건너뛰었습니다.');
+    } else notes.push('인스타그램 비즈니스 계정 ID가 없어 댓글 조회를 생략했습니다.');
     if (str(cfg.pageId)) {
         try {
             const j = await call(`${encodeURIComponent(cfg.pageId)}/conversations?platform=instagram&fields=participants,messages.limit(5){id,message,from,created_time}&limit=10`);
@@ -500,7 +500,7 @@ export async function instagramPull(cfg, token, fetchFn) {
                 items.push({ kind: 'dm', id: msg.id, who, text: msg.message, at: msg.created_time, post: 'DM', link: '' });
             }));
         } catch (e) { notes.push('DM: ' + e.message + ' (instagram_manage_messages 권한이 필요합니다)'); }
-    } else notes.push('페이스북 페이지 ID 가 없어 DM 은 건너뛰었습니다.');
+    } else notes.push('페이스북 페이지 ID가 없어 DM 조회를 생략했습니다.');
     return { items: items.sort((a, b) => str(b.at).localeCompare(str(a.at))), notes };
 }
 export function instaToRecord(it, rules) {
@@ -514,7 +514,7 @@ export function instaToRecord(it, rules) {
 export function sheetCsvUrl(url) {
     const u = str(url);
     const id = (u.match(/\/spreadsheets\/d\/([A-Za-z0-9_-]+)/) || [])[1];
-    if (!id) throw new Error('구글 시트 주소가 아닙니다. 주소창의 https://docs.google.com/spreadsheets/d/… 를 그대로 붙여 넣어 주세요.');
+    if (!id) throw new Error('올바른 구글 시트 주소가 아닙니다. 주소창의 https://docs.google.com/spreadsheets/d/… 주소를 그대로 입력해 주세요.');
     const gid = (u.match(/[#&?]gid=(\d+)/) || [])[1] || '0';
     return `https://docs.google.com/spreadsheets/d/${id}/export?format=csv&gid=${gid}`;
 }
@@ -535,7 +535,7 @@ export function parseCsv(text) {
 export async function sheetPull(url, fetchFn) {
     const res = await fetchFn(sheetCsvUrl(url), { redirect: 'follow' });
     const text = await res.text();
-    if (!res.ok || /^\s*<!DOCTYPE html/i.test(text)) throw new Error('시트를 읽지 못했습니다. 시트 [공유] 에서 「링크가 있는 모든 사용자 · 뷰어」 로 바꾼 뒤 다시 시도해 주세요.');
+    if (!res.ok || /^\s*<!DOCTYPE html/i.test(text)) throw new Error('시트를 읽을 수 없습니다. 시트 [공유]에서 「링크가 있는 모든 사용자 · 뷰어」로 변경한 후 다시 시도해 주세요.');
     return parseCsv(text);
 }
 
@@ -582,7 +582,7 @@ export function secretStore(env) {
         const res = await fetch(`${base}/rest/v1/${path}`, { method, headers: Object.assign({}, headers, extra || {}), body: body === undefined ? undefined : JSON.stringify(body) });
         if (!res.ok) {
             const t = await res.text();
-            if (/inbound_secrets/.test(t) && /does not exist|not find|schema cache/i.test(t)) throw new Error('inbound_secrets 표가 없습니다. Supabase SQL Editor 에서 supabase/schema-v7.sql 을 먼저 실행해 주세요.');
+            if (/inbound_secrets/.test(t) && /does not exist|not find|schema cache/i.test(t)) throw new Error('inbound_secrets 테이블이 없습니다. Supabase SQL Editor 에서 supabase/schema-v7.sql 을 먼저 실행해 주세요.');
             throw new Error(`Supabase ${method} ${path} → ${res.status} ${t}`);
         }
         const t = await res.text(); return t ? JSON.parse(t) : null;
@@ -614,8 +614,8 @@ export async function runSource(source, cfg, secrets, deps) {
     const fetchFn = deps.fetch || fetch;
     if (source === 'mail') {
         const m = cfg.mail;
-        if (!str(m.host) || !str(m.user)) throw new Error('메일 서버와 아이디를 먼저 넣어 주세요.');
-        if (!secrets.mailPassword) throw new Error('메일 비밀번호(앱 비밀번호)를 먼저 넣어 주세요.');
+        if (!str(m.host) || !str(m.user)) throw new Error('메일 서버와 아이디를 먼저 입력해 주세요.');
+        if (!secrets.mailPassword) throw new Error('메일 비밀번호(앱 비밀번호)를 먼저 입력해 주세요.');
         const connectFn = deps.connect || await cfConnect();
         // 제목 조건 — 쉼표로 여러 낱말을 넣으면 그중 하나라도 든 메일을 고릅니다 (2026-10-12 · 아임웹 알림 제목이 여러 가지)
         const subjs = str(m.subject).split(/[,，]/).map(t => t.trim()).filter(Boolean);

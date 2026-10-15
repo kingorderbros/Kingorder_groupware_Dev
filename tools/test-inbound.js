@@ -145,7 +145,7 @@ function fakeConnect({ hostname }) {
         ok(imapLog.some(l => /HEADER\.FIELDS \(SUBJECT FROM\)/.test(l)), '제목 조건이 있으면 머리(제목 · 보낸 사람)를 먼저 읽는다');
         ok(imapLog.some(l => /^K\d+ UID FETCH 11 \(UID BODY\.PEEK\[\]\)/.test(l)), '본문은 조건에 맞는 메일(11)만 받는다');
         ok(r.items.length === 1, '맞는 메일 1통');
-        ok((r.log || []).some(l => /맞는 것 1통/.test(l)), '기록에 맞는 메일 수');
+        ok((r.log || []).some(l => /일치 1통/.test(l)), '기록에 맞는 메일 수');
     }
     // 제목 조건 여러 개 — 쉼표로 넣으면 하나라도 들면 가져옴 (2026-10-12)
     const cfgMulti = I.withDefaults({ mail: { user: 'kob', subject: '없는말, 입력폼' } });

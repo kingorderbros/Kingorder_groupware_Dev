@@ -34,7 +34,7 @@ export const CATEGORIES = [
     { id: 'meeting',   label: '영업 회의' },
     { id: 'issue',     label: '이슈 보고' },
     { id: 'dev',       label: '개발의뢰' },
-    { id: 'etc',       label: '그 밖의 알림' }
+    { id: 'etc',       label: '기타 알림' }
 ];
 export function categoryOf(type) {
     const t = String(type || '');

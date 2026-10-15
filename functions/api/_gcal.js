@@ -143,7 +143,7 @@ let tokenCache = { value: '', until: 0 };
 export async function accessToken(env, store) {
     if (tokenCache.value && Date.now() < tokenCache.until) return tokenCache.value;
     const acc = await store.account();
-    if (!acc || !acc.refresh_token) { const e = new Error('구글 계정이 아직 연결되지 않았습니다.'); e.code = 'not-connected'; throw e; }
+    if (!acc || !acc.refresh_token) { const e = new Error('구글 계정이 연결되지 않았습니다.'); e.code = 'not-connected'; throw e; }
     const data = await tokenCall(env, { grant_type: 'refresh_token', refresh_token: acc.refresh_token });
     tokenCache = { value: data.access_token, until: Date.now() + Math.max(60, (data.expires_in || 3600) - 120) * 1000 };
     return tokenCache.value;
@@ -560,7 +560,7 @@ export async function syncBoth(env, opts) {
     if (gap) {
         const mark = await store.syncState('__push');
         if (mark && mark.last_sync_at && Date.now() - new Date(mark.last_sync_at).getTime() < gap) {
-            return { ok: true, skipped: '방금 맞췄습니다.' };
+            return { ok: true, skipped: '방금 동기화되었습니다.' };
         }
     }
     const ctx = await buildContext(env, store);

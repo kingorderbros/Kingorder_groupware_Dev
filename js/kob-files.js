@@ -61,7 +61,7 @@
         return new Promise((resolve, reject) => {
             const fr = new FileReader();
             fr.onload = () => resolve(String(fr.result || ''));
-            fr.onerror = () => reject(new Error('파일을 읽지 못했습니다.'));
+            fr.onerror = () => reject(new Error('파일을 읽을 수 없습니다.'));
             fr.readAsDataURL(file);
         });
     }
@@ -71,7 +71,7 @@
         const name = String(o.name || (file && file.name) || 'file');
         const type = String(o.type || (file && file.type) || 'application/octet-stream');
         const size = Number(file && file.size) || 0;
-        if (size > MAX_BYTES) throw new Error(`한 파일 20MB 까지 올릴 수 있습니다: ${name}`);
+        if (size > MAX_BYTES) throw new Error(`파일당 최대 20MB까지 업로드할 수 있습니다: ${name}`);
         if (!remote) return { name, type, size, dataUrl: await readDataUrl(file) };
         const send = () => fetch(`${API}/api/files/upload?name=${encodeURIComponent(name)}&type=${encodeURIComponent(type)}`, {
             method: 'POST', body: file, credentials: 'same-origin', headers: { 'Content-Type': 'application/octet-stream' }
@@ -80,7 +80,7 @@
         let r = await send();
         if (r.status === 401) { await session(true); r = await send(); }
         const j = await r.json().catch(() => ({}));
-        if (!r.ok || !j.ok || !j.file) throw new Error(j.error || `파일을 올리지 못했습니다 (${r.status}): ${name}`);
+        if (!r.ok || !j.ok || !j.file) throw new Error(j.error || `파일 업로드에 실패했습니다 (${r.status}): ${name}`);
         return j.file;
     }
     // data URL(화면에서 줄인 그림 등) → 올리기
@@ -119,7 +119,7 @@
             await session();
             let r = await fetch(src(f), { credentials: 'same-origin' });
             if (r.status === 401) { await session(true); r = await fetch(src(f), { credentials: 'same-origin' }); }
-            if (!r.ok) throw new Error('파일을 받지 못했습니다 (' + r.status + ')');
+            if (!r.ok) throw new Error('파일 다운로드에 실패했습니다 (' + r.status + ')');
             return r.text();
         }
         const u = f.dataUrl || '';

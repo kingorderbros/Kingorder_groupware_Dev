@@ -45,7 +45,7 @@
     function validate(pw) {
         const s = String(pw || '');
         if (s.length < 8) return '비밀번호는 8자 이상이어야 합니다.';
-        if (!/[A-Za-z]/.test(s) || !/[0-9]/.test(s)) return '영문과 숫자를 함께 넣어 주세요.';
+        if (!/[A-Za-z]/.test(s) || !/[0-9]/.test(s)) return '영문과 숫자를 함께 입력해 주세요.';
         return '';
     }
 
@@ -63,7 +63,7 @@
         mode: 'local',
         async status() { return { mode: 'local', empty: !Object.keys(readLocal()).length }; },
         async bootstrap(email) {
-            if (Object.keys(readLocal()).length) throw new Error('처음 설정은 이미 끝났습니다.');
+            if (Object.keys(readLocal()).length) throw new Error('초기 설정이 이미 완료되었습니다.');
             return local.setTemp(email);
         },
         async setTemp(email) {
@@ -84,12 +84,12 @@
             if (!localSession) throw new Error('로그인 상태가 아닙니다.');
             const o = readLocal();
             const rec = o[localSession.email];
-            if (currentPw !== undefined && rec && rec.hash !== await hashOf(localSession.email, currentPw)) throw new Error('현재 비밀번호가 맞지 않습니다.');
+            if (currentPw !== undefined && rec && rec.hash !== await hashOf(localSession.email, currentPw)) throw new Error('현재 비밀번호가 일치하지 않습니다.');
             o[localSession.email] = { hash: await hashOf(localSession.email, newPw), mustChange: false, at: new Date().toISOString() };
             writeLocal(o);
         },
         async requestReset() {
-            throw new Error('로컬 저장소 모드에서는 이메일을 보낼 수 없습니다.\n관리자에게 [사용자/권한관리 › 비밀번호 초기화] 를 요청해 주세요.');
+            throw new Error('로컬 저장소 모드에서는 이메일을 발송할 수 없습니다.\n관리자에게 [사용자/권한관리 › 비밀번호 초기화]를 요청해 주세요.');
         },
         async rename(oldEmail, newEmail) {
             const o = readLocal();
@@ -99,7 +99,7 @@
         async signOut() { localSession = null; },
         async recovery() { return false; },
         // 서버(/api)가 있어야 하는 기능 — 로컬 모드에서는 쓸 수 없습니다
-        async call() { throw new Error('이 기능은 Supabase 설정(config/app-config.js)이 있어야 씁니다.'); }
+        async call() { throw new Error('이 기능은 Supabase 설정(config/app-config.js)이 필요합니다.'); }
     };
 
     // ---------- Supabase 모드 ----------
@@ -120,16 +120,16 @@
     //   · 파일을 직접 연 경우(file://) · 에디터 미리보기처럼 /api 가 없는 곳에서 연 경우가 대부분입니다
     function apiDownHint() {
         const loc = window.location;
-        if (API) return `서버(${API})에 연결하지 못했습니다. 잠시 뒤 새로고침해 주세요.`;
+        if (API) return `서버(${API})에 연결할 수 없습니다. 잠시 후 새로고침해 주세요.`;
         if (loc.protocol === 'file:') {
-            return '파일을 직접 열어서 서버(/api)가 없습니다. 브라우저 주소창에 dev 주소(https://kingorder-groupware-dev.kingorderbros.workers.dev)를 넣어 열어 주세요.';
+            return '파일을 직접 열어 서버(/api)에 연결할 수 없습니다. 브라우저 주소창에 dev 주소(https://kingorder-groupware-dev.kingorderbros.workers.dev)를 입력해 접속해 주세요.';
         }
         if (/^(localhost|127\.0\.0\.1)$/.test(loc.hostname)) {
             return loc.port === '8788'
-                ? '서버(/api)에 연결하지 못했습니다. 터미널에서 npm run dev 가 켜져 있는지, 개발환경 폴더에 .dev.vars 가 있는지 확인해 주세요.'
-                : `이 주소(${loc.host})에는 서버(/api)가 없습니다. 개발환경 폴더에서 npm run dev 로 띄운 뒤 http://localhost:8788 로 열거나, dev 주소로 열어 주세요.`;
+                ? '서버(/api)에 연결할 수 없습니다. 터미널의 npm run dev 실행 여부와 개발환경 폴더의 .dev.vars 파일 유무를 확인해 주세요.'
+                : `이 주소(${loc.host})에는 서버(/api)가 없습니다. 개발환경 폴더에서 npm run dev 실행 후 http://localhost:8788 또는 dev 주소로 접속해 주세요.`;
         }
-        return '서버(/api)에 연결하지 못했습니다. 배포 중이면 1~2분 걸립니다 — 잠시 뒤 새로고침해 주세요.';
+        return '서버(/api)에 연결할 수 없습니다. 배포 중에는 1~2분 정도 소요됩니다. 잠시 후 새로고침해 주세요.';
     }
     const remote = {
         mode: 'supabase',
@@ -145,7 +145,7 @@
             const { data, error } = await client().auth.signInWithPassword({ email: norm(email), password: String(pw) });
             if (error) {
                 if (/invalid login/i.test(error.message)) throw new Error('BAD_PASSWORD');
-                if (/email not confirmed/i.test(error.message)) throw new Error('아직 확인되지 않은 계정입니다. 관리자에게 비밀번호 초기화를 요청해 주세요.');
+                if (/email not confirmed/i.test(error.message)) throw new Error('인증되지 않은 계정입니다. 관리자에게 비밀번호 초기화를 요청해 주세요.');
                 throw new Error(error.message);
             }
             const meta = (data && data.user && data.user.user_metadata) || {};
@@ -157,11 +157,11 @@
                 const { data } = await client().auth.getUser();
                 const email = data && data.user ? data.user.email : '';
                 const { error: e1 } = await client().auth.signInWithPassword({ email, password: String(currentPw) });
-                if (e1) throw new Error('현재 비밀번호가 맞지 않습니다.');
+                if (e1) throw new Error('현재 비밀번호가 일치하지 않습니다.');
             }
             const { error } = await client().auth.updateUser({ password: String(newPw), data: { must_change_password: false } });
             if (error) {
-                if (/same password|different from the old/i.test(error.message)) throw new Error('지금 쓰는 비밀번호와 다른 것으로 정해 주세요.');
+                if (/same password|different from the old/i.test(error.message)) throw new Error('현재 비밀번호와 다른 비밀번호를 입력해 주세요.');
                 throw new Error(error.message);
             }
         },
@@ -169,7 +169,7 @@
             const redirectTo = window.location.origin + window.location.pathname;
             const { error } = await client().auth.resetPasswordForEmail(norm(email), { redirectTo });
             if (error) {
-                if (/rate limit|security purposes/i.test(error.message)) throw new Error('잠시 뒤에 다시 시도해 주세요 (메일 발송 제한).');
+                if (/rate limit|security purposes/i.test(error.message)) throw new Error('메일 발송 횟수 제한으로 잠시 후 다시 시도해 주세요.');
                 throw new Error(error.message);
             }
         },
@@ -187,7 +187,7 @@
             let r;
             try { r = await (await fetch(API + '/api/auth/lookup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) })).json(); }
             catch (e) { throw new Error(apiDownHint()); }
-            if (!r || r.ok === false) throw new Error((r && r.error) || '계정을 확인하지 못했습니다.');
+            if (!r || r.ok === false) throw new Error((r && r.error) || '계정을 확인할 수 없습니다.');
             return r.email;
         },
         // 이 브라우저에 남아 있는 로그인 — 있으면 { email, mustChange }
@@ -224,7 +224,7 @@
     const PC_ITER = 100000;      // 2026-10-05 S5 — 서버와 같게 10만 회 (예전 1만 회 저장분은 그대로 확인됩니다)
     const hexOf = (buf) => Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
     async function pcHash(pw, saltHex, iter) {
-        if (!(window.crypto && window.crypto.subtle)) throw new Error('이 브라우저에서는 비밀번호를 암호화할 수 없습니다 (https 주소로 열어 주세요).');
+        if (!(window.crypto && window.crypto.subtle)) throw new Error('이 브라우저에서는 비밀번호를 암호화할 수 없습니다 (https 주소로 접속해 주세요).');
         const salt = saltHex ? Uint8Array.from(saltHex.match(/../g).map(h => parseInt(h, 16))) : window.crypto.getRandomValues(new Uint8Array(16));
         const n = iter || PC_ITER;
         const key = await window.crypto.subtle.importKey('raw', new TextEncoder().encode(String(pw)), 'PBKDF2', false, ['deriveBits']);

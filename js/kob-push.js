@@ -49,7 +49,7 @@
     // 서비스 워커가 끝내 준비되지 않아도 화면이 멈추지 않게 8초까지만 기다립니다 (2026-09-29 검토)
     async function reg() {
         const r = await Promise.race([navigator.serviceWorker.ready, new Promise(res => setTimeout(() => res(null), 8000))]);
-        if (!r) throw new Error('알림 준비(서비스 워커)가 되지 않았습니다. 새로고침한 뒤 다시 눌러 주세요.');
+        if (!r) throw new Error('알림 서비스(서비스 워커)가 준비되지 않았습니다. 새로고침 후 다시 시도해 주세요.');
         return r;
     }
     const isPartnerPage = () => { try { const q = new URLSearchParams(location.search); return q.get('mode') === 'partner' || location.hash === '#partner'; } catch (e) { return false; } };
@@ -78,14 +78,14 @@
     }
     async function enable() {
         if (!supported()) throw new Error(isIos() && !standalone()
-            ? '아이폰은 사파리에서 [공유 › 홈 화면에 추가] 한 뒤, 홈 화면의 그룹웨어 아이콘으로 열어야 알림을 받을 수 있습니다.'
-            : '이 브라우저는 알림을 받을 수 없습니다.');
+            ? '아이폰은 사파리에서 [공유 › 홈 화면에 추가] 후 홈 화면의 그룹웨어 아이콘으로 실행해야 알림을 받을 수 있습니다.'
+            : '이 브라우저는 알림을 지원하지 않습니다.');
         const k = await key();
-        if (!k) throw new Error('서버에 알림 키가 아직 설정되지 않았습니다. 관리자에게 문의해 주세요.');
+        if (!k) throw new Error('서버에 알림 키가 설정되지 않았습니다. 관리자에게 문의해 주세요.');
         const perm = await Notification.requestPermission();
         if (perm !== 'granted') throw new Error(perm === 'denied'
-            ? '알림이 차단되어 있습니다. 브라우저(또는 폰) 설정에서 이 사이트의 알림을 허용한 뒤 다시 눌러 주세요.'
-            : '알림 허용을 누르지 않았습니다.');
+            ? '알림이 차단되어 있습니다. 브라우저(또는 휴대폰) 설정에서 이 사이트의 알림을 허용한 후 다시 시도해 주세요.'
+            : '알림이 허용되지 않았습니다.');
         const r = await reg();
         let sub = await r.pushManager.getSubscription();
         if (!sub) sub = await r.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ToBytes(k) });

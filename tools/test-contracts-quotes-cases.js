@@ -119,7 +119,7 @@ function run(k, seed) {
 
             win.dispatchEvent({ type: 'kob-db-conflict', detail: { table: k.table, id: k.prefix + '0003', mine: {}, theirs: k.sample(k.prefix + '0003') } });
             eq(toasts.length, 1, '충돌을 알린다');
-            ok(/다른 사람이 먼저 고쳤습니다/.test(toasts[0].t), '무슨 일인지 알려 준다');
+            ok(/다른 사용자가 먼저 수정했습니다/.test(toasts[0].t), '무슨 일인지 알려 준다');
         }
 
         console.log('\n  [6] 내가 방금 한 것은 되돌아오지 않는지');

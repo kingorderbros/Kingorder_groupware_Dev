@@ -42,17 +42,17 @@ const ok = (c, m) => { if (c) { pass++; console.log('  ✓', m); } else { fail++
     const bad = (patch, re, m) => { const x = S.validateSignup(Object.assign({}, base, patch), ctx); ok(x.error && re.test(x.error), m + ' — ' + (x.error || '통과해 버림')); };
     bad({ kind: 'zzz' }, /유형/, '모르는 유형');
     bad({ parentId: '' }, /소속/, '소속 없이 파트너사 가맹점');
-    bad({ parentId: 'p99' }, /찾지 못/, '다른 소속 id');
+    bad({ parentId: 'p99' }, /찾을 수 없/, '다른 소속 id');
     bad({ businessNo: '123' }, /10자리/, '사업자번호 자릿수');
     bad({ loginId: 'Ab' }, /4~20/, '아이디 규칙');
     bad({ loginId: 'ptn00009' }, /ptn/, 'ptn 으로 시작');
-    bad({ loginId: 'taken1' }, /이미 쓰고/, '이미 있는 아이디');
+    bad({ loginId: 'taken1' }, /이미 사용 중/, '이미 있는 아이디');
     bad({ loginId: 'wait01' }, /신청 중/, '신청 중인 아이디');
     bad({ pw: 'ab1', pw2: 'ab1' }, /6자/, '짧은 비밀번호');
-    bad({ pw2: 'Abcd1234!y' }, /확인/, '비밀번호 확인 다름');
+    bad({ pw2: 'Abcd1234!y' }, /확인 값/, '비밀번호 확인 다름');
     bad({ consents: { privacy: false } }, /동의/, '필수 동의 없음');
     bad({ phone: '12' }, /연락처/, '연락처');
-    bad({ name: 'x'.repeat(101) }, /길/, '너무 긴 상호');
+    bad({ name: 'x'.repeat(101) }, /깁니다/, '너무 긴 상호');
     r = S.validateSignup(Object.assign({}, base, { zipCode: '06234', roadAddress: '서울 강남구 테헤란로 1', addressDetail: '2층' }), ctx);
     ok(r.rec.company.address === '서울 강남구 테헤란로 1 2층' && r.rec.company.zipCode === '06234' && r.rec.company.addressDetail === '2층', '주소 검색 값(우편번호 · 도로명 · 상세) → 한 줄 주소도 만듦');
     ok(S.approveSignup(Object.assign({}, r.rec), { companyId: 'c1' }).company.roadAddress === '서울 강남구 테헤란로 1', '승인하면 업체에도 도로명 · 상세 · 우편번호');
@@ -123,7 +123,7 @@ const ok = (c, m) => { if (c) { pass++; console.log('  ✓', m); } else { fail++
     x = await call('POST', '/api/partner/signup', form);
     ok(!x.ok && /신청 중/.test(x.error), '같은 아이디로 또 신청 불가');
     x = await call('POST', '/api/partner/login', { loginId: 'newshop1', pw: 'Abcd1234!x' });
-    ok(!x.ok && x.pending && /승인을 기다/.test(x.error), '승인 전 로그인 → 승인 대기 안내');
+    ok(!x.ok && x.pending && /승인 대기/.test(x.error), '승인 전 로그인 → 승인 대기 안내');
     x = await call('POST', '/api/partner/login', { loginId: 'newshop1', pw: 'Wrong1234!x' });
     ok(!x.ok && !x.pending, '비밀번호가 틀리면 승인 대기 여부를 알려 주지 않음');
     x = await call('POST', '/api/partner-admin/signup-decide', { id: 'SU-0001', decision: 'approve' }, 'tok-sales');
@@ -175,7 +175,7 @@ const ok = (c, m) => { if (c) { pass++; console.log('  ✓', m); } else { fail++
     x = await call('POST', '/api/partner/login', { loginId: 'okt01', pw: 'Wrong5' });
     ok(!x.ok && x.locked, '5번째에 잠김');
     x = await call('POST', '/api/partner/login', { loginId: 'okt01', pw: 'Oldpass123!' });
-    ok(!x.ok && x.locked && /분 뒤/.test(x.error), '잠긴 동안은 맞는 비밀번호도 거절');
+    ok(!x.ok && x.locked && /분 후/.test(x.error), '잠긴 동안은 맞는 비밀번호도 거절');
     x = await call('POST', '/api/partner-admin/unlock', { loginId: 'okt01' }, 'tok-admin');
     ok(x.ok, '직원이 잠금 해제');
     x = await call('POST', '/api/partner/login', { loginId: 'okt01', pw: 'Oldpass123!' });
@@ -203,7 +203,7 @@ const ok = (c, m) => { if (c) { pass++; console.log('  ✓', m); } else { fail++
     x = await call('POST', '/api/partner/password', { current: temp, next: 'short' }, tokOkt);
     ok(!x.ok && /6자|영문과 숫자/.test(x.error), '새 비밀번호도 규칙 검사');
     x = await call('POST', '/api/partner/password', { current: 'nope', next: 'Newpass123!x' }, tokOkt);
-    ok(!x.ok && /지금 비밀번호/.test(x.error), '지금 비밀번호가 틀리면 거절');
+    ok(!x.ok && /현재 비밀번호/.test(x.error), '지금 비밀번호가 틀리면 거절');
     x = await call('POST', '/api/partner/password', { current: temp, next: 'Newpass123!x' }, tokOkt);
     ok(x.ok, '임시 → 새 비밀번호');
     x = await call('GET', '/api/partner/boot', undefined, tokOkt);

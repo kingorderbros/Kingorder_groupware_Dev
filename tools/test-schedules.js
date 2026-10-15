@@ -159,7 +159,7 @@ function run(seed) {
             theirs: { id: 's1', title: '남이 먼저 고친 것' }
         });
         eq(toasts.length, 1, '사용자에게 알린다');
-        ok(/다른 사람이 먼저 고쳤습니다/.test(toasts[0].t), '무슨 일인지 알려 준다');
+        ok(/다른 사용자가 먼저 수정했습니다/.test(toasts[0].t), '무슨 일인지 알려 준다');
         ok(/남이 먼저 고친 것/.test(toasts[0].t), '어느 일정인지 알려 준다');
         eq(ctx.schedules[0].title, '남이 먼저 고친 것', '화면을 최신 내용으로 맞춘다');
     }

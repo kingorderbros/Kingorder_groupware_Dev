@@ -250,7 +250,7 @@ function freeId(id, taken) {
 }
 // current: 서버에 있는 전체 목록. 돌려주는 것: { list: 새 전체 목록, renamed: {옛 id → 새 id}, rejected: [id…] }
 export function applyPartnerWrite(key, current, upserts, removes, me) {
-    if (!WRITE_KEYS.includes(key)) throw new Error('파트너가 저장할 수 없는 자료입니다: ' + key);
+    if (!WRITE_KEYS.includes(key)) throw new Error('파트너 계정으로 저장할 수 없는 데이터입니다: ' + key);
     const wrapped = WRAPPED_KEYS.includes(key);
     let list = listOf(key, current).slice();
     const done = (res) => {

@@ -210,10 +210,10 @@
             document.body.appendChild(el);
         }
         const env = cfg.env ? ` · ${cfg.env}` : '';
-        if (state === 'error') { el.style.background = '#fee2e2'; el.style.color = '#991b1b'; el.textContent = `저장 실패 — 다시 시도 중${env}`; el.title = detail || ''; }
+        if (state === 'error') { el.style.background = '#fee2e2'; el.style.color = '#991b1b'; el.textContent = `저장 실패, 재시도 중${env}`; el.title = detail || ''; }
         else if (mode === 'supabase') { el.style.background = '#dcfce7'; el.style.color = '#166534'; el.textContent = `Supabase${env}`; }
         else if (mode === 'partner') { el.style.background = '#dcfce7'; el.style.color = '#166534'; el.textContent = `서버${env}`; }
-        else { el.style.background = '#e5e7eb'; el.style.color = '#374151'; el.textContent = `로컬 저장소${env} — Supabase 미설정`; }
+        else { el.style.background = '#e5e7eb'; el.style.color = '#374151'; el.textContent = `로컬 저장소${env} (Supabase 미설정)`; }
     }
 
     window.kobStorage = {
@@ -320,12 +320,12 @@
                 if (oldStr === null) cache.delete(k); else cache.set(k, oldStr);
                 fireStorage(k, newStr, oldStr);
             }
-            alert('저장하지 못했습니다. 인터넷 연결을 확인한 뒤 다시 시도해 주세요.\n(방금 입력한 내용은 저장되지 않았습니다)\n\n' + (e.message || e));
+            alert('저장에 실패했습니다. 인터넷 연결을 확인한 후 다시 시도해 주세요.\n(입력한 내용은 저장되지 않았습니다)\n\n' + (e.message || e));
         }
     }
     function pcExpired() {
         ls.del(PC_TOKEN_KEY);
-        alert('로그인이 끝났습니다. 다시 로그인해 주세요.');
+        alert('로그인이 만료되었습니다. 다시 로그인해 주세요.');
         window.location.reload();
     }
     async function pcPull() {
@@ -371,13 +371,13 @@
         // 서버 부르기 (회원가입 · 비밀번호 바꾸기 · 가입 승인 — 2026-10-05). 돌려주는 것: { ok, status, ...서버 응답 }
         async call(method, path, bodyObj) {
             try { const r = await pcFetch(method, path, bodyObj); return Object.assign({ status: r.status }, r.j || {}, { ok: !!(r.j && r.j.ok) }); }
-            catch (e) { return { ok: false, status: 0, error: '서버에 연결하지 못했습니다. 잠시 뒤 다시 시도해 주세요.' }; }
+            catch (e) { return { ok: false, status: 0, error: '서버에 연결할 수 없습니다. 잠시 후 다시 시도해 주세요.' }; }
         },
         // 성공하면 토큰을 남기고 { ok: true } — 화면은 새로 불러 들어갑니다
         async login(loginId, pw) {
             let r;
             try { r = await pcFetch('POST', '/api/partner/login', { loginId, pw }); }
-            catch (e) { return { ok: false, error: '서버에 연결하지 못했습니다. 잠시 뒤 다시 시도해 주세요.' }; }
+            catch (e) { return { ok: false, error: '서버에 연결할 수 없습니다. 잠시 후 다시 시도해 주세요.' }; }
             if (!r.j || !r.j.ok) return { ok: false, error: (r.j && r.j.error) || ('서버 오류 ' + r.status) };
             ls.set(PC_TOKEN_KEY, r.j.token);
             return { ok: true };
@@ -390,7 +390,7 @@
     };
 
     function loadScript(src) {
-        return new Promise((ok, fail) => { const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = () => fail(new Error('스크립트를 못 받아 옴: ' + src)); document.head.appendChild(s); });
+        return new Promise((ok, fail) => { const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = () => fail(new Error('스크립트를 불러올 수 없습니다: ' + src)); document.head.appendChild(s); });
     }
     function runMain() {
         const holder = document.getElementById('kob-main');
@@ -425,8 +425,8 @@
                         // 이 화면에서 누른 로그아웃이 아닌데 로그인이 끊겼으면(다른 탭 · 기기에서 로그아웃, 만료)
                         // 조용히 저장이 멈추지 않도록 알리고 로그인 화면으로 보냅니다 (2026-09-28 검토)
                         if (was && !authed && !window.__kobLoggingOut) {
-                            setStatus('error', '로그인이 끊겼습니다');
-                            setTimeout(() => { alert('로그인이 끊겼습니다 (다른 곳에서 로그아웃했거나 시간이 지났습니다).\n다시 로그인해 주세요.'); window.location.reload(); }, 0);
+                            setStatus('error', '로그인 세션 만료');
+                            setTimeout(() => { alert('로그인 세션이 종료되었습니다 (다른 곳에서 로그아웃했거나 세션이 만료되었습니다).\n다시 로그인해 주세요.'); window.location.reload(); }, 0);
                         }
                     });
                 } catch (e) { /* 로그인 상태를 못 따라가면 처음 값(authed)을 그대로 씁니다 */ }

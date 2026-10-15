@@ -32,8 +32,8 @@ export function passwordProblem(pw, loginId) {
     // 2026-10-05 사용자 요청으로 쉽게 — 6자 이상 · 영문과 숫자를 섞어서 (특수문자는 넣어도 되고 안 넣어도 됨)
     const p = String(pw === null || pw === undefined ? '' : pw);
     if (p.length < 6) return '비밀번호는 6자 이상이어야 합니다.';
-    if (p.length > 64) return '비밀번호는 64자까지입니다.';
-    if (!/[A-Za-z]/.test(p) || !/[0-9]/.test(p)) return '비밀번호는 영문과 숫자를 섞어 주세요.';
+    if (p.length > 64) return '비밀번호는 64자 이하로 입력해 주세요.';
+    if (!/[A-Za-z]/.test(p) || !/[0-9]/.test(p)) return '비밀번호는 영문과 숫자를 함께 사용해 주세요.';
     return '';
 }
 // 임시 비밀번호 — 12자 · 대문자 · 소문자 · 숫자 · 특수문자 모두 (헷갈리는 글자 0 O 1 l I 는 뺌)
@@ -85,9 +85,9 @@ export const SIGNUP_LOGIN_RE = /^[a-z0-9]{4,20}$/;
 // 회원가입 때 업체가 정하는 아이디 — 영문 소문자 · 숫자 4~20자 · ptn 으로 시작 불가(자동 번호와 겹치지 않게) · 이미 있거나 승인 대기 중이면 불가
 export function loginIdProblem(loginId, accounts, signups) {
     const id = s(loginId).toLowerCase();
-    if (!SIGNUP_LOGIN_RE.test(id)) return '아이디는 영문 소문자 · 숫자 4~20자로 정해 주세요.';
-    if (/^ptn/.test(id)) return "'ptn' 으로 시작하는 아이디는 쓸 수 없습니다 (킹오더가 만드는 아이디 번호입니다).";
-    if (arr(accounts).some(a => s(a.loginId).toLowerCase() === id)) return '이미 쓰고 있는 아이디입니다.';
+    if (!SIGNUP_LOGIN_RE.test(id)) return '아이디는 영문 소문자, 숫자 4~20자로 입력해 주세요.';
+    if (/^ptn/.test(id)) return "'ptn'으로 시작하는 아이디는 사용할 수 없습니다 (킹오더 발급 아이디 전용).";
+    if (arr(accounts).some(a => s(a.loginId).toLowerCase() === id)) return '이미 사용 중인 아이디입니다.';
     if (arr(signups).some(x => x && x.status === 'pending' && s(x.loginId).toLowerCase() === id)) return '이미 가입 신청 중인 아이디입니다.';
     return '';
 }
@@ -118,28 +118,28 @@ export function nextSignupId(list) {
 export function validateSignup(input, ctx) {
     const i = obj(input), c = obj(ctx);
     const kind = s(i.kind);
-    if (!SIGNUP_KINDS.includes(kind)) return { error: '업체 유형을 골라 주세요.' };
+    if (!SIGNUP_KINDS.includes(kind)) return { error: '업체 유형을 선택해 주세요.' };
     const parentKind = PARENT_KIND[kind] || '';
     const parent = c.parent || null;
     if (parentKind) {
-        if (!s(i.parentId)) return { error: parentKind === 'hq' ? '소속 프랜차이즈 본사를 찾아 골라 주세요.' : '소속 파트너사를 찾아 골라 주세요.' };
-        if (!parent || s(parent.id) !== s(i.parentId) || s(parent.kind || parent.custType) !== parentKind) return { error: '고른 소속 업체를 찾지 못했습니다. 다시 찾아 골라 주세요.' };
+        if (!s(i.parentId)) return { error: parentKind === 'hq' ? '소속 프랜차이즈 본사를 검색하여 선택해 주세요.' : '소속 파트너사를 검색하여 선택해 주세요.' };
+        if (!parent || s(parent.id) !== s(i.parentId) || s(parent.kind || parent.custType) !== parentKind) return { error: '선택한 소속 업체를 찾을 수 없습니다. 다시 검색하여 선택해 주세요.' };
     }
     const co = {};
     for (const k of Object.keys(LIMITS)) {
         const v = s(i[k]);
-        if (v.length > LIMITS[k]) return { error: `${LIMIT_LABELS[k]}이(가) 너무 길어요 (${LIMITS[k]}자까지).` };
+        if (v.length > LIMITS[k]) return { error: `${LIMIT_LABELS[k]}이(가) 너무 깁니다 (${LIMITS[k]}자까지).` };
         co[k] = v;
     }
     // 주소 — 검색으로 찾은 도로명 · 상세를 나눠 받고, 한 줄 주소(address)도 함께 둡니다 (2026-10-05)
     if (!co.address && (co.roadAddress || co.addressDetail)) co.address = [co.roadAddress, co.addressDetail].filter(Boolean).join(' ').slice(0, 200);
     if (!co.roadAddress && co.address) co.roadAddress = co.address.slice(0, 150);
-    if (!co.name) return { error: '상호(업체명)를 넣어 주세요.' };
-    if (digits(i.businessNo).length !== 10) return { error: '사업자등록번호 10자리를 넣어 주세요.' };
+    if (!co.name) return { error: '상호(업체명)를 입력해 주세요.' };
+    if (digits(i.businessNo).length !== 10) return { error: '사업자등록번호 10자리를 입력해 주세요.' };
     co.businessNo = bizNoFormat(i.businessNo);
     co.bizType = s(i.bizType) === 'corp' ? 'corp' : (s(i.bizType) === 'personal' ? 'personal' : '');
-    if (!co.ceo) return { error: '대표자명을 넣어 주세요.' };
-    if (!co.contactName) return { error: '담당자 이름을 넣어 주세요.' };
+    if (!co.ceo) return { error: '대표자명을 입력해 주세요.' };
+    if (!co.contactName) return { error: '담당자 이름을 입력해 주세요.' };
     if (digits(co.phone).length < 9 || digits(co.phone).length > 11) return { error: '담당자 연락처를 확인해 주세요.' };
     if (co.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(co.email)) return { error: '이메일 주소를 확인해 주세요.' };
     const loginId = s(i.loginId).toLowerCase();
@@ -147,9 +147,9 @@ export function validateSignup(input, ctx) {
     if (idErr) return { error: idErr };
     const pwErr = passwordProblem(i.pw, loginId);
     if (pwErr) return { error: pwErr };
-    if (String(i.pw) !== String(i.pw2 === undefined ? i.pw : i.pw2)) return { error: '비밀번호 확인이 맞지 않습니다.' };
+    if (String(i.pw) !== String(i.pw2 === undefined ? i.pw : i.pw2)) return { error: '비밀번호 확인 값이 일치하지 않습니다.' };
     const consents = obj(i.consents);
-    if (consents.privacy !== true) return { error: '개인정보 수집 · 이용에 동의해야 가입할 수 있습니다.' };
+    if (consents.privacy !== true) return { error: '개인정보 수집·이용에 동의해야 가입할 수 있습니다.' };
     const now = c.nowMs || Date.now();
     const rec = {
         id: nextSignupId(c.signups), status: 'pending', at: new Date(now).toISOString(),

@@ -15,8 +15,8 @@ const OFFLINE_HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8"
 <body style="font-family:system-ui,-apple-system,'Malgun Gothic',sans-serif;margin:0;display:flex;align-items:center;justify-content:center;height:100vh;background:#f8fafc;color:#334155">
 <div style="text-align:center;padding:24px">
   <p style="font-size:40px;margin:0 0 8px">📡</p>
-  <h1 style="font-size:18px;margin:0 0 6px">연결이 없습니다</h1>
-  <p style="font-size:13px;color:#64748b;margin:0">네트워크가 돌아오면 다시 열어 주세요.</p>
+  <h1 style="font-size:18px;margin:0 0 6px">네트워크에 연결되어 있지 않습니다</h1>
+  <p style="font-size:13px;color:#64748b;margin:0">네트워크 연결 후 다시 시도해 주세요.</p>
 </div></body></html>`;
 
 self.addEventListener('install', (e) => {
