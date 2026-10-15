@@ -12923,6 +12923,13 @@ const QUOTE_TEMPLATES = [
         function saveArchiveConf() { return saveJsonStore(ARCHIVE_KEY, archiveConf); }
         // 지금 실제로 쓰는 접속 방식 — 외부 접속이 꺼져 있으면 늘 사내망만
         function archiveMode() { return archiveConf.wanEnabled ? (archiveConf.mode || 'auto') : 'lan'; }
+        // 폴더 바로가기의 본부 칸 — 본부 이름(예: 영업본부) 또는 본부 id. '전사' · '전사 공통' · 빈칸은 모두에게 (2026-10-15)
+        const ARCHIVE_FOLDER_ALL = ['', '전사', '전사 공통', 'company'];
+        function archiveFolderVisible(f) {
+            const d = String((f && f.dept) || '').trim();
+            if (ARCHIVE_FOLDER_ALL.includes(d)) return true;
+            return !!currentUserDept && (d === currentUserDept || d === deptName(currentUserDept));
+        }
         // 이 사람이 쓸 파일서버 아이디 — 본부 공용이면 본부 계정, 개인이면 로그인 이메일
         function archiveMyAccount() {
             if (archiveConf.account === 'personal') return { loginId: String(currentUserEmail || ''), memo: '' };
@@ -13505,8 +13512,10 @@ const QUOTE_TEMPLATES = [
                 </div>`;
 
             // ---------- 폴더 바로가기 ----------
+            // 관리자(전체 자료 권한)는 모든 폴더, 직원은 자기 본부 폴더 + 전사 공통 폴더만 (2026-10-15)
             const folders = archiveConf.folders || [];
-            const cards = folders.length ? folders.map(f => `
+            const shown = canManageAllData() ? folders : folders.filter(archiveFolderVisible);
+            const cards = shown.length ? shown.map(f => `
                 <button type="button" onclick="openArchive('${escapeHtml(f.path || '')}')"
                         class="text-left rounded-lg border border-gray-200 bg-white p-3.5 hover:border-amber-300 hover:shadow-sm transition-colors">
                     <div class="flex items-center gap-2 mb-1">
@@ -13517,7 +13526,7 @@ const QUOTE_TEMPLATES = [
                     <p class="text-xs text-gray-500 truncate">${escapeHtml(f.memo || '')}</p>
                     <p class="text-[11px] text-gray-400 mt-1 truncate">${escapeHtml(f.path || '/')}</p>
                 </button>`).join('')
-                : `<p class="text-sm text-gray-400 col-span-full">등록된 바로가기가 없습니다.</p>`;
+                : `<p class="text-sm text-gray-400 col-span-full">${folders.length ? '내 본부에 열린 폴더가 없습니다. 관리자에게 문의해 주세요.' : '등록된 바로가기가 없습니다.'}</p>`;
 
             const shortcutHtml = `
                 <div class="bg-white rounded-lg border border-gray-200 p-4 mb-4">
@@ -13530,6 +13539,7 @@ const QUOTE_TEMPLATES = [
                     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">${cards}</div>`}
                     <p class="text-xs text-gray-400 mt-3">
                         <i class="fas fa-circle-info mr-1"></i>누르면 파일서버의 그 폴더가 새 창으로 열립니다.
+                        ${canManageAllData() ? '관리자는 모든 폴더가 보이고, 직원에게는 <b>자기 본부 폴더와 전사 폴더만</b> 보입니다.' : ''}
                         폴더가 보이지 않거나 잠겨 있으면 <b>파일서버 쪽 계정 권한</b> 문제입니다 — 그룹웨어에서는 열어 줄 수 없습니다.</p>
                 </div>`;
 
@@ -13698,8 +13708,9 @@ const QUOTE_TEMPLATES = [
                         placeholder="이름" class="w-full border border-gray-300 rounded px-2 py-1.5 text-sm"></td>
                     <td class="p-1.5"><input type="text" value="${escapeHtml(f.path || '')}" oninput="archiveDraftSet(${i},'path',this.value)"
                         placeholder="/폴더경로" class="w-full border border-gray-300 rounded px-2 py-1.5 text-sm"></td>
-                    <td class="p-1.5"><input type="text" value="${escapeHtml(f.dept || '')}" oninput="archiveDraftSet(${i},'dept',this.value)"
-                        placeholder="본부" class="w-full border border-gray-300 rounded px-2 py-1.5 text-sm"></td>
+                    <td class="p-1.5"><select onchange="archiveDraftSet(${i},'dept',this.value)" class="w-full border border-gray-300 rounded px-2 py-1.5 text-sm bg-white">
+                        ${archiveFolderDeptChoices(f.dept).map(n => `<option value="${escapeHtml(n)}" ${n === (f.dept || '전사') ? 'selected' : ''}>${escapeHtml(n === '전사' ? '전사 (모두)' : n)}</option>`).join('')}
+                    </select></td>
                     <td class="p-1.5"><input type="text" value="${escapeHtml(f.memo || '')}" oninput="archiveDraftSet(${i},'memo',this.value)"
                         placeholder="설명" class="w-full border border-gray-300 rounded px-2 py-1.5 text-sm"></td>
                     <td class="p-1.5 text-right"><button type="button" onclick="archiveDraftRemove(${i})"
@@ -13729,6 +13740,13 @@ const QUOTE_TEMPLATES = [
                     </div>
                 </div>
                 <p class="text-xs text-gray-400 mt-2">폴더 경로는 파일서버 안의 경로입니다 — <b>/영업본부/제안서</b> 처럼 씁니다. 이름만 있고 경로가 비면 최상위가 열립니다.</p>`;
+        }
+        // 바로가기 본부 고르기 — 전사 + 조직도 본부 이름. 지금 값이 목록에 없으면(지운 본부 등) 그대로 남겨 보여 줍니다
+        function archiveFolderDeptChoices(cur) {
+            const names = ['전사'].concat(archiveDeptOptions().filter(d => d.id !== ARCHIVE_DEPT_ALL).map(d => d.name));
+            const c = String(cur || '').trim();
+            if (c && !ARCHIVE_FOLDER_ALL.includes(c) && !names.includes(c)) names.push(c);
+            return names;
         }
         function archiveDraftSet(i, key, val) { if (archiveDraft && archiveDraft[i]) archiveDraft[i][key] = val; }
         function archiveDraftRemove(i) { if (archiveDraft) { archiveDraft.splice(i, 1); drawArchive(); } }

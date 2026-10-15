@@ -29,9 +29,10 @@ function boot(saved, proto, up) {
         var currentUserDept = 'sales', currentUserEmail = 'kim@kingorder.co.kr';
         function loadJsonStore(k, f) { return __saved === undefined ? f : __saved; }
         function saveJsonStore() { return true; }
+        function deptName(id) { return ({ sales: '영업본부', ops: '운영본부' })[id] || id; }
     ` + CONF + LINK + `
     ;globalThis.__t = { get conf() { return archiveConf; }, get link() { return archiveLink; }, archiveMode, archiveMyAccount,
-        archiveResolve, archiveUrlFor, setDept(d) { currentUserDept = d; } };`, ctx);
+        archiveResolve, archiveUrlFor, archiveFolderVisible, setDept(d) { currentUserDept = d; } };`, ctx);
     return vm.runInContext('__t', ctx);
 }
 
@@ -91,6 +92,17 @@ function boot(saved, proto, up) {
     t = boot({ lanUrl: LAN, account: 'personal', deptAccounts: { sales: { loginId: 'nc_sales' } } }, 'https:', []);
     ok(t.archiveMyAccount().loginId === 'kim@kingorder.co.kr', '개인 계정 — 로그인 이메일');
     ok(!/password|pw/i.test(JSON.stringify(t.conf)), '설정에 비밀번호 칸이 없다');
+
+    console.log('\n[6] 폴더 바로가기 — 직원은 자기 본부 + 전사만');
+    t = boot(undefined, 'https:', []);
+    const seen = () => t.conf.folders.filter(t.archiveFolderVisible).map(f => f.name).join(',');
+    ok(seen() === '공통자료,영업본부,양식 · 규정', '영업본부 직원 — 공통자료 · 영업본부 · 양식규정');
+    t.setDept('ops');
+    ok(seen() === '공통자료,운영본부,양식 · 규정', '운영본부 직원 — 공통자료 · 운영본부 · 양식규정');
+    ok(t.archiveFolderVisible({ dept: 'ops' }) && !t.archiveFolderVisible({ dept: 'sales' }), '본부 칸에 id 를 적어도 맞춘다');
+    ok(t.archiveFolderVisible({ dept: '' }) && t.archiveFolderVisible({ dept: '전사 공통' }), '빈칸 · 전사 공통은 모두에게');
+    t.setDept('');
+    ok(seen() === '공통자료,양식 · 규정', '본부가 없는 사람은 전사 폴더만');
 
     console.log(`\n결과: 통과 ${pass} · 실패 ${fail}`);
     process.exit(fail ? 1 : 0);

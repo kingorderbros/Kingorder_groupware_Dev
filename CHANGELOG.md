@@ -2157,3 +2157,9 @@ test-files 41(주입 경로 거절 · 폴더 겹침 · 로그아웃 · 목록에
 - **비밀번호는 저장하지 않음** — `gwArchive.v1` 은 로그인한 모든 직원 브라우저에 내려가므로 아이디 · 안내 문구만 둠
 - 저장 키 그대로 `gwArchive.v1` (+ `wanEnabled` · `account` · `deptAccounts`). 새 함수 `archiveMode` · `archiveMyAccount` · `archiveToggleBox` · `archiveCopyId`
 - 시험 `tools/test-archive-server.js`(npm run check 포함) 19 통과 · 로컬 헤드리스로 관리자 저장 → 사내망 열기 표시 · 외부 접속 칸 펼침 · 본부 직원 계정 표시 확인(오류 0). 실제 https dev 에서 http 사내 주소 새 창 열기는 배포 뒤 확인 필요
+
+## 2026-10-15 — 자료실 폴더 바로가기: 관리자는 전체 · 직원은 자기 본부 폴더만
+- 관리자(전체 자료 권한 `canManageAllData`)는 바로가기 전부, 직원은 **자기 본부 폴더 + 전사 폴더**만 보임 (`archiveFolderVisible`). 본부 칸은 본부 이름 또는 id 로 맞춤 · 빈칸 · 전사 · 전사 공통은 모두에게
+- 바로가기 편집의 본부 칸을 글자 입력 → **고르기**(전사 + 조직도 본부)로 바꿈 — 오타로 폴더가 직원에게 안 보이는 일을 막음. 목록에 없는 예전 값은 남겨서 보여 줌
+- 그룹웨어는 **바로가기만** 가림. 실제 폴더 열람 권한은 넥스트클라우드(Team folders 그룹 권한)가 막아야 함
+- 시험 `tools/test-archive-server.js` [6] 추가 (24 통과) · 로컬 헤드리스: 관리자 6개 · 영업본부 직원 3개(공통자료 · 영업본부 · 양식규정), 오류 0
