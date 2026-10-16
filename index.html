@@ -1946,6 +1946,7 @@
                                 <p class="text-sm font-bold text-gray-800"><i class="far fa-bell text-gray-400 mr-1"></i>알림 <span id="noti-panel-count" class="ml-1 text-[11px] font-normal text-gray-400"></span></p>
                                 <div class="flex items-center gap-1">
                                     <button type="button" onclick="markAllNotiRead()" class="px-2 py-1 text-[11px] rounded bg-gray-100 hover:bg-gray-200 text-gray-600 whitespace-nowrap">모두 읽음</button>
+                                    <button type="button" id="delreq-btn" onclick="closeNotiPanel(); openDeleteRequests('pending')" class="hidden px-2 py-1 text-[11px] rounded border border-gray-200 bg-white hover:bg-gray-50 text-gray-600 whitespace-nowrap" title="관리자에게 보낸 삭제 요청"></button>
                                     <button type="button" id="noti-clear-btn" onclick="deleteAllMyNoti()" class="hidden px-2 py-1 text-[11px] rounded border border-red-200 text-red-600 bg-white hover:bg-red-50 whitespace-nowrap" title="관리자 — 받은 알림을 모두 삭제"><i class="fas fa-user-shield mr-0.5"></i>모두 삭제</button>
                                     <button type="button" onclick="closeNotiPanel()" class="w-6 h-6 text-gray-400 hover:text-gray-600"><i class="fas fa-times text-xs"></i></button>
                                 </div>
@@ -11493,7 +11494,9 @@ const QUOTE_TEMPLATES = [
             'issue-reported':          { icon: 'fa-triangle-exclamation', color: 'red', label: '이슈보고' },
             'issue-comment':           { icon: 'fa-comment-dots',     color: 'indigo', label: '이슈 코멘트' },
             'dev-update':              { icon: 'fa-code',             color: 'teal',   label: '개발 진행' },
-            'dev-review':              { icon: 'fa-magnifying-glass', color: 'purple', label: '검수 요청' }
+            'dev-review':              { icon: 'fa-magnifying-glass', color: 'purple', label: '검수 요청' },
+            'delete-request':          { icon: 'fa-trash-can',        color: 'red',    label: '삭제 요청' },
+            'delete-request-result':   { icon: 'fa-trash-can',        color: 'amber',  label: '삭제 요청 결과' }
         };
 
         const notiText = (n) => {
@@ -11517,11 +11520,14 @@ const QUOTE_TEMPLATES = [
             if (n.type === 'issue-comment') return `<b>${escapeHtml(n.title)}</b> 이슈보고서에 코멘트가 달렸습니다.${n.detail ? `<br><span class="text-xs text-gray-600">${escapeHtml(n.detail)}</span>` : ''}`;
             if (n.type === 'dev-update') return `<b>${escapeHtml(n.title)}</b> 개발요청에 파트너사의 진행 내용이 등록되었습니다.${n.detail ? `<br><span class="text-xs text-gray-600">${escapeHtml(n.detail)}</span>` : ''}`;
             if (n.type === 'dev-review') return `<b>${escapeHtml(n.title)}</b> 개발이 완료되어 <b>검수 요청</b>이 접수되었습니다. 확인 후 검수완료를 클릭해 주세요.${n.detail ? `<br><span class="text-xs text-gray-600">${escapeHtml(n.detail)}</span>` : ''}`;
+            if (n.type === 'delete-request') return `<b>${escapeHtml(n.title)}</b> 삭제 요청이 도착했습니다. 확인 후 삭제하거나 반려해 주세요.${n.detail ? `<br><span class="text-xs text-gray-600">${escapeHtml(n.detail)}</span>` : ''}`;
+            if (n.type === 'delete-request-result') return `<b>${escapeHtml(n.title)}</b> 삭제 요청이 처리되었습니다.${n.detail ? `<br><span class="text-xs text-gray-600">${escapeHtml(n.detail)}</span>` : ''}`;
             return escapeHtml(n.title || '');
         };
 
         // 알림을 눌렀을 때 갈 곳
         function notiClickJs(n) {
+            if (n.deleteReqId) return `openDeleteRequests('${n.type === 'delete-request' ? 'pending' : 'done'}')`;
             if (n.devId) return `openDevFromNotice('${n.devId}')`;
             if (n.meetingId) return `openMeetingFromNotice('${n.meetingId}')`;
             if (n.issueId) return `openIssueFromNotice('${n.issueId}')`;
@@ -11699,6 +11705,7 @@ const QUOTE_TEMPLATES = [
             const cnt = document.getElementById('noti-panel-count');
             if (cnt) cnt.textContent = list.length ? `${list.length}건 · 읽지 않음 ${unread}` : '';
             const canDel = canManageAllData();   // 알림 삭제는 관리자만 (2026-10-16)
+            refreshDeleteReqBadge();
             const clr = document.getElementById('noti-clear-btn');
             if (clr) clr.classList.toggle('hidden', !(canDel && list.length));
             el.innerHTML = list.length ? list.map(n => {
@@ -13370,13 +13377,12 @@ const QUOTE_TEMPLATES = [
             showAppToast(id ? '자료가 수정되었습니다.' : '자료가 등록되었습니다.', 'green');
         }
         function deleteArchivePost(id) {
-            if (!canEditArchive()) { alert('자료를 삭제하려면 자료실 관리 권한이 필요합니다.'); return; }
             // 화면에 보이는 목록과 메모리 목록이 어긋났으면(다른 창 · 실시간 반영 도중) 저장된 것을 다시 읽고 찾습니다.
             // 예전엔 여기서 말없이 끝나 '삭제를 눌러도 아무 반응이 없는' 것처럼 보였습니다 (2026-10-01)
             let x = archivePostById(id);
             if (!x) { reloadArchivePosts(); x = archivePostById(id); }
             if (!x) { alert('자료를 찾을 수 없습니다. 이미 삭제되었거나 목록이 변경되었습니다.\n목록을 다시 불러옵니다.'); renderArchive(); return; }
-            if (!canEditArchivePost(x)) { alert('소속 본부 자료와 전사 공통 자료만 삭제할 수 있습니다.'); return; }
+            if (!adminDeleteGate('deleteArchivePost', [id], '자료실', x.title || id)) return;
             if (!confirm(`'${x.title}' 자료를 삭제하시겠습니까?\n\n복구할 수 없습니다.`)) return;
             // 저장처럼 — 다른 창에서 바뀐 것을 먼저 읽고 그 위에서 지웁니다 (읽은 목록에 이 글이 없으면 믿지 않고 지금 목록으로)
             const fresh = loadArchivePosts();
@@ -18978,10 +18984,12 @@ const QUOTE_TEMPLATES = [
             document.getElementById('schedule-modal').classList.remove('hidden');
         }
         function deleteSchedule(id) {
+            const rawId = String(id);
             const occDate = String(id).indexOf(RECUR_SEP) > 0 ? String(id).slice(String(id).indexOf(RECUR_SEP) + 1) : '';
             id = scheduleMasterId(id);
             const schedule = schedules.find(s => s.id === id);
-            if (schedule && !canEditSchedule(schedule)) { alert('조회 권한만 있는 일정입니다. 삭제할 수 없습니다.'); return; }
+            if (!schedule) return;
+            if (!adminDeleteGate('deleteSchedule', [rawId], '일정', `${schedule.date || ''} ${schedule.title || ''}`.trim())) return;
             // 반복 일정 — 이 날만 지울지, 반복 전체를 지울지 고릅니다 (2026-10-12)
             if (isRecurring(schedule)) {
                 const day = occDate || schedule.date;
@@ -20480,11 +20488,11 @@ const QUOTE_TEMPLATES = [
             closeProjectModal();
             renderProjectCenter();
         }
-        function deleteProject() {
-            const id = document.getElementById('prj-edit-id').value;
+        function deleteProject(idArg) {
+            const id = idArg || document.getElementById('prj-edit-id').value;
             const p = findProject(id);
             if (!p) return;
-            if (!canEditProject(p)) { alert('삭제 권한이 없습니다.'); return; }
+            if (!adminDeleteGate('deleteProject', [id], '프로젝트', p.name || id)) return;
             if (!confirm(`'${p.name}' 프로젝트를 삭제하시겠습니까?\nWBS ${(p.wbs || []).length}개와 이슈도 함께 삭제됩니다.`)) return;
             projects = projects.filter(x => x.id !== id);
             if (currentProjectId === id) currentProjectId = null;
@@ -20861,12 +20869,12 @@ const QUOTE_TEMPLATES = [
             closeWbsModal();
             renderProjectCenter();
         }
-        function deleteWbs() {
-            const p = findProject(document.getElementById('wbs-project-id').value);
-            const id = document.getElementById('wbs-edit-id').value;
+        function deleteWbs(projectIdArg, wbsIdArg) {
+            const p = findProject(projectIdArg || document.getElementById('wbs-project-id').value);
+            const id = wbsIdArg || document.getElementById('wbs-edit-id').value;
             const w = p ? findWbs(p, id) : null;
             if (!p || !w) return;
-            if (!canEditProject(p)) { alert('삭제 권한이 없습니다.'); return; }
+            if (!adminDeleteGate('deleteWbs', [p.id, id], 'WBS', `${p.name} · ${w.code ? w.code + '. ' : ''}${w.name}`)) return;
             // 하위 작업은 부모 없이 홀로 남을 수 없으므로 함께 지웁니다
             const kids = wbsDescendants(p, w);
             const doomed = new Set([id, ...kids.map(x => x.id)]);
@@ -25407,12 +25415,14 @@ const QUOTE_TEMPLATES = [
             return out;
         }
 
-        function deleteInbound() {
-            if (!inboundEditId) return;
-            const r = inboundRecords.find(x => x.id === inboundEditId);
+        function deleteInbound(idArg) {
+            const inbId = idArg || inboundEditId;
+            if (!inbId) return;
+            const r = inboundRecords.find(x => x.id === inbId);
             if (!r) return;
+            if (!adminDeleteGate('deleteInbound', [inbId], '인바운드', `${r.id} · ${r.company || ''}`)) return;
             if (!confirm(`'${r.company || r.id}' 인입 건을 삭제하시겠습니까?\n삭제 후에는 복구할 수 없습니다.`)) return;
-            inboundRecords = inboundRecords.filter(x => x.id !== inboundEditId);
+            inboundRecords = inboundRecords.filter(x => x.id !== inbId);
             saveInboundRecords();     // 다른 창도 같은 자료를 보도록 담아 둡니다 (2026-09-07)
             closeInboundModal();
             renderInboundCenter();
@@ -28116,8 +28126,8 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
         // 업무이력이 완료 건만 모으던 때는 필요 없었지만, 이제 접수 이후 모든 건이 이력에 올라옵니다.
         function workHistoryDetailFootHtml(key, w, extraNote) {
             // 관리자 — 처리 상태와 관계없이 고치고 지우는 단추 (2026-09-28)
-            const adm = canManageAllData()
-                ? `<div class="mt-3 pt-3 border-t border-gray-100 flex justify-end">${adminEditButtonHtml(`openWorkAdminEdit('${key}', '${escapeHtml(w.id)}')`)}</div>` : '';
+            const admBtn = adminEditButtonHtml(`openWorkAdminEdit('${key}', '${escapeHtml(w.id)}')`);   // 관리자가 아니면 '삭제 요청' (2026-10-16)
+            const adm = admBtn ? `<div class="mt-3 pt-3 border-t border-gray-100 flex justify-end">${admBtn}</div>` : '';
             return workHistoryDetailFootInner(key, w, extraNote) + adm;
         }
         function openWorkAdminEdit(key, workId) {
@@ -30815,7 +30825,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
 
             document.getElementById('install-check-subject').textContent = `${chk.id} · ${w.id} · ${chk.customerName || '-'}`;
             document.getElementById('install-check-status').innerHTML = installCheckChipHtml(chk)
-                + (canManageAllData() ? ' ' + adminEditButtonHtml(`openInstallCheckAdminEdit('${escapeHtml(chk.id)}')`, '관리자') : '');
+                + ' ' + adminEditButtonHtml(`openInstallCheckAdminEdit('${escapeHtml(chk.id)}')`, '관리자');
 
             const groupsHtml = installCheckGroupsFor(chk).map(g => {
                 const items = g.items;
@@ -35061,7 +35071,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             if (cb && savedCustomer) cb(savedCustomer);
         }
 
-        function deleteCustomer(customerId) { if (confirm('정말 이 고객 정보를 삭제하시겠습니까?')) { setCompanyList(customers.filter(c => c.id !== customerId)); saveCustomers(); renderCustomers(); } }
+        function deleteCustomer(customerId) { if (!adminDeleteGate('deleteCustomer', [customerId], '고객사', deleteReqLabel(customers.find(c => c.id === customerId), customerId))) return; if (confirm('정말 이 고객 정보를 삭제하시겠습니까?')) { setCompanyList(customers.filter(c => c.id !== customerId)); saveCustomers(); renderCustomers(); } }
 
         // ==================== 상담관리 로직 (Salesforce Case Management 참고) ====================
         // ---------- 저장 (2026-09-17) ----------
@@ -35310,6 +35320,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
         }
 
         function deleteCase(caseId) {
+            if (!adminDeleteGate('deleteCase', [caseId], '상담', deleteReqLabel(cases.find(x => x.id === caseId), caseId))) return;
             if (confirm('정말 이 상담 내역을 삭제하시겠습니까?')) {
                 cases = cases.filter(c => c.id !== caseId);
                 saveCases();
@@ -35564,6 +35575,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             const m = document.getElementById('admin-edit-modal');
             if (m) m.classList.add('hidden');
             adminEditCtx = null;
+            if (typeof deleteReqRunning !== 'undefined') deleteReqRunning = null;
         }
         function adminRecordSave() {
             const ctx = adminEditCtx; if (!ctx || !ctx.onSave) return;
@@ -35600,11 +35612,14 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
         function adminRecordDelete() {
             const ctx = adminEditCtx; if (!ctx || !ctx.onDelete) return;
             if (!confirm(`'${ctx.title || '이 자료'}' 을(를) 삭제하시겠습니까?\n\n삭제 후에는 복구할 수 없습니다.`)) return;
+            const reqId = deleteReqRunning;   // 삭제 요청으로 연 창 (창을 닫으면 지워지므로 먼저 받아 둡니다)
             try { ctx.onDelete(); }
             catch (e) { alert('삭제에 실패했습니다.\n' + (e && e.message || e)); return; }
             closeAdminRecordEditor();
             refreshVisibleScreen();
             showAppToast('관리자 수정: 삭제되었습니다.', 'gray');
+            // 삭제 요청으로 연 창이면 그 요청을 완료로 (2026-10-16)
+            if (reqId) finishDeleteRequest(reqId, 'done');
         }
         // 지금 보고 있는 화면을 다시 그립니다 (관리자 수정 · 삭제 뒤)
         function refreshVisibleScreen() {
@@ -35614,9 +35629,250 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             try { navigate(id, document.getElementById('nav-' + id)); } catch (e) { /* 그 화면은 다음에 열 때 다시 그려집니다 */ }
             try { refreshNotiBell(); } catch (e) { /* 무시 */ }
         }
+        // ==================== 삭제는 관리자만 · 관리자에게 삭제 요청 (2026-10-16) ====================
+        // 자료 삭제는 canManageAllData() (관리자 · '전체 자료 수정 · 삭제' 권한 그룹) 만 합니다.
+        // 그 밖의 직원이 삭제를 누르면 사유를 받아 '삭제 요청'으로 남기고 관리자에게 알립니다.
+        // 관리자가 [삭제 실행]을 누르면 요청에 적힌 삭제 함수를 관리자 권한으로 다시 부릅니다.
+        //   · 실행할 수 있는 함수는 DELETE_REQ_FNS 에 있는 이름뿐이고, 인자는 글자 · 숫자만 받습니다
+        //     (저장된 요청을 그대로 코드로 실행하지 않도록).
+        const DELETE_REQ_KEY = 'gwDeleteRequests.v1';
+        const DELETE_REQ_FNS = [
+            'deleteCustomer', 'deleteCompany', 'deleteCase', 'deleteContract', 'deleteQuote', 'deleteSupply', 'deletePrice',
+            'deletePayoutRowFromModal', 'deleteVehicle', 'deleteVehicleLog', 'deleteCorpCard', 'undoCardBatch', 'deleteQuoteTpl',
+            'deleteOrgMember', 'deleteOrgTeam', 'deleteOrgRank', 'deleteOrgDept', 'deleteInbound', 'deleteSchedule',
+            'deleteProject', 'deleteWbs', 'deleteNotice', 'deleteArchivePost', 'deleteMeeting', 'deleteIssue', 'deleteDevReq',
+            'deletePartnerId', 'deletePartnerIntake',
+            // 관리자 수정 · 삭제 창으로 여는 자료 — 승인하면 그 창이 열리고, 관리자가 창에서 삭제합니다
+            'openWorkAdminEdit', 'openCollabAdminEdit', 'openLocalTaskAdminEdit', 'openProjectIssueAdminEdit',
+            'openInstallCheckAdminEdit', 'openPayDocAdminEdit', 'openPartnerIntakeAdminEdit', 'openCardTxnAdminEdit'
+        ];
+        const DELETE_REQ_KINDS = { openWorkAdminEdit: '업무', openCollabAdminEdit: '협업 요청', openLocalTaskAdminEdit: '자부서 업무',
+            openProjectIssueAdminEdit: '프로젝트 이슈', openInstallCheckAdminEdit: '설치 체크리스트', openPayDocAdminEdit: '보완서류 요청',
+            openPartnerIntakeAdminEdit: '파트너센터 접수', openCardTxnAdminEdit: '법인카드 사용내역' };
+        // 요청 창에 보여 줄 자료 이름 — 번호와 제목 · 이름 중 있는 것
+        function deleteReqLabel(x, id) {
+            if (!x) return String(id || '');
+            const name = x.title || x.name || x.subject || x.company || x.customerName || x.customer || '';
+            return [x.id || id, name].filter(Boolean).join(' · ');
+        }
+        let deleteReqTab = 'pending';
+        let deleteReqRunning = null;      // 관리자 수정 창으로 승인 중인 요청 — 창에서 삭제하면 완료로 바꿉니다
+
+        function deleteRequestList() { return (loadJsonStore(DELETE_REQ_KEY, []) || []).filter(x => x && x.id); }
+        function saveDeleteRequest(req) {
+            // 다른 사람이 그 사이 요청을 넣었을 수 있어 저장 직전에 다시 읽고 한 건만 바꿉니다
+            const list = deleteRequestList();
+            const i = list.findIndex(x => x.id === req.id);
+            if (i > -1) list[i] = req; else list.push(req);
+            saveJsonStore(DELETE_REQ_KEY, list.slice(-500));
+            refreshDeleteReqBadge();
+        }
+        function deleteReqArgsOk(args) { return Array.isArray(args) && args.every(a => ['string', 'number', 'boolean'].indexOf(typeof a) > -1); }
+        // 삭제를 받을 관리자 — 관리자 계정 + '전체 자료 수정 · 삭제' 권한 그룹 구성원
+        function deleteAdminNames() {
+            const dataGroups = (typeof permissionGroups !== 'undefined' ? permissionGroups : [])
+                .filter(g => (g.permissions || []).indexOf('data-admin') > -1).map(g => g.id);
+            return Array.from(new Set((typeof localUsers !== 'undefined' ? localUsers : [])
+                .filter(u => u && u.name && (isAdminAccount(u) || dataGroups.indexOf(u.groupId) > -1))
+                .map(u => u.name)));
+        }
+
+        // 삭제 함수 맨 앞에서 부릅니다. 관리자면 true, 아니면 삭제 요청 창을 띄우고 false.
+        //   adminDeleteGate('deleteContract', [id], '계약', `${c.id} · ${c.title}`)
+        function adminDeleteGate(fn, args, kind, label) {
+            if (canManageAllData()) return true;
+            requestAdminDelete(fn, args, kind, label);
+            return false;
+        }
+        function requestAdminDelete(fn, args, kind, label) {
+            args = args || [];
+            if (DELETE_REQ_FNS.indexOf(fn) < 0 || !deleteReqArgsOk(args)) { alert('삭제는 관리자만 할 수 있습니다.'); return null; }
+            const same = deleteRequestList().find(r => r.status === 'pending' && r.fn === fn && JSON.stringify(r.args) === JSON.stringify(args));
+            if (same) { alert(`이미 관리자에게 삭제를 요청한 자료입니다.\n요청자: ${same.by} · ${String(same.at).slice(0, 10)}\n\n관리자가 처리할 때까지 기다려 주세요.`); return null; }
+            const reason = prompt(`삭제는 관리자만 할 수 있습니다. 관리자에게 삭제를 요청합니다.\n\n대상: [${kind}] ${label}\n\n삭제 사유를 입력해 주세요.`, '');
+            if (reason === null) return null;
+            if (!reason.trim()) { alert('삭제 사유를 입력해 주세요.'); return null; }
+            const now = new Date();
+            const req = { id: 'DR-' + now.getTime(), kind: String(kind || ''), label: String(label || ''), fn, args,
+                          reason: reason.trim(), by: currentUserName || '', byDept: currentUserDept || '', at: now.toISOString(), status: 'pending' };
+            saveDeleteRequest(req);
+            const admins = deleteAdminNames().filter(n => n !== currentUserName);
+            admins.forEach(name => pushNotification({
+                id: 'cnoti_' + collabNotiIdCounter++, type: 'delete-request', ticketId: '', projectId: '', deleteReqId: req.id,
+                title: `[${req.kind}] ${req.label}`, toUser: name, toDept: '', toTeam: '',
+                detail: `요청: ${req.by} · 사유: ${req.reason}`, date: ymd(now)
+            }));
+            showAppToast(admins.length ? '관리자에게 삭제를 요청했습니다.' : '삭제 요청을 등록했습니다. (알림을 받을 관리자가 없습니다)', 'blue');
+            return req;
+        }
+        // 관리자 수정 창만 있던 자료의 '삭제 요청' 단추 — 창 제목을 대상 이름으로 씁니다
+        function requestAdminDeleteFromBtn(btn) {
+            let args = [];
+            try { args = JSON.parse(btn.getAttribute('data-args') || '[]'); } catch (e) { args = []; }
+            const box = btn.closest('.fixed') || btn.closest('section') || document.body;
+            const head = box.querySelector('h2, h3');
+            const label = (btn.getAttribute('data-label') || (head ? head.textContent : '') || args.join(' · ')).replace(/\s+/g, ' ').trim();
+            const fn = btn.getAttribute('data-fn');
+            requestAdminDelete(fn, args, btn.getAttribute('data-kind') || DELETE_REQ_KINDS[fn] || '자료', label);
+        }
+        function notifyDeleteResult(req, text) {
+            if (!req.by || req.by === currentUserName) return;
+            pushNotification({
+                id: 'cnoti_' + collabNotiIdCounter++, type: 'delete-request-result', ticketId: '', projectId: '', deleteReqId: req.id,
+                title: `[${req.kind}] ${req.label}`, toUser: req.by, toDept: '', toTeam: '',
+                detail: text, date: ymd(new Date())
+            });
+        }
+
+        // ---------- 관리자: 삭제 실행 · 반려 ----------
+        async function approveDeleteRequest(id) {
+            if (!canManageAllData()) { alert('삭제 요청은 관리자만 처리할 수 있습니다.'); return; }
+            const req = deleteRequestList().find(r => r.id === id);
+            if (!req || req.status !== 'pending') return;
+            if (DELETE_REQ_FNS.indexOf(req.fn) < 0 || typeof window[req.fn] !== 'function' || !deleteReqArgsOk(req.args)) {
+                alert('이 요청은 실행할 수 없는 형식입니다. 반려 처리해 주세요.'); return;
+            }
+            closeDeleteRequests();
+            if (/AdminEdit$/.test(req.fn)) {         // 관리자 수정 창을 열고, 창에서 삭제하면 완료로 바꿉니다
+                deleteReqRunning = req.id;
+                try { window[req.fn].apply(window, req.args); } catch (e) { deleteReqRunning = null; alert('자료를 열 수 없습니다. 이미 삭제되었을 수 있습니다.\n' + (e.message || e)); }
+                if (!document.querySelector('#admin-edit-modal:not(.hidden)')) {
+                    deleteReqRunning = null;
+                    if (confirm('대상 자료를 찾지 못했습니다. 이미 삭제된 것으로 보고 요청을 완료 처리하시겠습니까?')) finishDeleteRequest(req.id, 'done', '이미 삭제된 자료');
+                } else showAppToast('관리자 수정 창에서 [삭제]를 누르면 요청이 완료됩니다.', 'blue');
+                return;
+            }
+            // 삭제 함수가 띄우는 확인 창을 관리자가 취소했는지 · 안내(막힘)가 떴는지 봅니다
+            let cancelled = false, alerted = false;
+            const oc = window.confirm, oa = window.alert;
+            window.confirm = (m) => { const ok = oc.call(window, m); if (!ok) cancelled = true; return ok; };
+            window.alert = (m) => { alerted = true; return oa.call(window, m); };
+            try { await window[req.fn].apply(window, req.args); }
+            catch (e) { cancelled = true; console.error('[삭제 요청] 실행 실패', e); oa.call(window, '삭제에 실패했습니다.\n' + (e.message || e)); }
+            finally { window.confirm = oc; window.alert = oa; }
+            if (cancelled) { showAppToast('삭제를 취소했습니다. 요청은 대기 중으로 남습니다.', 'gray'); return; }
+            if (alerted && !confirm('삭제가 완료되었습니까?\n[확인] 완료 처리 · [취소] 요청을 대기 중으로 둡니다')) return;
+            finishDeleteRequest(req.id, 'done');
+        }
+        function finishDeleteRequest(id, status, note) {
+            const req = deleteRequestList().find(r => r.id === id);
+            if (!req || req.status !== 'pending') return;
+            req.status = status;
+            req.decidedBy = currentUserName || '';
+            req.decidedAt = new Date().toISOString();
+            if (note) req.note = note;
+            saveDeleteRequest(req);
+            notifyDeleteResult(req, status === 'done' ? `삭제되었습니다 (처리: ${req.decidedBy})` : `반려되었습니다 (처리: ${req.decidedBy})${note ? ' · 사유: ' + note : ''}`);
+            showAppToast(status === 'done' ? '삭제 요청을 완료 처리했습니다.' : '삭제 요청을 반려했습니다.', status === 'done' ? 'green' : 'gray');
+            if (document.getElementById('delreq-modal') && !document.getElementById('delreq-modal').classList.contains('hidden')) renderDeleteRequests();
+        }
+        function rejectDeleteRequest(id) {
+            if (!canManageAllData()) return;
+            const reason = prompt('반려 사유를 입력해 주세요. (요청자에게 알림으로 전달됩니다)', '');
+            if (reason === null) return;
+            finishDeleteRequest(id, 'rejected', reason.trim());
+        }
+        // 요청자는 대기 중인 본인 요청을 거둘 수 있습니다
+        function withdrawDeleteRequest(id) {
+            const req = deleteRequestList().find(r => r.id === id);
+            if (!req || req.status !== 'pending' || req.by !== currentUserName) return;
+            if (!confirm('이 삭제 요청을 취소하시겠습니까?')) return;
+            req.status = 'withdrawn';
+            req.decidedBy = currentUserName;
+            req.decidedAt = new Date().toISOString();
+            saveDeleteRequest(req);
+            renderDeleteRequests();
+        }
+
+        // ---------- 삭제 요청 창 ----------
+        // 관리자는 전체, 그 밖의 직원은 본인 요청만 봅니다.
+        function myDeleteRequests() {
+            const all = deleteRequestList();
+            return canManageAllData() ? all : all.filter(r => r.by === currentUserName);
+        }
+        function refreshDeleteReqBadge() {
+            const btn = document.getElementById('delreq-btn');
+            if (!btn) return;
+            const list = myDeleteRequests();
+            const pend = list.filter(r => r.status === 'pending').length;
+            btn.classList.toggle('hidden', !(canManageAllData() || list.length));
+            btn.innerHTML = `<i class="fas fa-trash-can mr-0.5"></i>삭제 요청${pend ? ` <b class="text-red-600">${pend}</b>` : ''}`;
+        }
+        function openDeleteRequests(tab) {
+            if (tab) deleteReqTab = tab;
+            let m = document.getElementById('delreq-modal');
+            if (!m) {
+                m = document.createElement('div');
+                m.id = 'delreq-modal';
+                m.className = 'hidden fixed inset-0 bg-black/40 z-[70] flex items-center justify-center p-4';
+                m.addEventListener('click', (e) => { if (e.target === m) closeDeleteRequests(); });
+                m.innerHTML = `<div class="bg-white rounded-lg shadow-xl w-full max-w-3xl max-h-[85vh] flex flex-col">
+                        <div class="px-4 py-3 border-b border-gray-200 flex items-center justify-between gap-2">
+                            <h3 class="text-base font-bold text-gray-800"><i class="fas fa-trash-can text-red-500 mr-1"></i>삭제 요청</h3>
+                            <button type="button" onclick="closeDeleteRequests()" class="w-7 h-7 text-gray-400 hover:text-gray-600"><i class="fas fa-times"></i></button>
+                        </div>
+                        <div id="delreq-body" class="p-4 overflow-y-auto"></div>
+                    </div>`;
+                document.body.appendChild(m);
+            }
+            m.classList.remove('hidden');
+            renderDeleteRequests();
+        }
+        function closeDeleteRequests() { const m = document.getElementById('delreq-modal'); if (m) m.classList.add('hidden'); }
+        function renderDeleteRequests() {
+            const body = document.getElementById('delreq-body');
+            if (!body) return;
+            const admin = canManageAllData();
+            const all = myDeleteRequests().slice().sort((a, b) => String(b.at).localeCompare(String(a.at)));
+            const pend = all.filter(r => r.status === 'pending');
+            const done = all.filter(r => r.status !== 'pending');
+            const list = deleteReqTab === 'pending' ? pend : done.slice(0, 100);
+            const tab = (id, label, n) => `<button type="button" onclick="deleteReqTab='${id}'; renderDeleteRequests()" class="px-3 py-1.5 text-sm rounded ${deleteReqTab === id ? 'bg-gray-800 text-white' : 'bg-white border border-gray-300 text-gray-600'}">${label} <span class="text-xs">${n}</span></button>`;
+            const stName = { pending: ['처리 대기', 'bg-amber-100 text-amber-800'], done: ['삭제 완료', 'bg-green-100 text-green-700'],
+                             rejected: ['반려', 'bg-red-100 text-red-700'], withdrawn: ['요청 취소', 'bg-gray-100 text-gray-600'] };
+            const when = (v) => v ? escapeHtml(new Date(v).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })) : '';
+            body.innerHTML = `
+                <p class="text-xs text-gray-500 mb-3"><i class="fas fa-circle-info mr-1"></i>${admin
+                    ? '자료 삭제는 관리자만 할 수 있습니다. [삭제 실행]을 누르면 해당 자료의 삭제 확인 창이 열립니다.'
+                    : '자료 삭제는 관리자만 할 수 있습니다. 내가 요청한 삭제 건과 처리 결과입니다.'}</p>
+                <div class="flex gap-2 mb-3">${tab('pending', '처리 대기', pend.length)}${tab('done', '처리 완료', done.length)}</div>
+                ${list.length ? list.map(r => {
+                    const st = stName[r.status] || [r.status, 'bg-gray-100 text-gray-600'];
+                    return `<div class="border border-gray-200 rounded-lg p-3 mb-2">
+                        <div class="flex flex-wrap items-center gap-2">
+                            <span class="px-2 py-0.5 rounded-full text-xs ${st[1]}">${st[0]}</span>
+                            <span class="px-1.5 py-0.5 rounded text-[11px] bg-gray-100 text-gray-700">${escapeHtml(r.kind)}</span>
+                            <b class="text-sm text-gray-800 min-w-0 break-words">${escapeHtml(r.label)}</b>
+                        </div>
+                        <p class="text-xs text-gray-600 mt-1.5">사유: ${escapeHtml(r.reason)}</p>
+                        <p class="text-[11px] text-gray-400 mt-1">요청 ${escapeHtml(r.by)}${r.byDept ? ' (' + escapeHtml(deptName(r.byDept)) + ')' : ''} · ${when(r.at)}${r.decidedBy ? ` · 처리 ${escapeHtml(r.decidedBy)} · ${when(r.decidedAt)}` : ''}${r.note ? ' · ' + escapeHtml(r.note) : ''}</p>
+                        ${r.status === 'pending' ? `<div class="mt-2 flex justify-end gap-1.5">
+                            ${admin ? `<button type="button" onclick="approveDeleteRequest('${escapeHtml(r.id)}')" class="px-3 py-1.5 text-xs rounded bg-red-600 text-white hover:bg-red-700">삭제 실행</button>
+                                       <button type="button" onclick="rejectDeleteRequest('${escapeHtml(r.id)}')" class="px-3 py-1.5 text-xs rounded border border-gray-300 bg-white text-gray-700 hover:bg-gray-50">반려</button>` : ''}
+                            ${r.by === currentUserName ? `<button type="button" onclick="withdrawDeleteRequest('${escapeHtml(r.id)}')" class="px-3 py-1.5 text-xs rounded border border-gray-300 bg-white text-gray-600 hover:bg-gray-50">요청 취소</button>` : ''}
+                        </div>` : ''}
+                    </div>`;
+                }).join('') : `<p class="text-sm text-gray-400 text-center py-10">${deleteReqTab === 'pending' ? '처리 대기 중인 삭제 요청이 없습니다.' : '처리된 삭제 요청이 없습니다.'}</p>`}`;
+            refreshDeleteReqBadge();
+        }
+        // 다른 사람이 요청을 넣거나 처리하면 숫자 · 열린 창을 맞춥니다
+        window.addEventListener('storage', (e) => {
+            if (e.key !== DELETE_REQ_KEY) return;
+            refreshDeleteReqBadge();
+            const m = document.getElementById('delreq-modal');
+            if (m && !m.classList.contains('hidden')) renderDeleteRequests();
+        });
+
         // 관리자 수정 단추 (각 상세 화면이 붙입니다)
+        // 관리자가 아니면 같은 자리에 '삭제 요청' 단추를 둡니다 (2026-10-16)
         function adminEditButtonHtml(onclickJs, label) {
-            if (!canManageAllData()) return '';
+            if (!canManageAllData()) {
+                const m = /^\s*(\w+)\((.*)\)\s*$/.exec(String(onclickJs || ''));
+                if (!m || DELETE_REQ_FNS.indexOf(m[1]) < 0) return '';
+                const args = [];
+                m[2].replace(/'([^']*)'|(-?\d+(?:\.\d+)?)/g, (all, str, num) => { args.push(str !== undefined ? str : Number(num)); return all; });
+                return `<button type="button" data-fn="${m[1]}" data-args="${escapeHtml(JSON.stringify(args))}" onclick="requestAdminDeleteFromBtn(this)" class="px-3 py-2 text-sm rounded border border-gray-300 text-gray-600 bg-white hover:bg-gray-50 whitespace-nowrap" title="삭제는 관리자만 할 수 있습니다. 사유를 적어 관리자에게 요청합니다."><i class="fas fa-trash-can mr-1"></i>삭제 요청</button>`;
+            }
             return `<button type="button" onclick="${onclickJs}" class="px-3 py-2 text-sm rounded border border-red-300 text-red-600 bg-white hover:bg-red-50 whitespace-nowrap"><i class="fas fa-user-shield mr-1"></i>${escapeHtml(label || '관리자 수정·삭제')}</button>`;
         }
 
@@ -35817,9 +36073,9 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
         }
 
         function deleteNotice(noticeId) {
-            if (!canWriteNotice()) { alert('공지사항 삭제 권한이 없습니다.'); return; }
             const n = notices.find(x => x.id === noticeId);
             if (!n) return;
+            if (!adminDeleteGate('deleteNotice', [noticeId], '공지사항', n.title || noticeId)) return;
             if (!confirm(`'${n.title}' 공지를 삭제하시겠습니까?`)) return;
             notices = notices.filter(x => x.id !== noticeId);
             saveNotices();
@@ -37114,6 +37370,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
         }
 
         function deleteContract(contractId) {
+            if (!adminDeleteGate('deleteContract', [contractId], '계약', deleteReqLabel(contracts.find(x => x.id === contractId), contractId))) return;
             if (confirm('정말 이 계약을 삭제하시겠습니까?')) {
                 contracts = contracts.filter(c => c.id !== contractId);
                 saveContracts();
@@ -37483,11 +37740,12 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             renderSupplyCenter();
         }
 
-        function deleteSupply() {
-            const id = document.getElementById('edit-supply-id').value;
+        function deleteSupply(idArg) {
+            const id = idArg || document.getElementById('edit-supply-id').value;
             const rec = supplyRecords.find(r => r.id === id);
             if (!rec) return;
             const def = supplyDef(rec.channel);
+            if (!adminDeleteGate('deleteSupply', [id], '거래처', `${rec.id} · ${rec[def.titleField] || ''}`)) return;
             if (!confirm(`'${rec[def.titleField] || rec.id}' 거래처를 삭제하시겠습니까?`)) return;
             supplyRecords = supplyRecords.filter(r => r.id !== id);
             closeSupplyModal();
@@ -37986,10 +38244,11 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             renderPriceBook();
         }
 
-        function deletePrice() {
-            const id = document.getElementById('edit-price-id').value;
+        function deletePrice(idArg) {
+            const id = idArg || document.getElementById('edit-price-id').value;
             const r = priceBook.find(x => x.id === id);
             if (!r) return;
+            if (!adminDeleteGate('deletePrice', [id], '단가표', `${r.name || r.id}`)) return;
             if (!confirm(`'${r.name}' 단가를 삭제하시겠습니까?`)) return;
             priceBook = priceBook.filter(x => x.id !== id);
             closePriceModal();
@@ -39405,8 +39664,10 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             saveOrgRanks(); syncOrgAll();
         }
         function deleteOrgRank(i) {
+            if (typeof i === 'string') i = orgRanks.findIndex(x => x.name === i);   // 삭제 요청은 이름으로 (순서가 바뀔 수 있어서)
             const rk = orgRanks[i];
             if (!rk) return;
+            if (!adminDeleteGate('deleteOrgRank', [rk.name], '직급', rk.name)) return;
             const r = rk.name;
             const n = orgAccounts().filter(u => String(u.rank || '').trim() === r || u.level === rk.id).length;
             if (!confirm(`'${r}' 직급을 삭제하시겠습니까?` + (n ? `\n이 직급인 구성원 ${n}명의 직급 이름은 유지되며, 권한은 '${levelClassNames[rk.cls]}' 으로 취급됩니다. 구성원 수정에서 다른 직급으로 변경해 주세요.` : ''))) return;
@@ -39529,6 +39790,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
         function deleteOrgDept(id) {
             const d = orgFindDept(id);
             if (!d) return;
+            if (!adminDeleteGate('deleteOrgDept', [id], '본부', d.name)) return;
             // 기본 본부는 관리자만 지울 수 있습니다 (2026-09-21). 지운 기본 본부는 아래 [되살리기] 로 되돌립니다.
             if (d.system && !isSystemAdmin()) { alert(`'${d.name}' 은(는) 기본 본부라 관리자만 삭제할 수 있습니다.\n이름은 [수정]으로 변경할 수 있습니다.`); return; }
             const people = orgMembers().filter(u => u.dept === id);
@@ -39636,6 +39898,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
         function deleteOrgTeam(id) {
             const t = orgFindTeam(id);
             if (!t) return;
+            if (!adminDeleteGate('deleteOrgTeam', [id], '팀', `${deptName(t.deptId)} · ${t.name}`)) return;
             const people = localUsers.filter(u => u.dept === t.deptId && String(u.team || '').trim() === t.name);
             if (!confirm(`'${t.name}' 팀을 삭제하시겠습니까?${people.length ? `\n이 팀 구성원 ${people.length}명은 '${orgNoTeamLabel}' (으)로 이동됩니다 (계정은 유지).` : ''}`)) return;
             people.forEach(u => { u.team = ''; });
@@ -39995,6 +40258,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
         function deleteOrgMember(id) {
             const u = orgFindAccount(id);
             if (!u) return;
+            if (!adminDeleteGate('deleteOrgMember', [id], '구성원 · 계정', `${u.name} ${u.rank || ''} · ${u.email || ''}`)) return;
             if (currentUserName && u.name === currentUserName) { alert('현재 로그인한 본인은 삭제할 수 없습니다.'); return; }
             if (!confirm(`'${u.name} ${u.rank || ''}' 을(를) 조직도에서 삭제합니다.\n로그인 계정(${u.email})도 함께 삭제됩니다.\n\n계속하시겠습니까?`)) return;
             localUsers = localUsers.filter(x => x.id !== id);
@@ -40663,10 +40927,12 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             renderSupplyCenter();
         }
 
-        function deletePayoutRowFromModal() {
-            if (!payoutRowEditId) return;
-            const r = payoutRecords.find(x => x.id === payoutRowEditId);
+        function deletePayoutRowFromModal(idArg) {
+            const rowId = idArg || payoutRowEditId;
+            if (!rowId) return;
+            const r = payoutRecords.find(x => x.id === rowId);
             if (!r) return;
+            if (!adminDeleteGate('deletePayoutRowFromModal', [rowId], '지급명세', `${r.ym || ''} · ${r.name || r.id}`)) return;
             const kids = payoutRecords.filter(x => x.ym === r.ym && x.id !== r.id && x.pathRaw.indexOf(r.pathRaw + ' >') === 0);
             if (!confirm(`'${r.name}' 행을 삭제합니다.${kids.length ? `\n이 업체의 하위 ${kids.length}건은 유지됩니다.` : ''}\n\n계속하시겠습니까?`)) return;
             payoutRecords = payoutRecords.filter(x => x.id !== r.id);
@@ -41536,6 +41802,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
         function deleteCompany(id) {
             const c = customers.find(x => x.id === id);
             if (!c) return;
+            if (!adminDeleteGate('deleteCompany', [id], '업체', `${companyNameOf(c)}${c.businessNo ? ' · ' + c.businessNo : ''}`)) return;
             const kids = companyChildren(id);
             if (kids.length) { alert(`'${companyNameOf(c)}' 아래에 소속 업체가 ${kids.length}곳 있습니다.\n소속 업체의 상위업체를 먼저 변경하거나 삭제한 후 삭제해 주세요.`); return; }
             const asCustomer = contracts.filter(k => k.customerId === id).length;
@@ -44767,22 +45034,24 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             closeQuoteTplModal();
         }
 
-        function deleteQuoteTpl() {
-            if (!quoteTplEditingId) return;
-            const t = findQuoteTemplate(quoteTplEditingId);
+        function deleteQuoteTpl(idArg) {
+            const tplId = idArg || quoteTplEditingId;
+            if (!tplId) return;
+            const t = findQuoteTemplate(tplId);
             if (!t) return;
-            const used = quotes.filter(q => q.templateId === quoteTplEditingId).length;
+            if (!adminDeleteGate('deleteQuoteTpl', [tplId], '견적 템플릿', t.title || tplId)) return;
+            const used = quotes.filter(q => q.templateId === tplId).length;
             const warn = used
                 ? `\n\n이 템플릿을 사용하는 견적서가 ${used}건 있습니다. 삭제하면 해당 견적서의 제품 이미지·사양 블록이 문서에서 제외됩니다.`
                 : '';
             if (!confirm(`'${t.title}' 템플릿을 삭제하시겠습니까?${warn}`)) return;
 
             const before = JSON.parse(JSON.stringify(userQuoteTemplates));
-            userQuoteTemplates = userQuoteTemplates.filter(x => x.id !== quoteTplEditingId);
+            userQuoteTemplates = userQuoteTemplates.filter(x => x.id !== tplId);
             if (!persistUserQuoteTemplates()) { userQuoteTemplates = before; alert('삭제 내용 저장에 실패했습니다.'); return; }
 
             const cur = document.getElementById('quote-template');
-            if (cur && cur.value === quoteTplEditingId) fillQuoteTemplateSelect('');
+            if (cur && cur.value === tplId) fillQuoteTemplateSelect('');
             else fillQuoteTemplateSelect(cur ? cur.value : '');
             alert(`'${t.title}' 템플릿이 삭제되었습니다.`);
             closeQuoteTplModal();
@@ -45801,6 +46070,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
         }
 
         function deleteQuote(quoteId) {
+            if (!adminDeleteGate('deleteQuote', [quoteId], '견적', deleteReqLabel(quotes.find(x => x.id === quoteId), quoteId))) return;
             if (confirm('정말 이 견적을 삭제하시겠습니까?')) {
                 quotes = quotes.filter(q => q.id !== quoteId);
                 saveQuotes();
@@ -48310,7 +48580,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
         function deleteMeeting(id) {
             const m = findMeeting(id);
             if (!m) return;
-            if (!canEditSalesDoc(m)) { alert('회의록은 작성자 본인 또는 관리자만 삭제할 수 있습니다.'); return; }
+            if (!adminDeleteGate('deleteMeeting', [id], '회의록', `${m.id} · ${m.title || ''}`)) return;
             if (!confirm(`회의록 ${m.id} · ${m.title} 을(를) 삭제하시겠습니까?\nFollow-up 항목도 함께 삭제됩니다.`)) return;
             salesMeetings = salesMeetings.filter(x => x.id !== id);
             saveSalesMeetings();
@@ -48722,7 +48992,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
         function deleteIssue(id) {
             const x = findIssue(id);
             if (!x) return;
-            if (!canEditSalesDoc(x)) { alert('이슈보고서는 작성자 본인 또는 관리자만 삭제할 수 있습니다.'); return; }
+            if (!adminDeleteGate('deleteIssue', [id], '이슈보고서', `${x.id} · ${x.title || ''}`)) return;
             if (!confirm(`이슈보고서 ${x.id} · ${x.title} 을(를) 삭제하시겠습니까?\n코멘트도 함께 삭제됩니다.`)) return;
             salesIssues = salesIssues.filter(y => y.id !== id);
             saveSalesIssues();
@@ -49581,7 +49851,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
         function deleteDevReq(id) {
             const x = findDevReq(id);
             if (!x) return;
-            if (!canHandleDevReq()) { alert('개발의뢰서는 IT본부 담당자와 관리자만 삭제할 수 있습니다.'); return; }
+            if (!adminDeleteGate('deleteDevReq', [id], '개발의뢰', `${x.id} · ${x.title || ''}`)) return;
             if (x.status !== 'draft' && !confirm(`${x.id} 는 이미 파트너사에 접수된 건입니다.\n대화·첨부가 모두 삭제됩니다. 삭제하시겠습니까?`)) return;
             if (x.status === 'draft' && !confirm(`${x.id} · ${x.title} 을(를) 삭제하시겠습니까?`)) return;
             devRequests = devRequests.filter(y => y.id !== id);
@@ -51235,6 +51505,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
         function deleteCorpCard(id) {
             const c = corpCards.find(x => x.id === id);
             if (!c) return;
+            if (!adminDeleteGate('deleteCorpCard', [id], '법인카드', `카드 ···${String(c.cardNo || '').slice(-4)}`)) return;
             const cnt = cardTxns.filter(t => t.cardKey === cardKeyOf(c.cardNo)).length;
             const msg = cnt
                 ? `'${c.cardNo}' 카드를 삭제하시겠습니까?\n업로드된 사용내역 ${cnt}건은 삭제되지 않으나 '미등록 카드'로 전환되어 소유자에게 표시되지 않습니다.`
@@ -51371,6 +51642,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                             : (canEdit
                                 ? `<button onclick="openCardUseModal('${t.id}')" class="px-2 py-1 rounded text-xs font-medium ${doneOne ? 'bg-green-50 text-green-700 hover:bg-green-100' : 'bg-indigo-600 text-white hover:bg-indigo-700'}"><i class="fas ${doneOne ? 'fa-check' : 'fa-pen'} mr-1"></i>${doneOne ? '작성완료' : '작성'}</button>`
                                 : `<span class="text-xs ${doneOne ? 'text-green-600' : 'text-gray-400'}">${doneOne ? '작성완료' : '미작성'}</span>`)}
+                        ${!canManageAllData() ? `<button type="button" title="삭제 요청 (관리자에게)" data-fn="openCardTxnAdminEdit" data-args="${escapeHtml(JSON.stringify([t.id]))}" data-label="${escapeHtml(`${t.date || ''} ${t.merchant || ''} ${formatKRW(t.amount)}`)}" onclick="requestAdminDeleteFromBtn(this)" class="ml-1 px-1.5 py-1 rounded text-xs border border-gray-200 text-gray-400 hover:text-red-500 hover:bg-gray-50"><i class="fas fa-trash-can"></i></button>` : ''}
                         ${canManageAllData() ? `<button type="button" title="관리자 수정 · 삭제" onclick="openCardTxnAdminEdit('${t.id}')" class="ml-1 px-1.5 py-1 rounded text-xs border border-red-200 text-red-600 hover:bg-red-50"><i class="fas fa-user-shield"></i></button>` : ''}
                     </td>
                 </tr>`;
@@ -51548,6 +51820,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
         function undoCardBatch(batchId) {
             const b = cardBatches.find(x => x.id === batchId);
             if (!b) return;
+            if (!adminDeleteGate('undoCardBatch', [batchId], '카드 업로드 내역', `${b.id}${b.fileName ? ' · ' + b.fileName : ''}`)) return;
             // 되돌릴 수 있는 건 '이 업로드로 새로 들어온' 내역뿐입니다.
             // 이미 있던 건을 덮어쓴(갱신) 줄은 먼저 올린 업로드의 것이라 그대로 둡니다.
             const targets = cardTxns.filter(t => t.batchId === batchId);
@@ -51842,6 +52115,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
         function deleteVehicle(id) {
             const v = vehicles.find(x => x.id === id);
             if (!v) return;
+            if (!adminDeleteGate('deleteVehicle', [id], '법인차량', vehicleLabel(v))) return;
             const label = vehicleLabel(v);
             const used = vehicleReserves.some(r => r.vehicle === label) || vehicleLogs.some(l => l.vehicle === label);
             const msg = used
@@ -52900,6 +53174,8 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             }
         }
         async function deleteVehicleLog(id) {
+            const lg = vehicleLogs.find(l => l.id === id);
+            if (!adminDeleteGate('deleteVehicleLog', [id], '운행내역', lg ? `${lg.id} · ${lg.date || ''} ${lg.vehicle || ''} ${lg.driver || ''}`.trim() : id)) return;
             if (!confirm('이 운행내역을 삭제하시겠습니까?')) return;
             // 서버에서 지웁니다 (2026-09-28. 예전엔 화면에서만 사라지고 새로 불러오면 다시 나왔음) — 관리자 · 전체 자료 권한
             if (kobStorage.mode === 'supabase') {
@@ -55382,8 +55658,8 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             savePartnerAccounts(); renderPartnerIdAdmin();
         }
         function deletePartnerId(loginId, fromModal) {
-            if (!canManagePartnerIds()) { partnerPermDenied('아이디 관리'); return; }   // 2026-10-05 파트너센터 권한
             const a = partnerAccounts.find(x => x.loginId === loginId); if (!a) return;
+            if (!adminDeleteGate('deletePartnerId', [loginId], '파트너센터 아이디', `${loginId}${a.companyName ? ' · ' + a.companyName : ''}`)) return;   // 삭제는 관리자만 (2026-10-16)
             if (!confirm(`'${loginId}' 아이디를 삭제하시겠습니까?\n이 아이디로 등록한 접수, 개발요청 자료는 유지되지만 다시 로그인할 수 없습니다. 일시적으로 제한하려면 '중지'를 사용해 주세요.`)) return;
             partnerAccounts = partnerAccounts.filter(x => x.loginId !== loginId);
             delete partnerDeptPerm[loginId]; savePartnerDeptPerm();
@@ -59518,9 +59794,9 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             });
         }
         function deletePartnerIntake(id) {
-            if (!canManageAllData()) { alert('접수 삭제는 관리자만 가능합니다.'); return; }
             const x = partnerIntakeById(id);
             if (!x) return;
+            if (!adminDeleteGate('deletePartnerIntake', [id], '파트너센터 접수', `${x.id} · ${x.title || partnerIntakeTypeName(x)}`)) return;
             if (!confirm(`접수 ${x.id} (${x.title || partnerIntakeTypeName(x)}) 을(를) 삭제하시겠습니까?\n파트너 화면에서도 삭제되며 복구할 수 없습니다.`)) return;
             partnerIntakes = partnerIntakes.filter(y => y.id !== id);
             savePartnerIntakes();
