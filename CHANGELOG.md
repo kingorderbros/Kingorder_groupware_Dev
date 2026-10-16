@@ -2178,3 +2178,11 @@ test-files 41(주입 경로 거절 · 폴더 겹침 · 로그아웃 · 목록에
 - 함께 맞춘 것: 운행일지 "처음/최종 키로수" → "출발/도착 주행거리"(입력 화면과 통일) · 안내문이 가리키는 버튼 이름([이미지 업로드] · [기본값으로 복원] · CMS·렌탈 엑셀 업로드) · 팝업 저장 단추 판별 정규식에 새 버튼 이름(다운로드 · 업로드 · 복원 · 해제) 추가 · 깨져 있던 위약금 안내 문장("이보다 입력하면") 바로잡음 · 회원가입 "비밀번호 확인 값이 일치하지 않습니다"
 - 시험 문구 맞춤: test-schedules · test-contracts-quotes-cases · test-signup · test-inbound
 - 검증: npm run check 전체 통과 · 전 화면 E2E 51개 오류 0 · 바뀐 줄마다 `${...}` · 따옴표 · 태그 수 대조
+
+## 2026-10-16 — 관리자 삭제가 없던 자료에 관리자 삭제 추가
+- 알림함: 알림마다 × · '모두 삭제' (관리자 · `deleteNoti` / `deleteAllMyNoti`)
+- 업체 관리 › 가입 승인: 신청 카드마다 '삭제' (`deleteCompanySignup`) — 승인으로 만들어진 업체 · 아이디는 그대로
+- 자부서 업무 Follow-up · 이슈보고서 코멘트 · 개발의뢰 대화(그룹웨어 화면만): 한 건씩 × (`deleteFollowUp` / `deleteIssueComment` / `deleteDevMessage`)
+- 모두 `canManageAllData()` (관리자 또는 '전체 자료 수정 · 삭제' 권한 그룹) 일 때만 단추가 보이고, 함수 안에서도 다시 확인
+- 상담 · 계약 · 견적에서 자동 생성된 업무는 원본에서 지우도록 안내 문구 보완
+- 검증: `node tools/e2e-admin-delete.js .` 12건 통과 · `npm run check` 통과

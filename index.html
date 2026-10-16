@@ -1946,6 +1946,7 @@
                                 <p class="text-sm font-bold text-gray-800"><i class="far fa-bell text-gray-400 mr-1"></i>알림 <span id="noti-panel-count" class="ml-1 text-[11px] font-normal text-gray-400"></span></p>
                                 <div class="flex items-center gap-1">
                                     <button type="button" onclick="markAllNotiRead()" class="px-2 py-1 text-[11px] rounded bg-gray-100 hover:bg-gray-200 text-gray-600 whitespace-nowrap">모두 읽음</button>
+                                    <button type="button" id="noti-clear-btn" onclick="deleteAllMyNoti()" class="hidden px-2 py-1 text-[11px] rounded border border-red-200 text-red-600 bg-white hover:bg-red-50 whitespace-nowrap" title="관리자 — 받은 알림을 모두 삭제"><i class="fas fa-user-shield mr-0.5"></i>모두 삭제</button>
                                     <button type="button" onclick="closeNotiPanel()" class="w-6 h-6 text-gray-400 hover:text-gray-600"><i class="fas fa-times text-xs"></i></button>
                                 </div>
                             </div>
@@ -11697,6 +11698,9 @@ const QUOTE_TEMPLATES = [
             const unread = list.filter(n => !n.read).length;
             const cnt = document.getElementById('noti-panel-count');
             if (cnt) cnt.textContent = list.length ? `${list.length}건 · 읽지 않음 ${unread}` : '';
+            const canDel = canManageAllData();   // 알림 삭제는 관리자만 (2026-10-16)
+            const clr = document.getElementById('noti-clear-btn');
+            if (clr) clr.classList.toggle('hidden', !(canDel && list.length));
             el.innerHTML = list.length ? list.map(n => {
                 const st = NOTI_STYLE[n.type] || NOTI_STYLE['collab-completed'];
                 const ic = { blue: 'text-blue-600', red: 'text-red-600', amber: 'text-amber-600', indigo: 'text-indigo-600', purple: 'text-purple-600', teal: 'text-teal-600' }[st.color] || 'text-gray-500';
@@ -11711,6 +11715,7 @@ const QUOTE_TEMPLATES = [
                                 </p>
                             </div>
                             <span class="text-[11px] text-gray-400 whitespace-nowrap shrink-0">${escapeHtml(n.date || '')}</span>
+                            ${canDel ? `<button type="button" onclick="event.stopPropagation(); deleteNoti('${escapeHtml(n.id)}')" class="w-5 h-5 -mr-1 text-gray-300 hover:text-red-500 shrink-0" title="알림 삭제 (관리자)"><i class="fas fa-times text-[11px]"></i></button>` : ''}
                         </div>
                     </div>`;
             }).join('') : '<p class="text-sm text-gray-400 text-center py-10"><i class="far fa-bell-slash text-2xl block mb-2 text-gray-300"></i>받은 알림이 없습니다.</p>';
@@ -11720,6 +11725,22 @@ const QUOTE_TEMPLATES = [
             // 나에게 온 알림만 읽음으로 둡니다 — 남 앞으로 온 알림을 건드리지 않기 위해서입니다
             const n = myNotifications().find(x => String(x.id) === String(id));
             if (n && !n.read) { n.read = true; refreshNotiBell(); }
+        }
+        // 알림 삭제 — 관리자만 (2026-10-16). 받은 알림함에 보이는 것만 지웁니다.
+        function deleteNoti(id) {
+            if (!canManageAllData()) return;
+            collabNotifications = collabNotifications.filter(x => String(x.id) !== String(id));
+            refreshNotiBell();
+            renderNotiPanel();
+        }
+        function deleteAllMyNoti() {
+            if (!canManageAllData()) return;
+            const mine = new Set(myNotifications().map(x => String(x.id)));
+            if (!mine.size) return;
+            if (!confirm(`받은 알림 ${mine.size}건을 모두 삭제하시겠습니까?\n삭제한 알림은 되돌릴 수 없습니다.`)) return;
+            collabNotifications = collabNotifications.filter(x => !mine.has(String(x.id)));
+            refreshNotiBell();
+            renderNotiPanel();
         }
         function markAllNotiRead() {
             myNotifications().forEach(n => { n.read = true; });
@@ -14381,17 +14402,28 @@ const QUOTE_TEMPLATES = [
                 container.innerHTML = '<p class="text-sm text-gray-400 text-center mt-4">등록된 Follow-up 내역이 없습니다.</p>';
                 return;
             }
-            task.followUps.forEach(f => {
+            const canDel = canManageAllData();   // Follow-up 삭제는 관리자만 (2026-10-16)
+            task.followUps.forEach((f, i) => {
                 container.innerHTML += `
                     <div class="bg-blue-50 p-3 rounded-lg text-sm border border-blue-100">
                         <div class="flex justify-between items-center mb-1">
                             <span class="font-bold text-gray-800"><i class="fas fa-user-circle text-gray-400 mr-1"></i>${escapeHtml(f.author)}</span>
-                            <span class="text-xs text-gray-400">${escapeHtml(f.date)}</span>
+                            <span class="text-xs text-gray-400">${escapeHtml(f.date)}${canDel ? `<button type="button" onclick="deleteFollowUp('${escapeHtml(task.id)}', ${i})" class="ml-1 w-5 h-5 text-gray-300 hover:text-red-500 align-middle" title="삭제 (관리자)"><i class="fas fa-times text-[11px]"></i></button>` : ''}</span>
                         </div>
                         <p class="text-gray-700 mt-1">${escapeHtml(f.text).replace(/\n/g, '<br>')}</p>
                     </div>
                 `;
             });
+        }
+
+        function deleteFollowUp(taskId, idx) {
+            if (!canManageAllData()) return;
+            const task = localTasks.find(t => String(t.id) === String(taskId));
+            if (!task || !task.followUps || !task.followUps[idx]) return;
+            if (!confirm('이 Follow-up 내역을 삭제하시겠습니까?')) return;
+            task.followUps.splice(idx, 1);
+            renderFollowUps(task);
+            renderLocalTasks();
         }
 
         function submitFollowUp(event) {
@@ -28095,7 +28127,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             const derived = isDerivedWork(w);
             openAdminRecordEditor({
                 title: `${def.title} · ${w.id} ${w.title || ''}`, record: w,
-                note: derived ? '상담, 계약, 견적에서 자동 생성된 업무입니다. 여기서 수정해도 원본이 변경되면 다시 생성되므로 원본(상담, 계약, 견적)에서 수정해 주세요.' : '',
+                note: derived ? '상담, 계약, 견적에서 자동 생성된 업무입니다. 여기서 수정해도 원본이 변경되면 다시 생성되므로 수정 · 삭제는 원본(상담, 계약, 견적)에서 해 주세요.' : '',
                 choices: { status: Object.entries(def.statusNames || {}).map(([v, l]) => ({ v, l })) },
                 onSave: (patch) => {
                     Object.assign(w, patch);
@@ -41288,7 +41320,8 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                          : '<span class="px-2 py-0.5 rounded-full text-xs bg-amber-100 text-amber-800">승인대기</span>';
                 return `<div class="bg-white border border-gray-200 rounded-lg p-4">
                     <div class="flex flex-wrap items-center gap-2 mb-2">${st}${partnerCustTypeChip({ custType: x.kind })}
-                        <b class="text-gray-800">${escapeHtml(co.name || '')}</b><span class="text-xs text-gray-400">${escapeHtml(x.id)} · ${escapeHtml(new Date(x.at).toLocaleString('ko-KR'))}</span></div>
+                        <b class="text-gray-800">${escapeHtml(co.name || '')}</b><span class="text-xs text-gray-400">${escapeHtml(x.id)} · ${escapeHtml(new Date(x.at).toLocaleString('ko-KR'))}</span>
+                        ${canManageAllData() ? `<button type="button" onclick="deleteCompanySignup('${escapeHtml(x.id)}')" class="ml-auto px-2 py-1 text-[11px] rounded border border-red-200 text-red-600 bg-white hover:bg-red-50" title="관리자 — 가입 신청 기록 삭제"><i class="fas fa-user-shield mr-0.5"></i>삭제</button>` : ''}</div>
                     <div class="grid sm:grid-cols-2 gap-x-6 gap-y-1 text-xs">
                         ${row('사업자번호', escapeHtml(co.businessNo || ''))}${row('대표자', escapeHtml(co.ceo || ''))}
                         ${row('사업자 구분', escapeHtml(partnerBizTypeName(co.bizType) || ''))}${row('주소', escapeHtml(co.address || ''))}
@@ -41334,6 +41367,19 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
         function showCompanyInList(id) {
             const c = customers.find(x => x.id === id);
             companyFilter = { q: c ? companyNameOf(c) : '', kind: '', status: '', view: 'list', limit: COMPANY_PAGE };
+            renderCompanies();
+        }
+        // 가입 신청 기록 삭제 — 관리자만 (2026-10-16). 승인으로 만들어진 업체 · 아이디는 그대로 둡니다.
+        function deleteCompanySignup(id) {
+            if (!canManageAllData()) { alert('가입 신청 삭제는 관리자만 할 수 있습니다.'); return; }
+            const x = companySignupList().find(s => s.id === id);
+            if (!x) return;
+            const msg = `${(x.company || {}).name || x.loginId} 의 가입 신청 기록을 삭제하시겠습니까?`
+                + (x.status === 'pending' ? '\n승인대기 건입니다. 삭제하면 승인 · 반려할 수 없습니다.' : '')
+                + (x.status === 'approved' ? '\n이미 등록된 업체와 아이디는 삭제되지 않습니다.' : '');
+            if (!confirm(msg)) return;
+            // 서버가 새 신청을 넣었을 수 있어 저장 직전에 다시 읽습니다
+            saveJsonStore('gwPartnerSignups.v1', (loadJsonStore('gwPartnerSignups.v1', []) || []).filter(s => !(s && s.id === id)));
             renderCompanies();
         }
         async function decideCompanySignup(id, decision) {
@@ -48748,6 +48794,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                                     ${(x.reportTo || []).indexOf(c.by) > -1 ? '<span class="ml-1 px-1.5 py-0.5 rounded text-[10px] bg-indigo-100 text-indigo-700">보고 대상</span>' : ''}
                                     ${c.by === x.reporter ? '<span class="ml-1 px-1.5 py-0.5 rounded text-[10px] bg-gray-100 text-gray-600">작성자</span>' : ''}
                                     <span class="ml-1">${escapeHtml(c.at)}${c.time ? ' ' + escapeHtml(c.time) : ''}</span>
+                                    ${canManageAllData() && c.id ? `<button type="button" onclick="deleteIssueComment('${escapeHtml(x.id)}', '${escapeHtml(c.id)}')" class="ml-1 w-5 h-5 text-gray-300 hover:text-red-500 align-middle" title="삭제 (관리자)"><i class="fas fa-times text-[11px]"></i></button>` : ''}
                                 </p>
                                 <p class="text-sm text-gray-700 whitespace-pre-wrap">${escapeHtml(c.text)}</p>
                             </div>`).join('') : '<p class="text-xs text-indigo-800/70 text-center py-3">아직 코멘트가 없습니다.</p>'}
@@ -48793,6 +48840,18 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             renderIssueDetail();
             renderIssueCenter();
             renderPersonalDashboard(currentUserName, currentUserRole);
+        }
+
+        // 코멘트 삭제 — 관리자만 (2026-10-16)
+        function deleteIssueComment(issueId, commentId) {
+            if (!canManageAllData()) return;
+            const x = findIssue(issueId);
+            if (!x || !(x.comments || []).some(c => c.id === commentId)) return;
+            if (!confirm('이 코멘트를 삭제하시겠습니까?')) return;
+            x.comments = x.comments.filter(c => c.id !== commentId);
+            saveSalesIssues();
+            renderIssueDetail();
+            renderIssueCenter();
         }
 
         // 보고받은 사람이 처리 상태를 바꿉니다 — 작성자에게 알립니다
@@ -49549,6 +49608,16 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
         // 상태 변화 같은 기록은 아래 [히스토리] 에서 따로 보므로 대화에는 넣지 않습니다. (2026-09-05)
         function devTalk(x) { return (x && x.thread || []).filter(m => !m.system); }
         function devTalkCount(x) { return devTalk(x).length; }
+        // 대화 삭제 — 그룹웨어 관리자만 (2026-10-16)
+        function deleteDevMessage(reqId, msgId) {
+            if (!canManageAllData()) return;
+            const x = findDevReq(reqId);
+            if (!x || !(x.thread || []).some(m => m.id === msgId)) return;
+            if (!confirm('이 대화를 삭제하시겠습니까?')) return;
+            x.thread = x.thread.filter(m => m.id !== msgId);
+            saveDevRequests();
+            renderDevDetail();
+        }
 
         // 스레드 한 줄 그리기 (그룹웨어·파트너 페이지가 함께 씁니다)
         //   meSide — 지금 보고 있는 쪽. 내 글은 오른쪽에 붙습니다.
@@ -49564,6 +49633,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                                 <b class="text-gray-700">${escapeHtml(m.by)}</b>
                                 <span class="ml-1 px-1.5 py-0.5 rounded text-[10px] ${m.side === 'kob' ? 'bg-cyan-100 text-cyan-700' : 'bg-gray-200 text-gray-700'}">${m.side === 'kob' ? '킹오더' : '파트너사'}</span>
                                 <span class="ml-1">${escapeHtml(m.at)} ${escapeHtml(m.time || '')}</span>
+                                ${meSide === 'kob' && m.id && canManageAllData() ? `<button type="button" onclick="deleteDevMessage('${escapeHtml(x.id)}', '${escapeHtml(m.id)}')" class="ml-1 w-5 h-5 text-gray-300 hover:text-red-500 align-middle" title="삭제 (관리자)"><i class="fas fa-times text-[11px]"></i></button>` : ''}
                             </p>
                             <div class="rounded-lg border ${tone} px-3 py-2">
                                 <p class="text-sm text-gray-800 whitespace-pre-wrap break-words">${escapeHtml(m.text)}</p>
