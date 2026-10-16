@@ -52947,7 +52947,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
         // ==================== PG 구분 · VAN 구분 (단순맵핑 · 단말기 맵핑) ====================
         // 단순맵핑은 파트너사가 직접 TID 를 채번해 전달하는 건입니다.
         // **어디서 채번했는지(PG 구분)** 에 따라 함께 받아야 하는 정보가 다릅니다.
-        //   갤럭시아 · 헥토 — TID (개수·번호) + 채번 캡처본
+        //   갤럭시아 · 헥토 · 섹타나인 — TID (개수·번호) + 채번 캡처본 (섹타나인 2026-10-16 추가)
         //   나이스 정보통신 — 정보통신 / 페이먼츠 구분 + TID + 사업자번호
         //   KIS           — 헥토 / 나이스 구분 + 일련번호 · 패스워드 · TID · MID + 캡처본
         // 화면에는 **고른 곳에 필요한 칸만** 나타납니다 (showIf).
@@ -52956,7 +52956,8 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             { id: 'galaxia', name: '갤럭시아' },
             { id: 'hecto',   name: '헥토' },
             { id: 'nice',    name: '나이스 정보통신' },
-            { id: 'kis',     name: 'KIS' }
+            { id: 'kis',     name: 'KIS' },
+            { id: 'sectanine', name: '섹타나인' }
         ];
         const PARTNER_VAN_ALL = PARTNER_VAN_OPTIONS.map(o => o.id);
 
@@ -53028,7 +53029,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
               showIf: { key: 'van', in: PARTNER_VAN_ALL } }
         ];
         // PG사별로 채번 캡처본을 함께 받아야 하는지 — 나이스 정보통신은 사업자번호로 갈음합니다
-        const PARTNER_VAN_NEEDS_CAPTURE = { galaxia: true, hecto: true, nice: false, kis: true };
+        const PARTNER_VAN_NEEDS_CAPTURE = { galaxia: true, hecto: true, nice: false, kis: true, sectanine: true };
         const partnerVanName = (id) => (PARTNER_VAN_OPTIONS.find(o => o.id === id) || {}).name || '';
         // 나이스 정보통신·KIS 는 그 안에서 한 번 더 갈립니다 — 고른 값의 이름을 돌려줍니다
         function partnerVanSubName(extra) {
