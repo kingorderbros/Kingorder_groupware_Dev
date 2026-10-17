@@ -3818,6 +3818,14 @@
                         <label id="org-unit-label" class="block text-sm font-medium text-gray-700 mb-1">본부 이름</label>
                         <input type="text" id="org-unit-name" required maxlength="20" class="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="예: 마케팅본부" />
                     </div>
+                    <!-- 본부만 — 조직도 표시 여부 (2026-10-17). 숨겨도 구성원 · 결재 · 권한 · 일정에는 그대로 쓰입니다 -->
+                    <div id="org-unit-show-wrap" class="mb-3 hidden">
+                        <label class="inline-flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                            <input type="checkbox" id="org-unit-show" class="w-4 h-4 text-indigo-600 rounded border-gray-300" checked />
+                            조직도에 표시
+                        </label>
+                        <p class="text-xs text-gray-500 mt-1">선택을 해제하면 조직도(계층도 · 카드)에서 이 본부와 구성원이 표시되지 않습니다. 조직도 관리, 결재, 권한, 일정에는 그대로 반영됩니다.</p>
+                    </div>
                     <p id="org-unit-help" class="text-xs text-gray-500 mb-4"></p>
                     <div class="flex justify-end space-x-2">
                         <button type="button" onclick="closeOrgUnitModal()" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded text-sm transition-colors">닫기</button>
@@ -10262,6 +10270,8 @@ const QUOTE_TEMPLATES = [
         }
         function orgDeptIds(withExternal) { return orgDeptList(withExternal).map(d => d.id); }
         function orgFindDept(id) { return orgDepts.find(d => d.id === id) || null; }
+        // 조직도에 표시하지 않는 본부 (2026-10-17) — 조직도 화면에서만 빠지고 나머지 기능에는 그대로 쓰입니다
+        function isOrgDeptHidden(id) { const d = orgFindDept(id); return !!(d && d.hideInOrg); }
         // IT본부의 본부 id (2026-10-08) — 기본값은 'it' 이지만, 조직 관리에서 기본 'it' 자리의 이름을 다른 본부(예: 관리본부)로
         // 바꾸고 IT본부를 새로 만든 경우가 있습니다(dev 에서 실제로 그랬음). 이름에 'IT' 가 들어간 본부를 먼저 찾고, 없으면 'it'.
         function itDeptId() {
@@ -39112,6 +39122,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             const norm = v => String(v || '').replace(/\s+/g, '').toLowerCase();
             const q = norm(orgFilter.q);
             return orgChartMembers().filter(u => {
+                if (isOrgDeptHidden(u.dept)) return false;          // 조직도에 표시하지 않는 본부
                 if (orgFilter.dept && u.dept !== orgFilter.dept) return false;
                 if (q && !norm([u.name, u.rank, orgTeamName(u), u.duty, u.email, u.phone, u.mobile, orgDeptName(u.dept)].join(' ')).includes(q)) return false;
                 return true;
@@ -39134,6 +39145,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             if (o.includeEmpty) {
                 orgDeptIds(false).forEach(d => {
                     if (o.deptFilter && o.deptFilter !== d) return;
+                    if (isOrgDeptHidden(d)) return;                 // 빈 자리도 조직도에 표시하지 않는 본부는 뺍니다
                     depts.push(d);
                 });
             }
@@ -39390,14 +39402,14 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
         function renderOrgChart() {
             const host = document.getElementById('sec-org-chart');
             if (!host) return;
-            const all = orgChartMembers();
+            const all = orgChartMembers().filter(u => !isOrgDeptHidden(u.dept));   // 조직도에 표시하지 않는 본부 제외
             const list = orgFiltered();
             // 검색 중이 아니면 사람이 없는 본부·팀도 자리를 보여 줍니다 (새로 만든 조직이 바로 보이도록)
             const groupOpts = { includeEmpty: !String(orgFilter.q || '').trim(), deptFilter: orgFilter.dept || '' };
             const groups = orgGrouped(list, groupOpts);
             const selCls = 'p-2 text-sm border border-gray-300 rounded bg-white focus:outline-none focus:ring-2 focus:ring-rose-500';
             // 인원이 없는 새 본부도 조직도에 자리를 보여 줍니다 (본부를 만들면 바로 나타납니다)
-            const deptsPresent = orgDeptIds(false)
+            const deptsPresent = orgDeptIds(false).filter(d => !isOrgDeptHidden(d))
                 .concat(Array.from(new Set(all.map(u => u.dept))).filter(d => orgDeptIds(true).indexOf(d) < 0));
 
             const deptCards = deptsPresent.map(d => {
@@ -39574,10 +39586,10 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                     <div class="flex items-start justify-between gap-2">
                         <div class="min-w-0">
                             <p class="font-bold text-gray-800 truncate"><i class="fas ${st.icon} mr-1 opacity-70"></i>${escapeHtml(d.name)}</p>
-                            <p class="text-xs text-gray-500 mt-0.5">${people.length}명 · 팀 ${teams.length}개${d.system ? ' · <span class="text-gray-400">기본 본부</span>' : ''}</p>
+                            <p class="text-xs text-gray-500 mt-0.5">${people.length}명 · 팀 ${teams.length}개${d.system ? ' · <span class="text-gray-400">기본 본부</span>' : ''}${d.hideInOrg ? ' · <span class="text-amber-600"><i class="fas fa-eye-slash mr-0.5"></i>조직도 미표시</span>' : ''}</p>
                         </div>
                         <div class="flex shrink-0">
-                            <button onclick="openOrgDeptModal('${d.id}')" class="text-blue-500 hover:text-blue-700 px-1" title="본부 이름 수정"><i class="fas fa-edit"></i></button>
+                            <button onclick="openOrgDeptModal('${d.id}')" class="text-blue-500 hover:text-blue-700 px-1" title="본부 수정 (이름 · 조직도 표시)"><i class="fas fa-edit"></i></button>
                             <button onclick="deleteOrgDept('${d.id}')" class="text-red-500 hover:text-red-700 px-1" title="본부 삭제"><i class="fas fa-trash"></i></button>
                         </div>
                     </div>
@@ -39695,13 +39707,15 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
         function openOrgDeptModal(id) {
             const d = id ? orgFindDept(id) : null;
             orgUnitEdit = { type: 'dept', id: d ? d.id : '', deptId: '' };
-            document.getElementById('org-unit-title').innerText = d ? '본부 이름 수정' : '본부 추가';
+            document.getElementById('org-unit-title').innerText = d ? '본부 수정' : '본부 추가';
             document.getElementById('org-unit-label').innerText = '본부 이름';
             document.getElementById('org-unit-name').value = d ? d.name : '';
             document.getElementById('org-unit-name').placeholder = '예: 마케팅본부';
             document.getElementById('org-unit-dept-wrap').classList.add('hidden');
+            document.getElementById('org-unit-show-wrap').classList.remove('hidden');
+            document.getElementById('org-unit-show').checked = !(d && d.hideInOrg);
             document.getElementById('org-unit-help').innerHTML = d
-                ? '이름만 변경됩니다. 이 본부의 구성원, 요청, 일정, 권한은 그대로 유지됩니다.'
+                ? '이름과 조직도 표시 여부만 변경됩니다. 이 본부의 구성원, 요청, 일정, 권한은 그대로 유지됩니다.'
                 : '본부를 등록하면 구성원 등록, 협업요청, 일정, 업무이관, 경영 현황판의 본부 목록에 반영됩니다.';
             document.getElementById('org-unit-modal').classList.remove('hidden');
         }
@@ -39714,6 +39728,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             document.getElementById('org-unit-name').placeholder = '예: 영업1팀';
             const wrap = document.getElementById('org-unit-dept-wrap');
             wrap.classList.remove('hidden');
+            document.getElementById('org-unit-show-wrap').classList.add('hidden');
             document.getElementById('org-unit-dept').innerHTML = orgDeptList(false)
                 .map(d => `<option value="${escapeHtml(d.id)}" ${d.id === orgUnitEdit.deptId ? 'selected' : ''}>${escapeHtml(d.name)}</option>`).join('');
             document.getElementById('org-unit-help').innerHTML = t
@@ -39729,6 +39744,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             document.getElementById('org-unit-name').value = orgNoTeamLabel;
             document.getElementById('org-unit-name').placeholder = '예: 팀 미지정 · 본부 직속';
             document.getElementById('org-unit-dept-wrap').classList.add('hidden');
+            document.getElementById('org-unit-show-wrap').classList.add('hidden');
             document.getElementById('org-unit-help').innerHTML = '팀이 지정되지 않은 구성원 그룹의 이름입니다. 조직도(계층도·카드형)와 관리 화면에 함께 반영됩니다. 미입력 후 저장하면 기본값 <b>팀 미지정</b>으로 변경됩니다.';
             document.getElementById('org-unit-modal').classList.remove('hidden');
         }
@@ -39755,14 +39771,19 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             if (orgUnitEdit.type === 'dept') {
                 const dup = orgDepts.find(d => d.id !== orgUnitEdit.id && d.name === name);
                 if (dup) { alert('같은 이름의 본부가 이미 있습니다.'); return; }
+                const hide = !document.getElementById('org-unit-show').checked;   // 조직도 표시 여부 (2026-10-17)
                 if (orgUnitEdit.id) {
                     const d = orgFindDept(orgUnitEdit.id);
                     d.name = name;
+                    if (hide) d.hideInOrg = true; else delete d.hideInOrg;
                 } else {
                     let n = 1;
                     while (orgFindDept('dept' + n)) n++;
-                    orgDepts.push({ id: 'dept' + n, name: name, order: Math.max(0, ...orgDepts.filter(x => !x.external).map(x => x.order || 0)) + 1, style: orgNextStyleKey() });
+                    const nd = { id: 'dept' + n, name: name, order: Math.max(0, ...orgDepts.filter(x => !x.external).map(x => x.order || 0)) + 1, style: orgNextStyleKey() };
+                    if (hide) nd.hideInOrg = true;
+                    orgDepts.push(nd);
                 }
+                if (hide && orgFilter.dept === (orgUnitEdit.id || '')) orgFilter.dept = '';
                 saveOrgDepts();
             } else {
                 const deptId = document.getElementById('org-unit-dept').value;
