@@ -8021,6 +8021,14 @@
                             </div>
                             <div>
                                 <label class="inline-flex items-start gap-2 text-sm text-gray-700 cursor-pointer">
+                                    <input type="checkbox" id="org-edit-on-leave" class="w-4 h-4 mt-0.5 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500">
+                                    <span><b>휴직중</b>
+                                        <span class="block text-xs text-gray-400 mt-0.5">조직도와 구성원 목록에 '휴직중'으로 표시합니다. 계정 · 소속 · 권한은 그대로 유지됩니다.</span>
+                                    </span>
+                                </label>
+                            </div>
+                            <div>
+                                <label class="inline-flex items-start gap-2 text-sm text-gray-700 cursor-pointer">
                                     <input type="checkbox" id="org-edit-hide-org" class="w-4 h-4 mt-0.5 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500">
                                     <span><b>조직도에 표시하지 않음</b>
                                         <span class="block text-xs text-gray-400 mt-0.5">계정만 생성하고 조직도에는 표시하지 않습니다. 사용자 목록, 담당자 선택, 참석자 선택에는 표시되며 로그인도 가능합니다.</span>
@@ -13988,9 +13996,14 @@ const QUOTE_TEMPLATES = [
         function orgTeamName(u) { return (u && String(u.team || '').trim()) || orgNoTeamLabel; }
         // 그 본부의 본부장 — 직급이 '본부장' 이거나 권한 레벨이 본부장(head)인 사람.
         // 조직도에서는 팀·묶음에 넣지 않고 **본부 상자·카드에 따로** 표시합니다.
-        function orgDeptHeads(members) {
+        function orgDeptHeads(members, deptId) {
             // 직급이 '본부장' 인 사람만 — 등급이 본부장급인 부장 등은 본부장으로 그리지 않습니다 (2026-09-21)
-            return (members || []).filter(u => String(u.rank || '').indexOf('본부장') > -1);
+            const heads = (members || []).filter(u => String(u.rank || '').indexOf('본부장') > -1);
+            if (heads.length || deptId === 'management') return heads;
+            // 본부장이 없는 본부는 그 본부의 임원(전무 · 상무 · 이사 등 대표급 직급)을 본부장 자리에 둡니다 (2026-10-19).
+            // 상자에는 '본부장' 대신 그 사람의 직급(예: 전무)을 표시합니다.
+            const execRanks = orgRanks.filter(r => r.cls === 'exec').map(r => r.name);
+            return (members || []).filter(u => execRanks.indexOf(String(u.rank || '').trim()) > -1);
         }
 
         // 사용자 관리 표 — 계정 항목 + 조직도 항목(팀 · 담당업무)을 함께 보여 줍니다.
@@ -14008,7 +14021,7 @@ const QUOTE_TEMPLATES = [
                 return `
                     <tr class="border-b border-gray-100 hover:bg-gray-50 cursor-pointer" onclick="openOrgEdit('${escapeHtml(user.id)}')">
                         <td class="p-4 font-medium whitespace-nowrap">
-                            <div class="flex items-center gap-2">${orgAvatarHtml(user)}<span>${escapeHtml(user.name)}</span>${user.hideInOrg === true ? '<span class="px-1.5 py-0.5 bg-gray-200 text-gray-600 rounded text-[11px] whitespace-nowrap" title="조직도에 표시되지 않는 사용자입니다"><i class="fas fa-eye-slash mr-0.5"></i>조직도 제외</span>' : ''}</div>
+                            <div class="flex items-center gap-2">${orgAvatarHtml(user)}<span>${escapeHtml(user.name)}</span>${orgLeaveChip(user)}${user.hideInOrg === true ? '<span class="px-1.5 py-0.5 bg-gray-200 text-gray-600 rounded text-[11px] whitespace-nowrap" title="조직도에 표시되지 않는 사용자입니다"><i class="fas fa-eye-slash mr-0.5"></i>조직도 제외</span>' : ''}</div>
                         </td>
                         <td class="p-4 whitespace-nowrap"><span class="px-2 py-1 ${st.chip} rounded-full text-xs">${escapeHtml(orgDeptName(user.dept))}</span></td>
                         <td class="p-4 bg-rose-50/30 ${team ? '' : 'text-gray-300'}">${team ? escapeHtml(team) : '미지정'}</td>
@@ -39125,6 +39138,11 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
         // 계정은 그대로 살아 있어 로그인 · 사용자 목록 · 사람 고르기(담당자 · 참석자 · 카드 소유자)에는 나옵니다.
         // 본부를 지울 수 있는지 볼 때는 orgMembers() 를 그대로 쓰므로, 숨긴 사람이 있으면 그 본부는 지워지지 않습니다.
         function isOrgHidden(u) { return !!u && u.hideInOrg === true; }
+        // 휴직중 표시 (2026-10-19) — 계정 · 소속 · 권한은 그대로 두고 이름 옆에 표시만 붙입니다
+        function isOnLeave(u) { return !!u && u.onLeave === true; }
+        function orgLeaveChip(u) {
+            return isOnLeave(u) ? '<span class="ml-1 px-1.5 py-0.5 text-[10px] rounded font-semibold bg-gray-200 text-gray-600 align-middle whitespace-nowrap" title="휴직중인 구성원입니다"><i class="fas fa-user-clock mr-0.5"></i>휴직중</span>' : '';
+        }
         function orgChartMembers() { return orgMembers().filter(u => !isOrgAdminAccount(u) && !isOrgHidden(u)); }
         function orgFindAccount(id) { return orgAccounts().find(u => u.id === id) || null; }
         function orgFiltered() {
@@ -39170,7 +39188,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             return depts.map(d => {
                 const members = (byDept[d] || []).slice().sort(byRank);
                 // 본부장은 본부 상자·카드에 따로 세우고, 아래 팀·묶음 목록에서는 뺍니다
-                const heads = orgDeptHeads(members).sort(byRank);
+                const heads = orgDeptHeads(members, d).sort(byRank);
                 const rest = members.filter(u => heads.indexOf(u) < 0);
                 // 팀을 지정하지 않은 사람은 한 묶음(기본 '팀 미지정')으로 모읍니다
                 const direct = rest.filter(u => !String(u.team || '').trim());
@@ -39256,7 +39274,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                                 <button type="button" onclick="openOrgMember('${escapeHtml(u.id)}')" class="w-full text-left px-4 py-2.5 flex items-center gap-3 hover:bg-rose-50/50 transition-colors">
                                     ${orgAvatarHtml(u)}
                                     <div class="min-w-0 flex-1">
-                                        <p class="text-sm font-semibold text-gray-800 truncate">${escapeHtml(u.name)}<span class="ml-1.5 text-[11px] font-normal text-gray-500">${escapeHtml(u.rank || '')}</span>${orgBirthdayChip(u)}</p>
+                                        <p class="text-sm font-semibold text-gray-800 truncate">${escapeHtml(u.name)}<span class="ml-1.5 text-[11px] font-normal text-gray-500">${escapeHtml(u.rank || '')}</span>${orgLeaveChip(u)}${orgBirthdayChip(u)}</p>
                                         ${String(u.duty || '').trim() ? `<p class="text-[11px] text-gray-500 truncate">${escapeHtml(u.duty)}</p>` : ''}
                                     </div>
                                     <i class="fas fa-chevron-right text-xs text-gray-300 shrink-0"></i>
@@ -39297,10 +39315,10 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             const s = orgDeptStyle(u.dept);
             const size = o.size === 'lg' ? 'px-4 py-2.5 min-w-[168px]' : 'px-3 py-2 min-w-[150px]';
             return `<button type="button" onclick="openOrgMember('${escapeHtml(u.id)}')"
-                        class="inline-flex items-center gap-2 ${size} bg-white border ${o.strong ? 'border-2' : 'border'} ${o.strong ? s.bar.replace('border-', 'border-') : 'border-gray-200'} rounded-lg shadow-sm text-left hover:shadow-md hover:bg-rose-50/40 transition-all">
+                        class="inline-flex items-center gap-2 ${size} ${isOnLeave(u) ? 'bg-gray-50 opacity-70' : 'bg-white'} border ${o.strong ? 'border-2' : 'border'} ${o.strong ? s.bar.replace('border-', 'border-') : 'border-gray-200'} rounded-lg shadow-sm text-left hover:shadow-md hover:bg-rose-50/40 transition-all">
                         ${orgAvatarHtml(u, o.size === 'lg' ? 'lg' : '')}
                         <span class="min-w-0">
-                            <span class="block text-sm font-bold text-gray-800 truncate">${escapeHtml(u.name)}<span class="ml-1 text-[11px] font-normal text-gray-500">${escapeHtml(u.rank || '')}</span></span>
+                            <span class="block text-sm font-bold text-gray-800 truncate">${escapeHtml(u.name)}<span class="ml-1 text-[11px] font-normal text-gray-500">${escapeHtml(u.rank || '')}</span>${orgLeaveChip(u)}</span>
                             ${String(u.duty || '').trim() ? `<span class="block text-[11px] text-gray-500 truncate max-w-[190px]">${escapeHtml(u.duty)}</span>` : ''}
                         </span>
                     </button>`;
@@ -39318,8 +39336,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                             <span class="text-[11px] opacity-70">${count}명</span>
                         </div>
                         ${list.length ? `<div class="flex items-center justify-center gap-1 mt-1 pt-1 border-t border-current/20">
-                            <span class="text-[10px] opacity-70">본부장</span>
-                            ${list.map(u => `<button type="button" onclick="openOrgMember('${escapeHtml(u.id)}')" class="text-[11px] font-bold underline decoration-dotted underline-offset-2 hover:opacity-80">${escapeHtml(u.name)}</button>`).join('<span class="opacity-50">·</span>')}
+                            ${list.map(u => `<span class="text-[10px] opacity-70">${escapeHtml(u.rank || '본부장')}</span><button type="button" onclick="openOrgMember('${escapeHtml(u.id)}')" class="text-[11px] font-bold underline decoration-dotted underline-offset-2 hover:opacity-80">${escapeHtml(u.name)}</button>${orgLeaveChip(u)}`).join('<span class="opacity-50">·</span>')}
                         </div>` : ''}
                     </div>`;
         }
@@ -39490,7 +39507,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                         <span class="px-2 py-0.5 rounded text-xs font-bold ${g.style.chip}"><i class="fas ${g.style.icon} mr-1"></i>${escapeHtml(g.name)}</span>
                         <span class="text-xs text-gray-400">${g.count}명${g.hasTeams ? ` · ${g.teams.length}개 팀${(g.direct || []).length ? ` · ${escapeHtml(orgNoTeamLabel)} ${g.direct.length}명` : ''}` : ''}</span>
                         ${(g.heads || []).map(u => `<button type="button" onclick="openOrgMember('${escapeHtml(u.id)}')" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] border ${g.style.bar} bg-white text-gray-700 hover:bg-gray-50">
-                            <i class="fas fa-user-tie text-[10px] opacity-60"></i><span class="opacity-60">본부장</span><b>${escapeHtml(u.name)}</b></button>`).join('')}
+                            <i class="fas fa-user-tie text-[10px] opacity-60"></i><span class="opacity-60">${escapeHtml(u.rank || '본부장')}</span><b>${escapeHtml(u.name)}</b>${orgLeaveChip(u)}</button>`).join('')}
                     </div>
                     ${g.hasTeams ? `
                     ${(g.direct || []).length ? `<div class="mb-3">${orgTeamCardHtml(g, '', g.direct, orgNoTeamLabel)}</div>` : ''}
@@ -39516,7 +39533,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                 av.innerHTML = escapeHtml(String(u.name || '?').charAt(0));
             }
             document.getElementById('org-member-name').innerHTML =
-                escapeHtml(`${u.name || '-'} ${u.rank || ''}`.trim()) + orgBirthdayChip(u);
+                escapeHtml(`${u.name || '-'} ${u.rank || ''}`.trim()) + orgLeaveChip(u) + orgBirthdayChip(u);
             const team = String(u.team || '').trim();
             document.getElementById('org-member-sub').innerHTML =
                 `<span class="px-1.5 py-0.5 text-[10px] rounded font-semibold ${s.chip}">${escapeHtml(orgDeptName(u.dept))}</span>`
@@ -40110,7 +40127,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                                     return `
                                     <tr class="border-b border-gray-50 last:border-0 hover:bg-indigo-50/40 cursor-pointer" onclick="openOrgEdit('${escapeHtml(u.id)}')">
                                         <td class="px-3 py-2 whitespace-nowrap">
-                                            <div class="flex items-center gap-2">${orgAvatarHtml(u)}<span class="font-medium">${escapeHtml(u.name)}</span></div>
+                                            <div class="flex items-center gap-2">${orgAvatarHtml(u)}<span class="font-medium">${escapeHtml(u.name)}</span>${orgLeaveChip(u)}</div>
                                         </td>
                                         <td class="px-3 py-2 whitespace-nowrap"><span class="px-1.5 py-0.5 text-[10px] rounded font-semibold ${s.chip}">${escapeHtml(orgDeptName(u.dept))}</span></td>
                                         <td class="px-3 py-2 whitespace-nowrap ${String(u.team || '').trim() ? 'text-gray-700' : 'text-gray-300'}">${String(u.team || '').trim() ? escapeHtml(u.team) : '미지정'}</td>
@@ -40224,6 +40241,8 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             if (adminChk) adminChk.checked = !!(u && u.isAdmin === true);
             const hideChk = document.getElementById('org-edit-hide-org');
             if (hideChk) hideChk.checked = !!(u && u.hideInOrg === true);
+            const leaveChk = document.getElementById('org-edit-on-leave');
+            if (leaveChk) leaveChk.checked = !!(u && u.onLeave === true);
             const bdayChk = document.getElementById('org-edit-show-birthday');
             if (bdayChk) bdayChk.checked = !(u && u.showBirthday === false);     // 기본은 표시 (2026-09-28)
             onOrgEditAdminChange();          // 관리자면 부서 · 직급 · 팀을 선택 사항으로 (2026-09-21)
@@ -40259,6 +40278,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                 groupId: v('group') || 'sales',
                 isAdmin: !!((document.getElementById('org-edit-admin') || {}).checked),   // 겸직 관리자 (2026-09-21)
                 hideInOrg: !!((document.getElementById('org-edit-hide-org') || {}).checked),   // 조직도에 안 내보내기 (2026-09-23)
+                onLeave: !!((document.getElementById('org-edit-on-leave') || {}).checked),     // 휴직중 표시 (2026-10-19)
                 showBirthday: (document.getElementById('org-edit-show-birthday') || { checked: true }).checked   // 캘린더에 생일 표시 (2026-09-28)
             };
             let created = null, oldEmail = '';
