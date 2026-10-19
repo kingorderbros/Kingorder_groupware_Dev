@@ -2003,7 +2003,11 @@
                         <div class="bg-white p-5 rounded-lg shadow-sm border border-gray-200">
                             <h4 class="font-bold text-gray-700 mb-3 border-b border-gray-100 pb-2 flex items-center justify-between">
                                 <span><i class="fas fa-calendar-day text-red-500 mr-2"></i>오늘의 일정</span>
-                                <button onclick="navigate('calendar-center', document.getElementById('nav-calendar-center'))" class="text-xs font-normal text-red-500 hover:text-red-700">캘린더 보기 <i class="fas fa-arrow-right ml-0.5"></i></button>
+                                <span class="flex items-center gap-2">
+                                    <!-- 캘린더 종류별로 보기 (2026-10-19) -->
+                                    <select id="today-cal-filter" onchange="setTodayCalFilter(this.value)" title="캘린더 종류 선택" class="text-xs font-normal p-1 border border-gray-300 rounded bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-red-400 max-w-[11rem]"></select>
+                                    <button onclick="navigate('calendar-center', document.getElementById('nav-calendar-center'))" class="text-xs font-normal text-red-500 hover:text-red-700 whitespace-nowrap">캘린더 보기 <i class="fas fa-arrow-right ml-0.5"></i></button>
+                                </span>
                             </h4>
                             <div id="personal-today-schedule-list" class="space-y-2 max-h-72 overflow-y-auto pr-2"></div>
                         </div>
@@ -12209,6 +12213,13 @@ const QUOTE_TEMPLATES = [
             renderTodaySchedule(userName);
         }
 
+        // 오늘의 일정 — 고른 캘린더 종류 ('' = 전체). 이 브라우저에 기억합니다 (2026-10-19)
+        let todayCalFilter = (() => { try { return kobStorage.getItem('dashTodayCal') || ''; } catch (e) { return ''; } })();
+        function setTodayCalFilter(v) {
+            todayCalFilter = v || '';
+            try { kobStorage.setItem('dashTodayCal', todayCalFilter); } catch (e) { /* 저장 못 해도 화면은 바뀝니다 */ }
+            renderTodaySchedule(currentUserName);
+        }
         // 마이 대시보드 - 오늘의 일정 (일정 캘린더 데이터 연동)
         function renderTodaySchedule(userName) {
             const el = document.getElementById('personal-today-schedule-list');
@@ -12223,12 +12234,24 @@ const QUOTE_TEMPLATES = [
                 .filter(s => s.date === today && (scheduleCalendar(s).share === 'all' || seesAllDepts || (s.dept || 'sales') === currentUserDept))
                 .sort(compareScheduleTime);
 
-            if (todays.length === 0) {
-                el.innerHTML = '<p class="text-sm text-gray-500 text-center mt-4">오늘 예정된 일정이 없습니다.</p>';
+            // 캘린더 종류 드롭다운 (2026-10-19) — 종류마다 오늘 일정 수를 함께 보여 줍니다
+            const calOf = s => scheduleCalendar(s).id;
+            if (todayCalFilter && !CALENDARS.some(c => c.id === todayCalFilter)) todayCalFilter = '';
+            const sel = document.getElementById('today-cal-filter');
+            if (sel) {
+                sel.innerHTML = `<option value="">전체 캘린더 (${todays.length})</option>`
+                    + CALENDARS.map(c => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.short)} (${todays.filter(s => calOf(s) === c.id).length})</option>`).join('');
+                sel.value = todayCalFilter;
+            }
+            const shown = todayCalFilter ? todays.filter(s => calOf(s) === todayCalFilter) : todays;
+
+            if (shown.length === 0) {
+                const c = CALENDARS.find(x => x.id === todayCalFilter);
+                el.innerHTML = `<p class="text-sm text-gray-500 text-center mt-4">${c ? `오늘 ${escapeHtml(c.short)} 일정이 없습니다.` : '오늘 예정된 일정이 없습니다.'}</p>`;
                 return;
             }
 
-            el.innerHTML = todays.map(s => {
+            el.innerHTML = shown.map(s => {
                 // 아이콘·라벨은 해당 일정이 속한 부서의 '구분' 설정을 따른다 (영업 기준 고정 아님)
                 const sDept = s.dept || 'sales';
                 const sType = getScheduleType(sDept, s.type);
