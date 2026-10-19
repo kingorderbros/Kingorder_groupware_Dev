@@ -4471,10 +4471,10 @@
                 </div>
                 <!-- 타부서 발행 시: 수신 담당자(개인) 지정 -->
                 <div id="task-assignee-user-wrap" class="mb-4 hidden">
-                    <label class="block text-sm font-medium text-gray-700 mb-1">수신 담당자 <span class="text-gray-400 text-xs">(선택, 미지정 시 부서 전체)</span></label>
-                    <select id="task-assignee-user" class="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500">
-                        <option value="">부서 전체 (담당자 미지정)</option>
-                    </select>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">수신 담당자 <span class="text-gray-400 text-xs">(여러 명 선택 가능, 선택하지 않으면 부서 전체)</span></label>
+                    <!-- 복수 선택 (2026-10-19) — 고른 사람마다 같은 요청이 한 건씩 발행되어 한 묶음으로 연결됩니다 -->
+                    <div id="task-assignee-users" class="bg-white border border-gray-300 rounded max-h-44 overflow-y-auto"></div>
+                    <p id="task-assignee-count" class="text-xs text-gray-500 mt-1">선택하지 않으면 부서 전체에 발행됩니다.</p>
                 </div>
                 <!-- 업무지시 전용: 완료기한(지시자 지정) + 지시 대상 복수 선택 -->
                 <div id="task-directive-wrap" class="mb-4 hidden border border-purple-200 bg-purple-50 rounded p-3 space-y-3">
@@ -14247,6 +14247,16 @@ const QUOTE_TEMPLATES = [
             onDirectiveTargetChange();
         }
 
+        // 협업 요청 수신 담당자 (복수 · 2026-10-19)
+        function selectedCollabAssignees() {
+            return Array.from(document.querySelectorAll('#task-assignee-users .collab-assignee:checked')).map(el => el.value);
+        }
+        function onCollabAssigneeChange() {
+            const n = selectedCollabAssignees().length;
+            const label = document.getElementById('task-assignee-count');
+            if (label) label.textContent = n ? `선택된 담당자 ${n}명` + (n > 1 ? ' · 같은 요청이 각각 발행되어 한 묶음으로 연결됩니다' : '') : '선택하지 않으면 부서 전체에 발행됩니다.';
+        }
+
         function selectedDirectiveTargets() {
             return Array.from(document.querySelectorAll('#task-directive-targets .directive-target:checked')).map(el => el.value);
         }
@@ -14274,14 +14284,15 @@ const QUOTE_TEMPLATES = [
             document.getElementById('task-status-wrap').classList.toggle('hidden', targetDept !== 'none');
             // 수신 담당자(개인) 지정: 타부서 발행일 때만 노출하고 해당 부서 구성원으로 채움
             const auWrap = document.getElementById('task-assignee-user-wrap');
-            const auSelect = document.getElementById('task-assignee-user');
+            const auBox = document.getElementById('task-assignee-users');
             if (targetDept === 'none') {
                 auWrap.classList.add('hidden');
             } else {
                 auWrap.classList.remove('hidden');
                 const members = activeUsers().filter(u => u.dept === targetDept);
-                auSelect.innerHTML = '<option value="">부서 전체 (담당자 미지정)</option>' +
-                    members.map(u => `<option value="${escapeHtml(u.name)}">${escapeHtml(u.name)} · ${escapeHtml(u.rank || '')}</option>`).join('');
+                // 일정 참석자 · 업무지시와 같은 계층형 체크 목록 (2026-10-19 복수 선택)
+                auBox.innerHTML = peopleCheckTreeHtml(members, 'collab-assignee', [], { onchange: 'onCollabAssigneeChange()', empty: '이 부서에 등록된 구성원이 없습니다.' });
+                onCollabAssigneeChange();
             }
             // 첨부자료는 협업 요청(타부서·우리 팀 발행)에만 붙습니다. 자체 진행 업무는 첨부 저장소가 없습니다.
             const fileWrap = document.getElementById('task-file-wrap');
@@ -14404,36 +14415,46 @@ const QUOTE_TEMPLATES = [
                     }
                     description = (description ? description + '\n\n' : '') + '[기타 상세내용] ' + etcDetail;
                 }
-                collabRequests.push({
-                    id: 'collab_' + collabIdCounter++,
-                    type: type,
-                    title,
-                    description,
-                    assignee,
-                    assigneeUser: document.getElementById('task-assignee-user').value || '',
-                    sourceDept: dept,
-                    targetDept: targetDept,
-                    status: 'pending', // pending, accepted, rejected, hold
-                    date: '',
-                    memo: '',
-                    reason: '',
-                    ageDays: 0,
-                    requestFiles: takeCollabRequestFiles(1)[0]
-                });
-                // 받는 쪽에 알립니다 (2026-09-17). 지금까지는 업무지시(directive)만 알림을 보내고
-                // 일반 협업 요청은 상대가 협업업무센터를 열어 봐야 알 수 있었습니다.
-                const newReq = collabRequests[collabRequests.length - 1];
-                pushNotification({
-                    id: 'cnoti_' + collabNotiIdCounter++,
-                    type: 'collab-requested',
-                    ticketId: newReq.id,
-                    title: newReq.title,
-                    toUser: newReq.assigneeUser || '',
-                    toDept: newReq.targetDept,
-                    detail: `${deptName(dept)} ${assignee || ''} 님이 보낸 협업 요청입니다.`.replace(/\s+/g, ' ').trim(),
-                    date: ymd(new Date())
+                // 수신 담당자 복수 선택 (2026-10-19) — 고른 사람마다 한 건씩, 같은 묶음(collabGroupId)으로 발행합니다.
+                // 아무도 고르지 않으면 부서 전체 앞으로 한 건입니다.
+                const whoList = selectedCollabAssignees();
+                const targetsList = whoList.length ? whoList : [''];
+                const groupId = targetsList.length > 1 ? 'cgrp_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6) : '';
+                const reqFiles = takeCollabRequestFiles(targetsList.length);   // 사람마다 첨부를 따로 (열람 표시가 사람별로 남도록)
+                targetsList.forEach((who, i) => {
+                    const newReq = {
+                        id: 'collab_' + collabIdCounter++,
+                        type: type,
+                        title,
+                        description,
+                        assignee,
+                        assigneeUser: who,
+                        sourceDept: dept,
+                        targetDept: targetDept,
+                        status: 'pending', // pending, accepted, rejected, hold
+                        date: '',
+                        memo: '',
+                        reason: '',
+                        ageDays: 0,
+                        requestFiles: reqFiles[i] || []
+                    };
+                    if (groupId) newReq.collabGroupId = groupId;
+                    collabRequests.push(newReq);
+                    // 받는 쪽에 알립니다 (2026-09-17). 지금까지는 업무지시(directive)만 알림을 보내고
+                    // 일반 협업 요청은 상대가 협업업무센터를 열어 봐야 알 수 있었습니다.
+                    pushNotification({
+                        id: 'cnoti_' + collabNotiIdCounter++,
+                        type: 'collab-requested',
+                        ticketId: newReq.id,
+                        title: newReq.title,
+                        toUser: newReq.assigneeUser || '',
+                        toDept: newReq.targetDept,
+                        detail: `${deptName(dept)} ${assignee || ''} 님이 보낸 협업 요청입니다.`.replace(/\s+/g, ' ').trim(),
+                        date: ymd(new Date())
+                    });
                 });
                 renderCollabs();
+                if (whoList.length > 1) alert(`협업 요청이 ${whoList.length}명에게 각각 발행되었습니다.\n담당자: ${whoList.join(', ')}`);
             }
             closeTaskModal();
         }
@@ -16249,6 +16270,11 @@ const QUOTE_TEMPLATES = [
                 ${row('구분', collabRoute(req))}
                 ${row(dir ? '지시자' : '요청자', escapeHtml(req.assignee || '-'))}
                 ${row(dir ? '지시받은 사람' : '수신 담당자', req.assigneeUser ? escapeHtml(req.assigneeUser) : '<span class="text-gray-400">부서 전체</span>')}
+                ${(() => {   // 여러 명에게 함께 보낸 협업 요청 (2026-10-19)
+                    if (dir || !req.collabGroupId) return '';
+                    const g = collabRequests.filter(r => r.collabGroupId === req.collabGroupId);
+                    return g.length > 1 ? row('함께 받은 사람', `${g.length}명: ${g.map(r => `${escapeHtml(r.assigneeUser || '미지정')} ${collabStatusPill(r.status)}`).join(', ')}`) : '';
+                })()}
             </div>`;
 
             // 업무지시 전용: 완료기한 · D-day · 진척률 · 진척 이력
