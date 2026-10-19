@@ -14289,7 +14289,7 @@ const QUOTE_TEMPLATES = [
                 auWrap.classList.add('hidden');
             } else {
                 auWrap.classList.remove('hidden');
-                const members = activeUsers().filter(u => u.dept === targetDept);
+                const members = pickableUsers().filter(u => u.dept === targetDept);
                 // 일정 참석자 · 업무지시와 같은 계층형 체크 목록 (2026-10-19 복수 선택)
                 auBox.innerHTML = peopleCheckTreeHtml(members, 'collab-assignee', [], { onchange: 'onCollabAssigneeChange()', empty: '이 부서에 등록된 구성원이 없습니다.' });
                 onCollabAssigneeChange();
@@ -15655,7 +15655,7 @@ const QUOTE_TEMPLATES = [
         function directiveTargetCandidates(dept, issuerName, issuerLevel) {
             const lv = issuerLevel || currentUserLevel;
             const myRank = levelSeniority(lv);      // 직급 서열 (2026-09-21) — 같은 등급이라도 목록에서 위인 직급이 높습니다
-            return activeUsers().filter(u => u.dept === dept
+            return pickableUsers().filter(u => u.dept === dept
                 && u.name !== issuerName
                 && levelSeniority(u.level) < myRank);
         }
@@ -16495,7 +16495,7 @@ const QUOTE_TEMPLATES = [
                 `${collabRoute(req)} · ${req.assigneeUser ? escapeHtml(req.assigneeUser) : '<span class="text-gray-400">부서 전체</span>'} · ${collabStatusPill(req.status)}`;
 
             // 팀원 후보: 같은 수신 부서 구성원 중 현재 담당자 제외
-            const mates = activeUsers().filter(u => u.dept === req.targetDept && u.name !== req.assigneeUser);
+            const mates = pickableUsers().filter(u => u.dept === req.targetDept && u.name !== req.assigneeUser);
             const teamSel = document.getElementById('transfer-team-user');
             teamSel.innerHTML = mates.length
                 ? mates.map(u => `<option value="${escapeHtml(u.name)}">${escapeHtml(u.name)} · ${escapeHtml(u.rank || '')}</option>`).join('')
@@ -16533,7 +16533,7 @@ const QUOTE_TEMPLATES = [
         function onCollabTransferDeptChange() {
             const dept = document.getElementById('transfer-dept').value;
             const sel = document.getElementById('transfer-dept-user');
-            const members = activeUsers().filter(u => u.dept === dept);
+            const members = pickableUsers().filter(u => u.dept === dept);
             sel.innerHTML = '<option value="">부서 전체 (담당자 미지정)</option>' +
                 members.map(u => `<option value="${escapeHtml(u.name)}">${escapeHtml(u.name)} · ${escapeHtml(u.rank || '')}</option>`).join('');
         }
@@ -18638,7 +18638,7 @@ const QUOTE_TEMPLATES = [
 
         // 초대 가능한 사람: 등록된 사용자 중 본인(주최자) 제외
         function inviteCandidates() {
-            return activeUsers().filter(u => u.name !== currentUserName);
+            return pickableUsers().filter(u => u.name !== currentUserName);
         }
 
         // ---- 계층형 고르기 (UAT 2026-10-08): 회사 전체 › 본부 › 팀 › 팀원 ----
@@ -20529,7 +20529,7 @@ const QUOTE_TEMPLATES = [
 
         // ---------- 프로젝트 등록/수정 ----------
         function fillUserSelect(selectEl, dept, selected) {
-            const members = activeUsers().filter(u => !dept || u.dept === dept);
+            const members = pickableUsers().filter(u => !dept || u.dept === dept);
             // 지금 값이 퇴사자면 값이 사라지지 않게 목록에 함께 둡니다 (2026-10-19)
             if (selected && !members.some(u => u.name === selected)) { const old = localUsers.find(u => u.name === selected); if (old) members.unshift(old); }
             selectEl.innerHTML = members.map(u => `<option value="${escapeHtml(u.name)}">${escapeHtml(u.name)} · ${escapeHtml(u.rank || '')}</option>`).join('');
@@ -39217,6 +39217,8 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
         // 조직도 · 담당자 선택 목록에서는 빼고 로그인을 막습니다.
         function isResigned(u) { return !!u && u.resigned === true; }
         function activeUsers() { return (typeof localUsers !== 'undefined' ? localUsers : []).filter(u => !isResigned(u)); }
+        // 업무를 맡길 수 있는 사람 — 퇴사자 · 휴직자 제외 (2026-10-19). 담당자 · 수신자 · 지시 대상 · 참석자 고르기에 씁니다.
+        function pickableUsers() { return activeUsers().filter(u => !isOnLeave(u)); }
         function orgResignedChip(u) {
             return isResigned(u) ? `<span class="ml-1 px-1.5 py-0.5 text-[10px] rounded font-semibold bg-red-100 text-red-700 align-middle whitespace-nowrap" title="퇴사 처리된 구성원입니다"><i class="fas fa-user-slash mr-0.5"></i>퇴사${u.resignedAt ? ' ' + escapeHtml(u.resignedAt) : ''}</span>` : '';
         }
@@ -46723,7 +46725,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
         };
 
         // 요청 수신 대상으로 고를 수 있는 영업본부 담당자
-        function payDocSalesStaff() { return activeUsers().filter(u => u.dept === 'sales').map(u => u.name); }
+        function payDocSalesStaff() { return pickableUsers().filter(u => u.dept === 'sales').map(u => u.name); }
 
         // ---------- 보완서류 요청 데이터 (DEV환경) ----------
         // 항목의 파일 관련 필드
@@ -48161,10 +48163,10 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
         // ---------- 사람 고르기 ----------
         // 한 명 고르기 (Follow-up 담당자) — 본부별로 묶어 보여 줍니다.
         function personOptionsHtml(selected, depts) {
-            const list = orgMembers().filter(u => !depts || depts.indexOf(u.dept) > -1);
+            const list = orgMembers().filter(u => (!depts || depts.indexOf(u.dept) > -1) && !isOnLeave(u));   // 휴직자 제외 (2026-10-19)
             const byDept = {};
             list.forEach(u => { (byDept[u.dept] = byDept[u.dept] || []).push(u); });
-            // 지금 담긴 사람이 조직도에 없으면(퇴사·이름 변경) 값이 조용히 바뀌지 않게 맨 앞에 붙입니다
+            // 지금 담긴 사람이 목록에 없으면(퇴사 · 휴직 · 이름 변경) 값이 조용히 바뀌지 않게 맨 앞에 붙입니다
             const known = list.some(u => u.name === selected);
             const extra = (selected && !known) ? `<option value="${escapeHtml(selected)}" selected>${escapeHtml(selected)} (현재 값)</option>` : '';
             return extra + orgDeptIds(false).filter(d => byDept[d]).map(d => `
@@ -48175,7 +48177,9 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
         }
         // 여러 명 고르기 (참석자 · 보고 대상) — 회사 전체 › 본부 › 팀 › 직원 계층형 (2026-10-08 · 일정 참석자 초대와 같은 모양)
         function personChecksHtml(cls, selected, depts) {
-            const list = orgMembers().filter(u => !depts || depts.indexOf(u.dept) > -1);
+            // 휴직자는 뺍니다 — 이미 골라 둔 사람은 저장할 때 빠지지 않게 남겨 둡니다 (2026-10-19)
+            const keep = new Set(selected || []);
+            const list = orgMembers().filter(u => (!depts || depts.indexOf(u.dept) > -1) && (!isOnLeave(u) || keep.has(u.name)));
             return peopleCheckTreeHtml(list, cls, selected);
         }
 
