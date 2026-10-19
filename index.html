@@ -19062,7 +19062,8 @@ const QUOTE_TEMPLATES = [
             id = scheduleMasterId(id);
             const schedule = schedules.find(s => s.id === id);
             if (!schedule) return;
-            if (!adminDeleteGate('deleteSchedule', [rawId], '일정', `${schedule.date || ''} ${schedule.title || ''}`.trim())) return;
+            // 캘린더 일정은 삭제 요청 없이 본인(등록자·관리자·일정 대리 수정 권한자)이 바로 삭제합니다 (2026-10-19)
+            if (!canEditSchedule(schedule)) { alert('등록자, 관리자, 일정 대리 수정 권한자만 삭제할 수 있습니다.'); return; }
             // 반복 일정 — 이 날만 지울지, 반복 전체를 지울지 고릅니다 (2026-10-12)
             if (isRecurring(schedule)) {
                 const day = occDate || schedule.date;
