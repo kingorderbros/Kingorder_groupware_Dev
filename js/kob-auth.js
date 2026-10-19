@@ -173,7 +173,8 @@
                 throw new Error(error.message);
             }
         },
-        rename: (oldEmail, newEmail, name) => api('/api/auth/users', { email: oldEmail, newEmail, name }, 'PATCH'),
+        // active — 퇴사(false) · 복직(true) 때만 넘깁니다. 넘기지 않으면 로그인 가능 여부는 그대로 (2026-10-19)
+        rename: (oldEmail, newEmail, name, active) => api('/api/auth/users', Object.assign({ email: oldEmail, newEmail, name }, typeof active === 'boolean' ? { active } : {}), 'PATCH'),
         remove: (email) => api('/api/auth/users', { email }, 'DELETE'),
         // 이 기기만 로그아웃합니다(scope local) — 기본값(global)은 폰 · 다른 PC 의 로그인까지 모두 끊습니다 (2026-09-28 검토)
         async signOut() {

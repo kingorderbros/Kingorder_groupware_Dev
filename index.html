@@ -8029,6 +8029,18 @@
                             </div>
                             <div>
                                 <label class="inline-flex items-start gap-2 text-sm text-gray-700 cursor-pointer">
+                                    <input type="checkbox" id="org-edit-resigned" onchange="onOrgEditResignedChange()" class="w-4 h-4 mt-0.5 text-red-600 border-gray-300 rounded focus:ring-red-500">
+                                    <span><b class="text-red-700">퇴사</b>
+                                        <span class="block text-xs text-gray-400 mt-0.5">조직도와 담당자 선택 목록에서 빠지고 로그인이 중지됩니다. 이 사람이 작성 · 담당한 자료는 삭제되지 않고 그대로 조회됩니다. 선택을 해제하면 복직 처리됩니다.</span>
+                                    </span>
+                                </label>
+                                <div id="org-edit-resigned-at-wrap" class="hidden mt-2 ml-6">
+                                    <label class="block text-xs font-medium text-gray-600 mb-1">퇴사일</label>
+                                    <input type="date" id="org-edit-resigned-at" class="p-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-red-500" />
+                                </div>
+                            </div>
+                            <div>
+                                <label class="inline-flex items-start gap-2 text-sm text-gray-700 cursor-pointer">
                                     <input type="checkbox" id="org-edit-hide-org" class="w-4 h-4 mt-0.5 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500">
                                     <span><b>조직도에 표시하지 않음</b>
                                         <span class="block text-xs text-gray-400 mt-0.5">계정만 생성하고 조직도에는 표시하지 않습니다. 사용자 목록, 담당자 선택, 참석자 선택에는 표시되며 로그인도 가능합니다.</span>
@@ -11206,6 +11218,7 @@ const QUOTE_TEMPLATES = [
                 if (found.error) { showLoginMsg(found.error); return; }
                 user = found.user;
                 if (!user) { showLoginMsg('등록되지 않은 계정입니다. 관리자에게 계정 발급을 요청해 주세요.'); return; }
+                if (isResigned(user)) { showLoginMsg('퇴사 처리된 계정입니다. 로그인할 수 없습니다.'); return; }
                 email = user.email;
             }
             if (!typed) { showLoginMsg('아이디를 입력해 주세요.'); return; }
@@ -11463,6 +11476,11 @@ const QUOTE_TEMPLATES = [
                 showLoginMsg('이 계정은 직원 목록에 없습니다. 관리자에게 문의해 주세요.');
                 return;
             }
+            if (isResigned(user)) {                       // 퇴사 처리된 계정 (2026-10-19)
+                await kobAuth.signOut();
+                showLoginMsg('퇴사 처리된 계정입니다. 로그인할 수 없습니다.');
+                return;
+            }
             if (sess.mustChange) {
                 openPwChange({ force: true, title: '새 비밀번호를 설정해 주세요', desc: `${user.name} 님, 임시 비밀번호로 처음 로그인하셨습니다. 새 비밀번호를 설정해야 그룹웨어를 사용할 수 있습니다.`,
                     onDone: () => { alert('비밀번호가 변경되었습니다. 다음부터 새 비밀번호로 로그인해 주세요.'); enterApp(user); } });
@@ -11654,7 +11672,7 @@ const QUOTE_TEMPLATES = [
         // 눈에 보이는 사람 (조직도에 숨긴 사람 · 관리자 계정 빼고)
         function presencePeople() {
             return (typeof localUsers !== 'undefined' ? localUsers : [])
-                .filter(u => u && u.id && u.hideInOrg !== true && !(typeof ORG_HIDDEN_DEPTS !== 'undefined' && ORG_HIDDEN_DEPTS.includes(u.dept)));
+                .filter(u => u && u.id && u.hideInOrg !== true && u.resigned !== true && !(typeof ORG_HIDDEN_DEPTS !== 'undefined' && ORG_HIDDEN_DEPTS.includes(u.dept)));
         }
         // 점 · 숫자 · 목록 · 표 칸을 그 자리에서 고칩니다 (화면 전체를 다시 그리지 않음)
         function renderPresenceUi() {
@@ -14013,7 +14031,7 @@ const QUOTE_TEMPLATES = [
             if (!tbody) return;
             loadAuthLogins();          // 관리자 — 서버의 로그인 기록을 한 번 받아 둡니다 (2026-09-29)
             const groupName = id => (permissionGroups.find(g => g.id === id) || {}).name || '미지정';
-            tbody.innerHTML = localUsers.map(user => {
+            tbody.innerHTML = activeUsers().concat(localUsers.filter(isResigned)).map(user => {   // 퇴사자는 맨 아래 (2026-10-19)
                 const st = orgDeptStyle(user.dept);
                 const lvl = user.level || 'manager';
                 const team = String(user.team || '').trim();
@@ -14021,7 +14039,7 @@ const QUOTE_TEMPLATES = [
                 return `
                     <tr class="border-b border-gray-100 hover:bg-gray-50 cursor-pointer" onclick="openOrgEdit('${escapeHtml(user.id)}')">
                         <td class="p-4 font-medium whitespace-nowrap">
-                            <div class="flex items-center gap-2">${orgAvatarHtml(user)}<span>${escapeHtml(user.name)}</span>${orgLeaveChip(user)}${user.hideInOrg === true ? '<span class="px-1.5 py-0.5 bg-gray-200 text-gray-600 rounded text-[11px] whitespace-nowrap" title="조직도에 표시되지 않는 사용자입니다"><i class="fas fa-eye-slash mr-0.5"></i>조직도 제외</span>' : ''}</div>
+                            <div class="flex items-center gap-2">${orgAvatarHtml(user)}<span>${escapeHtml(user.name)}</span>${orgLeaveChip(user)}${orgResignedChip(user)}${user.hideInOrg === true ? '<span class="px-1.5 py-0.5 bg-gray-200 text-gray-600 rounded text-[11px] whitespace-nowrap" title="조직도에 표시되지 않는 사용자입니다"><i class="fas fa-eye-slash mr-0.5"></i>조직도 제외</span>' : ''}</div>
                         </td>
                         <td class="p-4 whitespace-nowrap"><span class="px-2 py-1 ${st.chip} rounded-full text-xs">${escapeHtml(orgDeptName(user.dept))}</span></td>
                         <td class="p-4 bg-rose-50/30 ${team ? '' : 'text-gray-300'}">${team ? escapeHtml(team) : '미지정'}</td>
@@ -14238,7 +14256,7 @@ const QUOTE_TEMPLATES = [
                 auWrap.classList.add('hidden');
             } else {
                 auWrap.classList.remove('hidden');
-                const members = localUsers.filter(u => u.dept === targetDept);
+                const members = activeUsers().filter(u => u.dept === targetDept);
                 auSelect.innerHTML = '<option value="">부서 전체 (담당자 미지정)</option>' +
                     members.map(u => `<option value="${escapeHtml(u.name)}">${escapeHtml(u.name)} · ${escapeHtml(u.rank || '')}</option>`).join('');
             }
@@ -15593,7 +15611,7 @@ const QUOTE_TEMPLATES = [
         function directiveTargetCandidates(dept, issuerName, issuerLevel) {
             const lv = issuerLevel || currentUserLevel;
             const myRank = levelSeniority(lv);      // 직급 서열 (2026-09-21) — 같은 등급이라도 목록에서 위인 직급이 높습니다
-            return localUsers.filter(u => u.dept === dept
+            return activeUsers().filter(u => u.dept === dept
                 && u.name !== issuerName
                 && levelSeniority(u.level) < myRank);
         }
@@ -16428,7 +16446,7 @@ const QUOTE_TEMPLATES = [
                 `${collabRoute(req)} · ${req.assigneeUser ? escapeHtml(req.assigneeUser) : '<span class="text-gray-400">부서 전체</span>'} · ${collabStatusPill(req.status)}`;
 
             // 팀원 후보: 같은 수신 부서 구성원 중 현재 담당자 제외
-            const mates = localUsers.filter(u => u.dept === req.targetDept && u.name !== req.assigneeUser);
+            const mates = activeUsers().filter(u => u.dept === req.targetDept && u.name !== req.assigneeUser);
             const teamSel = document.getElementById('transfer-team-user');
             teamSel.innerHTML = mates.length
                 ? mates.map(u => `<option value="${escapeHtml(u.name)}">${escapeHtml(u.name)} · ${escapeHtml(u.rank || '')}</option>`).join('')
@@ -16466,7 +16484,7 @@ const QUOTE_TEMPLATES = [
         function onCollabTransferDeptChange() {
             const dept = document.getElementById('transfer-dept').value;
             const sel = document.getElementById('transfer-dept-user');
-            const members = localUsers.filter(u => u.dept === dept);
+            const members = activeUsers().filter(u => u.dept === dept);
             sel.innerHTML = '<option value="">부서 전체 (담당자 미지정)</option>' +
                 members.map(u => `<option value="${escapeHtml(u.name)}">${escapeHtml(u.name)} · ${escapeHtml(u.rank || '')}</option>`).join('');
         }
@@ -16686,7 +16704,7 @@ const QUOTE_TEMPLATES = [
 
             // 예외 추가 드롭다운(아직 예외로 등록되지 않은 사용자)
             const addSel = document.getElementById('collab-perm-user-add');
-            const candidates = localUsers.filter(u => !collabUserOverrides[u.id]);
+            const candidates = activeUsers().filter(u => !collabUserOverrides[u.id]);
             addSel.innerHTML = '<option value="">＋ 예외 사용자 추가…</option>' +
                 candidates.map(u => `<option value="${u.id}">${escapeHtml(u.name)} (${deptNames[u.dept] || u.dept})</option>`).join('');
             addSel.onchange = function () {
@@ -16769,7 +16787,7 @@ const QUOTE_TEMPLATES = [
             }).join('') : `<tr><td colspan="4" class="p-4 text-center text-gray-400 text-sm">예외 사용자가 없습니다. 우측 상단에서 추가해 주세요.</td></tr>`;
 
             const addSel = document.getElementById('calendar-perm-user-add');
-            const candidates = localUsers.filter(u => !calendarUserOverrides[u.id]);
+            const candidates = activeUsers().filter(u => !calendarUserOverrides[u.id]);
             addSel.innerHTML = '<option value="">＋ 예외 사용자 추가…</option>' +
                 candidates.map(u => `<option value="${u.id}">${escapeHtml(u.name)} (${deptNames[u.dept] || u.dept})</option>`).join('');
             addSel.onchange = function () {
@@ -16798,7 +16816,7 @@ const QUOTE_TEMPLATES = [
                 : '<tr><td colspan="4" class="p-4 text-center text-gray-400 text-sm">지정된 사용자가 없습니다. 우측 상단에서 추가해 주세요.</td></tr>';
             const add = document.getElementById('calendar-editor-add');
             if (add) {
-                const cands = localUsers.filter(u => !calendarEditors.some(e => e.uid === u.id) && !isAdminAccount(u) && u.dept !== 'vendor');
+                const cands = activeUsers().filter(u => !calendarEditors.some(e => e.uid === u.id) && !isAdminAccount(u) && u.dept !== 'vendor');
                 add.innerHTML = '<option value="">＋ 대리 수정자 추가…</option>'
                     + cands.map(u => `<option value="${escapeHtml(u.id)}">${escapeHtml(u.name)} (${escapeHtml(deptNames[u.dept] || u.dept || '')})</option>`).join('');
                 add.onchange = function () { if (this.value) addCalendarEditor(this.value); };
@@ -18571,7 +18589,7 @@ const QUOTE_TEMPLATES = [
 
         // 초대 가능한 사람: 등록된 사용자 중 본인(주최자) 제외
         function inviteCandidates() {
-            return localUsers.filter(u => u.name !== currentUserName);
+            return activeUsers().filter(u => u.name !== currentUserName);
         }
 
         // ---- 계층형 고르기 (UAT 2026-10-08): 회사 전체 › 본부 › 팀 › 팀원 ----
@@ -20460,7 +20478,9 @@ const QUOTE_TEMPLATES = [
 
         // ---------- 프로젝트 등록/수정 ----------
         function fillUserSelect(selectEl, dept, selected) {
-            const members = localUsers.filter(u => !dept || u.dept === dept);
+            const members = activeUsers().filter(u => !dept || u.dept === dept);
+            // 지금 값이 퇴사자면 값이 사라지지 않게 목록에 함께 둡니다 (2026-10-19)
+            if (selected && !members.some(u => u.name === selected)) { const old = localUsers.find(u => u.name === selected); if (old) members.unshift(old); }
             selectEl.innerHTML = members.map(u => `<option value="${escapeHtml(u.name)}">${escapeHtml(u.name)} · ${escapeHtml(u.rank || '')}</option>`).join('');
             if (selected) selectEl.value = selected;
         }
@@ -39128,7 +39148,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
         function orgAccounts() { return (typeof localUsers !== 'undefined' ? localUsers : []); }
         // 조직도에 그릴 사람들 — 사외 계정은 뺍니다
         function orgMembers() {
-            return orgAccounts().filter(u => ORG_HIDDEN_DEPTS.indexOf(u.dept) < 0);
+            return orgAccounts().filter(u => ORG_HIDDEN_DEPTS.indexOf(u.dept) < 0 && !isResigned(u));   // 퇴사자 제외 (2026-10-19)
         }
         // 그룹웨어 관리자(권한 그룹 '관리자 그룹' 또는 직책 '관리자')는 조직도에 그리지 않습니다 (2026-09-21).
         // 관리자는 실제 직책과 겸직인 계정이라, 조직도에는 실제 직책의 계정만 나옵니다.
@@ -39140,6 +39160,20 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
         function isOrgHidden(u) { return !!u && u.hideInOrg === true; }
         // 휴직중 표시 (2026-10-19) — 계정 · 소속 · 권한은 그대로 두고 이름 옆에 표시만 붙입니다
         function isOnLeave(u) { return !!u && u.onLeave === true; }
+        // 퇴사 (2026-10-19) — 직원 목록(localUsers)에는 남겨 이름 · 작성 자료가 그대로 보이게 하고,
+        // 조직도 · 담당자 선택 목록에서는 빼고 로그인을 막습니다.
+        function isResigned(u) { return !!u && u.resigned === true; }
+        function activeUsers() { return (typeof localUsers !== 'undefined' ? localUsers : []).filter(u => !isResigned(u)); }
+        function orgResignedChip(u) {
+            return isResigned(u) ? `<span class="ml-1 px-1.5 py-0.5 text-[10px] rounded font-semibold bg-red-100 text-red-700 align-middle whitespace-nowrap" title="퇴사 처리된 구성원입니다"><i class="fas fa-user-slash mr-0.5"></i>퇴사${u.resignedAt ? ' ' + escapeHtml(u.resignedAt) : ''}</span>` : '';
+        }
+        function onOrgEditResignedChange() {
+            const on = !!((document.getElementById('org-edit-resigned') || {}).checked);
+            const wrap = document.getElementById('org-edit-resigned-at-wrap');
+            if (wrap) wrap.classList.toggle('hidden', !on);
+            const d = document.getElementById('org-edit-resigned-at');
+            if (on && d && !d.value) d.value = ymd(new Date());
+        }
         function orgLeaveChip(u) {
             return isOnLeave(u) ? '<span class="ml-1 px-1.5 py-0.5 text-[10px] rounded font-semibold bg-gray-200 text-gray-600 align-middle whitespace-nowrap" title="휴직중인 구성원입니다"><i class="fas fa-user-clock mr-0.5"></i>휴직중</span>' : '';
         }
@@ -39533,7 +39567,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                 av.innerHTML = escapeHtml(String(u.name || '?').charAt(0));
             }
             document.getElementById('org-member-name').innerHTML =
-                escapeHtml(`${u.name || '-'} ${u.rank || ''}`.trim()) + orgLeaveChip(u) + orgBirthdayChip(u);
+                escapeHtml(`${u.name || '-'} ${u.rank || ''}`.trim()) + orgLeaveChip(u) + orgResignedChip(u) + orgBirthdayChip(u);
             const team = String(u.team || '').trim();
             document.getElementById('org-member-sub').innerHTML =
                 `<span class="px-1.5 py-0.5 text-[10px] rounded font-semibold ${s.chip}">${escapeHtml(orgDeptName(u.dept))}</span>`
@@ -40147,6 +40181,46 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                             }</tbody>
                         </table>
                     </div>
+                </div>
+                ${orgResignedSectionHtml()}`;
+        }
+        // 퇴사자 목록 (2026-10-19) — 조직도에는 없지만 여기서 보고, 눌러서 정보 확인 · 복직 처리를 합니다
+        function orgResignedSectionHtml() {
+            const gone = orgAccounts().filter(isResigned)
+                .sort((a, b) => String(b.resignedAt || '').localeCompare(String(a.resignedAt || '')) || String(a.name).localeCompare(String(b.name), 'ko'));
+            if (!gone.length) return '';
+            const dim = v => v ? escapeHtml(String(v)) : '<span class="text-gray-300">-</span>';
+            return `
+                <div class="bg-white rounded-lg shadow-sm border border-gray-200 mt-4">
+                    <div class="px-4 py-3 border-b border-gray-100">
+                        <h4 class="text-sm font-bold text-gray-700"><i class="fas fa-user-slash text-red-500 mr-1"></i>퇴사자 <span class="text-xs font-normal text-gray-400 ml-1">${gone.length}명</span></h4>
+                        <p class="text-xs text-gray-500 mt-0.5">조직도와 담당자 선택 목록에 표시되지 않고 로그인이 중지된 구성원입니다. 작성 · 담당한 자료는 그대로 조회됩니다. 복직하려면 구성원을 눌러 <b>퇴사</b> 선택을 해제해 주세요.</p>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left text-sm">
+                            <thead class="bg-gray-50 text-xs text-gray-500">
+                                <tr>
+                                    <th class="px-3 py-2 font-medium whitespace-nowrap">이름</th>
+                                    <th class="px-3 py-2 font-medium whitespace-nowrap">본부</th>
+                                    <th class="px-3 py-2 font-medium whitespace-nowrap">팀</th>
+                                    <th class="px-3 py-2 font-medium whitespace-nowrap">직급</th>
+                                    <th class="px-3 py-2 font-medium whitespace-nowrap">이메일</th>
+                                    <th class="px-3 py-2 font-medium whitespace-nowrap text-center">입사일</th>
+                                    <th class="px-3 py-2 font-medium whitespace-nowrap text-center">퇴사일</th>
+                                </tr>
+                            </thead>
+                            <tbody>${gone.map(u => `
+                                <tr class="border-b border-gray-50 last:border-0 hover:bg-red-50/40 cursor-pointer text-gray-600" onclick="openOrgEdit('${escapeHtml(u.id)}')">
+                                    <td class="px-3 py-2 whitespace-nowrap"><div class="flex items-center gap-2 opacity-70">${orgAvatarHtml(u)}<span class="font-medium">${escapeHtml(u.name)}</span></div></td>
+                                    <td class="px-3 py-2 whitespace-nowrap">${dim(orgDeptName(u.dept))}</td>
+                                    <td class="px-3 py-2 whitespace-nowrap">${dim(String(u.team || '').trim())}</td>
+                                    <td class="px-3 py-2 whitespace-nowrap">${dim(u.rank)}</td>
+                                    <td class="px-3 py-2 whitespace-nowrap">${dim(u.email)}</td>
+                                    <td class="px-3 py-2 whitespace-nowrap text-center">${dim(u.joinedAt)}</td>
+                                    <td class="px-3 py-2 whitespace-nowrap text-center text-red-700">${dim(u.resignedAt)}</td>
+                                </tr>`).join('')}</tbody>
+                        </table>
+                    </div>
                 </div>`;
         }
 
@@ -40243,6 +40317,10 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             if (hideChk) hideChk.checked = !!(u && u.hideInOrg === true);
             const leaveChk = document.getElementById('org-edit-on-leave');
             if (leaveChk) leaveChk.checked = !!(u && u.onLeave === true);
+            const resChk = document.getElementById('org-edit-resigned');
+            if (resChk) resChk.checked = isResigned(u);
+            set('org-edit-resigned-at', u ? (u.resignedAt || '') : '');
+            onOrgEditResignedChange();
             const bdayChk = document.getElementById('org-edit-show-birthday');
             if (bdayChk) bdayChk.checked = !(u && u.showBirthday === false);     // 기본은 표시 (2026-09-28)
             onOrgEditAdminChange();          // 관리자면 부서 · 직급 · 팀을 선택 사항으로 (2026-09-21)
@@ -40259,6 +40337,10 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             if (!rank && !admin) { alert('직급을 입력해 주세요.'); return; }
             if (v('dept') === 'admin' && !admin) { alert("'소속 없음' 은 관리자(권한 그룹 관리자 · 직책 관리자)만 선택할 수 있습니다. 부서를 선택해 주세요."); return; }
             if (!email) { alert('이메일을 입력해 주세요. 로그인 계정으로도 사용됩니다.'); return; }
+            const resignNow = !!((document.getElementById('org-edit-resigned') || {}).checked);
+            const before = orgEditId ? orgFindAccount(orgEditId) : null;
+            if (resignNow && before && String(before.email || '').toLowerCase() === String(currentUserEmail || '').toLowerCase()) { alert('현재 로그인한 본인은 퇴사 처리할 수 없습니다.'); return; }
+            if (resignNow && !isResigned(before) && !confirm(`${name} 님을 퇴사 처리합니다.\n조직도와 담당자 선택 목록에서 빠지고 로그인이 중지됩니다.\n작성 · 담당한 자료는 그대로 남습니다.\n\n계속하시겠습니까?`)) return;
             const dup = orgAccounts().find(u => u.id !== orgEditId && String(u.email || '').toLowerCase() === email.toLowerCase());
             if (dup) { alert(`이미 사용 중인 이메일입니다: ${dup.name} (${orgDeptName(dup.dept)})`); return; }
 
@@ -40279,6 +40361,8 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                 isAdmin: !!((document.getElementById('org-edit-admin') || {}).checked),   // 겸직 관리자 (2026-09-21)
                 hideInOrg: !!((document.getElementById('org-edit-hide-org') || {}).checked),   // 조직도에 안 내보내기 (2026-09-23)
                 onLeave: !!((document.getElementById('org-edit-on-leave') || {}).checked),     // 휴직중 표시 (2026-10-19)
+                resigned: !!((document.getElementById('org-edit-resigned') || {}).checked),     // 퇴사 (2026-10-19)
+                resignedAt: (document.getElementById('org-edit-resigned') || {}).checked ? (v('resigned-at') || ymd(new Date())) : '',
                 showBirthday: (document.getElementById('org-edit-show-birthday') || { checked: true }).checked   // 캘린더에 생일 표시 (2026-09-28)
             };
             let created = null, oldEmail = '';
@@ -40300,8 +40384,13 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                     .catch(e => alert(`${name} 을(를) 조직도에 등록했으나 로그인 비밀번호 생성에 실패했습니다.\n${String(e && e.message || e)}\n\n사용자 목록의 [초기화]에서 다시 생성할 수 있습니다.`));
             } else {
                 // 이메일(로그인 아이디) · 이름을 로그인 계정에도 맞춥니다 (아직 비밀번호를 발급하지 않은 계정이면 할 것이 없습니다)
-                kobAuth.rename(oldEmail || email, email, name).catch(e => console.warn('[auth] 계정 정보 동기화 실패', e));
-                alert('구성원 정보가 수정되었습니다.');
+                // 퇴사 · 복직이 바뀌었으면 로그인 계정도 함께 중지 · 재개합니다 (2026-10-19)
+                const activeChanged = isResigned(before) !== data.resigned;
+                kobAuth.rename(oldEmail || email, email, name, activeChanged ? !data.resigned : undefined)
+                    .catch(e => activeChanged
+                        ? alert(`구성원 정보는 저장되었으나 로그인 계정 ${data.resigned ? '중지' : '재개'}에 실패했습니다.\n${String(e && e.message || e)}`)
+                        : console.warn('[auth] 계정 정보 동기화 실패', e));
+                alert(activeChanged ? (data.resigned ? `${name} 님을 퇴사 처리했습니다. 조직도 관리 › 퇴사자에서 다시 볼 수 있습니다.` : `${name} 님을 복직 처리했습니다.`) : '구성원 정보가 수정되었습니다.');
             }
         }
 
@@ -46581,7 +46670,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
         };
 
         // 요청 수신 대상으로 고를 수 있는 영업본부 담당자
-        function payDocSalesStaff() { return localUsers.filter(u => u.dept === 'sales').map(u => u.name); }
+        function payDocSalesStaff() { return activeUsers().filter(u => u.dept === 'sales').map(u => u.name); }
 
         // ---------- 보완서류 요청 데이터 (DEV환경) ----------
         // 항목의 파일 관련 필드

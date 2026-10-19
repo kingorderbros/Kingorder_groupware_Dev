@@ -183,7 +183,7 @@ async function requireStaff(env, store, request) {
     if (!me) return { error: json(401, { ok: false, error: '로그인이 필요합니다. 그룹웨어 아이디로 로그인해 주세요.' }) };
     const v = await store.storeValues(['gwUsers.v1', 'gwPermissionGroups.v2']);
     const users = Array.isArray(v['gwUsers.v1']) ? v['gwUsers.v1'] : [];
-    const rec = users.find(u => str(u.email).toLowerCase() === str(me.email).toLowerCase());
+    const rec = users.find(u => str(u.email).toLowerCase() === str(me.email).toLowerCase() && u.resigned !== true);   // 퇴사자 제외 (2026-10-19)
     if (!rec) return { error: json(403, { ok: false, error: '직원 목록에 없는 계정입니다. 관리자에게 문의해 주세요.' }) };
     const admin = rec.groupId === 'admin' || rec.dept === 'admin' || rec.level === 'admin' || rec.isAdmin === true;
     const pg = v['gwPermissionGroups.v2'];
@@ -199,7 +199,7 @@ async function requirePerm(env, store, request, perms) {
     if (!me) return { error: json(401, { ok: false, error: '로그인이 필요합니다.' }) };
     const v = await store.storeValues(['gwUsers.v1', 'gwPermissionGroups.v2']);
     const users = Array.isArray(v['gwUsers.v1']) ? v['gwUsers.v1'] : [];
-    const rec = users.find(u => str(u.email).toLowerCase() === str(me.email).toLowerCase());
+    const rec = users.find(u => str(u.email).toLowerCase() === str(me.email).toLowerCase() && u.resigned !== true);   // 퇴사자 제외 (2026-10-19)
     let ok = !!rec && (rec.groupId === 'admin' || rec.dept === 'admin' || rec.level === 'admin' || rec.isAdmin === true);
     if (!ok && rec) {
         const pg = v['gwPermissionGroups.v2'];                  // 저장 모양: { groups: [...], version } (예전엔 배열)
@@ -215,7 +215,7 @@ async function requireAdmin(env, store, request) {
     const me = await authAdmin(env).whoami(request);
     if (!me) return { error: json(401, { ok: false, error: '로그인이 필요합니다.' }) };
     const users = (await store.storeValue('gwUsers.v1')) || [];
-    const rec = (Array.isArray(users) ? users : []).find(u => str(u.email).toLowerCase() === str(me.email).toLowerCase());
+    const rec = (Array.isArray(users) ? users : []).find(u => str(u.email).toLowerCase() === str(me.email).toLowerCase() && u.resigned !== true);
     const ok = rec && (rec.groupId === 'admin' || rec.dept === 'admin' || rec.level === 'admin' || rec.isAdmin === true);
     if (!ok) return { error: json(403, { ok: false, error: '관리자만 사용할 수 있는 기능입니다.' }) };
     return { me, rec, users: Array.isArray(users) ? users : [] };
@@ -238,8 +238,11 @@ function gcalNamePrefix(env) { return (str((env || {}).KOB_ENV) || 'dev') === 'p
 
 function calendarPlan(users, depts, env) {
     const pre = gcalNamePrefix(env);
-    const people = (users || []).filter(u => str(u.dept) !== 'vendor');
+    // 퇴사자는 공유하지 않고, 이미 공유돼 있으면 [구글 캘린더 준비] 때 해제합니다 (2026-10-19)
+    const people = (users || []).filter(u => str(u.dept) !== 'vendor' && u.resigned !== true);
     const everyone = people.map(googleAddrOf).filter(Boolean);
+    const keep = new Set(everyone);
+    const revoke = Array.from(new Set((users || []).filter(u => u.resigned === true).map(googleAddrOf).filter(a => a && !keep.has(a))));
     const missingGoogle = people.filter(u => !googleAddrOf(u)).map(u => ({ name: str(u.name), email: str(u.email) }));
     const wanted = [
         { key: 'cal:company', kind: 'company', label: pre + GCAL_LABELS.company, shareTo: everyone },
@@ -261,6 +264,7 @@ function calendarPlan(users, depts, env) {
             label: pre + GCAL_LABELS.personal + ' – ' + str(u.name), shareTo: [addr]
         });
     });
+    wanted.forEach(w => { w.revoke = revoke; });
     return { wanted, missingGoogle };
 }
 
@@ -920,6 +924,7 @@ export async function onRequest(context) {
                     : list.filter(u => localPart(u.email) === typed);
                 if (hits.length > 1) return json(200, { ok: false, error: `'${typed}' 로 시작하는 계정이 ${hits.length}개 있습니다. 이메일 전체를 입력해 주세요.` });
                 if (!hits.length) return json(200, { ok: false, error: '등록되지 않은 계정입니다. 관리자에게 계정 발급을 요청해 주세요.' });
+                if (hits[0].resigned === true) return json(200, { ok: false, error: '퇴사 처리된 계정입니다. 로그인할 수 없습니다.' });   // 2026-10-19
                 return json(200, { ok: true, email: str(hits[0].email).toLowerCase() });
             }
             if (path === '/api/auth/bootstrap' && method === 'POST') {
@@ -961,7 +966,7 @@ export async function onRequest(context) {
                 const me = await auth.whoami(request);
                 if (!me) return json(401, { ok: false, error: '로그인이 필요합니다.' });
                 const users = (await store.storeValue('gwUsers.v1')) || [];
-                const meRec = (Array.isArray(users) ? users : []).find(u => str(u.email).toLowerCase() === str(me.email).toLowerCase());
+                const meRec = (Array.isArray(users) ? users : []).find(u => str(u.email).toLowerCase() === str(me.email).toLowerCase() && u.resigned !== true);
                 // 관리자 그룹, 소속 없는 관리자 계정(dept 'admin'), 직책 관리자, 겸직 관리자(isAdmin) 모두 됩니다 (2026-09-21)
                 const meAdmin = meRec && (meRec.groupId === 'admin' || meRec.dept === 'admin' || meRec.level === 'admin' || meRec.isAdmin === true);
                 if (!meAdmin) return json(403, { ok: false, error: '관리자만 계정을 관리할 수 있습니다.' });
@@ -982,7 +987,13 @@ export async function onRequest(context) {
                 if (method === 'PATCH') {
                     if (!existing) return json(200, { ok: true, existed: false });   // 아직 비밀번호를 발급하지 않은 계정 — 바꿀 것이 없습니다
                     const newEmail = str(input.newEmail).toLowerCase();
-                    const patch = { user_metadata: Object.assign({}, existing.user_metadata, { name: str(input.name) }) };
+                    const patch = {};
+                    if (input.name !== undefined) patch.user_metadata = Object.assign({}, existing.user_metadata, { name: str(input.name) });
+                    // 퇴사 · 복직 (2026-10-19) — 로그인 계정을 중지(ban) · 재개합니다. 계정과 자료는 지우지 않습니다.
+                    if (typeof input.active === 'boolean') {
+                        if (!input.active && str(me.email).toLowerCase() === email) return bad('현재 로그인한 본인 계정은 중지할 수 없습니다.');
+                        patch.ban_duration = input.active ? 'none' : '876000h';
+                    }
                     if (newEmail && newEmail !== email) {
                         if (!validEmail(newEmail)) return bad('새 이메일 형식이 아닙니다.');
                         if (await auth.findByEmail(newEmail)) return bad('이미 다른 계정에서 사용 중인 이메일입니다.');
@@ -1131,7 +1142,7 @@ export async function onRequest(context) {
                 const plan = calendarPlan(who.users, depts, env);
                 const existing = new Map(((await g.calendars()) || []).map(c => [c.key, c]));
 
-                const made = [], renamed = [], shared = [], failed = [];
+                const made = [], renamed = [], shared = [], unshared = [], failed = [];
                 let used = 0, remaining = 0, next = null;
                 // 어디서부터 이어서 할지 (화면이 앞 응답의 next 를 돌려줍니다). 매번 처음부터 훑으면
                 // 이미 끝난 앞쪽 캘린더의 공유 확인에 한도를 다 써서 뒤쪽에 영영 닿지 못합니다 (2026-10-12 시험에서 확인)
@@ -1162,11 +1173,19 @@ export async function onRequest(context) {
                             renamed.push({ key: want.key, label: want.label });
                         }
                         // 공유 — 이미 공유된 사람은 건너뜁니다
-                        if (used < budget && want.shareTo.length) {
+                        if (used < budget && (want.shareTo.length || (want.revoke || []).length)) {
                             const acl = await gcal.listAcl(env, g, row.google_calendar_id);
                             used++;
                             const have = new Set(((acl && acl.items) || []).map(i => str(i.scope && i.scope.value).toLowerCase()));
-                            for (const em of want.shareTo) {
+                            // 퇴사자 공유 해제 (2026-10-19)
+                            for (const em of (want.revoke || [])) {
+                                if (!have.has(em.toLowerCase())) continue;
+                                if (used >= budget) { cut = true; break; }
+                                await gcal.unshareCalendar(env, g, row.google_calendar_id, em);
+                                used++;
+                                unshared.push({ key: want.key, email: em });
+                            }
+                            for (const em of (cut ? [] : want.shareTo)) {
                                 if (have.has(em.toLowerCase())) continue;
                                 if (used >= budget) { cut = true; break; }
                                 await gcal.shareCalendar(env, g, row.google_calendar_id, em, 'writer');
@@ -1174,7 +1193,7 @@ export async function onRequest(context) {
                                 shared.push({ key: want.key, email: em });
                             }
                             if (!cut) { await g.patchCalendar(want.key, { share_state: 'ok', last_error: null }); used++; }
-                        } else if (want.shareTo.length) {
+                        } else if (want.shareTo.length || (want.revoke || []).length) {
                             cut = true;                    // 공유 확인을 못 했습니다 — 다음에 이 캘린더부터
                         }
                     } catch (e) {
@@ -1189,7 +1208,7 @@ export async function onRequest(context) {
                     }
                     if (cut) { next = i; remaining = plan.wanted.length - i; break; }
                 }
-                return json(200, { ok: true, made, renamed, shared, failed, remaining, next, total: plan.wanted.length, missingGoogle: plan.missingGoogle, done: remaining === 0 && !failed.length });
+                return json(200, { ok: true, made, renamed, shared, unshared, failed, remaining, next, total: plan.wanted.length, missingGoogle: plan.missingGoogle, done: remaining === 0 && !failed.length });
             }
 
             // 받아오기 — 관리자가 손으로 확인할 때 씁니다
