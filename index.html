@@ -41542,7 +41542,8 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
         // [목록] 은 한 줄씩, [소속 트리] 는 본사 · 파트너사 아래에 소속 가맹점을 묶어 보여 줍니다.
         // 줄을 누르면 — 가맹점 3종은 가맹점 상세(운영 · 결제 정보까지), 나머지는 업체 기본정보 창이 열립니다.
         // 거래 조건(계약서 · 거래 품목 · PG 수수료 …)은 지금처럼 영업본부 › 거래처 관리 › 파트너사 탭에서 다룹니다.
-        let companyFilter = { q: '', kind: '', status: '', view: 'list', limit: 300 };
+        // cols — 표 칸별 거르기 (2026-10-19): name · businessNo · contact · phone (글자 포함), parent · contract · ids (목록에서 고름)
+        let companyFilter = { q: '', kind: '', status: '', view: 'list', limit: 300, cols: {} };
         const COMPANY_PAGE = 300;          // 한 번에 그리는 줄 수 — 엑셀로 수천 곳이 올라와도 화면이 굳지 않게
         function companyAccountCount(id) {
             try { return partnerAccounts.filter(a => a.partnerId === id).length; } catch (e) { return 0; }
@@ -41556,12 +41557,43 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             const norm = v => String(v || '').replace(/\s+/g, '').toLowerCase();
             return norm([c.name, c.businessNo, c.contactName, c.phone, c.address, c.note, c.memo, partnerCustTypeName(c.kind), companyParentName(c)].join(' ')).includes(q);
         }
+        // 계약 칸 값 — 거르기용 (가맹점 3종만 계약을 셉니다)
+        function companyContractKey(c, map) {
+            if (!isShopKind(c.kind)) return 'na';
+            const st = map[c.id];
+            if (!st || !st.count) return 'none';
+            if (st.hasActive) return 'active';
+            if (st.hasExpired) return 'expired';
+            return 'other';
+        }
+        const COMPANY_CONTRACT_OPTS = [['active', '활성 계약'], ['expired', '만료만'], ['other', '그 밖의 계약'], ['none', '계약 없음'], ['na', '해당 없음(가맹점 외)']];
+        function companyColMatch(c, cols, map) {
+            const norm = v => String(v || '').replace(/[\s-]/g, '').toLowerCase();
+            const has = (val, want) => !want || norm(val).includes(norm(want));
+            if (!has(companyNameOf(c), cols.name)) return false;
+            if (!has(c.businessNo, cols.businessNo)) return false;
+            if (!has(c.contactName, cols.contact)) return false;
+            if (!has(c.phone, cols.phone)) return false;
+            if (cols.parent) {
+                const pn = companyParentName(c);
+                if (cols.parent === '__none') { if (pn || !companyParentKind(c.kind)) return false; }      // 연결 안 됨
+                else if (cols.parent === '__na') { if (companyParentKind(c.kind)) return false; }          // 상위업체를 두지 않는 유형
+                else if (pn !== cols.parent) return false;
+            }
+            if (cols.contract && companyContractKey(c, map) !== cols.contract) return false;
+            if (cols.ids === 'yes' && !companyAccountCount(c.id)) return false;
+            if (cols.ids === 'no' && companyAccountCount(c.id)) return false;
+            return true;
+        }
         function companyFiltered() {
             const f = companyFilter;
             const q = String(f.q || '').replace(/\s+/g, '').toLowerCase();
+            const cols = f.cols || {};
+            const map = (cols.contract) ? getContractedCustomers() : null;
             return customers.filter(c => {
                 if (f.kind && c.kind !== f.kind) return false;
                 if (f.status && c.status !== f.status) return false;
+                if (!companyColMatch(c, cols, map)) return false;
                 return companyMatches(c, q);
             }).sort((a, b) => companyNameOf(a).localeCompare(companyNameOf(b), 'ko'));
         }
@@ -41570,7 +41602,40 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             if (field !== 'limit') companyFilter.limit = COMPANY_PAGE;
             renderCompanies();
         }
-        function resetCompanyFilter() { companyFilter = { q: '', kind: '', status: '', view: companyFilter.view, limit: COMPANY_PAGE }; renderCompanies(); }
+        function resetCompanyFilter() { companyFilter = { q: '', kind: '', status: '', view: companyFilter.view, limit: COMPANY_PAGE, cols: {} }; renderCompanies(); }
+        // 표 칸 거르기 (2026-10-19) — 글자 칸은 칠 때마다 표만 다시 그리고 커서를 그 칸에 돌려놓습니다
+        function setCompanyCol(key, value, typing) {
+            companyFilter.cols = Object.assign({}, companyFilter.cols || {}, { [key]: value || '' });
+            companyFilter.limit = COMPANY_PAGE;
+            if (!typing) { renderCompanies(); return; }
+            const el = document.activeElement, pos = el && el.selectionStart;
+            drawCompanyRows();
+            const again = document.querySelector(`[data-ccol="${key}"]`);
+            if (again) { again.focus(); try { again.setSelectionRange(pos, pos); } catch (e) { /* 무시 */ } }
+        }
+        function clearCompanyCols() { companyFilter.cols = {}; companyFilter.kind = ''; companyFilter.status = ''; companyFilter.limit = COMPANY_PAGE; renderCompanies(); }
+        function companyColFilterRowHtml() {
+            const f = companyFilter, cols = f.cols || {};
+            const inp = 'w-full min-w-[80px] px-1.5 py-1 text-xs font-normal border border-gray-300 rounded bg-white focus:outline-none focus:ring-1 focus:ring-cyan-500';
+            const on = v => v ? ' border-cyan-500 bg-cyan-50' : '';
+            const text = (key, ph) => `<input type="text" data-ccol="${key}" value="${escapeHtml(cols[key] || '')}" oninput="setCompanyCol('${key}', this.value, true)" placeholder="${ph}" class="${inp}${on(cols[key])}" />`;
+            const sel = (key, val, opts, onch) => `<select ${key ? `data-ccol="${key}"` : ''} onchange="${onch}" class="${inp}${on(val)}"><option value="">전체</option>${opts.map(([v, l]) => `<option value="${escapeHtml(v)}"${val === v ? ' selected' : ''}>${escapeHtml(l)}</option>`).join('')}</select>`;
+            // 상위업체 — 본사 · 파트너사 이름 (등록된 상위업체만)
+            const parents = Array.from(new Set(customers.filter(c => c.kind === 'hq' || c.kind === 'partner').map(c => companyNameOf(c)).filter(Boolean))).sort((a, b) => a.localeCompare(b, 'ko'));
+            const anyOn = f.kind || f.status || Object.values(cols).some(Boolean);
+            return `<tr class="bg-white border-b border-gray-200" onclick="event.stopPropagation()">
+                <th class="px-2 py-1.5">${sel('', f.kind, PARTNER_CUST_TYPES.map(o => [o.id, o.name]), "setCompanyFilter('kind', this.value)")}</th>
+                <th class="px-2 py-1.5">${text('name', '상호')}</th>
+                <th class="px-2 py-1.5">${sel('parent', cols.parent || '', [['__none', '연결 안 됨'], ['__na', '해당 없음']].concat(parents.map(n => [n, n])), "setCompanyCol('parent', this.value)")}</th>
+                <th class="px-2 py-1.5">${text('businessNo', '사업자번호')}</th>
+                <th class="px-2 py-1.5">${text('contact', '담당자')}</th>
+                <th class="px-2 py-1.5">${text('phone', '연락처')}</th>
+                <th class="px-2 py-1.5">${sel('', f.status, PARTNER_STATUS.map(o => [o.id, o.id]), "setCompanyFilter('status', this.value)")}</th>
+                <th class="px-2 py-1.5">${sel('contract', cols.contract || '', COMPANY_CONTRACT_OPTS, "setCompanyCol('contract', this.value)")}</th>
+                <th class="px-2 py-1.5">${sel('ids', cols.ids || '', [['yes', '있음'], ['no', '없음']], "setCompanyCol('ids', this.value)")}</th>
+                <th class="px-2 py-1.5 text-center">${anyOn ? `<button type="button" onclick="clearCompanyCols()" class="px-2 py-1 text-[11px] rounded border border-gray-300 text-gray-600 bg-white hover:bg-gray-50 whitespace-nowrap" title="칸별 거르기 모두 해제"><i class="fas fa-filter-circle-xmark mr-0.5"></i>해제</button>` : '<span class="text-[11px] font-normal text-gray-400"><i class="fas fa-filter"></i></span>'}</th>
+            </tr>`;
+        }
         // 예전 화면 이름으로 부르는 곳이 남아 있어 그대로 이어 줍니다
         function renderPartners() { renderCompanies(); }
 
@@ -41816,7 +41881,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
         // 가입 승인으로 생긴 업체를 업체 관리 [목록] 에서 찾아 보여 줍니다
         function showCompanyInList(id) {
             const c = customers.find(x => x.id === id);
-            companyFilter = { q: c ? companyNameOf(c) : '', kind: '', status: '', view: 'list', limit: COMPANY_PAGE };
+            companyFilter = { q: c ? companyNameOf(c) : '', kind: '', status: '', view: 'list', limit: COMPANY_PAGE, cols: {} };
             renderCompanies();
         }
         // 가입 신청 기록 삭제 — 관리자만 (2026-10-16). 승인으로 만들어진 업체 · 아이디는 그대로 둡니다.
@@ -41923,6 +41988,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                                     <th class="px-3 py-2 font-medium text-center whitespace-nowrap">아이디</th>
                                     <th class="px-3 py-2 font-medium text-center whitespace-nowrap">관리</th>
                                 </tr>
+                                ${companyColFilterRowHtml()}
                             </thead>
                             <tbody class="text-gray-700">${rowsHtml}</tbody>
                         </table>
