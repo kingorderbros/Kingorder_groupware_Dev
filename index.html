@@ -3200,6 +3200,7 @@
                                             <th class="p-4 font-medium text-center">상태</th>
                                             <th class="p-4 font-medium text-center">관리</th>
                                         </tr>
+                                        <tr id="contracts-colf-row" class="bg-white border-b border-gray-200"></tr>
                                     </thead>
                                     <tbody id="contracts-table-body" class="text-sm text-gray-700">
                                         <!-- JS로 동적 렌더링 -->
@@ -36630,6 +36631,43 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
         let contractFilterStatus = 'all';
         const CONTRACT_RENEWAL_DAYS = 60;
 
+        // ==================== 표 칸별 거르기 공용 (2026-10-20) ====================
+        // 계약관리 · 공급단가표 · CMS·렌탈 현황 표 머리 아래에 칸마다 거르기를 둡니다 (업체 관리와 같은 모양).
+        //   글자 칸 — 포함 검색 (띄어쓰기 · 하이픈 무시) / 목록 칸 — 고른 값과 같은 것만
+        // 다시 그려도 글자를 치던 칸에 커서를 돌려놓습니다.
+        const colFilters = { contracts: {}, price: {}, cms: {} };
+        const COLF_RENDER = { contracts: () => renderContracts(), price: () => renderPriceBook(), cms: () => renderCmsStatus() };
+        const colfNorm = v => String(v == null ? '' : v).replace(/[\s-]/g, '').toLowerCase();
+        function colfHas(val, want) { return !want || colfNorm(val).includes(colfNorm(want)); }
+        function colfOn(t) { return Object.values(colFilters[t] || {}).some(Boolean); }
+        function setColFilter(t, key, value, typing) {
+            colFilters[t] = Object.assign({}, colFilters[t], { [key]: value || '' });
+            const el = document.activeElement, pos = el && el.selectionStart;
+            COLF_RENDER[t]();
+            if (!typing) return;
+            const again = document.querySelector(`[data-colf="${t}:${key}"]`);
+            if (again) { again.focus(); try { again.setSelectionRange(pos, pos); } catch (e) { /* 무시 */ } }
+        }
+        function clearColFilters(t) { colFilters[t] = {}; COLF_RENDER[t](); }
+        const COLF_INP = 'w-full min-w-[70px] px-1.5 py-1 text-xs font-normal border border-gray-300 rounded bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-500';
+        function colfText(t, key, ph) {
+            const v = (colFilters[t] || {})[key] || '';
+            return `<input type="text" data-colf="${t}:${key}" value="${escapeHtml(v)}" oninput="setColFilter('${t}', '${key}', this.value, true)" onclick="event.stopPropagation()" placeholder="${escapeHtml(ph || '')}" class="${COLF_INP}${v ? ' border-blue-500 bg-blue-50' : ''}" />`;
+        }
+        // opts: [[값, 표시], …]
+        function colfSel(t, key, opts) {
+            const v = (colFilters[t] || {})[key] || '';
+            return `<select data-colf="${t}:${key}" onchange="setColFilter('${t}', '${key}', this.value)" onclick="event.stopPropagation()" class="${COLF_INP}${v ? ' border-blue-500 bg-blue-50' : ''}"><option value="">전체</option>${opts.map(([ov, ol]) => `<option value="${escapeHtml(ov)}"${v === ov ? ' selected' : ''}>${escapeHtml(ol)}</option>`).join('')}</select>`;
+        }
+        function colfDistinct(list) { return Array.from(new Set(list.map(x => String(x == null ? '' : x).trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b, 'ko')).map(x => [x, x]); }
+        function colfClearBtn(t) {
+            return colfOn(t)
+                ? `<button type="button" onclick="clearColFilters('${t}')" class="px-2 py-1 text-[11px] font-normal rounded border border-gray-300 text-gray-600 bg-white hover:bg-gray-50 whitespace-nowrap" title="칸별 거르기 모두 해제"><i class="fas fa-filter-circle-xmark mr-0.5"></i>해제</button>`
+                : '<span class="text-[11px] font-normal text-gray-400"><i class="fas fa-filter"></i></span>';
+        }
+        const COLF_YESNO = [['yes', '있음'], ['no', '없음']];
+        function colfYesNo(want, has) { return !want || (want === 'yes' ? !!has : !has); }
+
         // ---------- 거래 구분 (BtoB · BtoC) · 2026-09-08 ----------
         // 파트너사를 거쳐 들어온 가맹점 계약과, 킹오더가 직접 맺은 계약을 갈라 봅니다.
         //   BtoB — 파트너사에 속한 가맹점과 맺은 계약
@@ -36765,8 +36803,9 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                     const haystack = `${c.name} ${c.owner} ${customer ? customer.name : ''} ${partner ? partner.name : ''} ${contractBizType(c)}`.toLowerCase();
                     if (!haystack.includes(searchTerm)) return false;
                 }
-                return true;
+                return contractColMatch(c);
             });
+            renderContractColFilterRow();
 
             if (list.length === 0) {
                 tbody.innerHTML = `<tr><td colspan="11" class="p-4 text-center text-gray-500">조건에 맞는 계약이 없습니다.</td></tr>`;
@@ -36811,6 +36850,42 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                     </tr>
                 `;
             }).join('');
+        }
+
+        // 계약관리 칸별 거르기 (2026-10-20)
+        const CONTRACT_VALUE_RANGES = [['0', '0원'], ['lt1m', '100만 원 미만'], ['1m', '100만 ~ 1,000만 원'], ['10m', '1,000만 원 이상']];
+        function contractValueRange(v) { const n = Number(v) || 0; return n <= 0 ? '0' : n < 1000000 ? 'lt1m' : n < 10000000 ? '1m' : '10m'; }
+        function contractColMatch(c) {
+            const f = colFilters.contracts || {};
+            if (!colfHas(c.id, f.id) || !colfHas(c.name, f.name)) return false;
+            if (f.biz && contractBizType(c) !== f.biz) return false;
+            if (f.customer) { const cu = customers.find(x => x.id === c.customerId); if (!colfHas(cu ? cu.name : '', f.customer)) return false; }
+            if (f.partner) {
+                const pt = partners.find(x => x.id === c.partnerId);
+                if (f.partner === '__none' ? !!pt : !(pt && String(pt.name).trim() === f.partner)) return false;
+            }
+            if (f.value && contractValueRange(c.value) !== f.value) return false;
+            if (f.owner && String(c.owner || '').trim() !== f.owner) return false;
+            if (f.period && !(colfHas(c.start, f.period) || colfHas(c.end, f.period))) return false;
+            if (f.approval && (c.approvalStatus || '미승인') !== f.approval) return false;
+            if (f.status && c.status !== f.status) return false;
+            return true;
+        }
+        function renderContractColFilterRow() {
+            const row = document.getElementById('contracts-colf-row');
+            if (!row) return;
+            const t = 'contracts', th = (inner, cls) => `<th class="px-2 py-1.5 ${cls || ''}">${inner}</th>`;
+            const pnames = colfDistinct(contracts.map(c => (partners.find(p => p.id === c.partnerId) || {}).name));
+            row.innerHTML = th(colfText(t, 'id', '계약번호')) + th(colfText(t, 'name', '계약명'))
+                + th(colfSel(t, 'biz', CONTRACT_BIZ_TYPES.map(x => [x.id, x.name])))
+                + th(colfText(t, 'customer', '고객사'))
+                + th(colfSel(t, 'partner', [['__none', '없음']].concat(pnames)))
+                + th(colfSel(t, 'value', CONTRACT_VALUE_RANGES))
+                + th(colfSel(t, 'owner', colfDistinct(contracts.map(c => c.owner))))
+                + th(colfText(t, 'period', '예: 2026-10'))
+                + th(colfSel(t, 'approval', colfDistinct(contracts.map(c => c.approvalStatus || '미승인'))))
+                + th(colfSel(t, 'status', colfDistinct(contracts.map(c => c.status))))
+                + th(colfClearBtn(t), 'text-center');
         }
 
         // ==================== 계약 상세 팝업 (읽기 전용) ====================
@@ -37976,8 +38051,46 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                 if (f.cat && r.cat !== f.cat) return false;
                 if (f.kind && r.kind !== f.kind) return false;
                 if (q && !norm([r.cat, r.name, r.memo, r.code, r.sub].join(' ')).includes(q)) return false;
-                return true;
+                return priceColMatch(r);
             });
+        }
+        // 공급단가표 칸별 거르기 (2026-10-20)
+        function priceColMatch(r) {
+            const f = colFilters.price || {};
+            if (!colfHas([r.name, r.code, r.sub, r.cat].join(' '), f.name)) return false;
+            if (!colfHas([priceText(r.cost), r.cost].join(' '), f.cost)) return false;
+            if (!colfHas([priceText(r.price), r.price].join(' '), f.price)) return false;
+            if (f.margin) {
+                const m = priceMargin(r);
+                const k = !m ? 'none' : m.amount > 0 ? 'plus' : 'minus';
+                if (k !== f.margin) return false;
+            }
+            for (const t of PARTNER_PRICE_TIERS) {
+                const want = f['tier_' + t.id];
+                const own = (r.tiers || {})[t.id];
+                if (!colfYesNo(want, own !== undefined && own !== '' && own !== null)) return false;
+            }
+            if (!colfYesNo(f.hq, r.hqPrice && Object.keys(r.hqPrice).length)) return false;
+            if (f.partner) {
+                const names = Object.keys(r.partnerPrice || {}).map(pricePartnerName).join(' ');
+                if (!colfHas(names, f.partner)) return false;
+            }
+            if (!colfHas(r.from, f.from) || !colfHas(r.memo, f.memo)) return false;
+            return true;
+        }
+        function priceColFilterRowHtml() {
+            const t = 'price', th = (inner, cls) => `<th class="px-2 py-1.5 font-normal ${cls || ''}">${inner}</th>`;
+            return `<tr class="bg-white border-b border-gray-200">`
+                + th(colfText(t, 'name', '제품 · 코드 · 카테고리'))
+                + th(colfText(t, 'cost', '금액'))
+                + th(colfText(t, 'price', '금액'))
+                + th(colfSel(t, 'margin', [['plus', '이익'], ['minus', '0원 이하'], ['none', '계산 안 함']]))
+                + PARTNER_PRICE_TIERS.map(x => th(colfSel(t, 'tier_' + x.id, [['yes', '전용 단가 있음'], ['no', '공급가 적용']]), 'bg-amber-50/60')).join('')
+                + th(colfSel(t, 'hq', COLF_YESNO), 'bg-violet-50/50')
+                + th(colfText(t, 'partner', '파트너사'), 'bg-teal-50/50')
+                + th(colfText(t, 'from', '예: 2026-09'))
+                + th(`<div class="flex items-center gap-1">${colfText(t, 'memo', '비고')}${colfClearBtn(t)}</div>`)
+                + `</tr>`;
         }
         function setPriceFilter(field, value) { priceFilter[field] = value; renderPriceBook(); }
         function resetPriceFilter() { priceFilter = { q: '', cat: '', kind: '' }; renderPriceBook(); }
@@ -38299,6 +38412,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                                     <th class="px-3 py-2 font-medium text-center whitespace-nowrap" title="단가 적용 시작일, 이전 단가 건수">적용일</th>
                                     <th class="px-3 py-2 font-medium">비고</th>
                                 </tr>
+                                ${priceColFilterRowHtml()}
                             </thead>
                             <tbody>${body || `<tr><td colspan="5" class="px-3 py-10 text-center text-sm text-gray-400">조건에 맞는 단가가 없습니다.</td></tr>`}</tbody>
                         </table>
@@ -43527,8 +43641,34 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                     const hay = `${r.c.name || ''} ${r.c.bizNo || ''} ${r.c.manager || ''} ${r.c.channelType || ''}`.toLowerCase();
                     if (!hay.includes(q)) return false;
                 }
-                return true;
+                return cmsColMatch(r);
             });
+        }
+        // CMS·렌탈 현황 칸별 거르기 (2026-10-20)
+        function cmsColMatch(r) {
+            const f = colFilters.cms || {}, c = r.c;
+            if (!colfHas(c.name, f.name) || !colfHas(c.bizNo, f.bizNo)) return false;
+            if (f.channel && String(c.channelType || '').trim() !== f.channel) return false;
+            if (f.manager && String(c.manager || '').trim() !== f.manager) return false;
+            if (f.kind && r.kind !== f.kind) return false;
+            if (!colfYesNo(f.rentFee, r.rentFee) || !colfYesNo(f.monthlyFee, r.monthlyFee) || !colfYesNo(f.total, r.rentFee + r.monthlyFee)) return false;
+            if (!colfHas([custPayMethodText(c), c.contract].join(' '), f.pay)) return false;
+            if (!colfYesNo(f.rentOwed, r.rentOwed.count) || !colfYesNo(f.feeOwed, r.feeOwed.count) || !colfYesNo(f.instOwed, r.instOwed.count)) return false;
+            return true;
+        }
+        function cmsColFilterRowHtml() {
+            const t = 'cms', th = (inner, cls) => `<th class="px-2 py-1.5 font-normal ${cls || ''}">${inner}</th>`;
+            const base = WORK_CENTERS.ops.customers || [];
+            return `<tr class="bg-white border-b border-gray-200">`
+                + th(colfText(t, 'name', '가맹점명')) + th(colfText(t, 'bizNo', '사업자번호'))
+                + th(colfSel(t, 'channel', colfDistinct(base.map(c => c.channelType))))
+                + th(colfSel(t, 'manager', colfDistinct(base.map(c => c.manager))))
+                + th(colfSel(t, 'kind', CMS_STATUS_KINDS.filter(k => k.id).map(k => [k.id, k.label])))
+                + th(colfSel(t, 'rentFee', COLF_YESNO)) + th(colfSel(t, 'monthlyFee', COLF_YESNO)) + th(colfSel(t, 'total', COLF_YESNO))
+                + th(colfText(t, 'pay', '계약방식 · 계약'))
+                + th(colfSel(t, 'rentOwed', COLF_YESNO)) + th(colfSel(t, 'feeOwed', COLF_YESNO))
+                + th(`<div class="flex items-center gap-1">${colfSel(t, 'instOwed', COLF_YESNO)}${colfClearBtn(t)}</div>`)
+                + `</tr>`;
         }
 
         function renderCmsStatus() {
@@ -43605,6 +43745,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                                     <th class="px-3 py-2 font-medium text-center whitespace-nowrap">관리비 미납</th>
                                     <th class="px-3 py-2 font-medium text-center whitespace-nowrap">렌탈/할부 미납</th>
                                 </tr>
+                                ${cmsColFilterRowHtml()}
                             </thead>
                             <tbody>
                                 ${rows.length === 0 ? `<tr><td colspan="12" class="px-3 py-6 text-center text-gray-500">조건에 맞는 가맹점이 없습니다.</td></tr>` : rows.map(r => {
