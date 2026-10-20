@@ -4820,8 +4820,13 @@
                         <input type="date" id="prj-start-plan" required class="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500" />
                     </div>
                     <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">종료 예정일 <span class="text-red-500">*</span></label>
-                        <input type="date" id="prj-end-plan" required class="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                        <label class="flex items-center justify-between text-sm font-medium text-gray-700 mb-1">
+                            <span>종료 예정일 <span class="text-red-500">*</span></span>
+                            <!-- 종료일을 아직 정하지 못한 프로젝트 (2026-10-20) -->
+                            <span class="inline-flex items-center gap-1 text-xs font-normal text-gray-600 cursor-pointer"><input type="checkbox" id="prj-end-tbd" onchange="onProjectEndTbdChange()" class="rounded border-gray-300 text-blue-600" />미정</span>
+                        </label>
+                        <input type="date" id="prj-end-plan" required class="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-400" />
+                        <p id="prj-end-tbd-note" class="hidden text-[11px] text-gray-500 mt-1">종료 예정일이 정해지면 미정 선택을 해제하고 날짜를 입력해 주세요.</p>
                     </div>
                 </div>
                 <div id="prj-actual-wrap" class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4 hidden">
@@ -20167,7 +20172,7 @@ const QUOTE_TEMPLATES = [
             document.getElementById('prj-d-delay').innerHTML = dl.length
                 ? `<span class="text-xs font-bold rounded-full px-2 py-0.5 border text-red-700 bg-red-50 border-red-200"><i class="fas fa-triangle-exclamation mr-0.5"></i>지연 ${dl.length}건</span>` : '';
             document.getElementById('prj-d-meta').innerHTML =
-                `${escapeHtml(deptNames[p.dept] || p.dept)} · PM <b class="text-gray-700">${escapeHtml(p.owner)}</b> · 예정 ${escapeHtml(p.startPlan)} ~ ${escapeHtml(p.endPlan)}`
+                `${escapeHtml(deptNames[p.dept] || p.dept)} · PM <b class="text-gray-700">${escapeHtml(p.owner)}</b> · 예정 ${escapeHtml(p.startPlan)} ~ ${escapeHtml(projectEndLabel(p))}`
                 + (p.startActual ? ` · 실제 시작 <b class="text-gray-700">${escapeHtml(p.startActual)}</b>` : '')
                 + (p.endActual ? ` · 실제 종료 <b class="text-gray-700">${escapeHtml(p.endActual)}</b>` : '');
             document.getElementById('prj-d-desc').textContent = p.description || '';
@@ -20227,7 +20232,8 @@ const QUOTE_TEMPLATES = [
 
             // 일정 대비 진척 — 기간 경과율과 실제 진척률을 비교해 앞섰는지/뒤졌는지 판단
             const today = ymd(new Date());
-            const total = Math.max(1, dayDiff(p.startPlan, p.endPlan));
+            const endTbd = isProjectEndTbd(p);                     // 종료 예정일 미정이면 기간 경과율을 셀 수 없습니다 (2026-10-20)
+            const total = endTbd ? 1 : Math.max(1, dayDiff(p.startPlan, p.endPlan));
             const passed = Math.min(total, Math.max(0, dayDiff(p.startPlan, today)));
             const expected = Math.round(passed / total * 100);
             const gap = pct - expected;
@@ -20254,7 +20260,15 @@ const QUOTE_TEMPLATES = [
                     ${statCard('지연', delays.length + '건', delays.length ? 'text-red-600' : 'text-gray-400')}
                 </div>
 
-                <div class="bg-white border border-gray-200 rounded p-4 mb-4">
+                ${endTbd ? `<div class="bg-white border border-gray-200 rounded p-4 mb-4">
+                    <p class="text-sm font-bold text-gray-700 mb-2">일정 대비 진척</p>
+                    <div class="flex items-center gap-2">
+                        <span class="text-xs text-gray-500 w-20 shrink-0">실제 진척</span>
+                        <div class="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden"><div class="h-full bg-blue-500 rounded-full" style="width:${pct}%"></div></div>
+                        <span class="text-xs font-bold text-gray-600 tabular-nums w-10 text-right">${pct}%</span>
+                    </div>
+                    <p class="text-sm mt-3 text-gray-500"><i class="fas fa-circle-info mr-1"></i>종료 예정일이 <b>미정</b>이라 기간 경과율과 비교하지 않습니다.</p>
+                </div>` : `<div class="bg-white border border-gray-200 rounded p-4 mb-4">
                     <p class="text-sm font-bold text-gray-700 mb-3">일정 대비 진척</p>
                     <div class="space-y-2">
                         <div class="flex items-center gap-2">
@@ -20273,7 +20287,7 @@ const QUOTE_TEMPLATES = [
                         기간 경과율 대비 <b>${gap >= 0 ? '+' : ''}${gap}%p</b> ${gap >= 0 ? '앞서 있습니다' : '뒤처져 있습니다'}
                         <span class="text-gray-500 text-xs ml-1">(전체 ${total}일 중 ${passed}일 경과)</span>
                     </p>
-                </div>
+                </div>`}
 
                 <div class="bg-white border border-gray-200 rounded p-4">
                     <p class="text-sm font-bold text-gray-700 mb-3">담당자별 진척</p>
@@ -20541,12 +20555,25 @@ const QUOTE_TEMPLATES = [
             fillUserSelect(document.getElementById('prj-owner'), '', p ? p.owner : currentUserName);
             document.getElementById('prj-name').value = p ? p.name : '';
             document.getElementById('prj-start-plan').value = p ? p.startPlan : '';
-            document.getElementById('prj-end-plan').value = p ? p.endPlan : '';
+            document.getElementById('prj-end-plan').value = p ? (p.endPlan || '') : '';
+            document.getElementById('prj-end-tbd').checked = !!(p && isProjectEndTbd(p));
+            onProjectEndTbdChange();
             document.getElementById('prj-start-actual').value = p ? (p.startActual || '') : '';
             document.getElementById('prj-end-actual').value = p ? (p.endActual || '') : '';
             document.getElementById('prj-status').value = p ? p.status : 'planning';
             document.getElementById('prj-desc').value = p ? (p.description || '') : '';
             document.getElementById('project-modal').classList.remove('hidden');
+        }
+        // 종료 예정일 미정 (2026-10-20) — 날짜 칸을 막고 필수에서 뺍니다
+        function isProjectEndTbd(p) { return !!p && (p.endTbd === true || !p.endPlan); }
+        function projectEndLabel(p) { return isProjectEndTbd(p) ? '미정' : (p.endPlan || '-'); }
+        function onProjectEndTbdChange() {
+            const tbd = document.getElementById('prj-end-tbd').checked;
+            const el = document.getElementById('prj-end-plan');
+            el.disabled = tbd; el.required = !tbd;
+            if (tbd) el.value = '';
+            const note = document.getElementById('prj-end-tbd-note');
+            if (note) note.classList.toggle('hidden', !tbd);
         }
         function closeProjectModal() {
             document.getElementById('project-modal').classList.add('hidden');
@@ -20556,14 +20583,16 @@ const QUOTE_TEMPLATES = [
             event.preventDefault();
             const id = document.getElementById('prj-edit-id').value;
             const startPlan = document.getElementById('prj-start-plan').value;
-            const endPlan = document.getElementById('prj-end-plan').value;
-            if (endPlan < startPlan) { alert('종료 예정일이 시작 예정일보다 빠릅니다.'); return; }
+            const endTbd = document.getElementById('prj-end-tbd').checked;
+            const endPlan = endTbd ? '' : document.getElementById('prj-end-plan').value;
+            if (!endTbd && !endPlan) { alert('종료 예정일을 입력하거나 [미정]을 선택해 주세요.'); return; }
+            if (endPlan && endPlan < startPlan) { alert('종료 예정일이 시작 예정일보다 빠릅니다.'); return; }
 
             const data = {
                 name: document.getElementById('prj-name').value.trim(),
                 dept: document.getElementById('prj-dept').value,
                 owner: document.getElementById('prj-owner').value,
-                startPlan, endPlan,
+                startPlan, endPlan, endTbd,
                 startActual: document.getElementById('prj-start-actual').value,
                 endActual: document.getElementById('prj-end-actual').value,
                 status: document.getElementById('prj-status').value,
@@ -20665,7 +20694,7 @@ const QUOTE_TEMPLATES = [
                 { id: 'all',  name: '전체', n: all.length }
             ];
             const list = all.filter(p => itPrjFilter === 'all' ? true : itPrjFilter === 'open' ? (p.status === 'planning' || p.status === 'active') : p.status === itPrjFilter)
-                .sort((a, b) => String(a.endPlan || '').localeCompare(String(b.endPlan || '')));
+                .sort((a, b) => String(a.endPlan || '9999').localeCompare(String(b.endPlan || '9999')));   // 미정은 뒤로
             const card = p => {
                 const st = PROJECT_STATUS[p.status] || PROJECT_STATUS.planning;
                 const prog = projectProgress(p);
@@ -20680,7 +20709,7 @@ const QUOTE_TEMPLATES = [
                         <p class="font-semibold text-gray-800 truncate">${escapeHtml(p.name)}</p>
                         <span class="shrink-0 text-xs px-2 py-0.5 rounded border ${st.chip}">${st.name}</span>
                     </div>
-                    <p class="text-xs text-gray-500 mt-1"><i class="fas fa-user-tie mr-1 text-gray-400"></i>PM ${escapeHtml(p.owner || '-')} · ${escapeHtml(p.startPlan || '-')} ~ ${escapeHtml(p.endPlan || '-')}
+                    <p class="text-xs text-gray-500 mt-1"><i class="fas fa-user-tie mr-1 text-gray-400"></i>PM ${escapeHtml(p.owner || '-')} · ${escapeHtml(p.startPlan || '-')} ~ ${escapeHtml(projectEndLabel(p))}
                         ${dday !== null ? `<span class="ml-1 font-semibold ${dday < 0 ? 'text-red-600' : dday <= 7 ? 'text-amber-600' : 'text-gray-500'}">${dday < 0 ? `D+${-dday}` : `D-${dday}`}</span>` : ''}</p>
                     <div class="mt-3 flex items-center gap-2">
                         <div class="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden"><div class="h-2 ${prog >= 100 ? 'bg-blue-500' : 'bg-cyan-500'}" style="width:${prog}%"></div></div>
@@ -24665,7 +24694,7 @@ const QUOTE_TEMPLATES = [
                     <td class="px-3 py-2 font-medium">${escapeHtml(p.name)}<span class="block text-[11px] font-mono text-gray-400">${escapeHtml(p.id)}</span></td>
                     <td class="px-3 py-2 whitespace-nowrap text-gray-500">${escapeHtml(deptNames[p.dept] || p.dept || '-')}</td>
                     <td class="px-3 py-2 whitespace-nowrap">${escapeHtml(p.owner || '-')}</td>
-                    <td class="px-3 py-2 whitespace-nowrap ${late ? 'text-red-600 font-semibold' : 'text-gray-500'}">${escapeHtml(p.startPlan || '-')} ~ ${escapeHtml(p.endPlan || '-')}${late ? ' (경과)' : ''}</td>
+                    <td class="px-3 py-2 whitespace-nowrap ${late ? 'text-red-600 font-semibold' : 'text-gray-500'}">${escapeHtml(p.startPlan || '-')} ~ ${escapeHtml(projectEndLabel(p))}${late ? ' (경과)' : ''}</td>
                     <td class="px-3 py-2">
                         <div class="flex items-center gap-2">
                             <div class="w-28 bg-gray-100 rounded-full h-1.5"><div class="bg-purple-500 h-1.5 rounded-full" style="width:${prog}%"></div></div>
@@ -24756,7 +24785,7 @@ const QUOTE_TEMPLATES = [
                 const p = (projects || []).find(x => x.id === pid);
                 if (!p) return;
                 eyebrow = '⑤ 프로젝트 현황'; title = p.name;
-                sub = `${deptNames[p.dept] || p.dept} · PM ${p.owner || '-'} · ${p.startPlan || '-'} ~ ${p.endPlan || '-'} · 진척 ${projectProgress(p)}%`;
+                sub = `${deptNames[p.dept] || p.dept} · PM ${p.owner || '-'} · ${p.startPlan || '-'} ~ ${projectEndLabel(p)} · 진척 ${projectProgress(p)}%`;
                 // 그 프로젝트 자신 + 그 프로젝트의 WBS 작업만 (id 로 정확히 고릅니다)
                 const wbsIds = wbsLeaves(p).map(w => w.id);
                 list = execItems.filter(i => i.id === p.id || (i.kind === 'wbs' && wbsIds.indexOf(i.id) > -1));
