@@ -3285,6 +3285,7 @@
                             <button onclick="changeDate(-1)" class="p-1 text-gray-500 hover:text-gray-800"><i class="fas fa-chevron-left"></i></button>
                             <div class="flex items-center gap-2">
                                 <h4 id="cal-month-year" class="text-lg font-bold text-gray-800"></h4>
+                                <button type="button" onclick="calendarGoToday()" class="text-xs px-2 py-1 rounded border border-gray-300 bg-white text-gray-600 hover:bg-gray-100 transition-colors whitespace-nowrap" title="오늘이 있는 주로 이동">오늘</button>
                                 <!-- 일간 보기에서만 노출 — 월/주간은 날짜 칸을 눌러 요약을 엽니다 -->
                                 <button id="cal-day-summary-btn" onclick="openDaySummaryForCurrentDate()" class="hidden text-xs px-2 py-1 rounded border border-gray-300 bg-white text-gray-600 hover:bg-gray-100 transition-colors whitespace-nowrap">
                                     <i class="fas fa-rectangle-list mr-1"></i>하루 요약
@@ -12812,7 +12813,7 @@ const QUOTE_TEMPLATES = [
             } else if (sectionId === 'partner-center-it') {
                 renderPartnerCenterIt();
             } else if (sectionId === 'calendar-center') {
-                renderCalendar();
+                calendarGoToday();          // 이번 달 · 오늘이 있는 주를 가운데로 (2026-10-20)
             } else if (sectionId === 'admin-center') {
                 renderAdminCenter();     // 활성 탭(사용자/권한)에 맞춰 렌더
             } else if (sectionId === 'settings') {
@@ -18341,7 +18342,7 @@ const QUOTE_TEMPLATES = [
                     ? `<span class="float-left text-[10px] px-1.5 rounded-full bg-gray-100 text-gray-500 group-hover:bg-blue-100 group-hover:text-blue-700">${daySchedules.length}</span>` : '';
 
                 return `
-                    <div onclick="openDaySummaryModal('${dateString}')" title="${dateString} 하루 일정 요약 보기"
+                    <div data-date="${dateString}"${isToday ? ' data-today="1"' : ''} onclick="openDaySummaryModal('${dateString}')" title="${dateString} 하루 일정 요약 보기"
                          class="${hol ? 'bg-red-50/40' : 'bg-white'} ${minHeight} p-1 border-gray-100 group cursor-pointer hover:bg-blue-50/50 transition-colors ${opacityClass}">
                         <div class="text-right mb-1">
                             ${cntBadge}
@@ -18463,6 +18464,18 @@ const QUOTE_TEMPLATES = [
             }
         }
 
+        // 오늘이 있는 주를 화면 가운데로 (2026-10-20) — 캘린더에 들어올 때 · [오늘] 을 누를 때만 (자료가 새로 와서 다시 그릴 때는 움직이지 않음)
+        function scrollCalendarToToday() {
+            requestAnimationFrame(() => {
+                const cell = document.querySelector('#cal-grid [data-today="1"]');
+                if (cell && cell.offsetParent !== null) cell.scrollIntoView({ block: 'center', behavior: 'smooth' });
+            });
+        }
+        function calendarGoToday() {
+            currentDate = new Date();
+            renderCalendar();
+            scrollCalendarToToday();
+        }
         function changeDate(delta) { 
             if (currentCalendarView === 'month') {
                 currentDate.setMonth(currentDate.getMonth() + delta); 
