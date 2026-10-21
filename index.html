@@ -2028,6 +2028,8 @@
                                 <span><i class="fas fa-tasks text-blue-500 mr-2"></i>나의 할 일 (업무)</span>
                                 <button onclick="openMyTodoModal()" class="text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 px-2 py-1 rounded transition-colors"><i class="fas fa-plus mr-1"></i>할 일 추가</button>
                             </h4>
+                            <!-- 완료 여부로 보기 (2026-10-21) -->
+                            <div id="my-todo-filter" class="flex items-center gap-1 mb-2"></div>
                             <div id="personal-tasks-list" class="space-y-2 max-h-72 overflow-y-auto pr-2"></div>
                         </div>
                         <!-- 3행 좌: 할당된 요청 -->
@@ -12292,7 +12294,14 @@ const QUOTE_TEMPLATES = [
             if (!tasksEl) return;
 
             // (a) 내 개인 할 일 - 마감일(D-day) 임박 순 정렬, 완료 항목은 뒤로
-            const todos = myTodos.filter(t => t.owner === userName);
+            const allMine = myTodos.filter(t => t.owner === userName);
+            const doneCnt = allMine.filter(t => t.done).length, openCnt = allMine.length - doneCnt;
+            const fEl = document.getElementById('my-todo-filter');
+            if (fEl) {
+                const tab = (v, label, n) => `<button type="button" onclick="setMyTodoFilter('${v}')" class="px-2 py-0.5 text-xs rounded-full border ${myTodoFilter === v ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white border-gray-300 text-gray-600 hover:bg-gray-50'}">${label} ${n}</button>`;
+                fEl.innerHTML = tab('', '전체', allMine.length) + tab('open', '진행 중', openCnt) + tab('done', '완료', doneCnt);
+            }
+            const todos = allMine.filter(t => myTodoFilter === 'done' ? t.done : myTodoFilter === 'open' ? !t.done : true);
             todos.sort((a, b) => {
                 if (a.done !== b.done) return a.done ? 1 : -1;
                 return new Date(a.dueDate || '9999-12-31') - new Date(b.dueDate || '9999-12-31');
@@ -12305,14 +12314,17 @@ const QUOTE_TEMPLATES = [
                 const act = todoTypeDef(t.activity);
                 const actBadge = `<span class="text-xs ${act.color} mr-2"><i class="fas ${act.icon} mr-0.5"></i>${act.text}</span>`;
                 const scheduled = !!t.scheduleId;
+                // 완료 버튼 · 완료 표시 (2026-10-21) — 작은 체크칸만 있어 완료 여부가 잘 안 보였던 것
+                const doneCtl = t.done
+                    ? `<span class="inline-flex items-center gap-1 shrink-0"><span class="px-1.5 py-0.5 text-xs rounded bg-green-100 text-green-700 font-semibold whitespace-nowrap"><i class="fas fa-circle-check mr-0.5"></i>완료${t.doneAt ? ' ' + escapeHtml(t.doneAt.slice(5).replace('-', '/')) : ''}</span><button type="button" onclick="toggleMyTodo('${t.id}')" class="text-[11px] text-gray-400 hover:text-gray-700 underline whitespace-nowrap" title="진행 중으로 되돌리기">되돌리기</button></span>`
+                    : `<button type="button" onclick="toggleMyTodo('${t.id}')" class="shrink-0 px-2 py-0.5 text-xs rounded border border-green-500 text-green-700 bg-white hover:bg-green-50 font-semibold whitespace-nowrap" title="완료로 표시"><i class="fas fa-check mr-0.5"></i>완료</button>`;
                 return `
-                    <div class="bg-blue-50 p-2 rounded border border-blue-100 group">
+                    <div class="${t.done ? 'bg-gray-50 border-gray-200' : 'bg-blue-50 border-blue-100'} p-2 rounded border group">
                         <div class="flex items-center">
-                            <input type="checkbox" ${t.done ? 'checked' : ''} onchange="toggleMyTodo('${t.id}')" class="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500 mr-2 cursor-pointer shrink-0">
                             <div class="flex-1 min-w-0">
-                                <div class="flex items-center justify-between">
-                                    <span class="text-sm font-medium ${titleCls} truncate pr-2">${escapeHtml(t.title)}</span>
-                                    ${ddayBadge}
+                                <div class="flex items-center justify-between gap-2">
+                                    <span class="text-sm font-medium ${titleCls} truncate">${escapeHtml(t.title)}</span>
+                                    <span class="flex items-center gap-1.5 shrink-0">${ddayBadge}${doneCtl}</span>
                                 </div>
                                 <div class="flex items-center justify-between mt-0.5">
                                     <span class="text-xs text-gray-500">${actBadge}<i class="far fa-calendar-alt mr-1"></i>${t.dueDate || '일정 미정'}</span>
@@ -12323,7 +12335,7 @@ const QUOTE_TEMPLATES = [
                                 </div>
                             </div>
                         </div>
-                        <label class="flex items-center mt-1.5 pl-6 cursor-pointer">
+                        <label class="flex items-center mt-1.5 cursor-pointer">
                             <input type="checkbox" ${scheduled ? 'checked' : ''} onchange="toggleTodoSchedule('${t.id}', this.checked)" class="w-3.5 h-3.5 text-green-600 rounded border-gray-300 focus:ring-green-500 mr-1.5 cursor-pointer">
                             <span class="text-xs ${scheduled ? 'text-green-600 font-medium' : 'text-gray-400'}"><i class="far fa-calendar-plus mr-0.5"></i>일정으로 등록${scheduled ? ' (등록됨)' : ''}</span>
                         </label>
@@ -12338,7 +12350,9 @@ const QUOTE_TEMPLATES = [
             ).join('');
 
             if (!todoHtml && !taskHtml) {
-                tasksEl.innerHTML = '<p class="text-sm text-gray-500 text-center mt-4">등록된 할 일이 없습니다. "할 일 추가"로 등록해 주세요.</p>';
+                tasksEl.innerHTML = allMine.length && myTodoFilter
+                    ? `<p class="text-sm text-gray-500 text-center mt-4">${myTodoFilter === 'done' ? '완료한 할 일이 없습니다.' : '진행 중인 할 일이 없습니다.'}</p>`
+                    : '<p class="text-sm text-gray-500 text-center mt-4">등록된 할 일이 없습니다. "할 일 추가"로 등록해 주세요.</p>';
                 return;
             }
 
@@ -12552,7 +12566,17 @@ const QUOTE_TEMPLATES = [
 
         function toggleMyTodo(todoId) {
             const t = myTodos.find(x => x.id === todoId);
-            if (t) { t.done = !t.done; renderPersonalTasks(currentUserName); }
+            if (!t) return;
+            t.done = !t.done;
+            t.doneAt = t.done ? ymd(new Date()) : '';      // 완료한 날 (2026-10-21)
+            renderPersonalTasks(currentUserName);
+        }
+        // 나의 할 일 보기 — 'open' 진행 중 · 'done' 완료 · '' 전체. 이 브라우저에 기억합니다 (2026-10-21)
+        let myTodoFilter = (() => { try { return kobStorage.getItem('dashTodoFilter') || ''; } catch (e) { return ''; } })();
+        function setMyTodoFilter(v) {
+            myTodoFilter = v || '';
+            try { kobStorage.setItem('dashTodoFilter', myTodoFilter); } catch (e) { /* 저장 못 해도 화면은 바뀝니다 */ }
+            renderPersonalTasks(currentUserName);
         }
 
         function deleteMyTodo(todoId) {
