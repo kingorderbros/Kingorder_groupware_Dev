@@ -5,7 +5,8 @@
  * 실제 주소는 [[route]].js 의 /api/inbound/* 입니다. 이 파일은 소스마다 '가져와서 인입 건 모양으로 바꾸는 일' 만 합니다.
  *
  * 소스
- *   form    홈페이지 문의 폼 (킹오더닷컴 · 큐알킹 · 브랜드팩토리) — 사이트가 POST /api/inbound/form 으로 보냅니다
+ *   form    홈페이지 문의 폼 (킹오더닷컴 · 큐알킹 · 브랜드팩토리 · 메디킹) — 사이트가 POST /api/inbound/form 으로 보냅니다
+ *           (메디킹은 사이트 서버가 대신 보냅니다 — 서버끼리라 Origin 없음)
  *   mail    아임웹 입력폼 알림 메일 — 메일함(IMAP: 네이버 메일 · 지메일)에서 읽어 항목을 뽑습니다
  *   naver   네이버 검색 API — 블로그 · 카페 글 중 키워드(킹오더 · 큐알킹 …)가 들어간 글
  *   blog    네이버 블로그 RSS — 우리 블로그 글 목록 (댓글은 공개 API 가 없어 바로 가기 링크만)
@@ -143,10 +144,12 @@ export function makeRecord(f, rules) {
 //   상담 팝업(ConsultPopup): name · phone · (types) · 상담 띠는 phone 만
 //   큐알킹: name · phone · company · email · store_type · interests[] · message
 //   브랜드팩토리: name · email · phone · inquiry_type · message
+//   메디킹(2026-10-21): name · phone · company(매장명) · email · store_type(일반약국/창고형 약국) · service(포스/결제대행/포스세트) · message
 // ============================================================================
-const FORM_LABELS = { kod_contact: '킹오더닷컴 · 문의하기', kod_popup: '킹오더닷컴 · 상담 팝업', kod_qr: '킹오더닷컴 · QR킹 폼', qrk_contact: '큐알킹 · 문의하기', bf_contact: '브랜드팩토리 · 문의하기' };
+const FORM_LABELS = { kod_contact: '킹오더닷컴 · 문의하기', kod_popup: '킹오더닷컴 · 상담 팝업', kod_qr: '킹오더닷컴 · QR킹 폼', qrk_contact: '큐알킹 · 문의하기', bf_contact: '브랜드팩토리 · 문의하기', mk_contact: '메디킹 · 문의하기' };
 export function formChannel(site, form) {
     const s = str(site).toLowerCase(), f = str(form).toLowerCase();
+    if (/mediking|메디킹/.test(s)) return 'mk_contact';
     if (/qrking|큐알/.test(s)) return 'qrk_contact';
     if (/brand|팩토리/.test(s)) return 'bf_contact';
     if (/popup|bar|띠/.test(f)) return 'kod_popup';
@@ -165,9 +168,10 @@ export function formToRecord(body, rules) {
     };
     Object.keys(src).forEach(k => { if (!src[k]) delete src[k]; });
     const self = arr(f.referral || f['referral[]']);
-    const services = arr(f.interests || f['interests[]']).concat(arr(f.types), arr(f.inquiry_type));
+    const services = arr(f.interests || f['interests[]']).concat(arr(f.types), arr(f.inquiry_type), arr(f.service));
     const biz = arr(f.business_types || f['business_types[]']).concat(arr(f.store_type)).join(', ');
-    const message = [str(f.message), biz ? `(업종: ${biz})` : ''].filter(Boolean).join('\n');
+    // 메디킹 서비스문의는 '결제대행' 처럼 서비스 목록에 없는 값이 있어 문의 내용에도 남깁니다
+    const message = [str(f.message), biz ? `(업종: ${biz})` : '', str(f.service) ? `(문의 서비스: ${arr(f.service).join(', ')})` : ''].filter(Boolean).join('\n');
     const raw = Object.entries(f).filter(([k]) => !/^_|^fields$|privacy/.test(k) && !['site', 'form', 'page', 'landing', 'referrer'].includes(k) && !/^utm_|keyword/.test(k))
         .map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(', ') : str(v)}`).join('\n');
     return makeRecord({
