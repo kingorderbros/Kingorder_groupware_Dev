@@ -10512,6 +10512,31 @@ const QUOTE_TEMPLATES = [
         }
 
         // 사용자 입력을 innerHTML에 삽입하기 전 HTML 이스케이프 (XSS 방지)
+        // ==================== 검색칸 입력 유지 (2026-10-21) ====================
+        // 글자를 칠 때마다 검색칸까지 새로 그리는 화면은 첫 글자 뒤에 커서가 빠져 한 글자만 들어갔습니다.
+        //   · rerenderKeepFocus(render) — 다시 그린 뒤 같은 칸(같은 id · 같은 oninput)에 커서를 원래 자리로 돌려놓습니다.
+        //   · 한글을 조합하는 동안(ㄱ→가→각)에는 다시 그리지 않고, 조합이 끝나면 그 칸의 입력을 한 번 더 보내 그립니다.
+        window.__gwComposing = false;
+        document.addEventListener('compositionstart', () => { window.__gwComposing = true; }, true);
+        document.addEventListener('compositionend', (e) => {
+            window.__gwComposing = false;
+            const t = e.target;
+            if (t && t.tagName === 'INPUT' && t.getAttribute('oninput')) t.dispatchEvent(new Event('input', { bubbles: true }));
+        }, true);
+        function rerenderKeepFocus(render) {
+            if (window.__gwComposing) return;              // 조합 중 — 조합이 끝나면 다시 불립니다
+            const a = document.activeElement;
+            const isField = a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA');
+            const id = isField ? a.id : '', key = isField ? a.getAttribute('oninput') : '';
+            const pos = isField ? a.selectionStart : null, posEnd = isField ? a.selectionEnd : null;
+            render();
+            if (!isField || (!id && !key) || document.activeElement === a && document.body.contains(a)) return;
+            const el = id ? document.getElementById(id)
+                : Array.from(document.querySelectorAll('input[oninput], textarea[oninput]')).find(x => x.getAttribute('oninput') === key && x.offsetParent !== null);
+            if (!el) return;
+            el.focus();
+            try { el.setSelectionRange(pos, posEnd); } catch (e) { /* 날짜 칸 등은 넘어갑니다 */ }
+        }
         function escapeHtml(value) {
             if (value === null || value === undefined) return '';
             return String(value)
@@ -24606,6 +24631,7 @@ const QUOTE_TEMPLATES = [
             execFilter[field] = value;
             clearTimeout(execFilterTimer);
             execFilterTimer = setTimeout(() => {
+                if (window.__gwComposing) return;          // 한글 조합 중 — 끝나면 다시 불립니다 (2026-10-21)
                 renderExecCenter();
                 const el = document.querySelector('#sec-exec-center input[oninput^="setExecFilterDebounced"]');
                 if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); }
@@ -25182,7 +25208,7 @@ const QUOTE_TEMPLATES = [
 
         function setInboundFilter(field, value) {
             inboundFilter[field] = value;
-            renderInboundList();
+            rerenderKeepFocus(renderInboundList);
         }
         function resetInboundFilter() {
             inboundFilter = { q: '', route: '', service: '', result: '', contact: '', from: '', to: '', quick: '', channel: '', dept: '' };
@@ -36687,6 +36713,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
         function colfOn(t) { return Object.values(colFilters[t] || {}).some(Boolean); }
         function setColFilter(t, key, value, typing) {
             colFilters[t] = Object.assign({}, colFilters[t], { [key]: value || '' });
+            if (typing && window.__gwComposing) return;    // 한글 조합 중 — 끝나면 다시 불립니다 (2026-10-21)
             const el = document.activeElement, pos = el && el.selectionStart;
             COLF_RENDER[t]();
             if (!typing) return;
@@ -37814,7 +37841,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             supplyFilter = { q: '', owner: '', v1: '', v2: '' };   // 채널마다 항목이 달라 필터는 비웁니다
             renderSupplyCenter();
         }
-        function setSupplyFilter(field, value) { supplyFilter[field] = value; renderSupplyCenter(); }
+        function setSupplyFilter(field, value) { supplyFilter[field] = value; rerenderKeepFocus(renderSupplyCenter); }
         function resetSupplyFilter() { supplyFilter = { q: '', owner: '', v1: '', v2: '' }; renderSupplyCenter(); }
 
         // 값 하나를 표에 보여 줄 모양으로
@@ -38137,7 +38164,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                 + th(`<div class="flex items-center gap-1">${colfText(t, 'memo', '비고')}${colfClearBtn(t)}</div>`)
                 + `</tr>`;
         }
-        function setPriceFilter(field, value) { priceFilter[field] = value; renderPriceBook(); }
+        function setPriceFilter(field, value) { priceFilter[field] = value; rerenderKeepFocus(renderPriceBook); }
         function resetPriceFilter() { priceFilter = { q: '', cat: '', kind: '' }; renderPriceBook(); }
 
         // ==================== 거래 유형별 공급단가 (2026-09-15) ====================
@@ -38916,7 +38943,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                 return true;
             });
         }
-        function setTradeFilter(field, value) { tradeFilter[field] = value; renderSupplyCenter(); }
+        function setTradeFilter(field, value) { tradeFilter[field] = value; rerenderKeepFocus(renderSupplyCenter); }
         function resetTradeFilter() {
             tradeFilter = { q: '', corp: '', status: '', item: '', owner: '', contractDoc: '' };
             renderSupplyCenter();
@@ -39497,7 +39524,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             const fromMembers = orgMembers().map(u => String(u.team || '').trim()).filter(Boolean);
             return Array.from(new Set(fromMaster.concat(fromMembers))).sort((a, b) => a.localeCompare(b, 'ko'));
         }
-        function setOrgFilter(field, value) { orgFilter[field] = value; renderOrgChart(); }
+        function setOrgFilter(field, value) { orgFilter[field] = value; rerenderKeepFocus(renderOrgChart); }
         function resetOrgFilter() { orgFilter = { q: '', dept: '' }; renderOrgChart(); }
 
         // 구성원 사진 — 올린 사진이 있으면 사진을, 없으면 이름 첫 글자를 씁니다.
@@ -39842,7 +39869,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
         let orgManageFilter = { q: '', dept: '', team: '' };
         let orgEditId = '';
 
-        function setOrgManageFilter(field, value) { orgManageFilter[field] = value; renderOrgManage(); }
+        function setOrgManageFilter(field, value) { orgManageFilter[field] = value; rerenderKeepFocus(renderOrgManage); }
         function resetOrgManageFilter() { orgManageFilter = { q: '', dept: '', team: '' }; renderOrgManage(); }
         function orgManageFiltered() {
             const norm = v => String(v || '').replace(/\s+/g, '').toLowerCase();
@@ -40825,7 +40852,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             });
             return payoutSorted(list);
         }
-        function setPayoutFilter(field, value) { payoutFilter[field] = value; renderSupplyCenter(); }
+        function setPayoutFilter(field, value) { payoutFilter[field] = value; rerenderKeepFocus(renderSupplyCenter); }
         function resetPayoutFilter() { payoutFilter = { q: '', level: '', cycle: '', feeMethod: '', root: '' }; renderSupplyCenter(); }
         function setPayoutMonth(v) { payoutMonth = v; renderSupplyCenter(); }
         function setPayoutView(v) { payoutView = v; renderSupplyCenter(); }
@@ -41808,6 +41835,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
         function setCompanyCol(key, value, typing) {
             companyFilter.cols = Object.assign({}, companyFilter.cols || {}, { [key]: value || '' });
             companyFilter.limit = COMPANY_PAGE;
+            if (typing && window.__gwComposing) return;    // 한글 조합 중 — 끝나면 다시 불립니다 (2026-10-21)
             if (!typing) { renderCompanies(); return; }
             const el = document.activeElement, pos = el && el.selectionStart;
             drawCompanyRows();
@@ -43645,7 +43673,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             { id: 'both',  label: '임대+관리비' },
             { id: 'none',  label: '미사용' }
         ];
-        function setCmsStatusFilter(field, value) { cmsStatusFilter[field] = value; renderCmsStatus(); }
+        function setCmsStatusFilter(field, value) { cmsStatusFilter[field] = value; rerenderKeepFocus(renderCmsStatus); }
         function resetCmsStatusFilter() { cmsStatusFilter = { q: '', kind: '' }; renderCmsStatus(); }
 
         // 이 줄이 가맹점관리에 등록된 고객사인지 (등록된 곳만 눌러서 기본정보를 열 수 있습니다)
@@ -48833,7 +48861,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                     <div class="px-4 py-2 border-b border-gray-100 bg-gray-50/60 flex flex-wrap items-center gap-2">
                         <div class="relative flex-1 min-w-[180px]">
                             <i class="fas fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-xs text-gray-400"></i>
-                            <input type="text" id="meeting-q" value="${escapeHtml(meetingFilter.q)}" oninput="meetingFilter.q=this.value; renderMeetingCenter();"
+                            <input type="text" id="meeting-q" value="${escapeHtml(meetingFilter.q)}" oninput="meetingFilter.q=this.value; rerenderKeepFocus(renderMeetingCenter);"
                                    placeholder="회의명, 안건, 논의내용, 참석자, Follow-up 검색"
                                    class="w-full pl-8 pr-3 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500" />
                         </div>
@@ -49291,7 +49319,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                     <div class="px-4 py-2 border-b border-gray-100 bg-gray-50/60">
                         <div class="relative">
                             <i class="fas fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-xs text-gray-400"></i>
-                            <input type="text" id="issue-q" value="${escapeHtml(issueFilter.q)}" oninput="issueFilter.q=this.value; renderIssueCenter();"
+                            <input type="text" id="issue-q" value="${escapeHtml(issueFilter.q)}" oninput="issueFilter.q=this.value; rerenderKeepFocus(renderIssueCenter);"
                                    placeholder="제목, 개요, 영향, 원인, 조치, 보고 대상, 코멘트 검색"
                                    class="w-full pl-8 pr-3 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-rose-500" />
                         </div>
