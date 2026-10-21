@@ -11562,6 +11562,7 @@ const QUOTE_TEMPLATES = [
             'delay-inquiry':      { icon: 'fa-hourglass-half',    color: 'red',    label: '지연사유 확인요청' },
             'delay-answer':       { icon: 'fa-reply',             color: 'amber',  label: '지연사유 회신' },
             'collab-transferred': { icon: 'fa-share-from-square', color: 'indigo', label: '요청 이관' },
+            'collab-comment':     { icon: 'fa-comment-dots',      color: 'indigo', label: '협업 코멘트' },
             'schedule-change':        { icon: 'fa-calendar-alt',   color: 'teal', label: '일정 변경 요청' },
             'schedule-change-result': { icon: 'fa-calendar-check', color: 'teal', label: '일정 변경 결과' },
             'directive-progress':  { icon: 'fa-chart-line',    color: 'purple', label: '지시 진척' },
@@ -11586,6 +11587,7 @@ const QUOTE_TEMPLATES = [
             if (n.type === 'collab-completed') return `<b>${escapeHtml(n.title)}</b> 처리가 완료되었습니다.${n.detail ? `<br><span class="text-xs text-gray-600">처리내용: ${escapeHtml(n.detail)}</span>` : ''}${n.issue ? `<br><span class="text-xs text-amber-600">이슈: ${escapeHtml(n.issue)}</span>` : ''}${n.fileCount ? `<br><span class="text-xs text-blue-700 font-semibold"><i class="fas fa-paperclip mr-1"></i>첨부자료 ${n.fileCount}건 · 클릭하여 확인</span>` : ''}`;
             if (n.type === 'delay-inquiry') return `<b>${escapeHtml(n.title)}</b> 지연에 대한 사유 확인요청이 도착했습니다.${n.detail ? `<br><span class="text-xs text-gray-600">요청: ${escapeHtml(n.detail)}</span>` : ''}`;
             if (n.type === 'delay-answer') return `<b>${escapeHtml(n.title)}</b> 지연 사유가 회신되었습니다.${n.detail ? `<br><span class="text-xs text-gray-600">사유: ${escapeHtml(n.detail)}</span>` : ''}`;
+            if (n.type === 'collab-comment') return `<b>${escapeHtml(n.title)}</b> 협업 요청에 코멘트가 등록되었습니다.${n.detail ? `<br><span class="text-xs text-gray-600">${escapeHtml(n.detail)}</span>` : ''}`;
             if (n.type === 'collab-transferred') return `<b>${escapeHtml(n.title)}</b> 요청 담당이 이관되었습니다.${n.detail ? `<br><span class="text-xs text-gray-600">${escapeHtml(n.detail)}</span>` : ''}`;
             if (n.type === 'schedule-change') return `<b>${escapeHtml(n.title)}</b> 처리완료 예정일 <b>변경 요청</b>이 도착했습니다. 확인 후 수락해 주세요.${n.detail ? `<br><span class="text-xs text-gray-600">${escapeHtml(n.detail)}</span>` : ''}`;
             if (n.type === 'schedule-change-result') return `<b>${escapeHtml(n.title)}</b> 일정 변경 요청이 처리되었습니다.${n.detail ? `<br><span class="text-xs text-gray-600">${escapeHtml(n.detail)}</span>` : ''}`;
@@ -14815,6 +14817,7 @@ const QUOTE_TEMPLATES = [
                         <p class="font-bold text-gray-800 text-sm flex-1 leading-snug min-w-[8rem]">${escapeHtml(req.title)}</p>
                         ${collabTransferBadge(req)}
                         ${reqFileBadge}
+                        ${(req.comments || []).length ? `<span class="text-xs font-bold rounded-full px-2 py-0.5 border text-slate-700 bg-slate-50 border-slate-200 whitespace-nowrap" title="코멘트 ${req.comments.length}건"><i class="far fa-comment-dots mr-0.5"></i>${req.comments.length}</span>` : ''}
                         ${ddayBadge}
                         ${schedBadge}
                         ${overdueBadge}
@@ -16485,10 +16488,86 @@ const QUOTE_TEMPLATES = [
                 </div>`;
             }
 
+            // 코멘트 — 요청을 확인한 사람이 의견을 남깁니다. 입력칸은 [코멘트 작성]을 눌러야 열립니다 (2026-10-22)
+            html += collabCommentsHtml(req);
+
             document.getElementById('collab-detail-body').innerHTML = html;
             document.getElementById('collab-detail-modal').classList.remove('hidden');
         }
         function closeCollabDetailModal() { document.getElementById('collab-detail-modal').classList.add('hidden'); }
+
+        // ==================== 협업요청 코멘트 (2026-10-22) ====================
+        // 요청을 확인한 사람(요청자 · 담당자 · 조회 권한이 있는 사람)이 의견을 남깁니다.
+        // req.comments = [{ id, by, dept, at, time, text }] · 등록하면 요청자와 수신 담당자(없으면 수신 부서)에게 알림이 갑니다.
+        // 삭제는 관리자만 합니다.
+        function collabCommentsHtml(req) {
+            const list = req.comments || [];
+            const items = list.map(c => `
+                <div class="bg-white border border-gray-200 rounded p-2.5">
+                    <p class="text-xs text-gray-500">
+                        <b class="text-gray-700">${escapeHtml(c.by || '')}</b>${c.dept ? ` · ${escapeHtml(deptNames[c.dept] || c.dept)}` : ''} · ${escapeHtml(c.at || '')} ${escapeHtml(c.time || '')}
+                        ${canManageAllData() && c.id ? `<button type="button" onclick="deleteCollabComment('${escapeHtml(req.id)}', '${escapeHtml(c.id)}')" class="ml-1 w-5 h-5 text-gray-300 hover:text-red-500 align-middle" title="삭제 (관리자)"><i class="fas fa-times text-[11px]"></i></button>` : ''}
+                    </p>
+                    <p class="text-gray-800 whitespace-pre-line mt-1">${escapeHtml(c.text || '')}</p>
+                </div>`).join('');
+            return `<div class="bg-slate-50 border border-slate-200 rounded p-3 space-y-2">
+                    <div class="flex items-center justify-between gap-2">
+                        <p class="text-slate-700 font-semibold"><i class="far fa-comment-dots mr-1"></i>코멘트${list.length ? ` <span class="text-xs font-normal text-slate-500">${list.length}건</span>` : ''}</p>
+                        <button type="button" id="collab-comment-open" onclick="toggleCollabCommentForm(true)" class="px-3 py-1 bg-white border border-slate-300 text-slate-700 hover:bg-slate-100 rounded text-xs font-semibold"><i class="fas fa-pen mr-1"></i>코멘트 작성</button>
+                    </div>
+                    ${items || '<p class="text-xs text-slate-400">등록된 코멘트가 없습니다.</p>'}
+                    <div id="collab-comment-form" class="hidden space-y-2">
+                        <textarea id="collab-comment-text" rows="3" placeholder="확인 의견을 입력해 주세요" class="w-full p-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-slate-500"></textarea>
+                        <div class="flex justify-end gap-1.5">
+                            <button type="button" onclick="toggleCollabCommentForm(false)" class="px-3 py-1.5 bg-gray-200 text-gray-700 hover:bg-gray-300 rounded text-xs">취소</button>
+                            <button type="button" onclick="addCollabComment('${escapeHtml(req.id)}')" class="px-3 py-1.5 bg-slate-700 hover:bg-slate-800 text-white rounded text-xs font-semibold"><i class="fas fa-paper-plane mr-1"></i>코멘트 등록</button>
+                        </div>
+                        <p class="text-[11px] text-slate-500">등록하면 요청자와 수신 담당자에게 알림이 발송됩니다.</p>
+                    </div>
+                </div>`;
+        }
+        function toggleCollabCommentForm(open) {
+            const f = document.getElementById('collab-comment-form');
+            const b = document.getElementById('collab-comment-open');
+            if (!f) return;
+            f.classList.toggle('hidden', !open);
+            if (b) b.classList.toggle('hidden', !!open);
+            const t = document.getElementById('collab-comment-text');
+            if (t) { if (open) t.focus(); else t.value = ''; }
+        }
+        function addCollabComment(id) {
+            const req = collabRequests.find(r => r.id === id);
+            if (!req) return;
+            const el = document.getElementById('collab-comment-text');
+            const text = (el && el.value || '').trim();
+            if (!text) { alert('코멘트 내용을 입력해 주세요.'); if (el) el.focus(); return; }
+            const now = new Date();
+            req.comments = req.comments || [];
+            req.comments.push({ id: gwUid('cc_'), by: currentUserName || '작성자', dept: currentUserDept || '', at: ymd(now), time: hhmm(now), text });
+            notifyCollabComment(req, text);
+            renderCollabCenter();   // 저장 포함
+            openCollabDetailModal(id);
+            showAppToast('코멘트가 등록되었습니다.', 'blue');
+        }
+        // 요청자 · 수신 담당자(없으면 수신 부서)에게 알림 — 본인에게는 보내지 않습니다
+        function notifyCollabComment(req, text) {
+            const me = currentUserName || '';
+            const base = { type: 'collab-comment', ticketId: req.id, title: req.title, targetDept: req.targetDept, detail: `${me}: ${text}`, date: ymd(new Date()), read: false };
+            if (req.assignee && req.assignee !== me)
+                pushNotification(Object.assign({ id: 'cnoti_' + collabNotiIdCounter++ }, base, { toUser: req.assignee, toDept: req.sourceDept }));
+            if (req.assigneeUser ? req.assigneeUser !== me : currentUserDept !== req.targetDept)
+                pushNotification(Object.assign({ id: 'cnoti_' + collabNotiIdCounter++ }, base, { toUser: req.assigneeUser || '', toDept: req.targetDept }));
+        }
+        // 코멘트 삭제 — 관리자만
+        function deleteCollabComment(reqId, commentId) {
+            if (!canManageAllData()) { alert('코멘트 삭제는 관리자만 할 수 있습니다.'); return; }
+            const req = collabRequests.find(r => r.id === reqId);
+            if (!req || !(req.comments || []).some(c => c.id === commentId)) return;
+            if (!confirm('이 코멘트를 삭제하시겠습니까?')) return;
+            req.comments = req.comments.filter(c => c.id !== commentId);
+            renderCollabCenter();
+            openCollabDetailModal(reqId);
+        }
         // 관리자 — 협업요청 · 업무지시를 상태 · 부서 · 담당과 관계없이 고치고 지웁니다 (2026-09-28)
         function openCollabAdminEdit(id) {
             const req = collabRequests.find(r => r.id === id);
