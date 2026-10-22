@@ -2580,24 +2580,24 @@
                         </div>
                     </div>
 
-                    <!-- KPI 카드 -->
+                    <!-- KPI 카드 — 누르면 탭 아래에 해당 목록을 보여 줍니다 (2026-10-22) -->
                     <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-                        <div class="bg-white p-4 rounded-lg shadow-sm border-l-4 border-amber-500">
+                        <div data-collab-kpi="inbox" onclick="showCollabKpi('inbox')" title="클릭하여 아래에 목록 보기" class="bg-white p-4 rounded-lg shadow-sm border-l-4 border-amber-500 cursor-pointer hover:shadow-md transition-shadow">
                             <p class="text-xs font-medium text-gray-500"><i class="fas fa-bell mr-1 text-amber-500"></i> 내가 처리할 대기</p>
                             <h3 id="collab-kpi-inbox-pending" class="text-2xl font-bold text-gray-800 mt-1 tabular-nums">0건</h3>
                             <p class="text-xs text-gray-400 mt-0.5">받은 요청 중 미처리</p>
                         </div>
-                        <div class="bg-white p-4 rounded-lg shadow-sm border-l-4 border-indigo-500">
+                        <div data-collab-kpi="sent" onclick="showCollabKpi('sent')" title="클릭하여 아래에 목록 보기" class="bg-white p-4 rounded-lg shadow-sm border-l-4 border-indigo-500 cursor-pointer hover:shadow-md transition-shadow">
                             <p class="text-xs font-medium text-gray-500"><i class="fas fa-paper-plane mr-1 text-indigo-500"></i> 내가 보낸 대기</p>
                             <h3 id="collab-kpi-sent-pending" class="text-2xl font-bold text-gray-800 mt-1 tabular-nums">0건</h3>
                             <p class="text-xs text-gray-400 mt-0.5">발행 후 상대 응답 대기</p>
                         </div>
-                        <div class="bg-white p-4 rounded-lg shadow-sm border-l-4 border-red-500">
+                        <div data-collab-kpi="aged" onclick="showCollabKpi('aged')" title="클릭하여 아래에 목록 보기" class="bg-white p-4 rounded-lg shadow-sm border-l-4 border-red-500 cursor-pointer hover:shadow-md transition-shadow">
                             <p class="text-xs font-medium text-gray-500"><i class="fas fa-hourglass-half mr-1 text-red-500"></i> 지연 요청</p>
                             <h3 id="collab-kpi-aged" class="text-2xl font-bold text-gray-800 mt-1 tabular-nums">0건</h3>
                             <p class="text-xs text-gray-400 mt-0.5">3일 이상 미응답</p>
                         </div>
-                        <div class="bg-white p-4 rounded-lg shadow-sm border-l-4 border-green-500">
+                        <div data-collab-kpi="active" onclick="showCollabKpi('active')" title="클릭하여 아래에 목록 보기" class="bg-white p-4 rounded-lg shadow-sm border-l-4 border-green-500 cursor-pointer hover:shadow-md transition-shadow">
                             <p class="text-xs font-medium text-gray-500"><i class="fas fa-sync-alt mr-1 text-green-500"></i> 진행중</p>
                             <h3 id="collab-kpi-active" class="text-2xl font-bold text-gray-800 mt-1 tabular-nums">0건</h3>
                             <p class="text-xs text-gray-400 mt-0.5">수락되어 처리 중</p>
@@ -2694,6 +2694,15 @@
                     <div id="collab-view-pending" class="collab-view hidden">
                         <div class="bg-indigo-50 border border-indigo-100 rounded-lg px-4 py-2.5 text-sm text-gray-600 mb-3"><i class="fas fa-hourglass-half text-indigo-500 mr-1"></i> 처리가 필요한 <b>대기·보류</b> 요청과 <b>일정 변경 요청</b> 건을 모아 표시합니다. 오래된 순으로 정렬됩니다.</div>
                         <div id="collab-pending-list" class="space-y-3"></div>
+                    </div>
+
+                    <!-- KPI 카드를 눌렀을 때: 카드 숫자와 같은 기준의 목록 -->
+                    <div id="collab-view-kpi" class="collab-view hidden">
+                        <div class="flex items-center justify-between gap-2 bg-amber-50 border border-amber-100 rounded-lg px-4 py-2.5 text-sm text-gray-700 mb-3">
+                            <span id="collab-kpi-view-title"></span>
+                            <button type="button" onclick="switchCollabTab('received')" class="text-xs text-gray-600 border border-gray-300 bg-white rounded px-2.5 py-1 hover:bg-gray-50 whitespace-nowrap"><i class="fas fa-times mr-1"></i>닫기</button>
+                        </div>
+                        <div id="collab-kpi-list" class="space-y-3"></div>
                     </div>
                 </section>
 
@@ -14623,6 +14632,18 @@ const QUOTE_TEMPLATES = [
         })();
 
         let currentCollabTab = 'received';
+        // KPI 카드(내가 처리할 대기 · 내가 보낸 대기 · 지연 요청 · 진행중)를 눌러 보고 있는 목록 (2026-10-22)
+        let collabKpiKey = '';
+        const COLLAB_KPI_NAMES = { inbox: '내가 처리할 대기', sent: '내가 보낸 대기', aged: '지연 요청', active: '진행중' };
+        function showCollabKpi(key) {
+            // 같은 카드를 다시 누르면 닫습니다
+            if (currentCollabTab === 'kpi' && collabKpiKey === key) { switchCollabTab('received'); return; }
+            collabKpiKey = key;
+            currentCollabTab = 'kpi';
+            renderCollabCenter();
+            const v = document.getElementById('collab-view-kpi');
+            if (v && v.scrollIntoView) v.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
 
         // 로그인 사용자의 실효 조회 범위
         function getCollabScopeFor(name, dept, level) {
@@ -14960,7 +14981,14 @@ const QUOTE_TEMPLATES = [
 
         function switchCollabTab(tab) {
             currentCollabTab = tab;
-            ['received', 'sent', 'directive', 'board', 'pending'].forEach(t => {
+            if (tab !== 'kpi') collabKpiKey = '';
+            document.querySelectorAll('[data-collab-kpi]').forEach(el => {
+                const on = el.dataset.collabKpi === collabKpiKey;
+                el.classList.toggle('collab-kpi-on', on);
+                el.style.outline = on ? '2px solid #3b82f6' : '';
+                el.style.outlineOffset = on ? '2px' : '';
+            });
+            ['received', 'sent', 'directive', 'board', 'pending', 'kpi'].forEach(t => {
                 document.getElementById('collab-view-' + t).classList.toggle('hidden', t !== tab);
                 const btn = document.querySelector(`[data-collab-tab="${t}"]`);
                 if (btn) {
@@ -15065,10 +15093,22 @@ const QUOTE_TEMPLATES = [
             document.getElementById('collab-tabcnt-directive').textContent = directiveCnt;
 
             // KPI (필터 무관, 조회범위 기준). self 스코프는 개인 기준, 그 이상은 부서 기준까지.
-            const inboxPending = visible.filter(r => (r.assigneeUser === name || (wide && (r.targetDept === dept || dept === 'admin'))) && r.status === 'pending').length;
-            const sentPending = visible.filter(r => (r.assignee === name || (wide && (r.sourceDept === dept || dept === 'admin'))) && r.status === 'pending').length;
-            const agedCnt = visible.filter(r => (r.status === 'pending' && (r.ageDays || 0) >= 3) || isCollabOverdue(r)).length;
-            const activeCnt = visible.filter(r => r.status === 'accepted').length;
+            const isInboxOf = (r) => r.assigneeUser === name || (wide && (r.targetDept === dept || dept === 'admin'));
+            const kpiLists = {
+                inbox:  visible.filter(r => isInboxOf(r) && r.status === 'pending'),
+                sent:   visible.filter(r => (r.assignee === name || (wide && (r.sourceDept === dept || dept === 'admin'))) && r.status === 'pending'),
+                aged:   visible.filter(r => (r.status === 'pending' && (r.ageDays || 0) >= 3) || isCollabOverdue(r)),
+                active: visible.filter(r => r.status === 'accepted')
+            };
+            const inboxPending = kpiLists.inbox.length, sentPending = kpiLists.sent.length, agedCnt = kpiLists.aged.length, activeCnt = kpiLists.active.length;
+            // KPI 카드를 눌렀으면 같은 기준의 목록을 탭 아래에 그립니다 (처리 단추: 받은 쪽이면 받은 요청, 아니면 발행 요청 기준)
+            if (collabKpiKey && kpiLists[collabKpiKey]) {
+                const list = kpiLists[collabKpiKey];
+                document.getElementById('collab-kpi-view-title').innerHTML = `<i class="fas fa-filter text-amber-500 mr-1"></i><b>${COLLAB_KPI_NAMES[collabKpiKey]}</b> ${list.length}건 <span class="text-xs text-gray-500">· 위 카드 숫자와 같은 기준 (필터는 적용되지 않음)</span>`;
+                document.getElementById('collab-kpi-list').innerHTML = list.length
+                    ? list.map(r => collabTicketCard(r, collabKpiKey !== 'sent' && (isInboxOf(r) || allData) ? 'inbox' : 'outbox')).join('')
+                    : collabEmpty('해당하는 요청이 없습니다.');
+            }
             document.getElementById('collab-kpi-inbox-pending').textContent = inboxPending + '건';
             document.getElementById('collab-kpi-sent-pending').textContent = sentPending + '건';
             document.getElementById('collab-kpi-aged').textContent = agedCnt + '건';
