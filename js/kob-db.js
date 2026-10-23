@@ -282,6 +282,13 @@
             const m = tbl(t);
             const isNew = !m.has(id);
             const prev = m.get(id);
+            // 새로 넣는 자료에는 등록한 사람을 남깁니다 — '본인이 등록한 자료는 바로 삭제' 에 씁니다 (2026-10-23).
+            // 화면 객체에도 붙여야 다음 저장 때 빠지지 않습니다.
+            if (isNew && !row.regBy) {
+                let nm = '';
+                try { if (typeof currentUserName === 'string') nm = currentUserName; } catch (e) { /* 로그인 전 */ }
+                if (nm) row.regBy = nm;
+            }
             m.set(id, { data: clone(row), rev: prev ? prev.rev : 0 });
             fire('kob-db-change', { table: t, id, reason: 'local' });
             return queue(t + ':' + id, () => pushRow(t, id, isNew));

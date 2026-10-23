@@ -1955,6 +1955,7 @@
                                 <p class="text-sm font-bold text-gray-800"><i class="far fa-bell text-gray-400 mr-1"></i>알림 <span id="noti-panel-count" class="ml-1 text-[11px] font-normal text-gray-400"></span></p>
                                 <div class="flex items-center gap-1">
                                     <button type="button" onclick="markAllNotiRead()" class="px-2 py-1 text-[11px] rounded bg-gray-100 hover:bg-gray-200 text-gray-600 whitespace-nowrap">모두 읽음</button>
+                                    <button type="button" onclick="closeNotiPanel(); openDeleteLog()" class="px-2 py-1 text-[11px] rounded border border-gray-200 bg-white hover:bg-gray-50 text-gray-600 whitespace-nowrap" title="삭제된 자료 이력"><i class="fas fa-clock-rotate-left mr-0.5"></i>삭제 이력</button>
                                     <button type="button" id="delreq-btn" onclick="closeNotiPanel(); openDeleteRequests('pending')" class="hidden px-2 py-1 text-[11px] rounded border border-gray-200 bg-white hover:bg-gray-50 text-gray-600 whitespace-nowrap" title="관리자에게 보낸 삭제 요청"></button>
                                     <button type="button" id="noti-clear-btn" onclick="deleteAllMyNoti()" class="hidden px-2 py-1 text-[11px] rounded border border-red-200 text-red-600 bg-white hover:bg-red-50 whitespace-nowrap" title="관리자 — 받은 알림을 모두 삭제"><i class="fas fa-user-shield mr-0.5"></i>모두 삭제</button>
                                     <button type="button" onclick="closeNotiPanel()" class="w-6 h-6 text-gray-400 hover:text-gray-600"><i class="fas fa-times text-xs"></i></button>
@@ -19400,6 +19401,7 @@ const QUOTE_TEMPLATES = [
                     return;
                 }
                 if (!confirm('반복 일정의 모든 회차를 삭제하시겠습니까?')) return;
+                addDeleteLog('일정', `${schedule.date || ''} ${schedule.title || ''} (반복 전체)`.trim(), schedule, '일정 삭제');
                 unlinkWorkFromSchedule(schedule);
                 schedules = schedules.filter(s => s.id !== id);
                 saveSchedules();
@@ -19410,6 +19412,7 @@ const QUOTE_TEMPLATES = [
             }
             if (confirm('정말 이 일정을 삭제하시겠습니까?')) {
                 // 업무센터에서 올린 일정이면 업무 쪽 연결도 함께 끊는다
+                addDeleteLog('일정', `${schedule.date || ''} ${schedule.title || ''}`.trim(), schedule, '일정 삭제');
                 unlinkWorkFromSchedule(schedule);
                 schedules = schedules.filter(s => s.id !== id);
                 saveSchedules();
@@ -35917,6 +35920,18 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
         let adminEditCtx = null;
         const ADMIN_EDIT_SKIP = ['id', '__rev', 'adminEditedAt', 'adminEditedBy'];
         function openAdminRecordEditor(opts) {
+            // 본인이 등록한 자료를 [삭제] 로 열었으면 창 없이 삭제 확인만 합니다 (보완사항 2026-10-23)
+            if (ownDeleteMode) {
+                const rec0 = opts && opts.record;
+                if (!rec0 || !opts.onDelete) { alert('이 자료는 여기서 삭제할 수 없습니다.'); return; }
+                if (!confirm(`'${opts.title || '이 자료'}' 을(를) 삭제하시겠습니까?\n\n삭제 후에는 복구할 수 없습니다.`)) return;
+                const snap = JSON.parse(JSON.stringify(rec0));
+                try { opts.onDelete(); } catch (e) { alert('삭제에 실패했습니다.\n' + (e && e.message || e)); return; }
+                addDeleteLog('자료', opts.title || '', snap, '본인 등록 자료 삭제');
+                refreshVisibleScreen();
+                showAppToast('삭제되었습니다.', 'gray');
+                return;
+            }
             if (!canManageAllData()) { alert('전체 자료 수정·삭제 권한이 없습니다.'); return; }
             const rec = opts && opts.record;
             if (!rec) { alert('자료를 찾을 수 없습니다.'); return; }
@@ -36038,12 +36053,26 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             refreshVisibleScreen();
             showAppToast('관리자 수정: 저장되었습니다.', 'green');
         }
+        // 본인 등록 자료 — 관리자 수정 창 없이 [삭제] 만 (보완사항 2026-10-23)
+        function ownDeleteFromBtn(btn) {
+            let args = [];
+            try { args = JSON.parse(btn.getAttribute('data-args') || '[]'); } catch (e) { args = []; }
+            const fn = btn.getAttribute('data-fn');
+            const rec = deleteRecordOf(fn, args);
+            if (!rec || !isMyRecord(rec, fn) || DELETE_REQ_FNS.indexOf(fn) < 0 || typeof window[fn] !== 'function') { requestAdminDeleteFromBtn(btn); return; }
+            ownDeleteMode = true;
+            try { window[fn].apply(window, args); } finally { ownDeleteMode = false; }
+        }
+        let ownDeleteMode = false;
         function adminRecordDelete() {
             const ctx = adminEditCtx; if (!ctx || !ctx.onDelete) return;
             if (!confirm(`'${ctx.title || '이 자료'}' 을(를) 삭제하시겠습니까?\n\n삭제 후에는 복구할 수 없습니다.`)) return;
             const reqId = deleteReqRunning;   // 삭제 요청으로 연 창 (창을 닫으면 지워지므로 먼저 받아 둡니다)
             try { ctx.onDelete(); }
             catch (e) { alert('삭제에 실패했습니다.\n' + (e && e.message || e)); return; }
+            const w = (deleteWatch && deleteWatch.editor) ? deleteWatch : null;
+            addDeleteLog(w ? w.kind : '자료', w ? w.label : (ctx.title || ''), w ? w.snap : ctx.record, w ? w.how : '관리자 삭제');
+            deleteWatch = null;
             closeAdminRecordEditor();
             refreshVisibleScreen();
             showAppToast('관리자 수정: 삭제되었습니다.', 'gray');
@@ -36109,16 +36138,103 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
         // 삭제 함수 맨 앞에서 부릅니다. 관리자면 true, 아니면 삭제 요청 창을 띄우고 false.
         //   adminDeleteGate('deleteContract', [id], '계약', `${c.id} · ${c.title}`)
         function adminDeleteGate(fn, args, kind, label) {
-            if (canManageAllData()) return true;
+            const rec = deleteRecordOf(fn, args);
+            // 관리자 · 본인이 등록한 자료는 바로 삭제합니다 (보완사항 2026-10-23) — 삭제되면 이력에 남깁니다
+            if (canManageAllData() || isMyRecord(rec, fn)) { watchDeletion(fn, args, kind, label, rec); return true; }
             requestAdminDelete(fn, args, kind, label);
             return false;
+        }
+
+        // ---------- 본인 등록 자료 판단 (보완사항 2026-10-23) ----------
+        // 삭제 함수 이름 → 대상 자료. 자료를 못 찾으면 null (그때는 관리자만 삭제)
+        // 조직 · 설정 성격의 자료(본부 · 팀 · 직급 · 구성원 · 파트너 아이디 · 법인카드 · 차량)는 넣지 않아 지금처럼 관리자만 삭제합니다.
+        function deleteRecordOf(fn, args) {
+            const a = args || [];
+            const find = (list, id) => (Array.isArray(list) ? list.find(x => x && x.id === id) : null) || null;
+            try {
+                switch (fn) {
+                    case 'deleteArchivePost': return archivePostById(a[0]);
+                    case 'deleteProject': return findProject(a[0]);
+                    case 'deleteWbs': { const p = findProject(a[0]); return p ? findWbs(p, a[1]) : null; }
+                    case 'deleteInbound': return find(inboundRecords, a[0]);
+                    case 'deleteCustomer': return find(customers, a[0]);
+                    case 'deleteCase': return find(cases, a[0]);
+                    case 'deleteNotice': return find(notices, a[0]);
+                    case 'deleteContract': return find(contracts, a[0]);
+                    case 'deleteQuote': return find(quotes, a[0]);
+                    case 'deleteSupply': return find(supplyRecords, a[0]);
+                    case 'deleteMeeting': return findMeeting(a[0]);
+                    case 'deleteIssue': return findIssue(a[0]);
+                    case 'deleteDevReq': return findDevReq(a[0]);
+                    case 'deleteVehicleLog': return find(vehicleLogs, a[0]);
+                    case 'deletePartnerIntake': return partnerIntakeById(a[0]);
+                    case 'openWorkAdminEdit': { const d = wcDef(a[0]); return d ? find(d.works, a[1]) : null; }
+                    case 'openCollabAdminEdit': return find(collabRequests, a[0]);
+                    case 'openLocalTaskAdminEdit': return find(localTasks, a[0]);
+                    case 'openInstallCheckAdminEdit': return find(installChecks, a[0]);
+                    case 'openPayDocAdminEdit': return find(payDocRequests, a[0]);
+                }
+            } catch (e) { /* 그 화면 자료가 아직 없으면 관리자만 */ }
+            return null;
+        }
+        // 등록한 사람 — 새로 저장되는 자료에는 regBy(이름)가 붙고, 예전 자료는 화면마다 쓰던 칸을 봅니다
+        const DELETE_OWNER_FIELDS = {
+            openWorkAdminEdit: ['regBy', 'receiver'], openCollabAdminEdit: ['regBy', 'assignee'], openLocalTaskAdminEdit: ['regBy', 'assignee'],
+            openPayDocAdminEdit: ['regBy', 'requester'], deleteIssue: ['regBy', 'reporter'], deleteDevReq: ['regBy', 'requester'],
+            deleteMeeting: ['regBy', 'writer'], deleteNotice: ['regBy', 'author'], deleteArchivePost: ['regBy', 'by']
+        };
+        function isMyRecord(rec, fn) {
+            if (!rec || !currentUserName) return false;
+            const me = String(currentUserName), mail = String(currentUserEmail || '').toLowerCase();
+            const fields = DELETE_OWNER_FIELDS[fn] || ['regBy', 'createdBy', 'author', 'writer', 'uploadedBy'];
+            return fields.some(f => {
+                const v = rec[f];
+                if (typeof v !== 'string' || !v) return false;
+                return v === me || (!!mail && v.toLowerCase() === mail);
+            });
+        }
+
+        // ---------- 삭제 이력 (보완사항 2026-10-23) ----------
+        // 실제로 지워진 자료만 남깁니다 — 삭제 함수가 띄우는 확인 창에서 취소하면 남기지 않습니다.
+        const DELETE_LOG_KEY = 'gwDeleteLog.v1';
+        function deleteLogList() { return (loadJsonStore(DELETE_LOG_KEY, []) || []).filter(x => x && x.id); }
+        function addDeleteLog(kind, label, rec, how) {
+            let snap = '';
+            try { snap = rec ? JSON.stringify(rec) : ''; } catch (e) { snap = ''; }
+            if (snap.length > 3000) snap = '';       // 큰 자료(첨부가 든 것)는 내용 없이 이름만 — 이력 전체가 한 저장 칸에 들어가므로 작게
+            const now = new Date();
+            const list = deleteLogList();
+            list.push({ id: 'DL-' + now.getTime() + Math.random().toString(36).slice(2, 5), kind: String(kind || ''), label: String(label || ''),
+                        by: currentUserName || '', byDept: currentUserDept || '', at: now.toISOString(), how: how || '', snapshot: snap });
+            saveJsonStore(DELETE_LOG_KEY, list.slice(-300));
+        }
+        // 게이트를 지난 뒤 같은 흐름 안에서 확인 창을 취소했는지 보고, 지워졌으면 이력을 남깁니다
+        let deleteWatch = null;
+        function watchDeletion(fn, args, kind, label, rec) {
+            if (deleteWatch) return;      // 이미 보고 있는 삭제 안에서 또 부른 경우
+            const snap = rec ? JSON.parse(JSON.stringify(rec)) : null;
+            const how = canManageAllData() ? '관리자 삭제' : '본인 등록 자료 삭제';
+            if (/AdminEdit$/.test(fn)) { deleteWatch = { fn, kind, label, snap, how, editor: true }; return; }   // 수정 창의 [삭제] 에서 남깁니다
+            let cancelled = false;
+            const oc = window.confirm;
+            const mine = (m) => { const ok = oc.call(window, m); if (!ok) cancelled = true; return ok; };
+            window.confirm = mine;
+            deleteWatch = { fn };
+            setTimeout(() => {
+                if (window.confirm === mine) window.confirm = oc;   // 그 사이 다른 곳(삭제 요청 실행)이 되돌렸으면 건드리지 않습니다
+                deleteWatch = null;
+                if (cancelled) return;
+                // 대상을 찾을 수 있는 자료는 실제로 없어졌는지 한 번 더 봅니다
+                if (rec && deleteRecordOf(fn, args)) return;
+                addDeleteLog(kind, label, snap, how);
+            }, 0);
         }
         function requestAdminDelete(fn, args, kind, label) {
             args = args || [];
             if (DELETE_REQ_FNS.indexOf(fn) < 0 || !deleteReqArgsOk(args)) { alert('삭제는 관리자만 할 수 있습니다.'); return null; }
             const same = deleteRequestList().find(r => r.status === 'pending' && r.fn === fn && JSON.stringify(r.args) === JSON.stringify(args));
             if (same) { alert(`이미 관리자에게 삭제를 요청한 자료입니다.\n요청자: ${same.by} · ${String(same.at).slice(0, 10)}\n\n관리자가 처리할 때까지 기다려 주세요.`); return null; }
-            const reason = prompt(`삭제는 관리자만 할 수 있습니다. 관리자에게 삭제를 요청합니다.\n\n대상: [${kind}] ${label}\n\n삭제 사유를 입력해 주세요.`, '');
+            const reason = prompt(`다른 사람이 등록한 자료는 관리자만 삭제할 수 있습니다. 관리자에게 삭제를 요청합니다.\n\n대상: [${kind}] ${label}\n\n삭제 사유를 입력해 주세요.`, '');
             if (reason === null) return null;
             if (!reason.trim()) { alert('삭제 사유를 입력해 주세요.'); return null; }
             const now = new Date();
@@ -36227,6 +36343,80 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             btn.classList.toggle('hidden', !(canManageAllData() || list.length));
             btn.innerHTML = `<i class="fas fa-trash-can mr-0.5"></i>삭제 요청${pend ? ` <b class="text-red-600">${pend}</b>` : ''}`;
         }
+        // ---------- 삭제 이력 창 (보완사항 2026-10-23) ----------
+        // 관리자는 전체, 그 밖의 직원은 본인이 삭제한 이력만 봅니다. 지운 자료의 내용(작은 자료만)도 열어 볼 수 있습니다.
+        let deleteLogFilter = { q: '', kind: '' };
+        function openDeleteLog() {
+            let m = document.getElementById('dellog-modal');
+            if (!m) {
+                m = document.createElement('div');
+                m.id = 'dellog-modal';
+                m.className = 'hidden fixed inset-0 bg-black/40 z-[70] flex items-center justify-center p-4';
+                m.addEventListener('click', (e) => { if (e.target === m) closeDeleteLog(); });
+                m.innerHTML = `<div class="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[85vh] flex flex-col">
+                        <div class="px-4 py-3 border-b border-gray-200 flex items-center justify-between gap-2">
+                            <h3 class="text-base font-bold text-gray-800"><i class="fas fa-clock-rotate-left text-gray-500 mr-1"></i>삭제 이력</h3>
+                            <button type="button" onclick="closeDeleteLog()" class="w-7 h-7 text-gray-400 hover:text-gray-600"><i class="fas fa-times"></i></button>
+                        </div>
+                        <div class="px-4 pt-3 flex flex-wrap gap-2">
+                            <input id="dellog-q" type="text" oninput="deleteLogFilter.q=this.value; renderDeleteLog()" placeholder="자료 이름 · 삭제한 사람 검색" class="flex-1 min-w-[180px] p-2 text-sm border border-gray-300 rounded" />
+                            <select id="dellog-kind" onchange="deleteLogFilter.kind=this.value; renderDeleteLog()" class="p-2 text-sm border border-gray-300 rounded bg-white"></select>
+                        </div>
+                        <div id="dellog-body" class="p-4 overflow-y-auto"></div>
+                    </div>`;
+                document.body.appendChild(m);
+            }
+            m.classList.remove('hidden');
+            renderDeleteLog();
+        }
+        function closeDeleteLog() { const m = document.getElementById('dellog-modal'); if (m) m.classList.add('hidden'); }
+        function visibleDeleteLog() {
+            const all = deleteLogList().slice().sort((a, b) => String(b.at).localeCompare(String(a.at)));
+            return canManageAllData() ? all : all.filter(x => x.by === currentUserName);
+        }
+        function renderDeleteLog() {
+            const body = document.getElementById('dellog-body');
+            if (!body) return;
+            const base = visibleDeleteLog();
+            const kinds = Array.from(new Set(base.map(x => x.kind).filter(Boolean))).sort((a, b) => a.localeCompare(b, 'ko'));
+            const sel = document.getElementById('dellog-kind');
+            if (sel) sel.innerHTML = `<option value="">종류 전체</option>` + kinds.map(k => `<option value="${escapeHtml(k)}" ${k === deleteLogFilter.kind ? 'selected' : ''}>${escapeHtml(k)}</option>`).join('');
+            const q = String(deleteLogFilter.q || '').trim().toLowerCase();
+            const list = base.filter(x => (!deleteLogFilter.kind || x.kind === deleteLogFilter.kind)
+                && (!q || `${x.label} ${x.by} ${x.kind}`.toLowerCase().includes(q)));
+            const when = (v) => v ? escapeHtml(new Date(v).toLocaleString('ko-KR', { year: 'numeric', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })) : '';
+            body.innerHTML = `
+                <p class="text-xs text-gray-500 mb-3"><i class="fas fa-circle-info mr-1"></i>${canManageAllData() ? '전체 직원의 삭제 이력입니다.' : '내가 삭제한 자료의 이력입니다.'} 최근 300건까지 보관합니다. 총 <b>${list.length}</b>건</p>
+                ${list.length ? `<div class="overflow-x-auto"><table class="w-full text-sm min-w-[640px]">
+                    <thead><tr class="bg-gray-50 text-xs text-gray-500 border-b"><th class="p-2 text-left font-medium">삭제 일시</th><th class="p-2 text-left font-medium">종류</th><th class="p-2 text-left font-medium">자료</th><th class="p-2 text-left font-medium">삭제한 사람</th><th class="p-2 text-left font-medium">구분</th><th class="p-2"></th></tr></thead>
+                    <tbody>${list.map(x => `<tr class="border-b border-gray-100 align-top">
+                        <td class="p-2 text-xs text-gray-600 whitespace-nowrap">${when(x.at)}</td>
+                        <td class="p-2"><span class="px-1.5 py-0.5 rounded text-[11px] bg-gray-100 text-gray-700 whitespace-nowrap">${escapeHtml(x.kind)}</span></td>
+                        <td class="p-2 text-gray-800 break-words">${escapeHtml(x.label)}</td>
+                        <td class="p-2 text-xs text-gray-600 whitespace-nowrap">${escapeHtml(x.by)}${x.byDept ? ' · ' + escapeHtml(deptName(x.byDept)) : ''}</td>
+                        <td class="p-2 text-[11px] text-gray-500 whitespace-nowrap">${escapeHtml(x.how || '')}</td>
+                        <td class="p-2 text-right">${x.snapshot ? `<button type="button" onclick="showDeleteLogSnapshot('${escapeHtml(x.id)}')" class="text-xs text-blue-600 hover:underline whitespace-nowrap">내용 보기</button>` : ''}</td>
+                    </tr>`).join('')}</tbody></table></div>`
+                : '<p class="text-sm text-gray-400 text-center py-10">삭제 이력이 없습니다.</p>'}`;
+        }
+        function showDeleteLogSnapshot(id) {
+            const x = visibleDeleteLog().find(v => v.id === id);
+            if (!x || !x.snapshot) return;
+            let obj = null;
+            try { obj = JSON.parse(x.snapshot); } catch (e) { obj = null; }
+            const rows = obj && typeof obj === 'object'
+                ? Object.keys(obj).filter(k => obj[k] !== '' && obj[k] != null).map(k => {
+                    const v = obj[k];
+                    const t = typeof v === 'object' ? JSON.stringify(v) : String(v);
+                    return `<tr class="border-b border-gray-100 align-top"><td class="p-1.5 text-xs text-gray-500 whitespace-nowrap">${escapeHtml(k)}</td><td class="p-1.5 text-xs text-gray-800 break-all">${escapeHtml(t.length > 400 ? t.slice(0, 400) + '…' : t)}</td></tr>`;
+                }).join('') : '';
+            const body = document.getElementById('dellog-body');
+            body.innerHTML = `<button type="button" onclick="renderDeleteLog()" class="mb-3 text-sm text-gray-600 hover:underline"><i class="fas fa-arrow-left mr-1"></i>목록으로</button>
+                <p class="text-sm font-bold text-gray-800 mb-1">[${escapeHtml(x.kind)}] ${escapeHtml(x.label)}</p>
+                <p class="text-xs text-gray-500 mb-3">삭제 ${escapeHtml(x.by)} · ${escapeHtml(new Date(x.at).toLocaleString('ko-KR'))}</p>
+                <table class="w-full">${rows}</table>`;
+        }
+
         function openDeleteRequests(tab) {
             if (tab) deleteReqTab = tab;
             let m = document.getElementById('delreq-modal');
@@ -36262,8 +36452,8 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             const when = (v) => v ? escapeHtml(new Date(v).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })) : '';
             body.innerHTML = `
                 <p class="text-xs text-gray-500 mb-3"><i class="fas fa-circle-info mr-1"></i>${admin
-                    ? '자료 삭제는 관리자만 할 수 있습니다. [삭제 실행]을 누르면 해당 자료의 삭제 확인 창이 열립니다.'
-                    : '자료 삭제는 관리자만 할 수 있습니다. 내가 요청한 삭제 건과 처리 결과입니다.'}</p>
+                    ? '다른 직원이 등록한 자료의 삭제 요청입니다. [삭제 실행]을 누르면 해당 자료의 삭제 확인 창이 열립니다.'
+                    : '내가 등록한 자료는 바로 삭제할 수 있고, 다른 사람이 등록한 자료는 관리자에게 삭제를 요청합니다. 내가 요청한 삭제 건과 처리 결과입니다.'}</p>
                 <div class="flex gap-2 mb-3">${tab('pending', '처리 대기', pend.length)}${tab('done', '처리 완료', done.length)}</div>
                 ${list.length ? list.map(r => {
                     const st = stName[r.status] || [r.status, 'bg-gray-100 text-gray-600'];
@@ -36300,6 +36490,9 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                 if (!m || DELETE_REQ_FNS.indexOf(m[1]) < 0) return '';
                 const args = [];
                 m[2].replace(/'([^']*)'|(-?\d+(?:\.\d+)?)/g, (all, str, num) => { args.push(str !== undefined ? str : Number(num)); return all; });
+                if (isMyRecord(deleteRecordOf(m[1], args), m[1])) {
+                    return `<button type="button" data-fn="${m[1]}" data-args="${escapeHtml(JSON.stringify(args))}" onclick="ownDeleteFromBtn(this)" class="px-3 py-2 text-sm rounded border border-red-300 text-red-600 bg-white hover:bg-red-50 whitespace-nowrap" title="내가 등록한 자료라 바로 삭제할 수 있습니다"><i class="fas fa-trash-can mr-1"></i>삭제</button>`;
+                }
                 return `<button type="button" data-fn="${m[1]}" data-args="${escapeHtml(JSON.stringify(args))}" onclick="requestAdminDeleteFromBtn(this)" class="px-3 py-2 text-sm rounded border border-gray-300 text-gray-600 bg-white hover:bg-gray-50 whitespace-nowrap" title="삭제는 관리자만 할 수 있습니다. 사유를 적어 관리자에게 요청합니다."><i class="fas fa-trash-can mr-1"></i>삭제 요청</button>`;
             }
             return `<button type="button" onclick="${onclickJs}" class="px-3 py-2 text-sm rounded border border-red-300 text-red-600 bg-white hover:bg-red-50 whitespace-nowrap"><i class="fas fa-user-shield mr-1"></i>${escapeHtml(label || '관리자 수정·삭제')}</button>`;
