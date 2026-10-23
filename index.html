@@ -2743,6 +2743,9 @@
                         </div>
                     </div>
 
+                    <!-- 회사 구분 탭 (보완사항 2026-10-23) -->
+                    <div id="prj-company-tabs" class="flex flex-wrap gap-2 mb-3"></div>
+
                     <!-- 본부별 보기 — 카드를 누르면 그 본부 프로젝트만 봅니다 (다시 누르면 전체) -->
                     <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-3 mb-4">
                         <div class="flex items-center justify-between gap-2 mb-2 flex-wrap">
@@ -4817,6 +4820,11 @@
                 <div class="mb-4">
                     <label class="block text-sm font-medium text-gray-700 mb-1">프로젝트명 <span class="text-red-500">*</span></label>
                     <input type="text" id="prj-name" required class="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="예: 킹오더 POS 3.0 출시" />
+                </div>
+                <!-- 회사 구분 (보완사항 2026-10-23) — 킹오더브라더스 / 브랜드팩토리 -->
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">회사 <span class="text-red-500">*</span></label>
+                    <div id="prj-company-wrap" class="flex flex-wrap gap-2"></div>
                 </div>
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
                     <div>
@@ -20340,8 +20348,10 @@ const QUOTE_TEMPLATES = [
             recalcAllWbsRollups();   // 요약 작업 값을 하위에서 끌어올린 뒤에 지연·집계를 계산합니다
             checkProjectDelays();
 
-            // 내가 볼 수 있는 전체 → 본부 거르개를 걸어 이번 화면에서 다룰 목록을 정합니다
-            const allVisible = visibleProjects();
+            // 내가 볼 수 있는 전체 → 회사 → 본부 거르개를 걸어 이번 화면에서 다룰 목록을 정합니다
+            const everyVisible = visibleProjects();
+            renderProjectCompanyTabs(everyVisible);
+            const allVisible = projectCompanyFilter ? everyVisible.filter(p => projectCompanyOf(p) === projectCompanyFilter) : everyVisible;
             if (projectDeptFilter && !orgDeptIds(false).includes(projectDeptFilter)) projectDeptFilter = '';
             const list = projectDeptFilter ? allVisible.filter(p => p.dept === projectDeptFilter) : allVisible;
 
@@ -20391,6 +20401,34 @@ const QUOTE_TEMPLATES = [
             // IT업무센터에서 프로젝트를 등록 · 수정했으면 그 화면도 새로 그립니다 (2026-10-08)
             const itSec = document.getElementById('sec-it-work-center');
             if (itSec && !itSec.classList.contains('hidden')) renderItWorkCenter();
+        }
+
+        // ---------- 회사 구분 (보완사항 2026-10-23) ----------
+        // 프로젝트마다 회사(킹오더브라더스 / 브랜드팩토리)를 정합니다. 예전 프로젝트는 킹오더브라더스로 봅니다.
+        const PROJECT_COMPANIES = [
+            { id: 'kob', name: '킹오더브라더스', chip: 'bg-rose-50 text-rose-700 border-rose-200', on: 'bg-rose-600 text-white border-rose-600' },
+            { id: 'bf',  name: '브랜드팩토리',   chip: 'bg-violet-50 text-violet-700 border-violet-200', on: 'bg-violet-600 text-white border-violet-600' }
+        ];
+        let projectCompanyFilter = '';   // '' = 전체
+        function projectCompanyOf(p) { return (p && PROJECT_COMPANIES.some(c => c.id === p.company)) ? p.company : 'kob'; }
+        function projectCompanyName(p) { return (PROJECT_COMPANIES.find(c => c.id === projectCompanyOf(p)) || PROJECT_COMPANIES[0]).name; }
+        function projectCompanyChip(p) {
+            const c = PROJECT_COMPANIES.find(x => x.id === projectCompanyOf(p)) || PROJECT_COMPANIES[0];
+            return `<span class="text-[11px] font-semibold px-1.5 py-0.5 rounded border ${c.chip} whitespace-nowrap">${escapeHtml(c.name)}</span>`;
+        }
+        function setProjectCompanyFilter(id) { projectCompanyFilter = (projectCompanyFilter === id) ? '' : id; currentProjectId = null; renderProjectCenter(); }
+        function renderProjectCompanyTabs(list) {
+            const host = document.getElementById('prj-company-tabs');
+            if (!host) return;
+            const btn = (id, name, n, on, off) => `<button type="button" onclick="setProjectCompanyFilter('${id}')" class="px-4 py-2 rounded-lg border text-sm font-semibold transition-colors ${projectCompanyFilter === id ? on : off + ' hover:shadow-sm'}">${escapeHtml(name)} <span class="ml-1 text-xs opacity-80">${n}</span></button>`;
+            host.innerHTML = btn('', '전체', list.length, 'bg-gray-800 text-white border-gray-800', 'bg-white text-gray-700 border-gray-300')
+                + PROJECT_COMPANIES.map(c => btn(c.id, c.name, list.filter(p => projectCompanyOf(p) === c.id).length, c.on, c.chip)).join('');
+        }
+        function fillProjectCompanyPicker(cur) {
+            const host = document.getElementById('prj-company-wrap');
+            if (!host) return;
+            host.innerHTML = PROJECT_COMPANIES.map(c => `<label class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded border ${c.chip} cursor-pointer text-sm">
+                    <input type="radio" name="prj-company" value="${c.id}" ${c.id === cur ? 'checked' : ''} class="w-4 h-4" /> ${escapeHtml(c.name)}</label>`).join('');
         }
 
         // ---------- 본부별 보기 ----------
@@ -20454,7 +20492,7 @@ const QUOTE_TEMPLATES = [
                 ? list.map(p => {
                     const st = PROJECT_STATUS[p.status] || PROJECT_STATUS.planning;
                     const dl = projectDelays(p).length;
-                    return `<option value="${p.id}">${escapeHtml(p.name)} — ${escapeHtml(deptNames[p.dept] || p.dept)} · ${st.name} · ${projectProgress(p)}%${dl ? ` · 지연 ${dl}` : ''}</option>`;
+                    return `<option value="${p.id}">[${escapeHtml(projectCompanyName(p))}] ${escapeHtml(p.name)} — ${escapeHtml(deptNames[p.dept] || p.dept)} · ${st.name} · ${projectProgress(p)}%${dl ? ` · 지연 ${dl}` : ''}</option>`;
                 }).join('')
                 : `<option value="">${projectDeptFilter ? '이 본부에 프로젝트가 없습니다' : '조회 가능한 프로젝트가 없습니다'}</option>`;
             if (currentProjectId) sel.value = currentProjectId;
@@ -20491,7 +20529,7 @@ const QUOTE_TEMPLATES = [
             const pct = projectProgress(p);
             const dl = projectDelays(p);
             document.getElementById('prj-d-status').innerHTML = `<span class="text-xs font-bold rounded-full px-2 py-0.5 border ${st.chip} whitespace-nowrap">${st.name}</span>`;
-            document.getElementById('prj-d-name').textContent = p.name;
+            document.getElementById('prj-d-name').innerHTML = `${projectCompanyChip(p)} ${escapeHtml(p.name)}`;   // 회사 구분 (2026-10-23)
             document.getElementById('prj-d-delay').innerHTML = dl.length
                 ? `<span class="text-xs font-bold rounded-full px-2 py-0.5 border text-red-700 bg-red-50 border-red-200"><i class="fas fa-triangle-exclamation mr-0.5"></i>지연 ${dl.length}건</span>` : '';
             document.getElementById('prj-d-meta').innerHTML =
@@ -20875,6 +20913,7 @@ const QUOTE_TEMPLATES = [
 
             const dept = p ? p.dept : (currentUserDept && currentUserDept !== 'admin' ? currentUserDept : 'sales');
             document.getElementById('prj-dept').value = dept;
+            fillProjectCompanyPicker(p ? projectCompanyOf(p) : (projectCompanyFilter || 'kob'));
             fillUserSelect(document.getElementById('prj-owner'), '', p ? p.owner : currentUserName);
             document.getElementById('prj-name').value = p ? p.name : '';
             document.getElementById('prj-start-plan').value = p ? p.startPlan : '';
@@ -20913,6 +20952,7 @@ const QUOTE_TEMPLATES = [
 
             const data = {
                 name: document.getElementById('prj-name').value.trim(),
+                company: ((document.querySelector('input[name="prj-company"]:checked') || {}).value) || 'kob',
                 dept: document.getElementById('prj-dept').value,
                 owner: document.getElementById('prj-owner').value,
                 startPlan, endPlan, endTbd,
