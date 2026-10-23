@@ -19852,6 +19852,8 @@ const QUOTE_TEMPLATES = [
 
         const delivFormatKeys   = (w) => (w && Array.isArray(w.deliverableFormats)) ? w.deliverableFormats.filter(k => DELIVERABLE_FORMATS[k]) : [];
         const wbsDeliverableFiles = (w) => (w && Array.isArray(w.deliverableFiles)) ? w.deliverableFiles : [];
+        // 산출물 링크 (2026-10-23) — 구글 드라이브 · 노션 · 파일서버 주소 등. 파일과 똑같이 '제출'로 셉니다.
+        const wbsDeliverableLinks = (w) => (w && Array.isArray(w.deliverableLinks)) ? w.deliverableLinks : [];
         // 제출 필수 여부 — 따로 정하지 않았으면 '포맷을 정해 둔 WBS 는 필수' 로 봅니다.
         function isDeliverableRequired(w) {
             if (!w) return false;
@@ -19893,7 +19895,7 @@ const QUOTE_TEMPLATES = [
         function canManageDeliverable(p, w) { return !!(p && w) && (canEditProject(p) || isWbsHandler(p, w)); }
         // 제출 상태 — 파일이 있으면 제출, 필수인데 없으면 미제출, 그 밖에는 해당 없음
         function deliverableState(w) {
-            const n = wbsDeliverableFiles(w).length;
+            const n = wbsDeliverableFiles(w).length + wbsDeliverableLinks(w).length;
             if (n) return { key: 'filed',   name: `제출 ${n}건`, chip: 'text-blue-700 bg-blue-50 border-blue-200',   icon: 'fa-paperclip' };
             if (isDeliverableRequired(w)) return { key: 'missing', name: '미제출', chip: 'text-red-700 bg-red-50 border-red-200',     icon: 'fa-triangle-exclamation' };
             return { key: 'none', name: '해당 없음', chip: 'text-gray-500 bg-gray-100 border-gray-300', icon: 'fa-minus' };
@@ -20551,8 +20553,8 @@ const QUOTE_TEMPLATES = [
             const delivEl = document.getElementById('prj-tabcnt-deliv');
             if (delivEl) {
                 const leaves = wbsLeaves(p);
-                const miss = leaves.filter(w => isDeliverableRequired(w) && !wbsDeliverableFiles(w).length).length;
-                delivEl.textContent = miss ? `미제출 ${miss}` : String(leaves.reduce((n, w) => n + wbsDeliverableFiles(w).length, 0));
+                const miss = leaves.filter(w => isDeliverableRequired(w) && !wbsDeliverableFiles(w).length && !wbsDeliverableLinks(w).length).length;
+                delivEl.textContent = miss ? `미제출 ${miss}` : String(leaves.reduce((n, w) => n + wbsDeliverableFiles(w).length + wbsDeliverableLinks(w).length, 0));
                 delivEl.className = 'text-xs rounded-full px-1.5 ' + (miss ? 'bg-red-100 text-red-700 font-bold' : 'bg-gray-100');
             }
 
@@ -21572,7 +21574,7 @@ const QUOTE_TEMPLATES = [
                     ? `허용 형식: <b>${escapeHtml(keys.map(k => DELIVERABLE_FORMATS[k].name).join(' · '))}</b> `
                       + (exts ? `<span class="text-gray-400">${escapeHtml(exts.replace(/,/g, ' '))}</span>` : '<span class="text-gray-400">(모든 형식)</span>')
                     : '포맷을 선택하지 않으면 모든 형식을 업로드할 수 있습니다.')
-                + (req ? '<br><span class="text-red-600 font-semibold"><i class="fas fa-triangle-exclamation mr-1"></i>결과물 파일을 하나 이상 업로드해야 완료 처리할 수 있습니다.</span>' : '');
+                + (req ? '<br><span class="text-red-600 font-semibold"><i class="fas fa-triangle-exclamation mr-1"></i>결과물 파일을 업로드하거나 링크를 등록해야 완료 처리할 수 있습니다.</span>' : '');
         }
 
         // ---------- WBS 에 결과물 파일 올리기 ----------
@@ -21637,6 +21639,93 @@ const QUOTE_TEMPLATES = [
             if (dm && !dm.classList.contains('hidden')) openWbsDetailModal(p.id, w.id);
         }
 
+        // ---------- 산출물 링크 등록 · 삭제 (2026-10-23) ----------
+        let wbsLinkTarget = null;
+        function openWbsLinkModal(projectId, wbsId) {
+            const p = findProject(projectId), w = p ? findWbs(p, wbsId) : null;
+            if (!p || !w) return;
+            if (!canManageDeliverable(p, w)) { alert('이 WBS의 산출물을 등록할 권한이 없습니다.\n담당자 본인 또는 PM만 가능합니다.'); return; }
+            wbsLinkTarget = { projectId, wbsId };
+            let m = document.getElementById('wbs-link-modal');
+            if (!m) {
+                m = document.createElement('div');
+                m.id = 'wbs-link-modal';
+                m.className = 'hidden fixed inset-0 bg-black/50 z-[70] flex items-center justify-center p-4';
+                m.addEventListener('click', (e) => { if (e.target === m) closeWbsLinkModal(); });
+                m.innerHTML = `<form onsubmit="submitWbsLink(event)" class="bg-white rounded-lg shadow-xl w-full max-w-md p-5">
+                        <h3 class="text-lg font-bold text-gray-800 mb-1"><i class="fas fa-link text-blue-600 mr-1"></i>산출물 링크 등록</h3>
+                        <p id="wbs-link-sub" class="text-xs text-gray-500 mb-3"></p>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">링크 주소 <span class="text-red-500">*</span></label>
+                        <input id="wbs-link-url" type="text" required placeholder="https://drive.google.com/..." class="w-full p-2 mb-3 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                        <label class="block text-sm font-medium text-gray-700 mb-1">이름 <span class="text-gray-400 font-normal text-xs">(비우면 주소로 표시)</span></label>
+                        <input id="wbs-link-title" type="text" maxlength="80" placeholder="예: 최종 기획서 (구글 문서)" class="w-full p-2 mb-4 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                        <div class="flex justify-end gap-2">
+                            <button type="button" onclick="closeWbsLinkModal()" class="px-4 py-2 text-sm rounded bg-gray-200 text-gray-700 hover:bg-gray-300">닫기</button>
+                            <button type="submit" class="px-4 py-2 text-sm rounded bg-blue-600 text-white hover:bg-blue-700">등록</button>
+                        </div>
+                    </form>`;
+                document.body.appendChild(m);
+            }
+            m.querySelector('form').reset();
+            document.getElementById('wbs-link-sub').textContent = `${p.name} · ${w.code ? w.code + '. ' : ''}${w.name}`;
+            m.classList.remove('hidden');
+            setTimeout(() => { const el = document.getElementById('wbs-link-url'); if (el) el.focus(); }, 0);
+        }
+        function closeWbsLinkModal() { const m = document.getElementById('wbs-link-modal'); if (m) m.classList.add('hidden'); wbsLinkTarget = null; }
+        // 주소 다듬기 — 앞에 http(s):// 가 없으면 https:// 를 붙이고, 웹 주소가 아니면 거절합니다
+        function normalizeDeliverableUrl(raw) {
+            let u = String(raw || '').trim();
+            if (!u) return '';
+            if (!/^[a-z][a-z0-9+.-]*:/i.test(u)) u = 'https://' + u;
+            if (!/^https?:\/\//i.test(u)) return '';
+            try { const x = new URL(u); return x.hostname.indexOf('.') > 0 || x.hostname === 'localhost' ? x.href : ''; } catch (e) { return ''; }
+        }
+        function submitWbsLink(e) {
+            e.preventDefault();
+            const t = wbsLinkTarget;
+            const p = t ? findProject(t.projectId) : null, w = p ? findWbs(p, t.wbsId) : null;
+            if (!p || !w) { closeWbsLinkModal(); return; }
+            if (!canManageDeliverable(p, w)) { alert('이 WBS의 산출물을 등록할 권한이 없습니다.'); return; }
+            const url = normalizeDeliverableUrl(document.getElementById('wbs-link-url').value);
+            if (!url) { alert('올바른 웹 주소를 입력해 주세요.\n예: https://drive.google.com/...'); document.getElementById('wbs-link-url').focus(); return; }
+            const title = document.getElementById('wbs-link-title').value.trim();
+            w.deliverableLinks = w.deliverableLinks || [];
+            if (w.deliverableLinks.some(l => l.url === url)) { alert('이미 등록된 링크입니다.'); return; }
+            if (w.deliverableLinks.length >= DELIVERABLE_FILE_MAX_COUNT) { alert(`링크는 WBS 당 최대 ${DELIVERABLE_FILE_MAX_COUNT}개까지 등록할 수 있습니다.`); return; }
+            w.deliverableLinks.push({ id: gwUid('wlink_'), title, url, by: currentUserName || '', at: ymd(new Date()) });
+            if (!w.deliverable) w.deliverable = title || url;   // 산출물명이 비어 있으면 링크 이름으로
+            closeWbsLinkModal();
+            refreshWbsDeliverableViews(p, w);
+            showAppToast('산출물 링크가 등록되었습니다.', 'blue');
+        }
+        function removeWbsDeliverableLink(projectId, wbsId, linkId) {
+            const p = findProject(projectId), w = p ? findWbs(p, wbsId) : null;
+            if (!p || !w) return;
+            if (!canManageDeliverable(p, w)) { alert('산출물 링크를 삭제할 권한이 없습니다.'); return; }
+            const list = w.deliverableLinks || [];
+            const i = list.findIndex(l => l.id === linkId);
+            if (i < 0) return;
+            if (!confirm(`'${list[i].title || list[i].url}' 링크를 삭제하시겠습니까?`)) return;
+            list.splice(i, 1);
+            refreshWbsDeliverableViews(p, w);
+        }
+        function wbsLinkRowHtml(p, w, l, canEdit) {
+            let host = '';
+            try { host = new URL(l.url).hostname.replace(/^www\./, ''); } catch (e) { host = ''; }
+            const safe = /^https?:\/\//i.test(String(l.url || '')) ? l.url : '#';
+            return `<li class="flex items-center gap-2 bg-white border border-gray-200 rounded px-2 py-1.5">
+                <a href="${escapeHtml(safe)}" target="_blank" rel="noopener noreferrer" class="flex items-center gap-2 flex-1 min-w-0 hover:bg-blue-50/50 rounded" title="${escapeHtml(l.url)}">
+                    <span class="w-10 h-10 flex items-center justify-center bg-blue-50 rounded border border-blue-100 shrink-0"><i class="fas fa-link text-blue-600"></i></span>
+                    <span class="flex-1 min-w-0">
+                        <span class="block text-sm text-blue-700 truncate underline-offset-2 hover:underline">${escapeHtml(l.title || l.url)}</span>
+                        <span class="block text-[11px] text-gray-400 truncate">링크${host ? ' · ' + escapeHtml(host) : ''} · ${escapeHtml(l.by || '')} ${escapeHtml(l.at || '')}</span>
+                    </span>
+                    <i class="fas fa-arrow-up-right-from-square text-gray-400 text-xs px-1 shrink-0"></i>
+                </a>
+                ${canEdit ? `<button type="button" onclick="removeWbsDeliverableLink('${p.id}','${w.id}','${escapeHtml(l.id)}')" class="text-gray-300 hover:text-red-500 px-1 shrink-0" title="링크 삭제"><i class="fas fa-times"></i></button>` : ''}
+            </li>`;
+        }
+
         // ---------- 상세 팝업·산출물 탭에서 함께 쓰는 산출물 상자 ----------
         function wbsDeliverableSectionHtml(p, w) {
             const files = wbsDeliverableFiles(w);
@@ -21651,13 +21740,16 @@ const QUOTE_TEMPLATES = [
                         <span class="text-xs font-bold rounded-full px-2 py-0.5 border ${st.chip} ml-1"><i class="fas ${st.icon} mr-0.5"></i>${st.name}</span>
                         ${isDeliverableRequired(w) ? '<span class="text-xs font-bold rounded-full px-2 py-0.5 border text-red-700 bg-red-50 border-red-200 ml-1">제출 필수</span>' : ''}
                     </p>
-                    ${canEdit ? `<button type="button" onclick="pickWbsDeliverableFiles('${p.id}','${w.id}')" class="px-2.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs font-semibold"><i class="fas fa-upload mr-1"></i>파일·이미지 업로드</button>` : ''}
+                    ${canEdit ? `<span class="flex gap-1.5">
+                        <button type="button" onclick="pickWbsDeliverableFiles('${p.id}','${w.id}')" class="px-2.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs font-semibold"><i class="fas fa-upload mr-1"></i>파일·이미지 업로드</button>
+                        <button type="button" onclick="openWbsLinkModal('${p.id}','${w.id}')" class="px-2.5 py-1.5 bg-white border border-blue-300 text-blue-700 hover:bg-blue-50 rounded text-xs font-semibold"><i class="fas fa-link mr-1"></i>링크 등록</button>
+                    </span>` : ''}
                 </div>
                 <div class="flex gap-3"><span class="w-20 shrink-0 text-gray-500 font-medium">산출물명</span><span class="flex-1 text-gray-800 min-w-0">${w.deliverable ? escapeHtml(w.deliverable) : '<span class="text-gray-400">-</span>'}</span></div>
                 <div class="flex gap-3"><span class="w-20 shrink-0 text-gray-500 font-medium">포맷</span><span class="flex-1 min-w-0">${fmt || '<span class="text-gray-400">지정 없음 (모든 형식 업로드 가능)</span>'}</span></div>
-                ${files.length
-                    ? `<ul class="space-y-1">${files.map(f => wbsFileRowHtml(p, w, f, canEdit)).join('')}</ul>`
-                    : `<p class="text-xs ${st.key === 'missing' ? 'text-red-600 font-semibold' : 'text-gray-400'} bg-gray-50 border border-dashed border-gray-200 rounded p-3 text-center">${st.key === 'missing' ? '등록된 결과물 파일이 없습니다. 완료 처리하려면 파일을 업로드해야 합니다.' : '등록된 결과물 파일이 없습니다.'}</p>`}
+                ${files.length ? `<ul class="space-y-1">${files.map(f => wbsFileRowHtml(p, w, f, canEdit)).join('')}</ul>` : ''}
+                ${wbsDeliverableLinks(w).length ? `<ul class="space-y-1">${wbsDeliverableLinks(w).map(l => wbsLinkRowHtml(p, w, l, canEdit)).join('')}</ul>` : ''}
+                ${(files.length || wbsDeliverableLinks(w).length) ? '' : `<p class="text-xs ${st.key === 'missing' ? 'text-red-600 font-semibold' : 'text-gray-400'} bg-gray-50 border border-dashed border-gray-200 rounded p-3 text-center">${st.key === 'missing' ? '등록된 결과물이 없습니다. 완료 처리하려면 파일을 업로드하거나 링크를 등록해야 합니다.' : '등록된 결과물 파일 · 링크가 없습니다.'}</p>`}
                 ${canEdit ? '<p class="gw-drop-hint"><i class="fas fa-hand-pointer mr-1"></i>이 영역에 파일을 드래그하거나 <b>Ctrl+V</b>로 붙여넣어 첨부할 수 있습니다</p>' : ''}
                 ${w.status === 'done' ? `<div class="flex gap-3 pt-1 border-t border-gray-100"><span class="w-20 shrink-0 text-gray-500 font-medium">완료 처리</span><span class="flex-1 text-gray-800">${escapeHtml(w.endActual || '')}${w.doneBy ? ' · ' + escapeHtml(w.doneBy) : ''}</span></div>` : ''}
                 ${w.doneMemo ? `<div class="flex gap-3"><span class="w-20 shrink-0 text-gray-500 font-medium">완료 메모</span><span class="flex-1 text-gray-800">${escapeHtml(w.doneMemo)}</span></div>` : ''}
@@ -21843,9 +21935,10 @@ const QUOTE_TEMPLATES = [
                 return;
             }
             const need = rows.filter(({ w }) => isDeliverableRequired(w));
-            const filed = need.filter(({ w }) => wbsDeliverableFiles(w).length);
+            const filed = need.filter(({ w }) => wbsDeliverableFiles(w).length || wbsDeliverableLinks(w).length);
             const missing = need.length - filed.length;
             const fileCnt = rows.reduce((n, { w }) => n + wbsDeliverableFiles(w).length, 0);
+            const linkCnt = rows.reduce((n, { w }) => n + wbsDeliverableLinks(w).length, 0);
 
             const card = (label, value, cls) => `<div class="bg-white border border-gray-200 rounded-lg p-3">
                 <p class="text-xs font-medium text-gray-500">${label}</p><p class="text-xl font-bold ${cls || 'text-gray-800'} mt-0.5">${value}</p></div>`;
@@ -21855,7 +21948,7 @@ const QUOTE_TEMPLATES = [
                     ${card('제출 필수 WBS', need.length + '건')}
                     ${card('제출 완료', filed.length + '건', 'text-blue-600')}
                     ${card('미제출', missing + '건', missing ? 'text-red-600' : 'text-gray-400')}
-                    ${card('등록된 결과물 파일', fileCnt + '개', 'text-gray-800')}
+                    ${card('등록된 결과물', `파일 ${fileCnt} · 링크 ${linkCnt}`, 'text-gray-800')}
                 </div>
                 <div class="space-y-2">${rows.map(({ w, level }) => {
                     const st = deliverableState(w);
@@ -21879,12 +21972,16 @@ const QUOTE_TEMPLATES = [
                                 </p>
                                 <p class="mt-1">${deliverableFormatChips(w, 'sm') || '<span class="text-xs text-gray-400">포맷 지정 없음</span>'}</p>
                             </div>
-                            ${canEdit ? `<button type="button" onclick="pickWbsDeliverableFiles('${p.id}','${w.id}')" class="px-2.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs font-semibold shrink-0"><i class="fas fa-upload mr-1"></i>업로드</button>` : ''}
+                            ${canEdit ? `<span class="flex gap-1.5 shrink-0">
+                                <button type="button" onclick="pickWbsDeliverableFiles('${p.id}','${w.id}')" class="px-2.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs font-semibold"><i class="fas fa-upload mr-1"></i>업로드</button>
+                                <button type="button" onclick="openWbsLinkModal('${p.id}','${w.id}')" class="px-2.5 py-1.5 bg-white border border-blue-300 text-blue-700 hover:bg-blue-50 rounded text-xs font-semibold"><i class="fas fa-link mr-1"></i>링크</button>
+                            </span>` : ''}
                         </div>
                         ${files.length ? `<ul class="space-y-1 mt-2">${files.map(f => wbsFileRowHtml(p, w, f, canEdit)).join('')}</ul>` : ''}
+                        ${wbsDeliverableLinks(w).length ? `<ul class="space-y-1 mt-2">${wbsDeliverableLinks(w).map(l => wbsLinkRowHtml(p, w, l, canEdit)).join('')}</ul>` : ''}
                     </div>`;
                 }).join('')}</div>
-                <p class="text-xs text-gray-400 mt-3"><i class="fas fa-file-circle-check mr-1 text-blue-500"></i>WBS 수정 창에서 <b>산출물 포맷</b>을 지정하면 해당 형식의 파일만 업로드할 수 있습니다. <b>제출 필수</b>로 둔 WBS는 결과물 파일을 하나 이상 업로드해야 완료 처리됩니다. 파일은 이 브라우저에서만 보관되며 새로고침하면 삭제됩니다.</p>`;
+                <p class="text-xs text-gray-400 mt-3"><i class="fas fa-file-circle-check mr-1 text-blue-500"></i>WBS 수정 창에서 <b>산출물 포맷</b>을 지정하면 해당 형식의 파일만 업로드할 수 있습니다. <b>제출 필수</b>로 둔 WBS는 결과물 파일을 업로드하거나 링크를 하나 이상 등록해야 완료 처리됩니다. 링크는 구글 드라이브 · 노션 · 파일서버 등 주소를 등록합니다.</p>`;
         }
 
         // ---------- 이슈 상세 팝업 ----------
@@ -22236,8 +22333,8 @@ const QUOTE_TEMPLATES = [
             if (!deliverable) { alert('산출물을 입력해야 완료 처리할 수 있습니다.'); return; }
 
             // 제출 필수인 WBS 는 결과물 파일이 하나도 없으면 완료할 수 없습니다
-            if (isDeliverableRequired(w) && !wbsDeliverableFiles(w).length && !wbsDoneFiles.length) {
-                alert('이 WBS는 결과물 파일 제출이 필수입니다.\n산출물 파일·이미지를 하나 이상 업로드해 주세요.'
+            if (isDeliverableRequired(w) && !wbsDeliverableFiles(w).length && !wbsDeliverableLinks(w).length && !wbsDoneFiles.length) {
+                alert('이 WBS는 결과물 제출이 필수입니다.\n산출물 파일·이미지를 업로드하거나 [링크 등록]으로 결과물 주소를 등록해 주세요.'
                     + (deliverableFormatLabel(w) ? `\n\n허용 포맷: ${deliverableFormatLabel(w)}` : ''));
                 return;
             }
