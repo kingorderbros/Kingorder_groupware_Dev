@@ -133,7 +133,7 @@ function run(customerRows, store, opts) {
         ok(p('가격표시형') === 'visible' && p('가격비공개형') === 'hidden' && p('페이백형') === 'payback' && p('payback') === 'payback' && p('x') === '', '가격정책: 이름 · 코드');
         const s = r.ctx.companyStatusOf;
         ok(s({ status: 'PG정산' }) === 'PG정산' && s({ status: '계약해지' }) === '거래중단' && s({ type: '휴면고객' }) === '휴면' && s({}) === '미거래', '거래상태 정하기');
-        ok(r.ctx.companyStatusList().map(x => x.id).join(',') === '거래중,PG정산,미거래,보류,휴면,거래중단', '거래상태 목록 6가지');
+        ok(r.ctx.companyStatusList().map(x => x.id).join(',') === '거래중,PG정산,미거래,보류,휴면,거래중단,양도,양수,폐업', '거래상태 목록 9가지 (양도 · 양수 · 폐업 2026-10-23)');
     }
 
     console.log(`\n=========== 통과 ${pass} · 실패 ${fail} ===========`);

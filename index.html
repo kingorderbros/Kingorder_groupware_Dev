@@ -22750,6 +22750,7 @@ const QUOTE_TEMPLATES = [
             wc.channelType = c.channelType || '';
             wc.manager = c.manager || '';
             wc.partnerName = c.partnerName || '';      // 담당 파트너사 (2026-09-14)
+            wc.status = companyStatusOf(c);            // 거래상태 — 양도 · 양수 · 폐업 표시 (2026-10-23)
             wc.cmsRentUse = cmsRentOn(c);
             wc.cmsFeeUse = cmsFeeOn(c);
             wc.cmsUse = cmsAnyOn(c);
@@ -23065,9 +23066,20 @@ const QUOTE_TEMPLATES = [
         // ==================== 장비설치 전용 상수 ====================
         // 운영업무센터 · 장비설치 탭에서만 씁니다. AS유지보수와 같은 흐름(접수 → 처리 팝업 → 업무이력)이지만
         // 접수·처리 항목이 설치 업무에 맞게 따로 구성돼 있습니다.
-        const INSTALL_VENDORS = ['자사 설치팀', '한빛테크', '대성시스템', '지역 협력사', '기타'];
+        // 설치업체 — 보완사항 2026-10-23: 청호 · 자사 설치팀 · 공간티비
+        const INSTALL_VENDORS = ['자사 설치팀', '청호', '공간티비'];
         const INSTALL_DEVICES = ['POS 단말', '카드리더', '주방프린터', '라벨프린터', 'KIOSK', '기타'];
-        const INSTALL_ENGINEERS = ['박운영', '이영희', '정운영', '최운영', '외주(한빛테크)'];
+        // 설치자 — 조직도 운영본부 설치팀 직원 + 외주(청호 · 공간티비). 예전 값은 목록에 없어도 지켜 둡니다 (보완사항 2026-10-23)
+        const INSTALL_OUTSOURCE = ['청호(외주)', '공간티비(외주)'];
+        function installTeamMembers() {
+            return (typeof pickableUsers === 'function' ? pickableUsers() : [])
+                .filter(u => u.dept === 'ops' && String(u.team || '').trim() === '설치팀').map(u => u.name);
+        }
+        function installEngineerList(cur) {
+            const list = installTeamMembers().concat(INSTALL_OUTSOURCE);
+            if (cur && list.indexOf(cur) < 0) list.push(cur);
+            return list;
+        }
         const INSTALL_VISIT_REASONS = ['신규 설치', '증설 설치', '이전 설치', '교체 설치', '재방문(추가 조치)', '기타'];
         // ==================== 택배 전용 상수 ====================
         // 운영업무센터 · 택배 탭. 신규 장비·소모품을 고객에게 보내는 요청과 발송 처리를 다룹니다.
@@ -23295,7 +23307,7 @@ const QUOTE_TEMPLATES = [
             const lbl = t => `<label class="block text-xs font-medium text-gray-600 mb-1">${t}</label>`;
 
             return `
-                        <form id="${wcId(key, 'install-form')}" onsubmit="submitInstallIntake(event, '${key}')" class="hidden p-4 space-y-3 flex-1">
+                        <form id="${wcId(key, 'install-form')}" data-intake-confirm="${key}" onsubmit="submitInstallIntake(event, '${key}')" class="hidden p-4 space-y-3 flex-1">
                             <!-- 설치 체크리스트 현황 — 접수 건마다 점검표가 작성됐는지 · 검수됐는지 (2026-09-16) -->
                             <div class="flex items-center justify-between gap-2 rounded border border-green-200 bg-green-50/60 px-3 py-2">
                                 <p class="text-xs text-green-800"><i class="fas fa-clipboard-check mr-1"></i>설치 건마다 <b>설치 체크리스트</b>를 작성하고 관리자 검수를 받습니다. 체크리스트는 처리 팝업에서 작성합니다.</p>
@@ -23379,7 +23391,7 @@ const QUOTE_TEMPLATES = [
             const lbl = t => `<label class="block text-xs font-medium text-gray-600 mb-1">${t}</label>`;
 
             return `
-                        <form id="${wcId(key, 'delivery-form')}" onsubmit="submitDeliveryIntake(event, '${key}')" class="hidden p-4 space-y-3 flex-1">
+                        <form id="${wcId(key, 'delivery-form')}" data-intake-confirm="${key}" onsubmit="submitDeliveryIntake(event, '${key}')" class="hidden p-4 space-y-3 flex-1">
                             <!-- 시스템이 채우는 항목 — no · 처리여부 · 요청일 · 요청시간 · 요청자 (입력 불가) -->
                             <div class="rounded border border-gray-200 bg-gray-50 px-3 py-2">
                                 <div class="grid grid-cols-2 sm:grid-cols-5 gap-2">
@@ -23509,7 +23521,7 @@ const QUOTE_TEMPLATES = [
             const lbl = x => `<label class="block text-xs font-medium text-gray-600 mb-1">${x}</label>`;
 
             return `
-                        <form id="${wcId(key, 'dist-form')}" onsubmit="submitDistIntake(event, '${key}')" class="hidden p-4 space-y-3 flex-1">
+                        <form id="${wcId(key, 'dist-form')}" data-intake-confirm="${key}" onsubmit="submitDistIntake(event, '${key}')" class="hidden p-4 space-y-3 flex-1">
                             <!-- 시스템이 채우는 항목 — no · 접수일 · 접수시간 · 접수자 (입력 불가) -->
                             <div class="rounded border border-gray-200 bg-gray-50 px-3 py-2">
                                 <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
@@ -23572,7 +23584,7 @@ const QUOTE_TEMPLATES = [
             const lbl = x => `<label class="block text-xs font-medium text-gray-600 mb-1">${x}</label>`;
 
             return `
-                        <form id="${wcId(key, 'menu-form')}" onsubmit="submitMenuIntake(event, '${key}')" class="hidden p-4 space-y-3 flex-1">
+                        <form id="${wcId(key, 'menu-form')}" data-intake-confirm="${key}" onsubmit="submitMenuIntake(event, '${key}')" class="hidden p-4 space-y-3 flex-1">
                             <!-- 시스템이 채우는 항목 — no · 접수일 · 접수시간 · 접수자 (입력 불가) -->
                             <div class="rounded border border-gray-200 bg-gray-50 px-3 py-2">
                                 <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
@@ -23684,6 +23696,10 @@ const QUOTE_TEMPLATES = [
                                 <i class="fas fa-magnifying-glass mr-1"></i>조회
                             </button>
                             <button onclick="resetWorkCenterSearch('${key}')" class="bg-gray-100 hover:bg-gray-200 text-gray-600 flex-1 sm:flex-none px-3 py-2 rounded text-sm transition-colors whitespace-nowrap">초기화</button>
+                            <!-- 보완사항 2026-10-23 — 신규 등록 · 가맹점 목록 · 전체 업무이력 -->
+                            <button onclick="createWorkCenterCustomer('${key}')" class="bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 flex-1 sm:flex-none px-3 py-2 rounded text-sm transition-colors whitespace-nowrap"><i class="fas fa-plus mr-1"></i>신규 등록</button>
+                            ${key === 'ops' ? `<button onclick="openWcShopList('${key}')" class="bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 flex-1 sm:flex-none px-3 py-2 rounded text-sm transition-colors whitespace-nowrap"><i class="fas fa-store mr-1"></i>가맹점 목록</button>
+                            <button onclick="openWcAllWorks('${key}')" class="bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 flex-1 sm:flex-none px-3 py-2 rounded text-sm transition-colors whitespace-nowrap"><i class="fas fa-list-ul mr-1"></i>전체 업무이력</button>` : ''}
                         </div>
                         <div id="${wcId(key, 'customer-summary')}" class="mt-2"></div>
                     </div>
@@ -23766,7 +23782,7 @@ const QUOTE_TEMPLATES = [
                             <h4 class="font-semibold text-gray-800"><i class="fas fa-inbox text-gray-500 mr-2"></i>${escapeHtml(c.intakeTitle)}</h4>
                             <p class="text-xs text-gray-500 mt-0.5">${escapeHtml(c.intakeDesc)}</p>
                         </div>
-                        <form id="${wcId(key, 'intake-form')}" onsubmit="submitWorkIntake(event, '${key}')" class="p-4 space-y-3 flex-1">
+                        <form id="${wcId(key, 'intake-form')}" data-intake-confirm="${key}" onsubmit="submitWorkIntake(event, '${key}')" class="p-4 space-y-3 flex-1">
                             ${buildWorkIntakeCore(key, c, inputCls)}
 
                             <!-- 프로젝트 연결 · 일정 등록.
@@ -24008,6 +24024,136 @@ const QUOTE_TEMPLATES = [
         }
 
         // 신규 고객 등록 — 가맹점관리와 같은 등록 모달을 쓰고, 저장되면 업무센터 목록에도 추가합니다.
+        // 조회한 매장 정보 수정 (보완사항 2026-10-23) — 가맹점관리의 같은 창을 열고, 저장하면 요약을 다시 그립니다
+        function editWorkCenterCustomer(key) {
+            const st = wcState[key];
+            const c = wcCustomer(key, st && st.customerId);
+            if (!c || !c.linkCustomerId) { alert('수정할 매장을 먼저 조회해 주세요.'); return; }
+            openCustomerModal(c.linkCustomerId, () => {
+                wcCustomers(key);   // 바뀐 내용을 업무센터 목록에 다시 맞춥니다
+                renderWorkCustomerSummary(key);
+            });
+        }
+        // 업무접수 칸에서 엔터를 눌러 바로 등록되던 것 — 등록 전에 한 번 더 묻습니다 (운영업무센터 · 보완사항 2026-10-23)
+        document.addEventListener('submit', (e) => {
+            const f = e.target;
+            if (!f || !f.getAttribute || f.getAttribute('data-intake-confirm') !== 'ops') return;
+            if (!confirm('입력한 내용으로 업무를 등록하시겠습니까?')) { e.preventDefault(); e.stopImmediatePropagation(); }
+        }, true);
+
+        // ---------- 가맹점 목록 창 (보완사항 2026-10-23) ----------
+        let wcShopListQ = '';
+        function openWcShopList(key) {
+            let m = document.getElementById('wc-shop-modal');
+            if (!m) {
+                m = document.createElement('div');
+                m.id = 'wc-shop-modal';
+                m.className = 'hidden fixed inset-0 bg-black/40 z-[60] flex items-center justify-center p-4';
+                m.addEventListener('click', (e) => { if (e.target === m) m.classList.add('hidden'); });
+                document.body.appendChild(m);
+            }
+            m.dataset.key = key;
+            m.innerHTML = `<div class="bg-white rounded-lg shadow-xl w-full max-w-5xl max-h-[85vh] flex flex-col">
+                    <div class="px-4 py-3 border-b border-gray-200 flex items-center justify-between gap-2">
+                        <h3 class="text-base font-bold text-gray-800"><i class="fas fa-store text-green-600 mr-1"></i>가맹점 목록</h3>
+                        <button type="button" onclick="document.getElementById('wc-shop-modal').classList.add('hidden')" class="w-7 h-7 text-gray-400 hover:text-gray-600"><i class="fas fa-times"></i></button>
+                    </div>
+                    <div class="px-4 pt-3 flex flex-wrap gap-2 items-center">
+                        <input id="wc-shop-q" type="text" value="${escapeHtml(wcShopListQ)}" oninput="wcShopListQ=this.value; renderWcShopList()" placeholder="상호명 · 사업자번호 · 대표자 · 연락처 · 주소 검색" class="flex-1 min-w-[220px] p-2 text-sm border border-gray-300 rounded" />
+                        <span class="text-xs text-gray-400">줄을 누르면 그 매장을 조회합니다</span>
+                    </div>
+                    <div id="wc-shop-body" class="p-4 overflow-auto"></div>
+                </div>`;
+            m.classList.remove('hidden');
+            renderWcShopList();
+        }
+        function renderWcShopList() {
+            const m = document.getElementById('wc-shop-modal');
+            const body = document.getElementById('wc-shop-body');
+            if (!m || !body) return;
+            const key = m.dataset.key || 'ops';
+            const q = String(wcShopListQ || '').trim().toLowerCase();
+            const all = wcCustomers(key).slice().sort((a, b) => String(a.name).localeCompare(String(b.name), 'ko'));
+            const list = all.filter(c => !q || `${c.name} ${c.bizNo} ${c.ceo} ${c.phone} ${c.address} ${c.brand || ''}`.toLowerCase().includes(q));
+            const st = (c) => { const s0 = companyStatusList().find(x => x.id === c.status); return s0 ? `<span class="px-1.5 py-0.5 text-[11px] rounded-full ${s0.chip}">${escapeHtml(s0.id)}</span>` : ''; };
+            const shown = list.slice(0, 300);
+            body.innerHTML = `<p class="text-xs text-gray-500 mb-2">전체 ${all.length}곳 · 검색 ${list.length}곳${list.length > shown.length ? ` (앞 ${shown.length}곳 표시 — 검색어로 좁혀 주세요)` : ''}</p>
+                <table class="w-full text-sm min-w-[820px]">
+                    <thead><tr class="bg-gray-50 text-xs text-gray-500 border-b"><th class="p-2 text-left font-medium">상호명</th><th class="p-2 text-left font-medium">상태</th><th class="p-2 text-left font-medium">사업자번호</th><th class="p-2 text-left font-medium">대표자</th><th class="p-2 text-left font-medium">연락처</th><th class="p-2 text-left font-medium">구분</th><th class="p-2 text-left font-medium">주소</th></tr></thead>
+                    <tbody>${shown.map(c => `<tr onclick="pickWcShop('${escapeHtml(key)}', '${escapeHtml(c.id)}')" class="border-b border-gray-100 hover:bg-green-50 cursor-pointer">
+                        <td class="p-2 font-semibold text-gray-800 whitespace-nowrap">${escapeHtml(c.name)}</td>
+                        <td class="p-2">${st(c)}</td>
+                        <td class="p-2 text-gray-600 whitespace-nowrap">${escapeHtml(c.bizNo || '-')}</td>
+                        <td class="p-2 text-gray-600 whitespace-nowrap">${escapeHtml(c.ceo || '-')}</td>
+                        <td class="p-2 text-gray-600 whitespace-nowrap">${escapeHtml(c.phone || '-')}</td>
+                        <td class="p-2 text-gray-600 whitespace-nowrap">${escapeHtml(c.channelType || c.partnerType || '-')}</td>
+                        <td class="p-2 text-gray-500 max-w-[260px] truncate" title="${escapeHtml(c.address || '')}">${escapeHtml(c.address || '-')}</td>
+                    </tr>`).join('') || '<tr><td colspan="7" class="p-8 text-center text-gray-400">조건에 맞는 가맹점이 없습니다.</td></tr>'}</tbody>
+                </table>`;
+        }
+        function pickWcShop(key, id) {
+            const m = document.getElementById('wc-shop-modal'); if (m) m.classList.add('hidden');
+            selectWorkCenterCustomer(key, id);
+        }
+
+        // ---------- 전체 업무이력 창 (보완사항 2026-10-23) — 고객과 상관없이 운영업무센터에 등록된 업무 전부 ----------
+        let wcAllWorksFilter = { q: '', type: '', status: '' };
+        function openWcAllWorks(key) {
+            let m = document.getElementById('wc-allworks-modal');
+            if (!m) {
+                m = document.createElement('div');
+                m.id = 'wc-allworks-modal';
+                m.className = 'hidden fixed inset-0 bg-black/40 z-[60] flex items-center justify-center p-4';
+                m.addEventListener('click', (e) => { if (e.target === m) m.classList.add('hidden'); });
+                document.body.appendChild(m);
+            }
+            m.dataset.key = key;
+            const def = wcDef(key);
+            const sel = 'p-2 text-sm border border-gray-300 rounded bg-white';
+            m.innerHTML = `<div class="bg-white rounded-lg shadow-xl w-full max-w-6xl max-h-[88vh] flex flex-col">
+                    <div class="px-4 py-3 border-b border-gray-200 flex items-center justify-between gap-2">
+                        <h3 class="text-base font-bold text-gray-800"><i class="fas fa-list-ul text-green-600 mr-1"></i>${escapeHtml(def.title)} 전체 업무이력</h3>
+                        <button type="button" onclick="document.getElementById('wc-allworks-modal').classList.add('hidden')" class="w-7 h-7 text-gray-400 hover:text-gray-600"><i class="fas fa-times"></i></button>
+                    </div>
+                    <div class="px-4 pt-3 flex flex-wrap gap-2 items-center">
+                        <input type="text" value="${escapeHtml(wcAllWorksFilter.q)}" oninput="wcAllWorksFilter.q=this.value; renderWcAllWorks()" placeholder="상호명 · 번호 · 내용 · 접수자 · 담당자 검색" class="flex-1 min-w-[200px] p-2 text-sm border border-gray-300 rounded" />
+                        <select onchange="wcAllWorksFilter.type=this.value; renderWcAllWorks()" class="${sel}"><option value="">업무유형 전체</option>${def.types.map(t => `<option value="${t.id}" ${wcAllWorksFilter.type === t.id ? 'selected' : ''}>${escapeHtml(t.name)}</option>`).join('')}</select>
+                        <select onchange="wcAllWorksFilter.status=this.value; renderWcAllWorks()" class="${sel}"><option value="">상태 전체</option>${Object.entries(def.statusNames || {}).map(([v, l]) => `<option value="${v}" ${wcAllWorksFilter.status === v ? 'selected' : ''}>${escapeHtml(l)}</option>`).join('')}</select>
+                    </div>
+                    <div id="wc-allworks-body" class="p-4 overflow-auto"></div>
+                </div>`;
+            m.classList.remove('hidden');
+            renderWcAllWorks();
+        }
+        function renderWcAllWorks() {
+            const m = document.getElementById('wc-allworks-modal');
+            const body = document.getElementById('wc-allworks-body');
+            if (!m || !body) return;
+            const key = m.dataset.key || 'ops';
+            const def = wcDef(key);
+            const f = wcAllWorksFilter;
+            const q = String(f.q || '').trim().toLowerCase();
+            const all = def.works.slice().sort((a, b) => (`${b.receivedAt || ''} ${b.receivedTime || ''}`).localeCompare(`${a.receivedAt || ''} ${a.receivedTime || ''}`) || String(b.id).localeCompare(String(a.id)));
+            const list = all.filter(w => (!f.type || w.type === f.type) && (!f.status || w.status === f.status)
+                && (!q || `${w.id} ${w.company || ''} ${w.title || ''} ${w.memo || ''} ${w.receiver || ''} ${w.assignee || ''}`.toLowerCase().includes(q)));
+            const stCls = { received: 'bg-amber-100 text-amber-700', assigned: 'bg-sky-100 text-sky-700', working: 'bg-blue-100 text-blue-700', hold: 'bg-yellow-100 text-yellow-700', done: 'bg-green-100 text-green-700' };
+            const shown = list.slice(0, 500);
+            body.innerHTML = `<p class="text-xs text-gray-500 mb-2">전체 ${all.length}건 · 조건 ${list.length}건 · 미완료 ${list.filter(w => w.status !== 'done').length}건${list.length > shown.length ? ` (최근 ${shown.length}건 표시)` : ''} · 줄을 누르면 상세를 엽니다</p>
+                <table class="w-full text-sm min-w-[980px]">
+                    <thead><tr class="bg-gray-50 text-xs text-gray-500 border-b"><th class="p-2 text-left font-medium">접수일</th><th class="p-2 text-left font-medium">번호</th><th class="p-2 text-left font-medium">업무유형</th><th class="p-2 text-left font-medium">상호명</th><th class="p-2 text-left font-medium">내용</th><th class="p-2 text-left font-medium">접수자</th><th class="p-2 text-left font-medium">담당자</th><th class="p-2 text-left font-medium">상태</th></tr></thead>
+                    <tbody>${shown.map(w => `<tr onclick="openWorkHistoryDetail('${escapeHtml(key)}', '${escapeHtml(w.id)}')" class="border-b border-gray-100 hover:bg-green-50 cursor-pointer">
+                        <td class="p-2 text-xs text-gray-600 whitespace-nowrap">${escapeHtml(w.receivedAt || '')} ${escapeHtml(w.receivedTime || '')}</td>
+                        <td class="p-2 text-xs text-gray-500 whitespace-nowrap">${escapeHtml(w.id)}</td>
+                        <td class="p-2 whitespace-nowrap"><span class="px-1.5 py-0.5 rounded text-[11px] bg-gray-100 text-gray-700">${escapeHtml(wcType(key, w.type).name)}</span></td>
+                        <td class="p-2 font-semibold text-gray-800 whitespace-nowrap">${escapeHtml(w.company || '-')}</td>
+                        <td class="p-2 text-gray-600 max-w-[280px] truncate" title="${escapeHtml(w.memo || w.title || '')}">${escapeHtml(w.title || w.memo || '-')}</td>
+                        <td class="p-2 text-xs text-gray-600 whitespace-nowrap">${escapeHtml(w.receiver || '-')}</td>
+                        <td class="p-2 text-xs text-gray-600 whitespace-nowrap">${escapeHtml(w.assignee || '-')}</td>
+                        <td class="p-2 whitespace-nowrap"><span class="px-1.5 py-0.5 rounded-full text-[11px] font-semibold ${stCls[w.status] || 'bg-gray-100 text-gray-600'}">${escapeHtml((def.statusNames || {})[w.status] || w.status || '')}</span></td>
+                    </tr>`).join('') || '<tr><td colspan="8" class="p-8 text-center text-gray-400">조건에 맞는 업무가 없습니다.</td></tr>'}</tbody>
+                </table>`;
+        }
+
         function createWorkCenterCustomer(key) {
             const t = wcSearchTerms(key);
             openCustomerModal(null, (saved) => {
@@ -24199,6 +24345,10 @@ const QUOTE_TEMPLATES = [
                     <div class="flex flex-wrap items-center gap-x-4 gap-y-1.5 px-3 py-2">
                         <span class="font-bold text-gray-800">${escapeHtml(c.name)}</span>
                         <span class="px-2 py-0.5 text-xs font-semibold rounded-full ${typeChip}">${escapeHtml(c.partnerType)}${c.brand ? ' · ' + escapeHtml(c.brand) : ''}</span>
+                        ${(() => { const s0 = (companyStatusList().find(x => x.id === c.status) || null);
+                            return s0 ? `<span class="px-2 py-0.5 text-xs font-bold rounded-full ${s0.chip}" title="거래상태">${escapeHtml(s0.id)}</span>` : ''; })()}
+                        ${c.linkCustomerId ? `<button type="button" onclick="editWorkCenterCustomer('${key}')" class="px-2 py-0.5 text-xs rounded border border-gray-300 bg-white text-gray-600 hover:bg-gray-100" title="매장 정보 수정 (거래상태 · 연락처 · 주소 등)"><i class="fas fa-pen mr-1"></i>수정</button>` : ''}
+                        ${item('fa-id-card', '사업자번호', escapeHtml(c.bizNo || '-'))}
                         ${item('fa-phone', '대표연락처', escapeHtml(c.phone || '-'))}
                         ${item('fa-calendar-check', '계약/설치', dateText)}
                         ${item('fa-building', '구분', escapeHtml(c.channelType || '-'))}
@@ -28616,9 +28766,102 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
         function workHistoryDetailFootHtml(key, w, extraNote) {
             // 관리자 — 처리 상태와 관계없이 고치고 지우는 단추 (2026-09-28)
             const admBtn = adminEditButtonHtml(`openWorkAdminEdit('${key}', '${escapeHtml(w.id)}')`);   // 관리자가 아니면 '삭제 요청' (2026-10-16)
-            const adm = admBtn ? `<div class="mt-3 pt-3 border-t border-gray-100 flex justify-end">${admBtn}</div>` : '';
+            // 등록 이후 수정 — 등록자 · 담당자 · 관리자 (보완사항 2026-10-23)
+            const ownBtn = canOwnEditWork(w) ? `<button type="button" onclick="openWorkOwnEdit('${key}', '${escapeHtml(w.id)}')" class="px-3 py-2 text-sm rounded border border-blue-300 text-blue-700 bg-white hover:bg-blue-50 whitespace-nowrap"><i class="fas fa-pen mr-1"></i>수정</button>` : '';
+            const adm = (admBtn || ownBtn) ? `<div class="mt-3 pt-3 border-t border-gray-100 flex justify-end gap-2">${ownBtn}${admBtn}</div>` : '';
             return workHistoryDetailFootInner(key, w, extraNote) + adm;
         }
+        // ---------- 등록한 업무 수정 (보완사항 2026-10-23) ----------
+        // 등록자(접수자) · 담당자 · 관리자가 연락처 · 접수방식 · 우선순위 · 상세 내용 · 업무유형 항목을 고칩니다. 바뀐 것만 수정이력에 남습니다.
+        function canOwnEditWork(w) {
+            if (!w || isDerivedWork(w)) return false;
+            if (canManageAllData()) return true;
+            return !!currentUserName && (w.receiver === currentUserName || w.assignee === currentUserName);
+        }
+        let workOwnEditRef = null;
+        function openWorkOwnEdit(key, workId) {
+            const def = wcDef(key);
+            const w = def ? def.works.find(x => x.id === workId) : null;
+            if (!w) return;
+            if (!canOwnEditWork(w)) { alert('등록자, 담당자, 관리자만 수정할 수 있습니다.'); return; }
+            workOwnEditRef = { key, workId };
+            const t = wcType(key, w.type);
+            const fields = (t.fields || []).filter(f => f && f.id);
+            const cls = 'w-full p-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500';
+            const lbl = (x) => `<label class="block text-xs font-medium text-gray-600 mb-1">${escapeHtml(x)}</label>`;
+            const opt = (list, cur) => { const l = (list || []).slice(); if (cur && l.indexOf(cur) < 0) l.unshift(cur); return l.map(o => `<option value="${escapeHtml(o)}" ${o === cur ? 'selected' : ''}>${escapeHtml(o)}</option>`).join(''); };
+            const ex = w.extra || {};
+            let m = document.getElementById('work-own-edit-modal');
+            if (!m) {
+                m = document.createElement('div');
+                m.id = 'work-own-edit-modal';
+                m.className = 'hidden fixed inset-0 bg-black/50 z-[75] flex items-center justify-center p-4';
+                m.addEventListener('click', (e) => { if (e.target === m) m.classList.add('hidden'); });
+                document.body.appendChild(m);
+            }
+            m.innerHTML = `<form onsubmit="submitWorkOwnEdit(event)" class="bg-white rounded-lg shadow-xl w-full max-w-xl max-h-[88vh] overflow-y-auto p-5">
+                    <div class="flex items-start justify-between gap-2 mb-3">
+                        <div><h3 class="text-lg font-bold text-gray-800"><i class="fas fa-pen text-blue-600 mr-1"></i>업무 수정</h3>
+                        <p class="text-xs text-gray-500 mt-0.5">${escapeHtml(w.id)} · ${escapeHtml(t.name)} · ${escapeHtml(w.company || '')}</p></div>
+                        <button type="button" onclick="document.getElementById('work-own-edit-modal').classList.add('hidden')" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times"></i></button>
+                    </div>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>${lbl('연락처')}<input id="woe-contact" type="text" value="${escapeHtml(w.contact || '')}" class="${cls}" /></div>
+                        <div>${lbl('접수방식')}<select id="woe-channel" class="${cls}">${opt(def.channels, w.channel || '')}</select></div>
+                        <div>${lbl('우선순위')}<select id="woe-priority" class="${cls}">${[['normal', '보통'], ['high', '긴급'], ['low', '낮음']].map(([v, l]) => `<option value="${v}" ${w.priority === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
+                        ${fields.map(f => {
+                            const v = ex[f.id] == null ? '' : String(ex[f.id]);
+                            if (f.type === 'select') return `<div>${lbl(f.label)}<select id="woe-x-${f.id}" class="${cls}"><option value="">선택 안 함</option>${opt(f.options, v)}</select></div>`;
+                            if (f.type === 'date') return `<div>${lbl(f.label)}<input id="woe-x-${f.id}" type="date" value="${escapeHtml(v)}" class="${cls}" /></div>`;
+                            return `<div>${lbl(f.label)}<input id="woe-x-${f.id}" type="text" value="${escapeHtml(v)}" class="${cls}" /></div>`;
+                        }).join('')}
+                        <div class="sm:col-span-2">${lbl('상세 내용')}<textarea id="woe-memo" rows="4" class="${cls}">${escapeHtml(w.memo || '')}</textarea></div>
+                    </div>
+                    <p class="text-[11px] text-gray-500 mt-2">바뀐 항목만 수정이력에 남습니다.</p>
+                    <div class="flex justify-end gap-2 mt-4">
+                        <button type="button" onclick="document.getElementById('work-own-edit-modal').classList.add('hidden')" class="px-4 py-2 text-sm rounded bg-gray-200 text-gray-700 hover:bg-gray-300">닫기</button>
+                        <button type="submit" class="px-4 py-2 text-sm rounded bg-blue-600 text-white hover:bg-blue-700">저장</button>
+                    </div>
+                </form>`;
+            m.classList.remove('hidden');
+        }
+        function submitWorkOwnEdit(e) {
+            e.preventDefault();
+            const ref = workOwnEditRef; if (!ref) return;
+            const def = wcDef(ref.key);
+            const w = def ? def.works.find(x => x.id === ref.workId) : null;
+            if (!w || !canOwnEditWork(w)) return;
+            const val = (id) => { const el = document.getElementById(id); return el ? String(el.value || '').trim() : null; };
+            const pri = { normal: '보통', high: '긴급', low: '낮음' };
+            let n = 0;
+            const set = (prop, label, to, show) => {
+                if (to === null) return;
+                const from = w[prop] == null ? '' : String(w[prop]);
+                if (from === to) return;
+                pushFieldEdit(w, label, show ? show(from) : from, show ? show(to) : to); w[prop] = to; n++;
+            };
+            set('contact', '연락처', val('woe-contact'));
+            set('channel', '접수방식', val('woe-channel'));
+            set('priority', '우선순위', val('woe-priority'), (v) => pri[v] || v);
+            set('memo', '상세 내용', val('woe-memo'));
+            const t = wcType(ref.key, w.type);
+            (t.fields || []).filter(f => f && f.id).forEach(f => {
+                const to = val('woe-x-' + f.id);
+                if (to === null) return;
+                w.extra = w.extra || {};
+                const from = w.extra[f.id] == null ? '' : String(w.extra[f.id]);
+                if (from === to) return;
+                pushFieldEdit(w, f.label, from, to); w.extra[f.id] = to; n++;
+            });
+            document.getElementById('work-own-edit-modal').classList.add('hidden');
+            if (!n) { showAppToast('바뀐 내용이 없습니다.', 'gray'); return; }
+            if (syncOpsWorkSchedule(ref.key, w) && typeof renderCalendar === 'function') renderCalendar();
+            saveWorks();
+            if (typeof refreshWorkViews === 'function') refreshWorkViews();
+            try { openWorkHistoryDetail(ref.key, w.id); } catch (err) { /* 상세 창이 없는 화면 */ }
+            showAppToast(`${n}개 항목을 수정했습니다.`, 'blue');
+        }
+
         function openWorkAdminEdit(key, workId) {
             const def = wcDef(key);
             const w = def ? def.works.find(x => x.id === workId) : null;
@@ -30719,8 +30962,17 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                         ${lbl('설치자 <span class="text-red-500">*</span>')}
                         <select id="inst-${w.id}-engineer" class="${cls}">
                             <option value="">미배정</option>
-                            ${INSTALL_ENGINEERS.map(e => `<option value="${escapeHtml(e)}" ${w.installEngineer === e ? 'selected' : ''}>${escapeHtml(e)}</option>`).join('')}
+                            ${installEngineerList(w.installEngineer).map(e => `<option value="${escapeHtml(e)}" ${w.installEngineer === e ? 'selected' : ''}>${escapeHtml(e)}</option>`).join('')}
                         </select>
+                    </div>
+                    <!-- 설치팀 안에서 담당자 이관 (보완사항 2026-10-23) — 바꾸면 이관 이력이 남고 새 담당자에게 알림이 갑니다 -->
+                    <div>
+                        ${lbl('담당자 (설치팀 내 이관)')}
+                        <select id="inst-${w.id}-owner" class="${cls}">
+                            <option value="">미지정</option>
+                            ${(() => { const l = installTeamMembers(); if (w.assignee && l.indexOf(w.assignee) < 0) l.push(w.assignee); return l; })().map(n => `<option value="${escapeHtml(n)}" ${w.assignee === n ? 'selected' : ''}>${escapeHtml(n)}</option>`).join('')}
+                        </select>
+                        ${(w.innerTransfers || []).length ? `<p class="text-[11px] text-gray-500 mt-1"><i class="fas fa-share-from-square mr-1"></i>이관 ${w.innerTransfers.length}회 · 최근 ${escapeHtml(w.innerTransfers[w.innerTransfers.length - 1].from || '미지정')} → ${escapeHtml(w.innerTransfers[w.innerTransfers.length - 1].to || '미지정')} (${escapeHtml(w.innerTransfers[w.innerTransfers.length - 1].at)})</p>` : ''}
                     </div>
                     <div>
                         ${lbl('설치방문사유')}
@@ -30793,6 +31045,19 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             // 설치장비가 바뀌면 목록·캘린더에 보이는 제목도 함께 맞춥니다
             w.title = `${w.installDevices || '장비'} 설치`;
             w.installEngineer = el('engineer').value;
+            // 설치팀 안에서 담당자 이관 — 바뀌었으면 이력 + 새 담당자 알림 (보완사항 2026-10-23)
+            const ownerEl = el('owner');
+            if (ownerEl && ownerEl.value !== (w.assignee || '')) {
+                const from = w.assignee || '', to = ownerEl.value;
+                (w.innerTransfers = w.innerTransfers || []).push({ at: `${ymd(now)} ${hhmm(now)}`, by: currentUserName || '', from, to });
+                w.fieldEdits.push({ at: ymd(now), time: hhmm(now), by: currentUserName || '담당자', label: '담당자(설치팀 내 이관)', from, to });
+                w.assignee = to;
+                if (to && to !== currentUserName) pushNotification({
+                    id: 'cnoti_' + collabNotiIdCounter++, type: 'work-received', ticketId: '', workKey: key, workId: w.id, workType: w.type,
+                    title: `${w.company || ''} ${w.title || '설치'}`.trim(), toUser: to, toDept: '', toTeam: '',
+                    detail: `${currentUserName || ''} 님이 설치 업무를 이관했습니다${from ? ` (이전 담당: ${from})` : ''}.`, date: ymd(now), read: false
+                });
+            }
             w.installDate = el('date').value;
             w.installTime = el('time').value;
             w.installReason = el('reason').value;
@@ -32999,7 +33264,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             const lbl = x => `<label class="block text-xs font-medium text-gray-600 mb-1">${x}</label>`;
 
             return `
-                        <form id="${wcId(key, cfg.typeId + '-form')}" onsubmit="submitConsultIntake(event, '${key}', '${cfg.typeId}')" class="hidden p-4 space-y-3 flex-1">
+                        <form id="${wcId(key, cfg.typeId + '-form')}" data-intake-confirm="${key}" onsubmit="submitConsultIntake(event, '${key}', '${cfg.typeId}')" class="hidden p-4 space-y-3 flex-1">
                             <!-- 시스템이 채우는 항목 — no · 접수일 · 접수시간 · 접수자 (입력 불가) -->
                             <div class="rounded border border-gray-200 bg-gray-50 px-3 py-2">
                                 <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
@@ -34114,7 +34379,11 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                 { id: '미거래',   chip: 'bg-gray-100 text-gray-600' },
                 { id: '보류',     chip: 'bg-amber-100 text-amber-700' },
                 { id: '휴면',     chip: 'bg-orange-100 text-orange-700' },
-                { id: '거래중단', chip: 'bg-red-100 text-red-700' }
+                { id: '거래중단', chip: 'bg-red-100 text-red-700' },
+                // 매장 양도 · 양수 · 폐업 (보완사항 2026-10-23)
+                { id: '양도',     chip: 'bg-purple-100 text-purple-700' },
+                { id: '양수',     chip: 'bg-indigo-100 text-indigo-700' },
+                { id: '폐업',     chip: 'bg-gray-800 text-white' }
             ];
         }
         // 예전 값 → 새 값. 가맹점의 고객구분(type)은 영업 단계라 그대로 두고, 거래상태가 비었을 때 처음 한 번만 여기서 정합니다
