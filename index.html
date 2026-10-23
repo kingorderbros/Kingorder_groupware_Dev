@@ -6831,7 +6831,7 @@
                         <li><b>상위업체</b>: 가맹점이 속한 본사·파트너사의 <b>상호 또는 사업자번호</b>. 같은 파일 안에 있어도 됩니다(본사·파트너사를 먼저 등록한 후 연결합니다). 찾지 못한 행은 등록하되 결과에 <b>상위업체 못 찾음</b>으로 표시합니다.</li>
                         <li>머리글은 <b>이름으로 인식하므로 열 순서가 달라도</b> 됩니다. 머리글 행 위치도 자동으로 인식합니다.</li>
                         <li>같은 곳인지는 <b>사업자번호 → 거래처코드 → 상호</b> 순으로 판단합니다.</li>
-                        <li><b>계약방식</b>은 여러 개를 <b>쉼표로 구분해</b> 입력할 수 있습니다. (예: <i>렌탈/할부, CMS(임대), CMS(관리비)</i>)</li>
+                        <li><b>계약방식</b>은 여러 개를 <b>쉼표로 구분해</b> 입력할 수 있습니다. (예: <i>렌탈/할부, CMS(렌탈), CMS(관리비)</i>)</li>
                         <li>상호가 비어 있는 행과 파일 안에서 중복된 행은 건너뜁니다.</li>
                     </ul>
                 </div>
@@ -6878,8 +6878,8 @@
                         <ul class="mt-2 text-[11px] text-gray-500 list-disc list-inside space-y-0.5">
                             <li><b>가맹점명</b> 열만 있으면 업로드됩니다. <b>빈 칸은 기존 값을 삭제하지 않습니다.</b></li>
                             <li>같은 곳인지는 <b>사업자번호 → 가맹점명</b> 순으로 판단합니다.</li>
-                            <li><b>임대CMS · 관리비CMS</b> 는 <i>Y · N</i> (또는 사용/예/O)로 입력합니다.</li>
-                            <li><b>계약방식</b>에 <i>CMS(임대) · CMS(관리비)</i> 를 입력하면 CMS 사용도 함께 설정됩니다.</li>
+                            <li><b>렌탈CMS · 관리비CMS</b> 는 <i>Y · N</i> (또는 사용/예/O)로 입력합니다.</li>
+                            <li><b>계약방식</b>에 <i>CMS(렌탈) · CMS(관리비)</i> 를 입력하면 CMS 사용도 함께 설정됩니다.</li>
                         </ul>
                         <label data-drop-input="cms-import-file" class="mt-3 flex flex-col items-center justify-center gap-1.5 p-5 rounded border-2 border-dashed border-blue-300 bg-blue-50/40 cursor-pointer hover:bg-blue-50 transition-colors">
                             <i class="fas fa-cloud-arrow-up text-2xl text-blue-500"></i>
@@ -6900,7 +6900,7 @@
                         <p class="text-xs font-semibold text-gray-600 mb-1">인식하는 열</p>
                         <p id="cms-pay-import-cols" class="text-xs text-gray-600"></p>
                         <ul class="mt-2 text-[11px] text-gray-500 list-disc list-inside space-y-0.5">
-                            <li><b>구분</b>은 <b>임대CMS · 관리비CMS · 렌탈/할부</b> 중 하나로 입력합니다(현황 표의 미납 3개 열과 대응).</li>
+                            <li><b>구분</b>은 <b>렌탈CMS · 관리비CMS · 렌탈/할부</b> 중 하나로 입력합니다(현황 표의 미납 3개 열과 대응).</li>
                             <li><b>회차월</b>은 <i>2026-09</i> 형식으로 입력하며, 렌탈·할부는 <i>2026-09 (8회차)</i>처럼 회차를 함께 입력할 수 있습니다.</li>
                             <li>같은 <b>가맹점 · 구분 · 회차월</b> 이 이미 있으면 <b>해당 행만 갱신</b>합니다. 나머지 내역은 유지됩니다.</li>
                             <li><b>상태</b>는 <i>미납 · 출금예정 · 납입예정 · 납부완료</i>. 비워 두면 출금예정(렌탈·할부는 납입예정)으로 등록합니다.</li>
@@ -7185,7 +7185,7 @@
                 </div>
 
                 <!-- 계약방식 — 여러 개를 함께 고를 수 있습니다.
-                     CMS(임대) · CMS(관리비) 를 고르면 바로 아래에 그 금액 칸이 나타납니다. -->
+                     CMS(렌탈) · CMS(관리비) 를 고르면 바로 아래에 그 금액 칸이 나타납니다. -->
                 <div class="mb-4">
                     <label class="block text-sm font-medium text-gray-700 mb-1">계약방식
                         <span class="text-[11px] font-normal text-gray-400">· 해당 항목을 모두 선택해 주세요</span></label>
@@ -7207,14 +7207,14 @@
                         </label>
                         <span class="w-px h-4 bg-gray-300 mx-1"></span>
                         <label class="flex items-center gap-1.5 text-sm text-gray-700 cursor-pointer select-none">
-                            <input type="checkbox" name="customer-pay-method" value="CMS(임대)" onchange="onCustomerPayMethodChange(this)" class="text-blue-600 focus:ring-blue-600" />CMS(임대)
+                            <input type="checkbox" name="customer-pay-method" value="CMS(렌탈)" onchange="onCustomerPayMethodChange(this)" class="text-blue-600 focus:ring-blue-600" />CMS(렌탈)
                         </label>
                         <label class="flex items-center gap-1.5 text-sm text-gray-700 cursor-pointer select-none">
                             <input type="checkbox" name="customer-pay-method" value="CMS(관리비)" onchange="onCustomerPayMethodChange(this)" class="text-cyan-600 focus:ring-cyan-600" />CMS(관리비)
                         </label>
                         <button type="button" onclick="clearCustomerPayMethod()" class="ml-1 px-2 py-0.5 text-[11px] rounded border border-gray-300 text-gray-500 hover:bg-gray-100 transition-colors">선택 해제</button>
                     </div>
-                    <p class="text-[11px] text-gray-400 mt-1.5"><i class="fas fa-circle-info mr-1"></i><b>현금</b>, <b>CMS(임대)</b>, <b>CMS(관리비)</b>를 선택하면 아래에 <b>금액</b> 입력란이 표시됩니다.</p>
+                    <p class="text-[11px] text-gray-400 mt-1.5"><i class="fas fa-circle-info mr-1"></i><b>현금</b>, <b>CMS(렌탈)</b>, <b>CMS(관리비)</b>를 선택하면 아래에 <b>금액</b> 입력란이 표시됩니다.</p>
 
                     <!-- 계약방식 금액 — 위에서 고른 것 중 금액이 필요한 항목만 나타납니다 -->
                     <div id="customer-pay-amounts" class="hidden mt-3 rounded border border-gray-200 bg-gray-50 p-3">
@@ -7226,7 +7226,7 @@
                                 <p class="text-[11px] text-gray-400 mt-1">현금 일시 결제 금액입니다. (VAT 별도)</p>
                             </div>
                             <div id="customer-cms-rent-wrap" class="hidden rounded border border-gray-200 bg-white p-3">
-                                <label class="block text-sm font-medium text-gray-700 mb-1"><i class="fas fa-file-contract text-blue-500 mr-1"></i>CMS(임대) · 월 임대료(원)</label>
+                                <label class="block text-sm font-medium text-gray-700 mb-1"><i class="fas fa-file-contract text-blue-500 mr-1"></i>CMS(렌탈) · 월 렌탈료(원)</label>
                                 <input type="number" id="customer-rent-fee" class="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="예: 220000" />
                                 <p class="text-[11px] text-gray-400 mt-1">장비 임대료로 매월 출금하는 금액입니다.</p>
                             </div>
@@ -22459,7 +22459,7 @@ const QUOTE_TEMPLATES = [
                     },
                     {
                         // consultForm: true — 상담형 흐름(WC_CONSULT_TABS.rental 설정을 씁니다)
-                        // CMS 는 운영업무센터 탭에서 빼고, 가맹점별로 [임대 CMS] · [관리비 CMS] 를 나눠 관리합니다. (2026-08-24)
+                        // CMS 는 운영업무센터 탭에서 빼고, 가맹점별로 [렌탈 CMS] · [관리비 CMS] 를 나눠 관리합니다. (2026-08-24)
                         id: 'rental', name: '렌탈/할부', icon: 'fa-file-invoice-dollar', active: 'bg-indigo-600', consultForm: true,
                         desc: '렌탈·할부 계약 관련 상담을 접수하고 조치까지 관리합니다. 회차별 납입 내역은 [미납이력 조회]에서 확인합니다.',
                         fields: []
@@ -22684,23 +22684,23 @@ const QUOTE_TEMPLATES = [
             return ((bizNo || '').replace(/[\s-]/g, '') || (name || '').replace(/\s/g, '')).toLowerCase();
         }
 
-        // ---------- CMS 구분 (가맹점별 임대 CMS · 관리비 CMS) ----------
+        // ---------- CMS 구분 (가맹점별 렌탈 CMS · 관리비 CMS) ----------
         // CMS 는 운영업무센터 탭이 아니라 가맹점별로 두 갈래로 나눠 관리합니다.
-        //   임대 CMS  — 장비 임대료를 CMS 로 출금 (금액 = rentFee)
+        //   렌탈 CMS  — 장비 임대료를 CMS 로 출금 (금액 = rentFee)
         //   관리비 CMS — 월 관리비를 CMS 로 출금 (금액 = monthlyFee)
         // cmsUse 하나만 있던 예전 자료·엑셀은 '관리비 CMS 사용' 으로 읽습니다.
         // ---------- 계약방식 (가맹점관리) ----------
         // 여러 개를 함께 고를 수 있습니다.
-        //   CMS(임대) · CMS(관리비) 는 위 CMS 구분(cmsRentUse · cmsFeeUse) 과 **같은 값**입니다.
+        //   CMS(렌탈) · CMS(관리비) 는 위 CMS 구분(cmsRentUse · cmsFeeUse) 과 **같은 값**입니다.
         //   값이 두 군데로 갈라지지 않게, 읽을 때 CMS 구분을 진짜 값으로 보고 목록을 맞춥니다.
         // '임대' → '렌탈/할부' 로 이름을 바꿨습니다 (보완사항 2026-10-23). 예전 자료의 '임대' 도 렌탈/할부로 읽습니다.
         const PAY_METHOD_RENTAL = '렌탈/할부';
-        const CUSTOMER_PAY_METHODS = [PAY_METHOD_RENTAL, '무상임대', '일시불', '할부렌탈', '현금', 'CMS(임대)', 'CMS(관리비)'];
+        const CUSTOMER_PAY_METHODS = [PAY_METHOD_RENTAL, '무상임대', '일시불', '할부렌탈', '현금', 'CMS(렌탈)', 'CMS(관리비)'];
         const PAY_METHOD_CASH     = '현금';
-        const PAY_METHOD_CMS_RENT = 'CMS(임대)';
+        const PAY_METHOD_CMS_RENT = 'CMS(렌탈)';
         const PAY_METHOD_CMS_FEE  = 'CMS(관리비)';
         // 예전 자료(구매방식 = 현금 · 할부 · 렌탈 하나만) 를 새 이름으로 읽습니다
-        const CUSTOMER_PAY_METHOD_LEGACY = { '임대': PAY_METHOD_RENTAL, '렌탈': PAY_METHOD_RENTAL, '할부': '할부렌탈', '현금': '현금', '일시불': '일시불' };
+        const CUSTOMER_PAY_METHOD_LEGACY = { 'CMS(임대)': 'CMS(렌탈)', '임대': PAY_METHOD_RENTAL, '렌탈': PAY_METHOD_RENTAL, '할부': '할부렌탈', '현금': '현금', '일시불': '일시불' };
         // 계약방식 글자를 나눕니다 — '/' 도 구분 기호라 '렌탈/할부' 는 한 덩어리로 지킵니다
         function splitPayMethodText(raw) {
             return String(raw == null ? '' : raw).replace(/렌탈\s*\/\s*할부/g, '\u0001').split(/[,·|/;]/)
@@ -24365,7 +24365,7 @@ const QUOTE_TEMPLATES = [
                                 ? `<button type="button" onclick="openInstallCheckList({ customerId: '${escapeHtml(c.id)}' })" class="underline text-green-700 hover:text-green-900">${n}건 보기</button>`
                                 : '<span class="text-gray-400">없음</span>'); })()}
                         ${item('fa-money-check-dollar', 'CMS', cmsAnyOn(c)
-                            ? `<b class="text-blue-700">${cmsRentOn(c) ? '임대' : ''}${cmsRentOn(c) && cmsFeeOn(c) ? ' · ' : ''}${cmsFeeOn(c) ? '관리비' : ''}</b> · 월 ${cmsSummaryText(c)}`
+                            ? `<b class="text-blue-700">${cmsRentOn(c) ? '렌탈' : ''}${cmsRentOn(c) && cmsFeeOn(c) ? ' · ' : ''}${cmsFeeOn(c) ? '관리비' : ''}</b> · 월 ${cmsSummaryText(c)}`
                             : '<span class="text-gray-400">미사용</span>')}
                         <span class="inline-flex items-center gap-1">
                             <span class="text-[11px] text-gray-400 mr-0.5">계약방식</span>${payHtml}
@@ -34857,13 +34857,13 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             { key: 'partnerName',  label: '담당파트너사', aliases: ['담당파트너사', '담당 파트너사'] },
             { key: 'contractDate', label: '계약일',     aliases: ['계약일', '계약일자'],     date: true },
             { key: 'installDate',  label: '설치일',     aliases: ['설치일', '설치일자'],     date: true },
-            // 계약방식은 여러 개를 함께 적을 수 있습니다 (예: "렌탈/할부, CMS(임대), CMS(관리비)")
+            // 계약방식은 여러 개를 함께 적을 수 있습니다 (예: "렌탈/할부, CMS(렌탈), CMS(관리비)")
             { key: 'payMethod', multiKey: 'payMethods', label: '계약방식',
               aliases: ['계약방식', '구매방식', '결제방식', '납부방식'],
               options: CUSTOMER_PAY_METHODS, legacy: CUSTOMER_PAY_METHOD_LEGACY },
-            // CMS 구분 — 가맹점별로 임대 CMS · 관리비 CMS 를 나눠 씁니다.
+            // CMS 구분 — 가맹점별로 렌탈 CMS · 관리비 CMS 를 나눠 씁니다.
             // 'CMS사용' 한 칸만 있던 예전 양식은 관리비 CMS 로 읽습니다.
-            { key: 'cmsRentUse',   label: '임대CMS',    aliases: ['임대cms', '임대cms사용', '임대cms여부'], bool: true },
+            { key: 'cmsRentUse',   label: '렌탈CMS',    aliases: ['렌탈cms', '렌탈cms사용', '렌탈cms여부', '임대cms', '임대cms사용', '임대cms여부'], bool: true },
             { key: 'cashAmount',   label: '현금금액',   aliases: ['현금금액', '현금', '현금가', '현금결제금액'], number: true },
             { key: 'rentFee',      label: '월임대료',   aliases: ['월임대료', '임대료', '월임대금액'], number: true },
             { key: 'cmsFeeUse',    label: '관리비CMS',  aliases: ['관리비cms', '관리비cms사용', '관리비cms여부', 'cms사용', 'cms', 'cms여부'], bool: true },
@@ -34943,7 +34943,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                 zipCode: '06234', address: '서울시 강남구 테헤란로 123', addressDetail: '2층', industry: 'IT/소프트웨어', size: '중소기업', type: '거래고객',
                 grade: 'VIP', manager: '김영업', kind: '파트너사 가맹점', parentRef: '오케팅홀딩스', status: '거래중', contractDate: '2026-03-02', installDate: '2026-03-10',
                 van: 'KIS정보통신', pg: 'KG이니시스', tid: 'T1023004501, T1023004502', mid: 'M20251114-01', settleCycle: 'D+2 (영업일)',
-                payMethod: '렌탈/할부, 현금, CMS(임대), CMS(관리비)', cashAmount: 3500000, cmsRentUse: 'Y', rentFee: 220000, cmsFeeUse: 'Y', monthlyFee: 330000,
+                payMethod: '렌탈/할부, 현금, CMS(렌탈), CMS(관리비)', cashAmount: 3500000, cmsRentUse: 'Y', rentFee: 220000, cmsFeeUse: 'Y', monthlyFee: 330000,
                 useYn: 'YES', transferInfo: '국민은행 1234-**-5678',
                 memo: '연간 계약 갱신 예정'
             };
@@ -35340,7 +35340,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                         <td class="p-4">${escapeHtml(customer.manager || '-')}</td>
                         <td class="p-4">${cmsAnyOn(customer)
                             ? `<span class="flex flex-wrap gap-1">
-                                    ${cmsRentOn(customer) ? '<span class="px-1.5 py-0.5 text-[11px] rounded bg-blue-100 text-blue-700 font-medium">임대</span>' : ''}
+                                    ${cmsRentOn(customer) ? '<span class="px-1.5 py-0.5 text-[11px] rounded bg-blue-100 text-blue-700 font-medium">렌탈</span>' : ''}
                                     ${cmsFeeOn(customer) ? '<span class="px-1.5 py-0.5 text-[11px] rounded bg-cyan-100 text-cyan-700 font-medium">관리비</span>' : ''}
                                </span><span class="block text-xs text-gray-500 mt-0.5">월 ${cmsSummaryText(customer)}</span>`
                             : '<span class="text-gray-400">미사용</span>'}</td>
@@ -35578,7 +35578,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
 
         // 계약방식에서 고른 것 중 '금액이 필요한 항목' 만 입력칸을 보여 줍니다.
         //   현금        → 결제금액 (한 번에 받는 금액)
-        //   CMS(임대)   → 월 임대료
+        //   CMS(렌탈)   → 월 임대료
         //   CMS(관리비) → 월 관리금액
         // 체크를 끄면 칸을 감추고, 저장할 때 그 금액은 0 으로 넣습니다.
         function updatePayMethodAmounts() {
@@ -44096,7 +44096,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                         ${fld('최소 청구액 (₩)', `<input type="number" id="pset-min" min="0" value="${s.minCharge}" class="${inp}" />`,
                             '계산 결과가 이 금액보다 적으면 이 금액으로 청구합니다. 0이면 적용하지 않습니다.')}
                     </div>`)
-                + card('fa-percent', '잔여 임대료 기준', '월 임대료 × 잔여 개월 × 위약률로 계산합니다. 월 임대료는 가맹점에 기재된 <b>임대 CMS</b> 금액을 우선 적용합니다.', `
+                + card('fa-percent', '잔여 임대료 기준', '월 임대료 × 잔여 개월 × 위약률로 계산합니다. 월 임대료는 가맹점에 기재된 <b>렌탈 CMS</b> 금액을 우선 적용합니다.', `
                     <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                         ${fld('위약률 (%)', `<input type="number" id="pset-rate" min="0" max="100" step="0.1" value="${s.rate}" class="${inp}" />`,
                             '잔여 임대료 합계에 곱하는 비율입니다.')}
@@ -44174,7 +44174,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             }
             return { cu: cu, wc: wc };
         }
-        // 미납 합계 — 관리비 CMS · 임대 CMS · 렌탈/할부 회차를 모두 봅니다
+        // 미납 합계 — 관리비 CMS · 렌탈 CMS · 렌탈/할부 회차를 모두 봅니다
         function penaltyArrearsOf(wc) {
             if (!wc) return { count: 0, amount: 0 };
             const parts = [cmsOwed(wc.rentArrears), cmsOwed(wc.arrears), cmsOwed(wc.rentalArrears)];
@@ -44216,7 +44216,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             const saved = c.penalty || null;
             const months = penaltyTermMonths(c.start, c.end);
             const owed = penaltyArrearsOf(wc);
-            // 월 임대료 — 가맹점에 기재된 임대 CMS 금액이 우선, 없으면 계약금액을 약정 개월로 나눠 채웁니다
+            // 월 임대료 — 가맹점에 기재된 렌탈 CMS 금액이 우선, 없으면 계약금액을 약정 개월로 나눠 채웁니다
             const rentFromCust = (wc && cmsRentOn(wc) ? Number(wc.rentFee) || 0 : 0)
                               || (cu && cu.cmsRentUse ? Number(cu.rentFee) || 0 : 0);
             const monthlyRent = rentFromCust || (months > 0 ? Math.round((Number(c.value) || 0) / months) : 0);
@@ -44231,7 +44231,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                 method: pick('method', s.method),
                 months: pick('months', months),
                 monthlyRent: pick('monthlyRent', monthlyRent),
-                monthlyRentSource: rentFromCust ? '가맹점 임대 CMS 월 임대료' : (months > 0 ? '계약금액 ÷ 약정 개월 (추정값)' : '직접 입력'),
+                monthlyRentSource: rentFromCust ? '가맹점 렌탈 CMS 월 렌탈료' : (months > 0 ? '계약금액 ÷ 약정 개월 (추정값)' : '직접 입력'),
                 rate: pick('rate', s.rate),
                 usefulMonths: pick('usefulMonths', s.usefulMonths),
                 salvageRate: pick('salvageRate', s.salvageRate),
@@ -44527,12 +44527,12 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
         // 가맹점별 CMS 상태(임대 · 관리비) · 월 출금액 · 렌탈 금액 · 미납을 한 화면에서 조회합니다.
         //   자료 출처 — 운영업무센터의 병합 고객 목록(WORK_CENTERS.ops.customers).
         //     · CMS 구분·금액은 가맹점관리에서 넣은 값(cmsRentUse · rentFee · cmsFeeUse · monthlyFee)
-        //     · 미납은 운영업무센터 고객 자료(arrears = 관리비 CMS 출금 / rentArrears = 임대 CMS 출금 / rentalArrears = 렌탈·할부 회차)
+        //     · 미납은 운영업무센터 고객 자료(arrears = 관리비 CMS 출금 / rentArrears = 렌탈 CMS 출금 / rentalArrears = 렌탈·할부 회차)
         //   조회 전용 화면입니다. 값을 고치려면 줄을 눌러 고객사 기본정보를 여세요.
         let cmsStatusFilter = { q: '', kind: '' };
         const CMS_STATUS_KINDS = [
             { id: '',      label: '전체' },
-            { id: 'rent',  label: '임대 CMS' },
+            { id: 'rent',  label: '렌탈 CMS' },
             { id: 'fee',   label: '관리비 CMS' },
             { id: 'both',  label: '임대+관리비' },
             { id: 'none',  label: '미사용' }
@@ -44639,7 +44639,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
 
                 <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
                     ${kpi('조회 대상', `${rows.length}곳`, `전체 ${all}곳`, 'border-cyan-500')}
-                    ${kpi('임대 CMS', `${rows.filter(r => r.rentOn).length}곳`, `월 ${sum(r => r.rentFee).toLocaleString()}원`, 'border-blue-500')}
+                    ${kpi('렌탈 CMS', `${rows.filter(r => r.rentOn).length}곳`, `월 ${sum(r => r.rentFee).toLocaleString()}원`, 'border-blue-500')}
                     ${kpi('관리비 CMS', `${rows.filter(r => r.feeOn).length}곳`, `월 ${sum(r => r.monthlyFee).toLocaleString()}원`, 'border-cyan-600')}
                     ${kpi('월 출금 합계', `${monthly.toLocaleString()}원`, `미납 ${owedCnt}건 · ${owedAmt.toLocaleString()}원`, 'border-red-500')}
                 </div>
@@ -44697,7 +44697,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                                     <td class="px-3 py-2 whitespace-nowrap">${escapeHtml(c.manager || '-')}</td>
                                     <td class="px-3 py-2 whitespace-nowrap">
                                         ${r.rentOn || r.feeOn
-                                            ? `<span class="flex flex-wrap gap-1">${chip(r.rentOn, '임대', 'bg-blue-100 text-blue-700')}${chip(r.feeOn, '관리비', 'bg-cyan-100 text-cyan-700')}</span>`
+                                            ? `<span class="flex flex-wrap gap-1">${chip(r.rentOn, '렌탈', 'bg-blue-100 text-blue-700')}${chip(r.feeOn, '관리비', 'bg-cyan-100 text-cyan-700')}</span>`
                                             : '<span class="text-gray-400">미사용</span>'}
                                     </td>
                                     <td class="px-3 py-2 text-right whitespace-nowrap">${won(r.rentFee)}</td>
@@ -44731,7 +44731,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
         const CMS_IMPORT_COLUMNS = [
             { key: 'name',        label: '가맹점명',    aliases: ['가맹점명', '고객사명', '거래처명', '상호', '상호명', '업체명'], required: true },
             { key: 'bizNo',       label: '사업자번호',  aliases: ['사업자번호', '사업자등록번호'] },
-            { key: 'cmsRentUse',  label: '임대CMS',     aliases: ['임대cms', '임대cms사용', '임대cms여부'], bool: true },
+            { key: 'cmsRentUse',  label: '렌탈CMS',     aliases: ['렌탈cms', '렌탈cms사용', '렌탈cms여부', '임대cms', '임대cms사용', '임대cms여부'], bool: true },
             { key: 'rentFee',     label: '월임대료',    aliases: ['월임대료', '임대료', '월임대금액'], number: true },
             { key: 'cmsFeeUse',   label: '관리비CMS',   aliases: ['관리비cms', '관리비cms사용', '관리비cms여부', 'cms사용', 'cms', 'cms여부'], bool: true },
             { key: 'monthlyFee',  label: '월관리금액',  aliases: ['월관리금액', '월관리비', '월정액'], number: true },
@@ -44745,7 +44745,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
         // ---------- ② 출금 · 납입 내역 ----------
         // 구분에 따라 담기는 곳이 다릅니다 (CMS·렌탈 현황 표의 미납 3칸과 짝).
         const CMS_PAY_KINDS = [
-            { id: 'rent', label: '임대CMS',   field: 'rentArrears',   defaultStatus: '출금예정', aliases: ['임대cms', '임대', '임대료', '임대cms출금', '임대출금'] },
+            { id: 'rent', label: '렌탈CMS',   field: 'rentArrears',   defaultStatus: '출금예정', aliases: ['렌탈cms', '렌탈cms출금', '렌탈료', '임대cms', '임대', '임대료', '임대cms출금', '임대출금'] },
             { id: 'fee',  label: '관리비CMS', field: 'arrears',       defaultStatus: '출금예정', aliases: ['관리비cms', '관리비', '관리금액', 'cms', '관리비출금'] },
             { id: 'inst', label: '렌탈/할부', field: 'rentalArrears', defaultStatus: '납입예정', aliases: ['렌탈/할부', '렌탈할부', '렌탈', '할부', '회차', '렌탈납입'] }
         ];
@@ -44848,7 +44848,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
         function downloadCmsImportTemplate() {
             const head = CMS_IMPORT_COLUMNS.map(c => c.label);
             const s1 = { name: '행복치킨 강남점', bizNo: '220-81-62517', cmsRentUse: 'Y', rentFee: 220000, cmsFeeUse: 'Y', monthlyFee: 330000,
-                         payMethod: '렌탈, CMS(임대), CMS(관리비)', contract: '렌탈 36개월', manager: '박운영', channelType: '파트너사' };
+                         payMethod: '렌탈, CMS(렌탈), CMS(관리비)', contract: '렌탈 36개월', manager: '박운영', channelType: '파트너사' };
             const s2 = { name: '(주)베타마트', bizNo: '312-81-40905', cmsRentUse: 'N', rentFee: 0, cmsFeeUse: 'N', monthlyFee: 0,
                          payMethod: '현금', contract: '일시불', manager: '이영희', channelType: '직영' };
             const rows = [head].concat([s1, s2].map(s => CMS_IMPORT_COLUMNS.map(c => s[c.key] !== undefined ? s[c.key] : '')));
@@ -44858,7 +44858,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             const head = CMS_PAY_IMPORT_COLUMNS.map(c => c.label);
             const s1 = { name: '행복치킨 강남점', bizNo: '220-81-62517', kind: '관리비CMS', month: '2026-09', amount: 330000,
                          dueDate: '2026-09-25', bank: '국민은행', account: '1234-**-5678', status: '출금예정', reason: '' };
-            const s2 = { name: '행복치킨 강남점', bizNo: '220-81-62517', kind: '임대CMS', month: '2026-09', amount: 220000,
+            const s2 = { name: '행복치킨 강남점', bizNo: '220-81-62517', kind: '렌탈CMS', month: '2026-09', amount: 220000,
                          dueDate: '2026-09-25', bank: '국민은행', account: '1234-**-5678', status: '미납', reason: '잔액 부족' };
             const s3 = { name: '오메가분식', bizNo: '345-67-89012', kind: '렌탈/할부', month: '2026-09 (8회차)', amount: 39000,
                          dueDate: '2026-09-20', bank: '할부 12개월', account: '', status: '납입예정', reason: '' };
@@ -44985,7 +44985,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             const cell = (r, k) => (col[k] >= 0 && r[col[k]] != null) ? String(r[col[k]]).trim() : '';
 
             if (col.kind < 0) {
-                box.innerHTML = `<p class="text-sm text-red-600"><i class="fas fa-triangle-exclamation mr-1"></i>머리글에서 <b>구분</b> 열을 찾을 수 없습니다. 구분에는 <b>임대CMS · 관리비CMS · 렌탈/할부</b> 중 하나를 입력해 주세요.</p>`;
+                box.innerHTML = `<p class="text-sm text-red-600"><i class="fas fa-triangle-exclamation mr-1"></i>머리글에서 <b>구분</b> 열을 찾을 수 없습니다. 구분에는 <b>렌탈CMS · 관리비CMS · 렌탈/할부</b> 중 하나를 입력해 주세요.</p>`;
                 input.value = ''; return;
             }
 
@@ -45044,7 +45044,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                 [`제외 ${stat.notFound + stat.noName + stat.badKind + stat.noMonth}건 (등록되지 않은 가맹점 ${stat.notFound} · 가맹점명 없음 ${stat.noName} · 구분 인식 불가 ${stat.badKind} · 회차월 없음 ${stat.noMonth})`,
                  `동일한 <b>가맹점·구분·회차월</b>이 있는 경우 갱신되었습니다.`],
                 usedCols, unknownHeads(rows, found, CMS_PAY_IMPORT_COLUMNS), preview, usedCols.slice(0, 8))
-                + (badKinds.length ? `<p class="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5 mt-2"><i class="fas fa-circle-info mr-1"></i>인식할 수 없는 구분: ${badKinds.map(escapeHtml).join(' · ')}<br><span class="text-amber-600">임대CMS · 관리비CMS · 렌탈/할부 중 하나로 입력해 주세요.</span></p>` : '')
+                + (badKinds.length ? `<p class="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5 mt-2"><i class="fas fa-circle-info mr-1"></i>인식할 수 없는 구분: ${badKinds.map(escapeHtml).join(' · ')}<br><span class="text-amber-600">렌탈CMS · 관리비CMS · 렌탈/할부 중 하나로 입력해 주세요.</span></p>` : '')
                 + (missing.length ? `<p class="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5 mt-2"><i class="fas fa-circle-info mr-1"></i>미등록으로 제외된 가맹점: ${missing.map(escapeHtml).join(' · ')}${stat.notFound > missing.length ? ` 외 ${stat.notFound - missing.length}곳` : ''}</p>` : '');
             input.value = '';
         }
@@ -45154,7 +45154,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
 
             document.getElementById('cmsd-body').innerHTML = `
                 <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
-                    ${kpi('월 임대료', rentFee ? rentFee.toLocaleString() + '원' : '-', rentOn ? '임대 CMS 사용' : '임대 CMS 미사용', 'border-blue-500')}
+                    ${kpi('월 렌탈료', rentFee ? rentFee.toLocaleString() + '원' : '-', rentOn ? '렌탈 CMS 사용' : '렌탈 CMS 미사용', 'border-blue-500')}
                     ${kpi('월 관리금액', monthlyFee ? monthlyFee.toLocaleString() + '원' : '-', feeOn ? '관리비 CMS 사용' : '관리비 CMS 미사용', 'border-cyan-600')}
                     ${kpi('월 출금 합계', (rentFee + monthlyFee).toLocaleString() + '원', '임대 + 관리비', 'border-emerald-500')}
                     ${kpi('미납 합계', owedAmt ? owedAmt.toLocaleString() + '원' : '없음', owedCnt ? owedCnt + '건' : '미납 없음', owedCnt ? 'border-red-500' : 'border-gray-300')}
@@ -45163,7 +45163,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                 ${box('계약방식 · 금액', 'fa-money-check-dollar', `
                     <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
                         ${row('계약방식', escapeHtml(custPayMethodText(c)), true)}
-                        ${row('임대 CMS', `${useChip(rentOn, '임대', 'bg-blue-100 text-blue-700')}${rentOn ? ` <span class="ml-1">${rentFee.toLocaleString()}원</span>` : ''}`)}
+                        ${row('렌탈 CMS', `${useChip(rentOn, '렌탈', 'bg-blue-100 text-blue-700')}${rentOn ? ` <span class="ml-1">${rentFee.toLocaleString()}원</span>` : ''}`)}
                         ${row('관리비 CMS', `${useChip(feeOn, '관리비', 'bg-cyan-100 text-cyan-700')}${feeOn ? ` <span class="ml-1">${monthlyFee.toLocaleString()}원</span>` : ''}`)}
                         ${row('현금 결제금액', Number(c.cashAmount) ? Number(c.cashAmount).toLocaleString() + '원' : '')}
                         ${row('계약', escapeHtml(c.contract || ''))}
@@ -45192,7 +45192,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                     </div>`) : ''}
 
                 <p class="text-xs font-semibold text-gray-500 mb-2 mt-4 pt-3 border-t border-gray-100">출금 · 납입 내역</p>
-                ${cmsPayRows('임대 CMS 출금 내역', 'fa-file-contract', c.rentArrears, '출금 월')}
+                ${cmsPayRows('렌탈 CMS 출금 내역', 'fa-file-contract', c.rentArrears, '출금 월')}
                 ${cmsPayRows('관리비 CMS 출금 내역', 'fa-receipt', c.arrears, '출금 월')}
                 ${cmsPayRows('렌탈 · 할부 납입 내역', 'fa-file-invoice-dollar', c.rentalArrears, '회차')}
 
