@@ -6831,7 +6831,7 @@
                         <li><b>상위업체</b>: 가맹점이 속한 본사·파트너사의 <b>상호 또는 사업자번호</b>. 같은 파일 안에 있어도 됩니다(본사·파트너사를 먼저 등록한 후 연결합니다). 찾지 못한 행은 등록하되 결과에 <b>상위업체 못 찾음</b>으로 표시합니다.</li>
                         <li>머리글은 <b>이름으로 인식하므로 열 순서가 달라도</b> 됩니다. 머리글 행 위치도 자동으로 인식합니다.</li>
                         <li>같은 곳인지는 <b>사업자번호 → 거래처코드 → 상호</b> 순으로 판단합니다.</li>
-                        <li><b>계약방식</b>은 여러 개를 <b>쉼표로 구분해</b> 입력할 수 있습니다. (예: <i>임대, CMS(임대), CMS(관리비)</i>)</li>
+                        <li><b>계약방식</b>은 여러 개를 <b>쉼표로 구분해</b> 입력할 수 있습니다. (예: <i>렌탈/할부, CMS(임대), CMS(관리비)</i>)</li>
                         <li>상호가 비어 있는 행과 파일 안에서 중복된 행은 건너뜁니다.</li>
                     </ul>
                 </div>
@@ -7191,7 +7191,7 @@
                         <span class="text-[11px] font-normal text-gray-400">· 해당 항목을 모두 선택해 주세요</span></label>
                     <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
                         <label class="flex items-center gap-1.5 text-sm text-gray-700 cursor-pointer select-none">
-                            <input type="checkbox" name="customer-pay-method" value="임대" onchange="onCustomerPayMethodChange(this)" class="text-blue-600 focus:ring-blue-500" />임대
+                            <input type="checkbox" name="customer-pay-method" value="렌탈/할부" onchange="onCustomerPayMethodChange(this)" class="text-blue-600 focus:ring-blue-500" />렌탈/할부
                         </label>
                         <label class="flex items-center gap-1.5 text-sm text-gray-700 cursor-pointer select-none">
                             <input type="checkbox" name="customer-pay-method" value="무상임대" onchange="onCustomerPayMethodChange(this)" class="text-blue-600 focus:ring-blue-500" />무상임대
@@ -22693,12 +22693,19 @@ const QUOTE_TEMPLATES = [
         // 여러 개를 함께 고를 수 있습니다.
         //   CMS(임대) · CMS(관리비) 는 위 CMS 구분(cmsRentUse · cmsFeeUse) 과 **같은 값**입니다.
         //   값이 두 군데로 갈라지지 않게, 읽을 때 CMS 구분을 진짜 값으로 보고 목록을 맞춥니다.
-        const CUSTOMER_PAY_METHODS = ['임대', '무상임대', '일시불', '할부렌탈', '현금', 'CMS(임대)', 'CMS(관리비)'];
+        // '임대' → '렌탈/할부' 로 이름을 바꿨습니다 (보완사항 2026-10-23). 예전 자료의 '임대' 도 렌탈/할부로 읽습니다.
+        const PAY_METHOD_RENTAL = '렌탈/할부';
+        const CUSTOMER_PAY_METHODS = [PAY_METHOD_RENTAL, '무상임대', '일시불', '할부렌탈', '현금', 'CMS(임대)', 'CMS(관리비)'];
         const PAY_METHOD_CASH     = '현금';
         const PAY_METHOD_CMS_RENT = 'CMS(임대)';
         const PAY_METHOD_CMS_FEE  = 'CMS(관리비)';
         // 예전 자료(구매방식 = 현금 · 할부 · 렌탈 하나만) 를 새 이름으로 읽습니다
-        const CUSTOMER_PAY_METHOD_LEGACY = { '렌탈': '임대', '할부': '할부렌탈', '현금': '현금', '일시불': '일시불' };
+        const CUSTOMER_PAY_METHOD_LEGACY = { '임대': PAY_METHOD_RENTAL, '렌탈': PAY_METHOD_RENTAL, '할부': '할부렌탈', '현금': '현금', '일시불': '일시불' };
+        // 계약방식 글자를 나눕니다 — '/' 도 구분 기호라 '렌탈/할부' 는 한 덩어리로 지킵니다
+        function splitPayMethodText(raw) {
+            return String(raw == null ? '' : raw).replace(/렌탈\s*\/\s*할부/g, '\u0001').split(/[,·|/;]/)
+                .map(v => v.replace(/\u0001/g, PAY_METHOD_RENTAL));
+        }
 
         function cmsRentOn(c) { return !!(c && c.cmsRentUse); }
         function cmsFeeOn(c) { return !!(c && (c.cmsFeeUse !== undefined ? c.cmsFeeUse : c.cmsUse)); }
@@ -22708,7 +22715,7 @@ const QUOTE_TEMPLATES = [
         //   CMS 두 항목은 CMS 구분 체크를 따라 붙이거나 뗍니다 (한 값을 두 곳에 두지 않으려고).
         function custPayMethods(c) {
             if (!c) return [];
-            const src = Array.isArray(c.payMethods) ? c.payMethods : String(c.payMethod || '').split(/[,·|/;]/);
+            const src = Array.isArray(c.payMethods) ? c.payMethods : splitPayMethodText(c.payMethod || '');
             const out = [];
             src.forEach(v => {
                 const t = String(v || '').trim();
@@ -34850,7 +34857,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             { key: 'partnerName',  label: '담당파트너사', aliases: ['담당파트너사', '담당 파트너사'] },
             { key: 'contractDate', label: '계약일',     aliases: ['계약일', '계약일자'],     date: true },
             { key: 'installDate',  label: '설치일',     aliases: ['설치일', '설치일자'],     date: true },
-            // 계약방식은 여러 개를 함께 적을 수 있습니다 (예: "임대, CMS(임대), CMS(관리비)")
+            // 계약방식은 여러 개를 함께 적을 수 있습니다 (예: "렌탈/할부, CMS(임대), CMS(관리비)")
             { key: 'payMethod', multiKey: 'payMethods', label: '계약방식',
               aliases: ['계약방식', '구매방식', '결제방식', '납부방식'],
               options: CUSTOMER_PAY_METHODS, legacy: CUSTOMER_PAY_METHOD_LEGACY },
@@ -34936,7 +34943,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                 zipCode: '06234', address: '서울시 강남구 테헤란로 123', addressDetail: '2층', industry: 'IT/소프트웨어', size: '중소기업', type: '거래고객',
                 grade: 'VIP', manager: '김영업', kind: '파트너사 가맹점', parentRef: '오케팅홀딩스', status: '거래중', contractDate: '2026-03-02', installDate: '2026-03-10',
                 van: 'KIS정보통신', pg: 'KG이니시스', tid: 'T1023004501, T1023004502', mid: 'M20251114-01', settleCycle: 'D+2 (영업일)',
-                payMethod: '임대, 현금, CMS(임대), CMS(관리비)', cashAmount: 3500000, cmsRentUse: 'Y', rentFee: 220000, cmsFeeUse: 'Y', monthlyFee: 330000,
+                payMethod: '렌탈/할부, 현금, CMS(임대), CMS(관리비)', cashAmount: 3500000, cmsRentUse: 'Y', rentFee: 220000, cmsFeeUse: 'Y', monthlyFee: 330000,
                 useYn: 'YES', transferInfo: '국민은행 1234-**-5678',
                 memo: '연간 계약 갱신 예정'
             };
@@ -35007,7 +35014,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                     if (c.multiKey) {
                         // 쉼표 · 가운뎃점 · 슬래시로 나눠 여러 개를 읽습니다. 목록에 없는 값은 건너뜁니다.
                         const uniq = [];
-                        String(raw).split(/[,·|/;]/).forEach(v => {
+                        splitPayMethodText(raw).forEach(v => {
                             const t = v.trim();
                             if (!t) return;
                             const hit = (c.options || []).find(o => normHeadName(o) === normHeadName(t)) || (c.legacy || {})[t];
@@ -44782,7 +44789,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             if (c.date) return excelDateToYmd(raw);
             if (c.multiKey) {
                 const uniq = [];
-                String(raw).split(/[,·|/;]/).forEach(v => {
+                splitPayMethodText(raw).forEach(v => {
                     const t = v.trim();
                     if (!t) return;
                     const hit = (c.options || []).find(o => normHeadName(o) === normHeadName(t)) || (c.legacy || {})[t];
