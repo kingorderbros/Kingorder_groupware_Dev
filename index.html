@@ -3837,7 +3837,7 @@
                 <h3 id="org-unit-title" class="text-lg font-bold text-gray-800 mb-4">본부 추가</h3>
                 <form id="org-unit-form" onsubmit="submitOrgUnit(event)">
                     <div id="org-unit-dept-wrap" class="mb-4 hidden">
-                        <label class="block text-sm font-medium text-gray-700 mb-1">소속 본부</label>
+                        <label id="org-unit-dept-label" class="block text-sm font-medium text-gray-700 mb-1">소속 본부</label>
                         <select id="org-unit-dept" class="w-full p-2 border border-gray-300 rounded bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"></select>
                     </div>
                     <div class="mb-3">
@@ -7992,7 +7992,12 @@
                             </div>
                             <div>
                                 <label class="block text-xs font-medium text-gray-600 mb-1">팀 <span class="font-normal text-gray-400">(선택)</span></label>
-                                <select id="org-edit-team" class="w-full p-2 text-sm border border-gray-300 rounded bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"></select>
+                                <select id="org-edit-team" onchange="onOrgEditTeamChange()" class="w-full p-2 text-sm border border-gray-300 rounded bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"></select>
+                                <!-- 파트 (2026-10-23) — 고른 팀에 파트가 등록돼 있을 때만 보입니다 -->
+                                <div id="org-edit-part-wrap" class="hidden mt-2">
+                                    <label class="block text-xs font-medium text-gray-600 mb-1">파트 <span class="font-normal text-gray-400">(선택)</span></label>
+                                    <select id="org-edit-part" class="w-full p-2 text-sm border border-gray-300 rounded bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"></select>
+                                </div>
                                 <p class="text-[11px] text-gray-400 mt-1">선택한 본부에 등록된 팀만 표시됩니다. 팀은 <b>조직도 관리 › 본부 · 팀 관리</b>에서 등록합니다. 팀을 선택하지 않으면 조직도에서 <b id="org-edit-noteam-hint">팀 미지정</b> 묶음으로 표시됩니다.</p>
                             </div>
                         </div>
@@ -10358,6 +10363,27 @@ const QUOTE_TEMPLATES = [
                 .slice().sort((a, b) => (a.order || 99) - (b.order || 99) || String(a.name).localeCompare(String(b.name), 'ko'));
         }
         function orgTeamNamesOf(deptId) { return orgTeamsOf(deptId).map(t => t.name); }
+
+        // ---------- 파트 (팀 아래 한 단계 · 2026-10-23) ----------
+        // 어느 본부의 어느 팀이든 파트를 둘 수 있습니다 (예: 운영본부 › 운영팀 › 1파트 · 2파트).
+        // 파트 목록은 팀 정보 안(team.parts = [{ id, name, order }])에 함께 저장하고, 구성원에는 파트 이름(u.part)을 적습니다.
+        // 파트가 없는 팀은 지금과 똑같이 보입니다. 파트를 지정하지 않은 팀원은 팀 상자에 바로 표시됩니다(팀장 등).
+        function orgTeamByName(deptId, teamName) { return orgTeams.find(t => t.deptId === deptId && t.name === teamName) || null; }
+        function orgPartsOfTeam(t) {
+            return (t && Array.isArray(t.parts) ? t.parts : []).slice()
+                .sort((a, b) => (a.order || 99) - (b.order || 99) || String(a.name).localeCompare(String(b.name), 'ko'));
+        }
+        function orgPartNamesOf(deptId, teamName) { return orgPartsOfTeam(orgTeamByName(deptId, teamName)).map(p => p.name); }
+        function orgPartOf(u) { return (u && String(u.part || '').trim()) || ''; }
+        // 팀원을 파트별로 나눕니다 — 파트가 없으면 parts 는 빈 배열이고 direct 에 모두 들어갑니다
+        function orgSplitParts(deptId, teamName, members) {
+            const names = orgPartNamesOf(deptId, teamName);
+            (members || []).forEach(u => { const p = orgPartOf(u); if (p && names.indexOf(p) < 0) names.push(p); });   // 예전 자료에만 있는 파트 이름도 지키기
+            return {
+                direct: (members || []).filter(u => !orgPartOf(u) || names.indexOf(orgPartOf(u)) < 0),
+                parts: names.map(n => ({ name: n, members: (members || []).filter(u => orgPartOf(u) === n) }))
+            };
+        }
 
         // ---------- 업무 이관 대상 (본부 · 팀) ----------
         // 이관·재이관은 본부까지만 고르는 것이 기본이고, 팀이 등록된 본부는 팀까지 골라 넘길 수 있습니다.
@@ -36004,7 +36030,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
         const DELETE_REQ_FNS = [
             'deleteCustomer', 'deleteCompany', 'deleteCase', 'deleteContract', 'deleteQuote', 'deleteSupply', 'deletePrice',
             'deletePayoutRowFromModal', 'deleteVehicle', 'deleteVehicleLog', 'deleteCorpCard', 'undoCardBatch', 'deleteQuoteTpl',
-            'deleteOrgMember', 'deleteOrgTeam', 'deleteOrgRank', 'deleteOrgDept', 'deleteInbound', 'deleteSchedule',
+            'deleteOrgMember', 'deleteOrgTeam', 'deleteOrgPart', 'deleteOrgRank', 'deleteOrgDept', 'deleteInbound', 'deleteSchedule',
             'deleteProject', 'deleteWbs', 'deleteNotice', 'deleteArchivePost', 'deleteMeeting', 'deleteIssue', 'deleteDevReq',
             'deletePartnerId', 'deletePartnerIntake',
             // 관리자 수정 · 삭제 창으로 여는 자료 — 승인하면 그 창이 열리고, 관리자가 창에서 삭제합니다
@@ -39733,6 +39759,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
         //   (팀 구조는 아직 없습니다 — 나중에 팀을 지정하면 그 본부만 팀별 카드로 나뉩니다)
         function orgTeamCardHtml(g, teamName, members, tag) {
             const flat = !teamName;
+            const split = flat ? { direct: members, parts: [] } : orgSplitParts(g.dept, teamName, members);   // 파트 (2026-10-23)
             const cell = u => `
                                 <button type="button" onclick="openOrgMember('${escapeHtml(u.id)}')" class="w-full text-left px-4 py-2.5 flex items-center gap-3 hover:bg-rose-50/50 transition-colors">
                                     ${orgAvatarHtml(u)}
@@ -39748,7 +39775,11 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                                 <h4 class="text-sm font-bold text-gray-800 truncate"><i class="fas ${flat ? g.style.icon : 'fa-people-group'} text-gray-400 mr-1"></i>${escapeHtml(flat ? g.name : teamName)}${tag ? `<span class="ml-1.5 text-[11px] font-normal text-gray-400">${escapeHtml(tag)}</span>` : ''}</h4>
                                 <span class="text-[11px] text-gray-400 shrink-0">${members.length}명</span>
                             </div>
-                            ${members.length ? `
+                            ${(!flat && split.parts.length) ? `
+                            <div class="divide-y divide-gray-50">${split.direct.map(cell).join('')}</div>
+                            ${split.parts.map(pt => `
+                            <div class="px-4 py-1.5 bg-gray-50 border-y border-gray-100 flex items-center justify-between text-[11px] font-semibold text-gray-600"><span><i class="fas fa-sitemap text-gray-400 mr-1"></i>${escapeHtml(pt.name)}</span><span class="font-normal text-gray-400">${pt.members.length}명</span></div>
+                            <div class="divide-y divide-gray-50">${pt.members.length ? pt.members.map(cell).join('') : '<p class="px-4 py-2 text-[11px] text-gray-400">구성원 없음</p>'}</div>`).join('')}` : members.length ? `
                             <div class="${flat ? 'grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 divide-y md:divide-y-0 divide-gray-50 md:gap-px md:bg-gray-50' : 'divide-y divide-gray-50'}">
                                 ${members.map(u => flat ? `<div class="bg-white">${cell(u)}</div>` : cell(u)).join('')}
                             </div>` : `
@@ -39847,13 +39878,32 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                                             ${orgMemberListHtml(g.direct)}
                                         </div>
                                     </div>` : '';
-                const teamCols = g.teams.map(t => `
+                // 파트가 있는 팀은 팀 → 파트 → 구성원으로 한 단계 더 내려갑니다 (2026-10-23).
+                //   파트를 지정하지 않은 팀원(팀장 등)은 팀 상자 안에 이름으로 표시합니다.
+                const teamCols = g.teams.map(t => {
+                    const sp = orgSplitParts(g.dept, t.name, t.members);
+                    if (!sp.parts.length) return `
                                     <div class="org-child"><span class="org-drop"></span><span class="org-only-stem"></span>
                                         <div class="inline-block">
                                             ${orgUnitBoxHtml(t.name, t.members.length, g.style, 'fa-people-group')}
                                             ${orgMemberListHtml(t.members)}
                                         </div>
-                                    </div>`).join('');
+                                    </div>`;
+                    const partCols = sp.parts.map(pt => `
+                                            <div class="org-child"><span class="org-drop"></span><span class="org-only-stem"></span>
+                                                <div class="inline-block">
+                                                    ${orgUnitBoxHtml(pt.name, pt.members.length, g.style, 'fa-sitemap')}
+                                                    ${orgMemberListHtml(pt.members)}
+                                                </div>
+                                            </div>`).join('');
+                    return `
+                                    <div class="org-child"><span class="org-drop"></span><span class="org-only-stem"></span>
+                                        <div class="inline-block">
+                                            <div class="org-stem text-center">${orgUnitBoxHtml(t.name, t.members.length, g.style, 'fa-people-group', sp.direct)}</div>
+                                            <div class="org-branch">${partCols}</div>
+                                        </div>
+                                    </div>`;
+                }).join('');
                 return `<div class="org-child"><span class="org-drop"></span><span class="org-only-stem"></span>
                             <div class="inline-block">
                                 <div class="org-stem text-center">${head}</div>
@@ -40066,7 +40116,8 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                 const teamChip = (name, teamId) => `
                     <span class="inline-flex items-center gap-1 ${st.chip} text-xs rounded-full pl-2.5 pr-1 py-1">
                         ${escapeHtml(name)}<span class="opacity-60">${people.filter(u => String(u.team || '').trim() === name).length}명</span>
-                        ${teamId ? `<button onclick="openOrgTeamModal('${d.id}','${teamId}')" class="w-5 h-5 rounded-full hover:bg-white/60" title="팀 이름 수정"><i class="fas fa-pen text-[9px]"></i></button>
+                        ${teamId ? `<button onclick="openOrgPartModal('${d.id}','${teamId}')" class="w-5 h-5 rounded-full hover:bg-white/60" title="이 팀에 파트 추가"><i class="fas fa-sitemap text-[9px]"></i></button>
+                        <button onclick="openOrgTeamModal('${d.id}','${teamId}')" class="w-5 h-5 rounded-full hover:bg-white/60" title="팀 이름 수정"><i class="fas fa-pen text-[9px]"></i></button>
                         <button onclick="deleteOrgTeam('${teamId}')" class="w-5 h-5 rounded-full hover:bg-white/60" title="팀 삭제"><i class="fas fa-times text-[10px]"></i></button>`
                         : `<button onclick="adoptOrgTeam('${d.id}', ${JSON.stringify(name)})" class="w-5 h-5 rounded-full hover:bg-white/60" title="팀 목록에 등록"><i class="fas fa-plus text-[10px]"></i></button>`}
                     </span>`;
@@ -40088,6 +40139,17 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                         ${noTeamChip}
                         <button onclick="openOrgTeamModal('${d.id}')" class="inline-flex items-center gap-1 text-xs rounded-full px-2.5 py-1 border border-dashed border-gray-300 text-gray-500 hover:bg-gray-50"><i class="fas fa-plus text-[10px]"></i>팀 추가</button>
                     </div>
+                    ${teams.filter(t => orgPartsOfTeam(t).length).map(t => `
+                    <div class="flex flex-wrap items-center gap-1.5 mt-1.5 pl-2 border-l-2 border-gray-200">
+                        <span class="text-[11px] text-gray-500 mr-0.5"><i class="fas fa-sitemap mr-0.5"></i>${escapeHtml(t.name)} 파트</span>
+                        ${orgPartsOfTeam(t).map(pt => `
+                        <span class="inline-flex items-center gap-1 bg-white border border-gray-300 text-gray-700 text-xs rounded-full pl-2.5 pr-1 py-0.5">
+                            ${escapeHtml(pt.name)}<span class="opacity-60">${people.filter(u => String(u.team || '').trim() === t.name && orgPartOf(u) === pt.name).length}명</span>
+                            <button onclick="openOrgPartModal('${d.id}','${t.id}','${escapeHtml(pt.id)}')" class="w-5 h-5 rounded-full hover:bg-gray-100" title="파트 이름 수정"><i class="fas fa-pen text-[9px]"></i></button>
+                            <button onclick="deleteOrgPart('${t.id}','${escapeHtml(pt.id)}')" class="w-5 h-5 rounded-full hover:bg-gray-100" title="파트 삭제"><i class="fas fa-times text-[10px]"></i></button>
+                        </span>`).join('')}
+                        <button onclick="openOrgPartModal('${d.id}','${t.id}')" class="inline-flex items-center gap-1 text-[11px] rounded-full px-2 py-0.5 border border-dashed border-gray-300 text-gray-500 hover:bg-gray-50"><i class="fas fa-plus text-[9px]"></i>파트 추가</button>
+                    </div>`).join('')}
                 </div>`;
             }).join('');
 
@@ -40217,6 +40279,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             document.getElementById('org-unit-name').placeholder = '예: 영업1팀';
             const wrap = document.getElementById('org-unit-dept-wrap');
             wrap.classList.remove('hidden');
+            document.getElementById('org-unit-dept-label').innerText = '소속 본부';
             document.getElementById('org-unit-show-wrap').classList.add('hidden');
             document.getElementById('org-unit-dept').innerHTML = orgDeptList(false)
                 .map(d => `<option value="${escapeHtml(d.id)}" ${d.id === orgUnitEdit.deptId ? 'selected' : ''}>${escapeHtml(d.name)}</option>`).join('');
@@ -40224,6 +40287,39 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                 ? '이름을 수정하면 <b>이 팀 구성원의 팀 이름도 함께</b> 변경됩니다.'
                 : '팀을 등록하면 구성원 등록 창의 <b>팀</b> 목록에서 선택할 수 있습니다. 팀이 지정된 본부는 조직도에서 팀별 카드로 구분됩니다.';
             document.getElementById('org-unit-modal').classList.remove('hidden');
+        }
+        // 파트 추가 · 이름 수정 (2026-10-23) — 같은 창을 씁니다. 위 선택칸은 '소속 팀'
+        function openOrgPartModal(deptId, teamId, partId) {
+            const t = orgFindTeam(teamId);
+            if (!t) return;
+            const pt = partId ? orgPartsOfTeam(t).find(x => x.id === partId) : null;
+            orgUnitEdit = { type: 'part', id: pt ? pt.id : '', deptId: t.deptId, teamId: t.id };
+            document.getElementById('org-unit-title').innerText = pt ? '파트 이름 수정' : '파트 추가';
+            document.getElementById('org-unit-label').innerText = '파트 이름';
+            document.getElementById('org-unit-name').value = pt ? pt.name : '';
+            document.getElementById('org-unit-name').placeholder = '예: 1파트';
+            document.getElementById('org-unit-dept-wrap').classList.remove('hidden');
+            document.getElementById('org-unit-dept-label').innerText = '소속 팀';
+            document.getElementById('org-unit-show-wrap').classList.add('hidden');
+            document.getElementById('org-unit-dept').innerHTML = orgTeamsOf(t.deptId)
+                .map(x => `<option value="${escapeHtml(x.id)}" ${x.id === t.id ? 'selected' : ''}>${escapeHtml(deptName(x.deptId))} · ${escapeHtml(x.name)}</option>`).join('');
+            document.getElementById('org-unit-help').innerHTML = pt
+                ? '이름을 수정하면 <b>이 파트 구성원의 파트 이름도 함께</b> 변경됩니다. 다른 팀을 고르면 파트와 구성원이 함께 옮겨집니다.'
+                : '팀 아래에 파트를 등록합니다. 구성원 등록 창에서 팀을 고른 뒤 <b>파트</b>를 선택할 수 있고, 조직도에서 팀 아래에 파트별로 표시됩니다. 파트를 지정하지 않은 팀원(팀장 등)은 팀 상자에 표시됩니다.';
+            document.getElementById('org-unit-modal').classList.remove('hidden');
+        }
+        function deleteOrgPart(teamId, partId) {
+            const t = orgFindTeam(teamId);
+            const pt = t ? orgPartsOfTeam(t).find(x => x.id === partId) : null;
+            if (!pt) return;
+            if (!adminDeleteGate('deleteOrgPart', [teamId, partId], '파트', `${deptName(t.deptId)} · ${t.name} · ${pt.name}`)) return;
+            const people = localUsers.filter(u => u.dept === t.deptId && String(u.team || '').trim() === t.name && orgPartOf(u) === pt.name);
+            if (!confirm(`'${t.name} · ${pt.name}' 파트를 삭제하시겠습니까?${people.length ? `\n이 파트 구성원 ${people.length}명은 파트 없이 ${t.name} 소속으로 남습니다 (계정은 유지).` : ''}`)) return;
+            people.forEach(u => { u.part = ''; });
+            if (people.length) saveLocalUsers();
+            t.parts = (t.parts || []).filter(x => x.id !== partId);
+            saveOrgTeams();
+            syncOrgAll();
         }
         // 팀 없는 구성원 묶음의 이름 고치기 (예: 팀 미지정 → 본부 직속)
         function openOrgNoTeamModal() {
@@ -40256,6 +40352,36 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             }
 
             if (!name) { alert('이름을 입력해 주세요.'); return; }
+
+            if (orgUnitEdit.type === 'part') {
+                const t = orgFindTeam(document.getElementById('org-unit-dept').value) || orgFindTeam(orgUnitEdit.teamId);
+                if (!t) { alert('소속 팀을 선택해 주세요.'); return; }
+                if (orgPartsOfTeam(t).some(x => x.id !== orgUnitEdit.id && x.name === name)) { alert('이 팀에 같은 이름의 파트가 이미 있습니다.'); return; }
+                if (orgUnitEdit.id) {
+                    const fromTeam = orgFindTeam(orgUnitEdit.teamId);
+                    const pt = fromTeam ? orgPartsOfTeam(fromTeam).find(x => x.id === orgUnitEdit.id) : null;
+                    if (!pt) { closeOrgUnitModal(); return; }
+                    const before = pt.name;
+                    // 이 파트 구성원의 파트 이름(다른 팀으로 옮겼으면 팀 이름도)을 함께 고칩니다
+                    localUsers.forEach(u => {
+                        if (u.dept === fromTeam.deptId && String(u.team || '').trim() === fromTeam.name && orgPartOf(u) === before) {
+                            u.part = name;
+                            if (t.id !== fromTeam.id) { u.team = t.name; u.dept = t.deptId; }
+                        }
+                    });
+                    saveLocalUsers();
+                    if (t.id !== fromTeam.id) {
+                        fromTeam.parts = (fromTeam.parts || []).filter(x => x.id !== pt.id);
+                        (t.parts = t.parts || []).push(Object.assign({}, pt, { name, order: orgPartsOfTeam(t).length + 1 }));
+                    } else pt.name = name;
+                } else {
+                    (t.parts = t.parts || []).push({ id: gwUid('part_'), name, order: orgPartsOfTeam(t).length + 1 });
+                }
+                saveOrgTeams();
+                closeOrgUnitModal();
+                syncOrgAll();
+                return;
+            }
 
             if (orgUnitEdit.type === 'dept') {
                 const dup = orgDepts.find(d => d.id !== orgUnitEdit.id && d.name === name);
@@ -40411,7 +40537,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             if (!adminDeleteGate('deleteOrgTeam', [id], '팀', `${deptName(t.deptId)} · ${t.name}`)) return;
             const people = localUsers.filter(u => u.dept === t.deptId && String(u.team || '').trim() === t.name);
             if (!confirm(`'${t.name}' 팀을 삭제하시겠습니까?${people.length ? `\n이 팀 구성원 ${people.length}명은 '${orgNoTeamLabel}' (으)로 이동됩니다 (계정은 유지).` : ''}`)) return;
-            people.forEach(u => { u.team = ''; });
+            people.forEach(u => { u.team = ''; u.part = ''; });
             if (people.length) saveLocalUsers();   // 구성원의 팀 비움도 저장 (2026-09-29)
             orgTeams = orgTeams.filter(x => x.id !== id);
             saveOrgTeams();
@@ -40695,6 +40821,22 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             sel.innerHTML = `<option value="">${escapeHtml(orgNoTeamLabel)}</option>`
                 + teams.map(t => `<option value="${escapeHtml(t)}" ${t === cur ? 'selected' : ''}>${escapeHtml(t)}</option>`).join('');
             sel.value = cur || '';
+            onOrgEditTeamChange();
+        }
+        // 팀을 바꾸면 그 팀의 파트만 고를 수 있게 (파트가 없는 팀이면 칸을 숨깁니다)
+        function onOrgEditTeamChange(keepPart) {
+            const d = (document.getElementById('org-edit-dept') || {}).value || '';
+            const team = (document.getElementById('org-edit-team') || {}).value || '';
+            const sel = document.getElementById('org-edit-part');
+            const wrap = document.getElementById('org-edit-part-wrap');
+            if (!sel || !wrap) return;
+            const cur = keepPart !== undefined ? keepPart : sel.value;
+            const parts = team ? orgPartNamesOf(d, team) : [];
+            if (cur && team && parts.indexOf(cur) < 0) parts.push(cur);
+            sel.innerHTML = `<option value="">파트 없음 (팀 소속)</option>`
+                + parts.map(p => `<option value="${escapeHtml(p)}">${escapeHtml(p)}</option>`).join('');
+            sel.value = parts.indexOf(cur) > -1 ? cur : '';
+            wrap.classList.toggle('hidden', !parts.length);
         }
 
         // 사진은 조직도 관리에서 다루지 않습니다 — 각자 [내 정보] 에서 올립니다. (2026-09-05)
@@ -40740,6 +40882,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             const hint = document.getElementById('org-edit-noteam-hint');
             if (hint) hint.innerText = orgNoTeamLabel;
             onOrgEditDeptChange(teamValue);
+            onOrgEditTeamChange(u ? orgPartOf(u) : '');
             const adminChk = document.getElementById('org-edit-admin');
             if (adminChk) adminChk.checked = !!(u && u.isAdmin === true);
             const hideChk = document.getElementById('org-edit-hide-org');
@@ -40778,6 +40921,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                 googleEmail: v('google').toLowerCase(),   // 폰 캘린더 연동용 (2026-09-23)
                 dept: v('dept') || (admin ? 'admin' : 'sales'),
                 team: v('dept') === 'admin' ? '' : v('team'),
+                part: (v('dept') === 'admin' || !v('team')) ? '' : v('part'),   // 파트 (2026-10-23)
                 duty: v('duty'),
                 phone: v('phone'),
                 mobile: v('mobile'),
