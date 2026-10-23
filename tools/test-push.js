@@ -123,7 +123,7 @@ async function decrypt(b, body) {
     ok((await call('park@k.co', 'POST', '/api/push/subscribe', { subscription: sub2, device: 'PC' })).status === 200, '박운영 PC 구독');
     ok(store['gwPushSubs.v1/u2'].subs.length === 1 && store['gwPushSubs.v1/u4'].subs.length === 1, '사람마다 따로 저장 (둘이 동시에 켜도 서로 안 지움)');
     let r = await call('kim@k.co', 'GET', '/api/push/status');
-    ok(r.j.devices.length === 1 && r.j.prefs.work === true && r.j.categories.length === 8, '내 상태 — 기기 1대 · 모두 켜짐');
+    ok(r.j.devices.length === 1 && r.j.prefs.work === true && r.j.categories.length === 9 && r.j.prefs.schedule === true, '내 상태 — 기기 1대 · 모두 켜짐 (일정 알림 포함 9종)');
     noti('N1', { type: 'work-received', title: '킹오더 강남점', detail: '<b>설치</b> 접수', toDept: 'sales', toTeam: '1팀' }, 'me@k.co');
     r = await call('me@k.co', 'POST', '/api/push/send', { id: 'N1', label: '업무접수' });
     ok(r.j.sent === 1 && pushed.length === 1 && pushed[0].url === sub1.endpoint, '영업 1팀 알림 → 김영업 폰에만 (박운영 · 보낸 사람 제외)');

@@ -27,6 +27,7 @@ const PUSH_HOSTS = [/^fcm\.googleapis\.com$/, /^android\.googleapis\.com$/, /(^|
 
 // 알림 종류 → 직원이 켜고 끄는 묶음
 export const CATEGORIES = [
+    { id: 'schedule',  label: '일정 알림' },
     { id: 'work',      label: '업무 접수' },
     { id: 'collab',    label: '협업요청' },
     { id: 'directive', label: '지시 업무' },
@@ -38,6 +39,7 @@ export const CATEGORIES = [
 ];
 export function categoryOf(type) {
     const t = String(type || '');
+    if (t === 'schedule-reminder') return 'schedule';      // 일정 알림 (2026-10-23) — 'schedule-change' 보다 먼저
     if (t.startsWith('work-')) return 'work';
     if (t.startsWith('collab-') || t.startsWith('delay-') || t.startsWith('schedule-change')) return 'collab';
     if (t.startsWith('directive-')) return 'directive';

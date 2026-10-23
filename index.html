@@ -5997,7 +5997,7 @@
                         </div>
                         <div>
                             <p class="font-medium text-gray-800">알림 설정</p>
-                            <p class="text-gray-600">일정 등록 시 <b>알림</b>을 선택해 시간을 지정합니다(예: 10분 전). 휴대폰 자체 알림이므로 그룹웨어에 접속해 있지 않아도 됩니다.</p>
+                            <p class="text-gray-600">일정 등록 시 <b>알림 설정</b>에서 시간을 고릅니다(예: 15분 전). 그 시각에 그룹웨어 알림함과 폰 · PC 알림(푸시 켠 기기)으로 담당자 · 등록자 · 참석자에게 알림이 갑니다. 그룹웨어에 접속해 있지 않아도 됩니다.</p>
                         </div>
                         <div>
                             <p class="font-medium text-gray-800">캘린더별 색상 변경</p>
@@ -6142,6 +6142,7 @@
                         <option value="none">알림 없음</option>
                         <option value="15min">15분 전</option>
                         <option value="30min">30분 전</option>
+                        <option value="1hour">1시간 전</option>
                         <option value="sameday">당일 오전</option>
                         <option value="1day">1일 전</option>
                         <option value="3day">3일 전</option>
@@ -6699,6 +6700,7 @@
                         <option value="none">알림 없음</option>
                         <option value="15min">15분 전</option>
                         <option value="30min">30분 전</option>
+                        <option value="1hour">1시간 전</option>
                         <option value="sameday">당일 오전</option>
                         <option value="1day">1일 전</option>
                         <option value="3day">3일 전</option>
@@ -11608,6 +11610,7 @@ const QUOTE_TEMPLATES = [
             'delay-answer':       { icon: 'fa-reply',             color: 'amber',  label: '지연사유 회신' },
             'collab-transferred': { icon: 'fa-share-from-square', color: 'indigo', label: '요청 이관' },
             'collab-comment':     { icon: 'fa-comment-dots',      color: 'indigo', label: '협업 코멘트' },
+            'schedule-reminder':  { icon: 'fa-bell',              color: 'amber',  label: '일정 알림' },
             'collab-taken':       { icon: 'fa-user-check',        color: 'green',  label: '협업 처리' },
             'schedule-change':        { icon: 'fa-calendar-alt',   color: 'teal', label: '일정 변경 요청' },
             'schedule-change-result': { icon: 'fa-calendar-check', color: 'teal', label: '일정 변경 결과' },
@@ -11633,6 +11636,7 @@ const QUOTE_TEMPLATES = [
             if (n.type === 'collab-completed') return `<b>${escapeHtml(n.title)}</b> 처리가 완료되었습니다.${n.detail ? `<br><span class="text-xs text-gray-600">처리내용: ${escapeHtml(n.detail)}</span>` : ''}${n.issue ? `<br><span class="text-xs text-amber-600">이슈: ${escapeHtml(n.issue)}</span>` : ''}${n.fileCount ? `<br><span class="text-xs text-blue-700 font-semibold"><i class="fas fa-paperclip mr-1"></i>첨부자료 ${n.fileCount}건 · 클릭하여 확인</span>` : ''}`;
             if (n.type === 'delay-inquiry') return `<b>${escapeHtml(n.title)}</b> 지연에 대한 사유 확인요청이 도착했습니다.${n.detail ? `<br><span class="text-xs text-gray-600">요청: ${escapeHtml(n.detail)}</span>` : ''}`;
             if (n.type === 'delay-answer') return `<b>${escapeHtml(n.title)}</b> 지연 사유가 회신되었습니다.${n.detail ? `<br><span class="text-xs text-gray-600">사유: ${escapeHtml(n.detail)}</span>` : ''}`;
+            if (n.type === 'schedule-reminder') return `<b>${escapeHtml(n.title)}</b> 일정이 곧 시작됩니다.${n.detail ? `<br><span class="text-xs text-gray-600">${escapeHtml(n.detail)}</span>` : ''}`;
             if (n.type === 'collab-taken') return `<b>${escapeHtml(n.title)}</b> 함께 받은 협업 요청이 처리되었습니다.${n.detail ? `<br><span class="text-xs text-gray-600">${escapeHtml(n.detail)}</span>` : ''}`;
             if (n.type === 'collab-comment') return `<b>${escapeHtml(n.title)}</b> 협업 요청에 코멘트가 등록되었습니다.${n.detail ? `<br><span class="text-xs text-gray-600">${escapeHtml(n.detail)}</span>` : ''}`;
             if (n.type === 'collab-transferred') return `<b>${escapeHtml(n.title)}</b> 요청 담당이 이관되었습니다.${n.detail ? `<br><span class="text-xs text-gray-600">${escapeHtml(n.detail)}</span>` : ''}`;
@@ -11659,6 +11663,7 @@ const QUOTE_TEMPLATES = [
 
         // 알림을 눌렀을 때 갈 곳
         function notiClickJs(n) {
+            if (n.scheduleId) return `openScheduleFromNotice('${escapeHtml(n.scheduleId)}')`;   // 일정 알림 (2026-10-23)
             if (n.deleteReqId) return `openDeleteRequests('${n.type === 'delete-request' ? 'pending' : 'done'}')`;
             if (n.devId) return `openDevFromNotice('${n.devId}')`;
             if (n.meetingId) return `openMeetingFromNotice('${n.meetingId}')`;
@@ -17387,6 +17392,7 @@ const QUOTE_TEMPLATES = [
             none:   '알림 없음',
             '15min':'15분 전',
             '30min':'30분 전',
+            '1hour':'1시간 전',
             sameday:'당일 오전',
             '1day': '1일 전',
             '3day': '3일 전',
@@ -19235,6 +19241,12 @@ const QUOTE_TEMPLATES = [
             closeScheduleModal();
             renderCalendar();
             if (typeof renderTodaySchedule === 'function') renderTodaySchedule(currentUserName);
+        }
+        // 일정 알림을 누르면 — 일정캘린더로 가서 그 일정을 엽니다 (2026-10-23)
+        function openScheduleFromNotice(id) {
+            try { navigate('calendar-center', document.getElementById('nav-calendar-center')); } catch (e) { /* 화면 권한이 없으면 상세만 */ }
+            if (!findScheduleForView(id)) { alert('일정을 찾을 수 없습니다. 삭제되었거나 변경되었을 수 있습니다.'); return; }
+            openScheduleDetailModal(id);
         }
         function openScheduleDetailModal(id) {
             const schedule = findScheduleForView(id);

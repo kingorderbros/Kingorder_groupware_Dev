@@ -7,6 +7,7 @@
 import { onRequest } from './functions/api/[[route]].js';
 import { syncBoth } from './functions/api/_gcal.js';
 import { autoPull as inboundAutoPull } from './functions/api/_inbound.js';
+import { runScheduleReminders } from './functions/api/_reminders.js';
 
 export default {
     async fetch(request, env, ctx) {
@@ -24,6 +25,15 @@ export default {
     // 1분마다 — 구글 캘린더와 주고받습니다 (wrangler.toml 의 [triggers]).
     // 구글이 알려 주는 방식(웹훅)은 도메인 확인이 필요해 지금은 못 씁니다. 도메인을 붙이면 그때 바꿉니다.
     async scheduled(event, env, ctx) {
+        // 일정 알림 (2026-10-23) — 알림 시각이 된 일정을 알림함 · 폰/PC 푸시로. 하위 요청이 적어 먼저 돌립니다.
+        ctx.waitUntil((async () => {
+            try {
+                const r = await runScheduleReminders(env);
+                if (r && r.made) console.log('[일정 알림]', JSON.stringify(r));
+            } catch (e) {
+                console.error('[일정 알림] 실패', e && e.message);
+            }
+        })());
         ctx.waitUntil((async () => {
             try {
                 const r = await syncBoth(env);
