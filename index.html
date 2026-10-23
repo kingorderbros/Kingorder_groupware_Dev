@@ -14719,7 +14719,8 @@ const QUOTE_TEMPLATES = [
             // cross(본부장 크로스체크)는 조회 범위상 전사와 동일 — 편집은 등록한 사람 · 관리자 · 대리 수정자만(canEditSchedule)
             if (scope === 'all' || scope === 'cross') return collabRequests.slice();
             if (scope === 'self') {
-                return collabRequests.filter(r => collabIsReceiver(r, name) || r.assignee === name);
+                // 본부(부서) 전체로 온 요청은 조회 범위가 '본인'인 팀원도 봅니다 — 1건이지만 본부 모두가 받은 요청 (2026-10-23)
+                return collabRequests.filter(r => collabIsReceiver(r, name) || r.assignee === name || collabIsDeptWideFor(r, dept));
             }
             // dept / hq: 발행 또는 수신 부서가 내 부서
             return collabRequests.filter(r => r.sourceDept === dept || r.targetDept === dept
@@ -14781,6 +14782,8 @@ const QUOTE_TEMPLATES = [
             return r.assigneeUser ? [r.assigneeUser] : [];
         }
         function collabIsReceiver(r, name) { return !!name && collabReceivers(r).includes(name); }
+        // 담당자를 정하지 않고 본부(부서) 전체로 보낸 요청이 내 본부 앞인지 (2026-10-23)
+        function collabIsDeptWideFor(r, dept) { return !!r && !!dept && dept !== 'admin' && !collabReceivers(r).length && r.targetDept === dept; }
         function collabReceiverText(r) { return collabReceivers(r).join(', '); }
         function collabReceiversChip(r) {
             const l = collabReceivers(r);
@@ -15132,7 +15135,7 @@ const QUOTE_TEMPLATES = [
             //  - dept↑ : 내 부서가 수신=받은 / 내 부서가 발행=발행 (개인 기준도 함께 포함)
             const wide = scope !== 'self';
             const allData = canManageAllData();     // 관리자 · 전체 자료 권한은 모든 요청의 처리 단추를 봅니다 (2026-09-28)
-            const received = filtered.filter(r => collabIsReceiver(r, name) || allData || (wide && ((r.targetDept === dept && dept !== 'admin') || dept === 'admin')));
+            const received = filtered.filter(r => collabIsReceiver(r, name) || collabIsDeptWideFor(r, dept) || allData || (wide && ((r.targetDept === dept && dept !== 'admin') || dept === 'admin')));
             const sent = filtered.filter(r => r.assignee === name || (wide && ((r.sourceDept === dept && dept !== 'admin') || dept === 'admin')));
 
             // 받은 요청 렌더
@@ -15147,7 +15150,7 @@ const QUOTE_TEMPLATES = [
                 .slice().sort((a, b) => (b.ageDays || 0) - (a.ageDays || 0));
             const pendEl = document.getElementById('collab-pending-list');
             pendEl.innerHTML = pending.length ? pending.map(r => {
-                const isInbox = collabIsReceiver(r, name) || allData || (wide && r.targetDept === dept);
+                const isInbox = collabIsReceiver(r, name) || collabIsDeptWideFor(r, dept) || allData || (wide && r.targetDept === dept);
                 return collabTicketCard(r, isInbox ? 'inbox' : 'outbox');
             }).join('') : collabEmpty('액션이 필요한 대기·보류 요청이 없습니다.');
 
@@ -15201,7 +15204,7 @@ const QUOTE_TEMPLATES = [
             document.getElementById('collab-tabcnt-directive').textContent = directiveCnt;
 
             // KPI (필터 무관, 조회범위 기준). self 스코프는 개인 기준, 그 이상은 부서 기준까지.
-            const isInboxOf = (r) => collabIsReceiver(r, name) || (wide && (r.targetDept === dept || dept === 'admin'));
+            const isInboxOf = (r) => collabIsReceiver(r, name) || collabIsDeptWideFor(r, dept) || (wide && (r.targetDept === dept || dept === 'admin'));
             const kpiLists = {
                 inbox:  visible.filter(r => isInboxOf(r) && r.status === 'pending'),
                 sent:   visible.filter(r => (r.assignee === name || (wide && (r.sourceDept === dept || dept === 'admin'))) && r.status === 'pending'),
