@@ -155,8 +155,13 @@ function run(k, seed) {
         const i = html2.indexOf("type: 'collab-requested'");
         ok(i > 0, '협업 요청을 보낼 때 알림을 만든다');
         const seg = html2.slice(i - 400, i + 400);
-        ok(/toDept:\s*newReq\.targetDept/.test(seg), '받는 부서 앞으로 보낸다');
-        ok(/toUser:\s*newReq\.assigneeUser/.test(seg), '담당자를 지정했으면 그 사람 앞으로도 보낸다');
+        // 2026-10-23 — 받는 사람이 여러 명일 수 있어 collabNotifyReceivers 로 보냅니다
+        ok(/collabNotifyReceivers\(newReq,/.test(seg), '받는 쪽 알림 공용 문으로 보낸다');
+        const j = html2.indexOf('function collabNotifyReceivers');
+        const fn = html2.slice(j, j + 900);
+        ok(/toDept:\s*req\.targetDept/.test(fn), '받는 부서 앞으로 보낸다');
+        ok(/toUser:\s*list\[0\]/.test(fn), '담당자를 지정했으면 그 사람 앞으로도 보낸다');
+        ok(/toUser:\s*who/.test(fn), '여러 명이면 사람마다 보낸다');
         ok(/ticketId:\s*newReq\.id/.test(seg), '알림을 누르면 그 요청을 열 수 있게 연결한다');
     }
 

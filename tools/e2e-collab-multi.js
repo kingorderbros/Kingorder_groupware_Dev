@@ -1,5 +1,6 @@
 // 사용법: node tools/e2e-collab-multi.js .   (맥 크롬 헤드리스 · npm run check 에는 넣지 않음)
-// 2026-10-19 — 협업요청 등록 시 수신 담당자 복수 선택: 사람마다 한 건 · 한 묶음 · 사람별 알림, 미선택이면 부서 전체 한 건
+// 2026-10-19 — 협업요청 등록 시 수신 담당자 복수 선택, 미선택이면 부서 전체 한 건
+// 2026-10-23 — 여러 명을 골라도 요청은 1건(assigneeUsers) · 사람별 알림 · 받은 사람 각자 받은 요청에 보임 · 한 명이 수락하면 요청 전체 수락 + 다른 사람에게 알림 · 보낸 쪽 1건
 const http=require('http'),fs=require('fs'),path=require('path'),pp=require('puppeteer-core');const ROOT=process.argv[2]||'.';
 const srv=http.createServer((q,r)=>{let p=decodeURIComponent(q.url.split('?')[0]);if(p==='/')p='/index.html';if(p==='/config/app-config.js'){r.writeHead(200);return r.end("window.KOB_CONFIG={env:'dev',supabaseUrl:'',supabaseAnonKey:'',apiBase:''};");}
  if(p.startsWith('/api/')){r.writeHead(404);return r.end('{}');}
@@ -31,22 +32,32 @@ srv.listen(8802,async()=>{const br=await pp.launch({executablePath:'/Application
    r.countLabel=document.getElementById('task-assignee-count').innerText;
    submitTask({preventDefault(){}});
    const made=collabRequests.slice(before);
-   r.made=made.map(x=>x.assigneeUser).join(',');
-   r.sameGroup=made.length===2&&!!made[0].collabGroupId&&made[0].collabGroupId===made[1].collabGroupId;
+   r.made=made.length+':'+(made[0].assigneeUsers||[]).join(',');
    r.notis=collabNotifications.slice(notiBefore).map(n=>n.toUser).sort().join(',');
-   // 상세에 '함께 받은 사람'
-   openCollabDetailModal(made[0].id); const dm=[...document.querySelectorAll('[id*=collab-detail]')].map(e=>e.innerText).join(' '); r.detailGroup=dm.includes('함께 받은 사람')&&dm.includes('영업가')&&dm.includes('영업다'); if(typeof closeCollabDetailModal==='function') closeCollabDetailModal();
+   const req=made[0];
+   openCollabDetailModal(req.id); r.detailGroup=document.getElementById('collab-detail-body').innerText.includes('영업가, 영업다'); closeCollabDetailModal();
+   // 받은 사람 각자 받은 요청에 보이는지 · 안 받은 사람은 아닌지
+   r.receivers=[collabIsReceiver(req,'영업가'),collabIsReceiver(req,'영업다'),collabIsReceiver(req,'영업나')].join(',');
+   // 영업가가 수락 → 요청 전체 수락 · 영업다에게 알림
+   const sv=currentUserName; currentUserName='영업가';
+   openCollabAcceptModal(req.id); const ad=document.getElementById('accept-date'); if(ad) ad.value='2099-12-31';
+   const n2=collabNotifications.length;
+   submitCollabAccept({preventDefault(){}});
+   currentUserName=sv;
+   r.accepted=req.status==='accepted'&&req.handledBy==='영업가';
+   r.takenNoti=collabNotifications.slice(n2).filter(n=>n.type==='collab-taken').map(n=>n.toUser).join(',');
+   r.cardChip=collabTicketCard(req,'outbox').includes('(2명)');
    // ② 아무도 고르지 않음 → 부서 전체 한 건
    const b2=collabRequests.length;
    fill('부서전체시험'); submitTask({preventDefault(){}});
    const m2=collabRequests.slice(b2);
-   r.deptWide=m2.length===1&&m2[0].assigneeUser===''&&!m2[0].collabGroupId;
+   r.deptWide=m2.length===1&&m2[0].assigneeUser===''&&!m2[0].assigneeUsers;
    // 정리
    collabRequests.splice(before); collabNotifications.splice(notiBefore);
    ppl.forEach(p=>localUsers.splice(localUsers.findIndex(u=>u.id===p.id),1));
    return r;
  });
- const expect={boxVisible:true,listHasPeople:true,noResigned:true,made:'영업가,영업다',sameGroup:true,notis:'영업가,영업다',deptWide:true,detailGroup:true};
+ const expect={boxVisible:true,listHasPeople:true,noResigned:true,made:'1:영업가,영업다',notis:'영업가,영업다',detailGroup:true,receivers:'true,true,false',accepted:true,takenNoti:'영업다',cardChip:true,deptWide:true};
  const bad=Object.keys(expect).filter(k=>out[k]!==expect[k]);
  console.log(JSON.stringify(out));console.log(bad.length?'실패: '+bad.join(', '):'통과','· 오류',errs.length,JSON.stringify(errs.slice(0,5)));
  await br.close();srv.close();process.exit(bad.length||errs.length?1:0);});

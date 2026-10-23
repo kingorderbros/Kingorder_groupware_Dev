@@ -11572,6 +11572,7 @@ const QUOTE_TEMPLATES = [
             'delay-answer':       { icon: 'fa-reply',             color: 'amber',  label: '지연사유 회신' },
             'collab-transferred': { icon: 'fa-share-from-square', color: 'indigo', label: '요청 이관' },
             'collab-comment':     { icon: 'fa-comment-dots',      color: 'indigo', label: '협업 코멘트' },
+            'collab-taken':       { icon: 'fa-user-check',        color: 'green',  label: '협업 처리' },
             'schedule-change':        { icon: 'fa-calendar-alt',   color: 'teal', label: '일정 변경 요청' },
             'schedule-change-result': { icon: 'fa-calendar-check', color: 'teal', label: '일정 변경 결과' },
             'directive-progress':  { icon: 'fa-chart-line',    color: 'purple', label: '지시 진척' },
@@ -11596,6 +11597,7 @@ const QUOTE_TEMPLATES = [
             if (n.type === 'collab-completed') return `<b>${escapeHtml(n.title)}</b> 처리가 완료되었습니다.${n.detail ? `<br><span class="text-xs text-gray-600">처리내용: ${escapeHtml(n.detail)}</span>` : ''}${n.issue ? `<br><span class="text-xs text-amber-600">이슈: ${escapeHtml(n.issue)}</span>` : ''}${n.fileCount ? `<br><span class="text-xs text-blue-700 font-semibold"><i class="fas fa-paperclip mr-1"></i>첨부자료 ${n.fileCount}건 · 클릭하여 확인</span>` : ''}`;
             if (n.type === 'delay-inquiry') return `<b>${escapeHtml(n.title)}</b> 지연에 대한 사유 확인요청이 도착했습니다.${n.detail ? `<br><span class="text-xs text-gray-600">요청: ${escapeHtml(n.detail)}</span>` : ''}`;
             if (n.type === 'delay-answer') return `<b>${escapeHtml(n.title)}</b> 지연 사유가 회신되었습니다.${n.detail ? `<br><span class="text-xs text-gray-600">사유: ${escapeHtml(n.detail)}</span>` : ''}`;
+            if (n.type === 'collab-taken') return `<b>${escapeHtml(n.title)}</b> 함께 받은 협업 요청이 처리되었습니다.${n.detail ? `<br><span class="text-xs text-gray-600">${escapeHtml(n.detail)}</span>` : ''}`;
             if (n.type === 'collab-comment') return `<b>${escapeHtml(n.title)}</b> 협업 요청에 코멘트가 등록되었습니다.${n.detail ? `<br><span class="text-xs text-gray-600">${escapeHtml(n.detail)}</span>` : ''}`;
             if (n.type === 'collab-transferred') return `<b>${escapeHtml(n.title)}</b> 요청 담당이 이관되었습니다.${n.detail ? `<br><span class="text-xs text-gray-600">${escapeHtml(n.detail)}</span>` : ''}`;
             if (n.type === 'schedule-change') return `<b>${escapeHtml(n.title)}</b> 처리완료 예정일 <b>변경 요청</b>이 도착했습니다. 확인 후 수락해 주세요.${n.detail ? `<br><span class="text-xs text-gray-600">${escapeHtml(n.detail)}</span>` : ''}`;
@@ -14311,7 +14313,7 @@ const QUOTE_TEMPLATES = [
         function onCollabAssigneeChange() {
             const n = selectedCollabAssignees().length;
             const label = document.getElementById('task-assignee-count');
-            if (label) label.textContent = n ? `선택된 담당자 ${n}명` + (n > 1 ? ' · 같은 요청이 각각 발행되어 한 묶음으로 연결됩니다' : '') : '선택하지 않으면 부서 전체에 발행됩니다.';
+            if (label) label.textContent = n ? `선택된 담당자 ${n}명` + (n > 1 ? ' · 요청 1건을 여러 명이 함께 받고, 한 명이 처리하면 요청 전체에 반영됩니다' : '') : '선택하지 않으면 부서 전체에 발행됩니다.';
         }
 
         function selectedDirectiveTargets() {
@@ -14472,46 +14474,38 @@ const QUOTE_TEMPLATES = [
                     }
                     description = (description ? description + '\n\n' : '') + '[기타 상세내용] ' + etcDetail;
                 }
-                // 수신 담당자 복수 선택 (2026-10-19) — 고른 사람마다 한 건씩, 같은 묶음(collabGroupId)으로 발행합니다.
+                // 수신 담당자 복수 선택 — 여러 명(팀)을 골라도 요청은 1건, 받는 사람이 여러 명입니다 (2026-10-23).
                 // 아무도 고르지 않으면 부서 전체 앞으로 한 건입니다.
                 const whoList = selectedCollabAssignees();
-                const targetsList = whoList.length ? whoList : [''];
-                const groupId = targetsList.length > 1 ? 'cgrp_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6) : '';
-                const reqFiles = takeCollabRequestFiles(targetsList.length);   // 사람마다 첨부를 따로 (열람 표시가 사람별로 남도록)
-                targetsList.forEach((who, i) => {
-                    const newReq = {
-                        id: 'collab_' + collabIdCounter++,
-                        type: type,
-                        title,
-                        description,
-                        assignee,
-                        assigneeUser: who,
-                        sourceDept: dept,
-                        targetDept: targetDept,
-                        status: 'pending', // pending, accepted, rejected, hold
-                        date: '',
-                        memo: '',
-                        reason: '',
-                        ageDays: 0,
-                        requestFiles: reqFiles[i] || []
-                    };
-                    if (groupId) newReq.collabGroupId = groupId;
-                    collabRequests.push(newReq);
-                    // 받는 쪽에 알립니다 (2026-09-17). 지금까지는 업무지시(directive)만 알림을 보내고
-                    // 일반 협업 요청은 상대가 협업업무센터를 열어 봐야 알 수 있었습니다.
-                    pushNotification({
-                        id: 'cnoti_' + collabNotiIdCounter++,
-                        type: 'collab-requested',
-                        ticketId: newReq.id,
-                        title: newReq.title,
-                        toUser: newReq.assigneeUser || '',
-                        toDept: newReq.targetDept,
-                        detail: `${deptName(dept)} ${assignee || ''} 님이 보낸 협업 요청입니다.`.replace(/\s+/g, ' ').trim(),
-                        date: ymd(new Date())
-                    });
+                const reqFiles = takeCollabRequestFiles(1);
+                const newReq = {
+                    id: 'collab_' + collabIdCounter++,
+                    type: type,
+                    title,
+                    description,
+                    assignee,
+                    assigneeUser: whoList.length === 1 ? whoList[0] : '',
+                    sourceDept: dept,
+                    targetDept: targetDept,
+                    status: 'pending', // pending, accepted, rejected, hold
+                    date: '',
+                    memo: '',
+                    reason: '',
+                    ageDays: 0,
+                    requestFiles: reqFiles[0] || []
+                };
+                if (whoList.length > 1) newReq.assigneeUsers = whoList.slice();
+                collabRequests.push(newReq);
+                // 받는 쪽에 알립니다 (2026-09-17) — 여러 명이면 사람마다
+                collabNotifyReceivers(newReq, {
+                    type: 'collab-requested',
+                    ticketId: newReq.id,
+                    title: newReq.title,
+                    detail: `${deptName(dept)} ${assignee || ''} 님이 보낸 협업 요청입니다.`.replace(/\s+/g, ' ').trim(),
+                    date: ymd(new Date())
                 });
                 renderCollabs();
-                if (whoList.length > 1) alert(`협업 요청이 ${whoList.length}명에게 각각 발행되었습니다.\n담당자: ${whoList.join(', ')}`);
+                if (whoList.length > 1) alert(`협업 요청 1건이 ${whoList.length}명에게 발행되었습니다.\n받는 사람: ${whoList.join(', ')}\n받은 사람 중 한 명이 처리하면 요청 전체에 반영됩니다.`);
             }
             closeTaskModal();
         }
@@ -14662,11 +14656,11 @@ const QUOTE_TEMPLATES = [
             // cross(본부장 크로스체크)는 조회 범위상 전사와 동일 — 편집은 등록한 사람 · 관리자 · 대리 수정자만(canEditSchedule)
             if (scope === 'all' || scope === 'cross') return collabRequests.slice();
             if (scope === 'self') {
-                return collabRequests.filter(r => r.assigneeUser === name || r.assignee === name);
+                return collabRequests.filter(r => collabIsReceiver(r, name) || r.assignee === name);
             }
             // dept / hq: 발행 또는 수신 부서가 내 부서
             return collabRequests.filter(r => r.sourceDept === dept || r.targetDept === dept
-                || r.assigneeUser === name || r.assignee === name);
+                || collabIsReceiver(r, name) || r.assignee === name);
         }
 
         // 필터 바 조건 적용
@@ -14682,7 +14676,7 @@ const QUOTE_TEMPLATES = [
                 if (type && r.type !== type) return false;
                 if (status && r.status !== status) return false;
                 if (q) {
-                    const hay = `${r.title} ${r.assignee} ${r.assigneeUser || ''} ${r.description || ''}`.toLowerCase();
+                    const hay = `${r.title} ${r.assignee} ${collabReceiverText(r)} ${r.description || ''}`.toLowerCase();
                     if (!hay.includes(q)) return false;
                 }
                 return true;
@@ -14714,6 +14708,43 @@ const QUOTE_TEMPLATES = [
             const initial = escapeHtml(String(name).charAt(0));
             return `<span class="inline-flex items-center gap-1"><span class="w-4 h-4 rounded-full bg-indigo-500 text-white text-[9px] font-bold grid place-items-center">${initial}</span><b class="text-gray-600 font-medium">${escapeHtml(name)}</b></span>`;
         }
+        // ---------- 받는 사람 (2026-10-23) ----------
+        // 여러 명(팀)에게 보내도 요청은 1건입니다 — 받는 사람은 assigneeUsers 배열, 한 명이면 assigneeUser.
+        // 받은 사람 중 한 명이 수락 · 보류 · 거절 · 완료하면 요청 전체에 반영됩니다.
+        // 예전에 사람마다 따로 만든 묶음 건(collabGroupId)은 그대로 둡니다.
+        function collabReceivers(r) {
+            if (!r) return [];
+            if (Array.isArray(r.assigneeUsers) && r.assigneeUsers.length) return r.assigneeUsers.slice();
+            return r.assigneeUser ? [r.assigneeUser] : [];
+        }
+        function collabIsReceiver(r, name) { return !!name && collabReceivers(r).includes(name); }
+        function collabReceiverText(r) { return collabReceivers(r).join(', '); }
+        function collabReceiversChip(r) {
+            const l = collabReceivers(r);
+            return l.length > 1 ? `<span class="inline-flex flex-wrap items-center gap-1.5">${l.map(collabAssigneeChip).join('')}<span class="text-gray-400">(${l.length}명)</span></span>` : collabAssigneeChip(l[0] || '');
+        }
+        // 받는 쪽 알림 — 여러 명이면 사람마다 한 건(읽음 표시가 사람별), 아니면 지금처럼 담당자 + 수신 부서
+        function collabNotifyReceivers(req, n, skipSelf) {
+            const list = collabReceivers(req);
+            const me = currentUserName || '';
+            if (list.length > 1) {
+                list.filter(who => !(skipSelf && who === me)).forEach(who =>
+                    pushNotification(Object.assign({}, n, { id: 'cnoti_' + collabNotiIdCounter++, toUser: who, toDept: '' })));
+            } else {
+                pushNotification(Object.assign({}, n, { id: 'cnoti_' + collabNotiIdCounter++, toUser: list[0] || '', toDept: req.targetDept }));
+            }
+        }
+        // 한 명이 처리하면 함께 받은 다른 사람에게 알립니다
+        function collabNotifyOtherReceivers(req, text) {
+            const list = collabReceivers(req);
+            if (list.length < 2) return;
+            const me = currentUserName || '';
+            list.filter(who => who !== me).forEach(who => pushNotification({
+                id: 'cnoti_' + collabNotiIdCounter++, type: 'collab-taken', ticketId: req.id, title: req.title,
+                toUser: who, toDept: '', detail: `${me} 님이 ${text}`, date: ymd(new Date()), read: false
+            }));
+        }
+
         // 요청 카드 (받은/발행/펜딩 공용). mode: 'inbox' 이면 처리 버튼 노출
         function collabTicketCard(req, mode) {
             const descHTML = req.description ? `<div class="text-xs text-gray-600 mt-2 bg-gray-50 p-2 rounded border border-gray-100">${escapeHtml(req.description).replace(/\n/g, '<br>')}</div>` : '';
@@ -14849,7 +14880,7 @@ const QUOTE_TEMPLATES = [
                     <div class="flex flex-wrap gap-x-3 gap-y-1 text-xs text-gray-400 mt-2 items-center">
                         ${collabRoute(req)}
                         <span>${senderLabel} <b class="text-gray-600 font-medium">${escapeHtml(req.assignee)}</b></span>
-                        <span>${whoLabel} ${collabAssigneeChip(req.assigneeUser)}</span>
+                        <span>${whoLabel} ${collabReceiversChip(req)}</span>
                         ${ageText}
                         ${detail}
                     </div>
@@ -15024,7 +15055,7 @@ const QUOTE_TEMPLATES = [
             //  - dept↑ : 내 부서가 수신=받은 / 내 부서가 발행=발행 (개인 기준도 함께 포함)
             const wide = scope !== 'self';
             const allData = canManageAllData();     // 관리자 · 전체 자료 권한은 모든 요청의 처리 단추를 봅니다 (2026-09-28)
-            const received = filtered.filter(r => r.assigneeUser === name || allData || (wide && ((r.targetDept === dept && dept !== 'admin') || dept === 'admin')));
+            const received = filtered.filter(r => collabIsReceiver(r, name) || allData || (wide && ((r.targetDept === dept && dept !== 'admin') || dept === 'admin')));
             const sent = filtered.filter(r => r.assignee === name || (wide && ((r.sourceDept === dept && dept !== 'admin') || dept === 'admin')));
 
             // 받은 요청 렌더
@@ -15039,7 +15070,7 @@ const QUOTE_TEMPLATES = [
                 .slice().sort((a, b) => (b.ageDays || 0) - (a.ageDays || 0));
             const pendEl = document.getElementById('collab-pending-list');
             pendEl.innerHTML = pending.length ? pending.map(r => {
-                const isInbox = r.assigneeUser === name || allData || (wide && r.targetDept === dept);
+                const isInbox = collabIsReceiver(r, name) || allData || (wide && r.targetDept === dept);
                 return collabTicketCard(r, isInbox ? 'inbox' : 'outbox');
             }).join('') : collabEmpty('액션이 필요한 대기·보류 요청이 없습니다.');
 
@@ -15067,7 +15098,7 @@ const QUOTE_TEMPLATES = [
             });
             const kcard = (r) => `<div onclick="openCollabDetailModal('${r.id}')" class="bg-white p-2.5 rounded border border-gray-200 border-l-2 ${{pending:'border-l-amber-400',accepted:'border-l-green-400',hold:'border-l-yellow-400',rejected:'border-l-red-400',completed:'border-l-blue-400',cancelled:'border-l-gray-300'}[r.status]||''} cursor-pointer hover:bg-gray-50">
                     <p class="font-semibold text-xs text-gray-800 mb-1">${escapeHtml(r.title)}</p>
-                    <div class="flex flex-wrap gap-1.5 items-center text-[11px] text-gray-400">${collabStatusPill(r.status)} ${collabRoute(r)}${r.assigneeUser ? ' · ' + escapeHtml(r.assigneeUser) : ''}</div>
+                    <div class="flex flex-wrap gap-1.5 items-center text-[11px] text-gray-400">${collabStatusPill(r.status)} ${collabRoute(r)}${collabReceivers(r).length ? ' · ' + escapeHtml(collabReceiverText(r)) : ''}</div>
                 </div>`;
             const lcard = (t) => `<div onclick="openTaskDetailModal('${t.id}')" class="bg-white p-2.5 rounded border border-gray-200 border-l-2 border-l-blue-400 cursor-pointer hover:bg-gray-50">
                     <p class="font-semibold text-xs text-gray-800 mb-1">${collabTypeTag(t.type)} ${escapeHtml(t.title)}</p>
@@ -15093,7 +15124,7 @@ const QUOTE_TEMPLATES = [
             document.getElementById('collab-tabcnt-directive').textContent = directiveCnt;
 
             // KPI (필터 무관, 조회범위 기준). self 스코프는 개인 기준, 그 이상은 부서 기준까지.
-            const isInboxOf = (r) => r.assigneeUser === name || (wide && (r.targetDept === dept || dept === 'admin'));
+            const isInboxOf = (r) => collabIsReceiver(r, name) || (wide && (r.targetDept === dept || dept === 'admin'));
             const kpiLists = {
                 inbox:  visible.filter(r => isInboxOf(r) && r.status === 'pending'),
                 sent:   visible.filter(r => (r.assignee === name || (wide && (r.sourceDept === dept || dept === 'admin'))) && r.status === 'pending'),
@@ -15163,6 +15194,8 @@ const QUOTE_TEMPLATES = [
             if (req) {
                 req.status = 'accepted';
                 req.acceptedAt = ymd(new Date());          // 수락 버튼 누른 날짜 자동 반영
+                req.handledBy = currentUserName || '';     // 여러 명이 받은 요청은 누가 처리했는지 남깁니다 (2026-10-23)
+                collabNotifyOtherReceivers(req, isDirective(req) ? '지시를 확인했습니다.' : '요청을 수락했습니다.');
                 // 업무지시는 지시자가 정한 완료기한을 그대로 유지합니다.
                 req.date = isDirective(req) ? (req.dueDate || req.date) : document.getElementById('accept-date').value;
                 // 협업요청은 수신자가 완료예정일시를 정합니다 (업무지시는 지시자가 정한 기한을 그대로 씁니다)
@@ -15195,6 +15228,8 @@ const QUOTE_TEMPLATES = [
             if (req) {
                 req.status = 'completed';
                 req.completedAt = ymd(new Date());          // 완료 처리일 자동 반영
+                req.handledBy = currentUserName || '';
+                collabNotifyOtherReceivers(req, '요청을 완료 처리했습니다.');
                 req.completeDetail = document.getElementById('complete-detail').value.trim();
                 req.completeIssue = document.getElementById('complete-issue').value.trim();
                 // 고른 첨부자료를 요청으로 옮깁니다 (objectURL 소유권도 함께 넘어가므로 여기서 revoke 하지 않습니다)
@@ -15463,7 +15498,7 @@ const QUOTE_TEMPLATES = [
         }
         // 요청받은 쪽인지 판별 — 요청 첨부자료를 '확인하는 사람' 입니다.
         function isCollabHandlerSide(req) {
-            return !!req && (req.assigneeUser === currentUserName || req.targetDept === currentUserDept || canManageAllData());
+            return !!req && (collabIsReceiver(req, currentUserName) || req.targetDept === currentUserDept || canManageAllData());
         }
         // 요청 첨부를 더 붙일 수 있는 사람 — 요청한 쪽이, 요청이 끝나기 전까지
         function canAddCollabRequestFile(req) {
@@ -15474,7 +15509,7 @@ const QUOTE_TEMPLATES = [
         // 처리한 쪽인지 판별 — 완료 후 자료를 더 붙일 수 있는 사람
         function canAddCollabCompleteFile(req) {
             if (!req || req.status !== 'completed') return false;
-            return req.assigneeUser === currentUserName || req.targetDept === currentUserDept || canManageAllData();
+            return collabIsReceiver(req, currentUserName) || req.targetDept === currentUserDept || canManageAllData();
         }
 
         function collabCompleteFilesHtml(req) {
@@ -16118,13 +16153,10 @@ const QUOTE_TEMPLATES = [
                     answeredAt: '', answeredBy: '', reason: ''
                 };
                 // 요청받은 부서(수신)에게 통보
-                pushNotification({
-                    id: 'cnoti_' + collabNotiIdCounter++,
+                collabNotifyReceivers(req, {
                     type: 'delay-inquiry',
                     ticketId: req.id,
                     title: req.title,
-                    toUser: req.assigneeUser || '',
-                    toDept: req.targetDept,
                     detail: req.delayInquiry.question,
                     date: ymd(new Date()),
                     read: false
@@ -16187,7 +16219,7 @@ const QUOTE_TEMPLATES = [
             if (req.status !== 'accepted') return false;
             if (req.scheduleChange && req.scheduleChange.status === 'pending') return false;   // 이미 요청 대기중
             if (canManageAllData()) return true;
-            if (req.assigneeUser) return req.assigneeUser === currentUserName;
+            if (collabReceivers(req).length) return collabIsReceiver(req, currentUserName);
             return req.targetDept === currentUserDept;
         }
         // 확인(수락/거절) 권한: 요청을 발행한 요청자 본인(또는 발행 부서 소속·관리자)
@@ -16324,7 +16356,7 @@ const QUOTE_TEMPLATES = [
                 type: 'schedule-change-result',
                 ticketId: req.id,
                 title: req.title,
-                toUser: sc.requestedBy || req.assigneeUser || '',
+                toUser: sc.requestedBy || collabReceivers(req)[0] || '',
                 toDept: req.targetDept,
                 detail: `${decision === 'approved' ? '수락' : '거절'} · ${sc.fromDate || '-'} → ${sc.toDate}${note ? ' · ' + note : ''}`,
                 date: today,
@@ -16358,7 +16390,8 @@ const QUOTE_TEMPLATES = [
                 ${row('상태', collabStatusPill(req.status) + (dir ? ' ' + directiveDdayBadge(req) : ''))}
                 ${row('구분', collabRoute(req))}
                 ${row(dir ? '지시자' : '요청자', escapeHtml(req.assignee || '-'))}
-                ${row(dir ? '지시받은 사람' : '수신 담당자', req.assigneeUser ? escapeHtml(req.assigneeUser) : '<span class="text-gray-400">부서 전체</span>')}
+                ${row(dir ? '지시받은 사람' : '수신 담당자', collabReceivers(req).length ? escapeHtml(collabReceiverText(req)) + (collabReceivers(req).length > 1 ? ` <span class="text-xs text-gray-500">(${collabReceivers(req).length}명 · 한 명이 처리하면 요청 전체에 반영)</span>` : '') : '<span class="text-gray-400">부서 전체</span>')}
+                ${req.handledBy ? row('처리한 사람', escapeHtml(req.handledBy)) : ''}
                 ${(() => {   // 여러 명에게 함께 보낸 협업 요청 (2026-10-19)
                     if (dir || !req.collabGroupId) return '';
                     const g = collabRequests.filter(r => r.collabGroupId === req.collabGroupId);
@@ -16595,8 +16628,10 @@ const QUOTE_TEMPLATES = [
             const base = { type: 'collab-comment', ticketId: req.id, title: req.title, targetDept: req.targetDept, detail: `${me}: ${text}`, date: ymd(new Date()), read: false };
             if (req.assignee && req.assignee !== me)
                 pushNotification(Object.assign({ id: 'cnoti_' + collabNotiIdCounter++ }, base, { toUser: req.assignee, toDept: req.sourceDept }));
-            if (req.assigneeUser ? req.assigneeUser !== me : currentUserDept !== req.targetDept)
-                pushNotification(Object.assign({ id: 'cnoti_' + collabNotiIdCounter++ }, base, { toUser: req.assigneeUser || '', toDept: req.targetDept }));
+            const rcv = collabReceivers(req);
+            if (rcv.length > 1) collabNotifyReceivers(req, base, true);
+            else if (rcv.length ? rcv[0] !== me : currentUserDept !== req.targetDept)
+                pushNotification(Object.assign({ id: 'cnoti_' + collabNotiIdCounter++ }, base, { toUser: rcv[0] || '', toDept: req.targetDept }));
         }
         // 코멘트 삭제 — 관리자만
         function deleteCollabComment(reqId, commentId) {
@@ -16639,7 +16674,7 @@ const QUOTE_TEMPLATES = [
             if (!req) return false;
             if (req.status === 'completed' || req.status === 'rejected' || req.status === 'cancelled') return false;
             if (canManageAllData()) return true;
-            if (req.assigneeUser && req.assigneeUser === currentUserName) return true;
+            if (collabIsReceiver(req, currentUserName)) return true;
             return req.targetDept === currentUserDept;
         }
 
@@ -16657,10 +16692,10 @@ const QUOTE_TEMPLATES = [
             document.getElementById('transfer-task-id').value = id;
             document.getElementById('collab-transfer-subject').innerText = req.title || '';
             document.getElementById('transfer-current').innerHTML =
-                `${collabRoute(req)} · ${req.assigneeUser ? escapeHtml(req.assigneeUser) : '<span class="text-gray-400">부서 전체</span>'} · ${collabStatusPill(req.status)}`;
+                `${collabRoute(req)} · ${collabReceivers(req).length ? escapeHtml(collabReceiverText(req)) : '<span class="text-gray-400">부서 전체</span>'} · ${collabStatusPill(req.status)}`;
 
             // 팀원 후보: 같은 수신 부서 구성원 중 현재 담당자 제외
-            const mates = pickableUsers().filter(u => u.dept === req.targetDept && u.name !== req.assigneeUser);
+            const mates = pickableUsers().filter(u => u.dept === req.targetDept && !collabIsReceiver(req, u.name));
             const teamSel = document.getElementById('transfer-team-user');
             teamSel.innerHTML = mates.length
                 ? mates.map(u => `<option value="${escapeHtml(u.name)}">${escapeHtml(u.name)} · ${escapeHtml(u.rank || '')}</option>`).join('')
@@ -16715,7 +16750,7 @@ const QUOTE_TEMPLATES = [
 
             const kind = collabTransferKind();
             const fromDept = req.targetDept;
-            const fromUser = req.assigneeUser || '';
+            const fromUser = collabReceiverText(req);
             let toDept, toUser;
 
             if (kind === 'team') {
@@ -16733,6 +16768,7 @@ const QUOTE_TEMPLATES = [
             const today = ymd(new Date());
             req.targetDept = toDept;
             req.assigneeUser = toUser;
+            delete req.assigneeUsers;   // 이관하면 받는 사람은 이관받은 한 명(또는 부서 전체)
             (req.transfers = req.transfers || []).push({
                 at: today, by: currentUserName || '', kind,
                 fromDept, fromUser, toDept, toUser, reason
@@ -16787,7 +16823,7 @@ const QUOTE_TEMPLATES = [
         function collabRoleOf(req) {
             if (!req) return '';
             if (req.assignee && req.assignee === currentUserName) return 'requester';
-            if (req.assigneeUser ? req.assigneeUser === currentUserName : currentUserDept === req.targetDept) return 'receiver';
+            if (collabReceivers(req).length ? collabIsReceiver(req, currentUserName) : currentUserDept === req.targetDept) return 'receiver';
             return canManageAllData() ? 'admin' : '';
         }
         function canEditCollabHold(req) { return !!req && req.status === 'hold' && !!collabRoleOf(req); }
@@ -16857,12 +16893,13 @@ const QUOTE_TEMPLATES = [
             (req.edits = req.edits || []).push({ at: `${ymd(now)} ${hhmm(now)}`, by: currentUserName || '', role, changes, note });
             // 상대에게 알림 — 요청자가 고쳤으면 수신자에게, 수신자가 고쳤으면 요청자에게
             const toReceiver = role !== 'receiver';
-            pushNotification({
-                id: 'cnoti_' + collabNotiIdCounter++, type: 'collab-requested', ticketId: req.id, title: req.title,
-                toUser: toReceiver ? (req.assigneeUser || '') : (req.assignee || ''), toDept: toReceiver ? req.targetDept : req.sourceDept,
+            const editNoti = {
+                type: 'collab-requested', ticketId: req.id, title: req.title,
                 detail: `보류 중인 요청을 ${currentUserName || ''} 님이 수정했습니다${changes.length ? ' (' + changes.map(c => c.label).join(' · ') + ')' : ''}${note ? ': ' + note : ''}`,
                 date: ymd(now)
-            });
+            };
+            if (toReceiver) collabNotifyReceivers(req, editNoti, true);
+            else pushNotification(Object.assign({ id: 'cnoti_' + collabNotiIdCounter++, toUser: req.assignee || '', toDept: req.sourceDept }, editNoti));
             closeCollabEditModal();
             renderCollabCenter();
             if (typeof showAppToast === 'function') showAppToast('보류 요청의 내용이 수정되었습니다. 상대방에게 알림이 발송되었습니다.', 'green');
@@ -16886,7 +16923,7 @@ const QUOTE_TEMPLATES = [
 
         function openCollabReasonModal(id, type) { document.getElementById('collab-reason-modal').classList.remove('hidden'); document.getElementById('reason-task-id').value = id; document.getElementById('reason-type').value = type; document.getElementById('reason-modal-title').innerText = type === 'reject' ? '협업 요청 거절' : '협업 요청 보류'; }
         function closeCollabReasonModal() { document.getElementById('collab-reason-modal').classList.add('hidden'); document.getElementById('collab-reason-form').reset(); }
-        function submitCollabReason(event) { event.preventDefault(); const id = document.getElementById('reason-task-id').value; const type = document.getElementById('reason-type').value; const req = collabRequests.find(r => r.id === id); if (req) { req.status = type === 'reject' ? 'rejected' : 'hold'; req.reason = document.getElementById('reason-text').value; renderCollabCenter(); } closeCollabReasonModal(); }
+        function submitCollabReason(event) { event.preventDefault(); const id = document.getElementById('reason-task-id').value; const type = document.getElementById('reason-type').value; const req = collabRequests.find(r => r.id === id); if (req) { req.status = type === 'reject' ? 'rejected' : 'hold'; req.reason = document.getElementById('reason-text').value; req.handledBy = currentUserName || ''; collabNotifyOtherReceivers(req, type === 'reject' ? '요청을 거절했습니다.' : '요청을 보류했습니다.'); renderCollabCenter(); } closeCollabReasonModal(); }
 
         // ==================== 협업 조회 권한 설정 ====================
         function renderCollabPermissions() {
@@ -24355,7 +24392,7 @@ const QUOTE_TEMPLATES = [
                     kind: directive ? 'directive' : 'collab',
                     kindName: directive ? '업무지시' : '협업요청',
                     id: r.id, title: r.title, dept: r.targetDept,
-                    owner: r.assigneeUser || '', from: r.assignee || r.orderedBy || '',
+                    owner: collabReceiverText(r), from: r.assignee || r.orderedBy || '',
                     statusName: st.name, chip: st.chip, due, overdue,
                     done: r.status === 'completed', doneAt: r.completedAt || '',
                     issue, detail: r.description || '', raw: r
