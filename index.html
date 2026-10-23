@@ -11405,9 +11405,10 @@ const QUOTE_TEMPLATES = [
             document.getElementById('app-view').classList.remove('hidden');
             endBootSplash();
             
-            // 로그인 후 접근 가능한 첫 번째 메뉴로 자동 이동
+            // 새로고침이면 보던 화면으로, 아니면 접근 가능한 첫 번째 메뉴로 자동 이동
             const availableMenus = document.querySelectorAll('.nav-item:not(.hidden)');
-            if (availableMenus.length > 0) {
+            if (restoreLastPage()) { /* 보던 화면 그대로 */ }
+            else if (availableMenus.length > 0) {
                 const firstMenu = availableMenus[0];
                 // onclick에 toggleSubmenu('...')가 함께 있을 수 있으므로 navigate('...') 호출만 추출
                 const onclickAttr = firstMenu.getAttribute('onclick') || '';
@@ -12703,6 +12704,7 @@ const QUOTE_TEMPLATES = [
         }
 
         async function handleLogout() {
+            try { sessionStorage.removeItem('gwLastPage.v1'); } catch (e) { /* 무시 */ }   // 다음 사람은 첫 화면부터
             if (!confirm('로그아웃하시겠습니까?')) return;   // 파트너센터와 같게 한 번 묻습니다 (2026-09-28)
             // [내 정보] 창에서 눌렀으면 그 창도 닫습니다
             const myProfile = document.getElementById('my-profile-modal');
@@ -12793,6 +12795,19 @@ const QUOTE_TEMPLATES = [
             return pageTitles[sectionId] || '킹오더브라더스 그룹웨어';
         }
 
+        const GW_LAST_PAGE_KEY = 'gwLastPage.v1';
+        // 새로고침 전에 보던 화면으로 — 지금도 들어갈 수 있는 화면일 때만 (보완사항 2026-10-23)
+        function restoreLastPage() {
+            let last = null;
+            try { last = JSON.parse(sessionStorage.getItem(GW_LAST_PAGE_KEY) || 'null'); } catch (e) { last = null; }
+            if (!last || !last.id || !document.getElementById('sec-' + last.id)) return false;
+            const el = last.nav ? document.getElementById(last.nav) : document.getElementById('nav-' + last.id);
+            if (el && el.classList.contains('hidden')) return false;          // 메뉴가 안 보이면 권한이 없는 것
+            if (!el && !canEnterSection(last.id)) return false;
+            try { navigate(last.id, el || null); } catch (e) { return false; }
+            const sec = document.getElementById('sec-' + last.id);
+            return !!(sec && !sec.classList.contains('hidden'));
+        }
         function navigate(sectionId, element) {
             // 사외 계정(외주업체 등)은 허용된 화면 밖으로 나갈 수 없습니다 (주소 직접 입력·옛 링크 차단)
             if (externalUser && allowedPageIds.length && !allowedPageIds.includes(sectionId)) {
@@ -12876,6 +12891,8 @@ const QUOTE_TEMPLATES = [
             const targetSection = document.getElementById(`sec-${sectionId}`);
             if (targetSection) {
                 targetSection.classList.remove('hidden');
+                // 새로고침해도 이 화면에 머물도록 지금 화면을 기억합니다 (이 창에서만 · 보완사항 2026-10-23)
+                try { sessionStorage.setItem(GW_LAST_PAGE_KEY, JSON.stringify({ id: sectionId, nav: (element && element.id) || '' })); } catch (e) { /* 막힌 브라우저 */ }
             }
             // 업무센터는 위(고객조회) · 아래(내용) 두 칸 — 바깥 스크롤을 끄고 아래 칸만 스크롤 (CSS #main-scroll.wc-mode)
             const mainScroll = document.getElementById('main-scroll');
