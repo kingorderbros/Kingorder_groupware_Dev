@@ -14368,7 +14368,7 @@ const QUOTE_TEMPLATES = [
 
         // 협업 요청 수신 담당자 (복수 · 2026-10-19)
         function selectedCollabAssignees() {
-            return Array.from(document.querySelectorAll('#task-assignee-users .collab-assignee:checked')).map(el => el.value);
+            return uniqueNames(Array.from(document.querySelectorAll('#task-assignee-users .collab-assignee:checked')).map(el => el.value));
         }
         function onCollabAssigneeChange() {
             const n = selectedCollabAssignees().length;
@@ -14377,7 +14377,7 @@ const QUOTE_TEMPLATES = [
         }
 
         function selectedDirectiveTargets() {
-            return Array.from(document.querySelectorAll('#task-directive-targets .directive-target:checked')).map(el => el.value);
+            return uniqueNames(Array.from(document.querySelectorAll('#task-directive-targets .directive-target:checked')).map(el => el.value));
         }
 
         function toggleAllDirectiveTargets(on) {
@@ -49507,8 +49507,15 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             }).join('');
             return node('회사 전체', 'fa-building', depts, true, users.length, '');
         }
+        // 같은 사람을 두 번 고르지 못하게 — 이름이 같은 줄은 하나만 둡니다 (수신자 중복 지정 막기 · 2026-10-23)
+        function uniquePeopleByName(users) {
+            const seen = new Set();
+            return (users || []).filter(u => { const n = u && String(u.name || '').trim(); if (!n || seen.has(n)) return false; seen.add(n); return true; });
+        }
+        function uniqueNames(list) { return Array.from(new Set((list || []).map(v => String(v || '').trim()).filter(Boolean))); }
         function peopleCheckTreeHtml(users, cls, selected, opts) {
             const o = opts || {};
+            users = uniquePeopleByName(users);
             const sel = new Set(selected || []);
             if (!users.length) return `<p class="text-xs text-gray-400 px-2 py-2">${escapeHtml(o.empty || '선택할 수 있는 직원이 없습니다.')}</p>`;
             const person = u => `<label class="flex items-center gap-2 px-2 py-1 text-sm cursor-pointer hover:bg-blue-50/50">
@@ -49550,7 +49557,10 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                 });
                 ptreeSync(t.closest('[data-ptree]'));
             } else if (t.matches('[data-ptree-person]')) {
-                ptreeSync(t.closest('[data-ptree]'));
+                // 같은 사람이 목록에 두 번 나와도 한 번만 고른 것으로 — 같은 이름 칸을 함께 맞춥니다
+                const root = t.closest('[data-ptree]');
+                if (root) root.querySelectorAll('[data-ptree-person]').forEach(x => { if (x !== t && x.value === t.value) x.checked = t.checked; });
+                ptreeSync(root);
             }
         });
 
@@ -49712,7 +49722,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             if (document.body) start(); else document.addEventListener('DOMContentLoaded', start);
         })();
         function pickedPersons(cls) {
-            return Array.from(document.querySelectorAll('input.' + cls + ':checked')).map(el => el.value);
+            return uniqueNames(Array.from(document.querySelectorAll('input.' + cls + ':checked')).map(el => el.value));
         }
         // 지금 로그인한 사람이 이 문서를 고칠 수 있는가 — 작성자 또는 관리자
         function canEditSalesDoc(doc) {
