@@ -59,6 +59,16 @@ const ok = (c, m) => { if (c) { pass++; console.log('  ✓', m); } else { fail++
     ok(w.list.find(x => x.id === 'PI-1').memo === undefined, '자기 기존 접수라도 파트너가 고칠 수 없는 칸은 그대로 (2026-09-28)');
     ok(w.list.find(x => x.id === 'PI-3').partnerId === 'PA-1', '새 건의 파트너사는 서버가 자기 것으로 적는다');
     ok(w.list.find(x => x.id === 'PI-2').partnerId === 'PA-2' && !w.list.find(x => x.id === 'PI-2').memo, '남의 건은 그대로');
+    {   // 담당자 회신 확인 (2026-10-26) — 확인한 회신 수만 앞으로, 서버 회신 수를 넘지 않게
+        const base = [{ id: 'PI-9', partnerId: 'PA-1', status: 'working', replies: [{ side: 'kob', text: 'a' }, { side: 'kob', text: 'b' }] }];
+        let a = P.applyPartnerWrite('gwPartnerIntakes.v1', base, [{ id: 'PI-9', partnerAckCount: 2, partnerAckAt: '2026-10-26 10:00', partnerAckBy: '가나', status: 'done', replies: [] }], [], me);
+        const r9 = a.list.find(x => x.id === 'PI-9');
+        ok(r9.partnerAckCount === 2 && r9.partnerAckAt === '2026-10-26 10:00' && r9.status === 'working' && r9.replies.length === 2, '회신 확인은 받고, 상태 · 회신은 파트너가 못 바꿈');
+        a = P.applyPartnerWrite('gwPartnerIntakes.v1', base, [{ id: 'PI-9', partnerAckCount: 5 }], [], me);
+        ok(a.list.find(x => x.id === 'PI-9').partnerAckCount === undefined, '회신 수보다 많이 확인할 수 없음');
+        a = P.applyPartnerWrite('gwPartnerIntakes.v1', [Object.assign({}, base[0], { partnerAckCount: 2 })], [{ id: 'PI-9', partnerAckCount: 1 }], [], me);
+        ok(a.list.find(x => x.id === 'PI-9').partnerAckCount === 2, '확인 수를 되돌릴 수 없음');
+    }
     w = P.applyPartnerWrite('gwPartnerIntakes.v1', store['gwPartnerIntakes.v1'], [{ id: 'PI-2', memo: '번호만 겹친 새 건' }], [], me);
     ok(w.renamed['PI-2'] === 'PI-3' && w.list.find(x => x.id === 'PI-2').partnerId === 'PA-2', '번호가 남의 것과 겹치면 빈 번호로 새로 넣고 남의 건은 그대로');
     w = P.applyPartnerWrite('gwPartnerIntakes.v1', store['gwPartnerIntakes.v1'], [], ['PI-1', 'PI-2'], me);

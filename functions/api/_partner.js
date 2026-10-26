@@ -322,6 +322,14 @@ function mergeExisting(key, server, incoming, me) {
             o.reRequestedTo = incoming.reRequestedTo;
             o.history = appended(server.history, incoming.history, 1, (h) => h && typeof h === 'object' && /재요청/.test(String(h.text || '')));
         }
+        // 담당자 회신 '확인' (2026-10-26) — 확인한 회신 개수만 앞으로 늘릴 수 있습니다 (서버의 회신 수를 넘지 않게)
+        const ack = Math.round(Number(incoming.partnerAckCount));
+        const reps = arr(server.replies).length;
+        if (!isNaN(ack) && ack > (Number(server.partnerAckCount) || 0) && ack <= reps) {
+            o.partnerAckCount = ack;
+            o.partnerAckAt = String(incoming.partnerAckAt || '').slice(0, 30);
+            o.partnerAckBy = String(incoming.partnerAckBy || me.partnerName || '').slice(0, 40);
+        }
         return o;
     }
     if (key === 'gwDevRequests.v1') {

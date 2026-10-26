@@ -58624,9 +58624,25 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             // 글에 '읽음' 표시가 없어 마지막 글이 누구 것인지로 봅니다.
             return myPartnerIntakes().filter(x => {
                 if (x.status === 'rejected' && !x.reRequestedTo) return true;
-                const reps = x.replies || [];
-                return reps.length > 0 && reps[reps.length - 1].side === 'kob';
+                return partnerReplyUnacked(x);
             });
+        }
+        // 담당자 회신을 아직 확인하지 않았는지 — [확인]을 누르면 그때까지의 회신 수를 남기고, 새 회신이 달리면 다시 뜹니다 (2026-10-26)
+        function partnerReplyUnacked(x) {
+            const reps = (x && x.replies) || [];
+            return reps.length > 0 && reps[reps.length - 1].side === 'kob' && reps.length > (Number(x.partnerAckCount) || 0);
+        }
+        function ackPartnerReply(id) {
+            const x = partnerIntakeById(id);
+            if (!x || !partnerReplyUnacked(x)) { closePartnerIntakeDetail(); return; }
+            x.partnerAckCount = (x.replies || []).length;
+            x.partnerAckAt = partnerNowStamp();
+            x.partnerAckBy = (partnerUser && (partnerUser.manager || partnerUser.partnerName)) || '';
+            if (!savePartnerIntakes()) return;
+            closePartnerIntakeDetail();
+            if (typeof renderPartnerHome === 'function') renderPartnerHome();
+            if (typeof renderPartnerMyList === 'function') { try { renderPartnerMyList(); } catch (e) { /* 그 화면이 없을 때 */ } }
+            alert('확인 완료되었습니다.');
         }
         function renderPartnerHome() {
             const host = document.getElementById('pc-view-home');
@@ -60584,7 +60600,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             el.innerHTML = `<div class="space-y-2">${list.map(x => {
                 const d = partnerDeptDef(x.dept);
                 const tk = partnerTaskOfIntake(x);                    // 업무 이름 (2026-09-14)
-                const unread = (x.replies || []).filter(r => r.side === 'kob').length;
+                const unread = (x.replies || []).filter((r, i) => r.side === 'kob' && i >= (Number(x.partnerAckCount) || 0)).length;   // 확인한 회신은 빼고 (2026-10-26)
                 const canRe = x.status === 'rejected' && !x.reRequestedTo;
                 return `<div class="bg-white rounded-lg border ${canRe ? 'border-rose-200' : 'border-gray-200'} p-3">
                     <button type="button" onclick="openPartnerIntakeDetail('${x.id}')" class="w-full text-left hover:opacity-80 transition">
@@ -60622,7 +60638,11 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             document.getElementById('pc-detail-title').textContent = x.title;
             document.getElementById('pc-detail-badges').innerHTML =
                 `<span class="text-xs font-bold rounded-full px-2 py-0.5 border ${d.tone.chip}"><i class="fas ${d.icon} mr-1"></i>${escapeHtml(d.name)}</span> ` + partnerStatusChip(x.status);
-            document.getElementById('pc-detail-body').innerHTML = partnerIntakeBodyHtml(x, false);
+            document.getElementById('pc-detail-body').innerHTML = partnerIntakeBodyHtml(x, false)
+                + (partnerReplyUnacked(x) ? `<div class="mt-4 flex flex-wrap items-center justify-between gap-2 rounded border border-blue-200 bg-blue-50 p-3">
+                        <p class="text-sm text-blue-800"><i class="fas fa-circle-info mr-1"></i>담당자 회신을 확인하셨으면 <b>[확인]</b>을 눌러 주세요.</p>
+                        <button type="button" onclick="ackPartnerReply('${escapeHtml(x.id)}')" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded text-sm font-semibold"><i class="fas fa-check mr-1"></i>확인</button>
+                    </div>` : '');
             document.getElementById('pc-detail-modal').classList.remove('hidden');
         }
         function closePartnerIntakeDetail() {
@@ -60853,7 +60873,10 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                     <div class="space-y-1.5">${reps.map(r => `<div class="rounded p-2.5 border ${r.side === 'kob' ? 'bg-blue-50/60 border-blue-100' : 'bg-gray-50 border-gray-200'}">
                         <p class="text-xs font-semibold ${r.side === 'kob' ? 'text-blue-700' : 'text-gray-600'}">${r.side === 'kob' ? '킹오더브라더스' : '파트너'} · ${escapeHtml(r.by || '')} <span class="font-normal text-gray-400">${escapeHtml(r.at || '')}</span></p>
                         <p class="text-gray-800 whitespace-pre-line mt-0.5">${escapeHtml(r.text)}</p>
-                    </div>`).join('')}</div></div>`;
+                    </div>`).join('')}</div>
+                    ${(Number(x.partnerAckCount) || 0) >= reps.length ? `<p class="text-xs text-green-700 mt-1.5"><i class="fas fa-circle-check mr-1"></i>파트너사 확인 완료${x.partnerAckAt ? ' · ' + escapeHtml(x.partnerAckAt) : ''}${x.partnerAckBy ? ' · ' + escapeHtml(x.partnerAckBy) : ''}</p>`
+                        : (Number(x.partnerAckCount) || 0) > 0 ? `<p class="text-xs text-gray-500 mt-1.5"><i class="far fa-clock mr-1"></i>새 회신 확인 대기 (이전 회신은 ${escapeHtml(x.partnerAckAt || '')} 확인)</p>` : ''}
+                    </div>`;
             }
             const hist = x.history || [];
             if (hist.length) {
