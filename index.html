@@ -19673,8 +19673,10 @@ const QUOTE_TEMPLATES = [
         const AS_OPTION_SEED = {
             device:  ['POS 단말', '카드리더', '주방프린터', '라벨프린터', 'KIOSK', '기타'],
             symptom: ['전원 불량', '인식 불량', '인쇄 불량', '네트워크', '소프트웨어', '기타'],
-            method:  ['현장방문', '원격', '전화통화', '택배', '기타']
+            method:  ['현장방문', '원격', '전화통화', '택배', '외주업체(청호)', '기타']
         };
+        // 나중에 기본 목록에 더한 값 — 이미 저장된 목록에도 한 번 끼워 넣고, 관리자가 지운 뒤에는 다시 넣지 않습니다
+        const AS_OPTION_ADDED = [{ id: 'method-chungho-20261026', kind: 'method', value: '외주업체(청호)', before: '기타' }];
         let asOptions = loadAsOptions();
         function loadAsOptions() {
             const seed = () => JSON.parse(JSON.stringify(AS_OPTION_SEED));
@@ -19688,6 +19690,13 @@ const QUOTE_TEMPLATES = [
                         if (list.length) out[k] = list;      // 통째로 비워 두지는 않습니다
                     }
                 });
+                const done = Array.isArray(saved._added) ? saved._added.slice() : [];
+                AS_OPTION_ADDED.forEach(a => {
+                    if (done.indexOf(a.id) > -1 || !Array.isArray(saved[a.kind])) return;
+                    const list = out[a.kind];
+                    if (list.indexOf(a.value) < 0) { const i = list.indexOf(a.before); list.splice(i > -1 ? i : list.length, 0, a.value); }
+                });
+                out._added = AS_OPTION_ADDED.map(a => a.id).concat(done.filter(id => !AS_OPTION_ADDED.some(a => a.id === id)));
                 return out;
             } catch (e) { return seed(); }
         }
@@ -19793,6 +19802,7 @@ const QUOTE_TEMPLATES = [
                 if (!list.length) { alert(`${k.name} 항목은 하나 이상 있어야 합니다.`); return; }
                 clean[k.key] = list;
             }
+            clean._added = AS_OPTION_ADDED.map(x => x.id);   // 관리자가 지운 추가 항목은 다시 넣지 않게 표시를 남깁니다
             asOptions = clean;
             if (!saveAsOptions()) return;
             closeAsOptions();
@@ -28898,12 +28908,30 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             return !!currentUserName && (w.receiver === currentUserName || w.assignee === currentUserName);
         }
         let workOwnEditRef = null;
-        function openWorkOwnEdit(key, workId) {
+        // 업무유형마다 접수 때 받은 항목 (2026-10-26 — 업무처리 창에서도 수정)
+        //   kind: text · date · time · select(options) · entry(누적 접수내용의 첫 건)
+        const WORK_OWN_EDIT_EXTRA = {
+            menu:     [{ prop: 'requester', label: '접수요청자' }, { prop: 'memo', label: '고객수정접수내용', kind: 'area' }],
+            dist:     [{ prop: 'intakeEntries', label: '불만접수내용 (최초 접수분)', kind: 'entry' }],
+            install:  [{ prop: 'installAddr', label: '설치주소' }, { prop: 'installReqDate', label: '설치요청일', kind: 'date' },
+                       { prop: 'installReqTime', label: '설치요청시간', kind: 'time' }, { prop: 'installVendor', label: '설치업체', kind: 'select', get options() { return INSTALL_VENDORS; } },
+                       { prop: 'memo', label: '비고', kind: 'area' }],
+            delivery: [{ prop: 'contractDate', label: '계약일', kind: 'date' }, { prop: 'dlvReqDate', label: '발송요청일', kind: 'date' }]
+        };
+        function workOwnEditSpec(key, w) {
+            if (WORK_OWN_EDIT_EXTRA[w.type]) return WORK_OWN_EDIT_EXTRA[w.type];
+            if (Array.isArray(w.intakeEntries)) return [{ prop: 'intakeEntries', label: '접수내용 (최초 접수분)', kind: 'entry' }];   // 렌탈/할부 등 상담형
+            return [{ prop: 'memo', label: '상세 내용', kind: 'area' }];
+        }
+        function workOwnEditBtnHtml(key, w) {
+            return canOwnEditWork(w) ? ` <button type="button" onclick="openWorkOwnEdit('${key}', '${escapeHtml(w.id)}', 'action')" class="ml-1 px-2.5 py-1 text-xs rounded border border-blue-300 text-blue-700 bg-white hover:bg-blue-50 whitespace-nowrap" title="접수한 내용을 수정합니다 (수정이력에 남음)"><i class="fas fa-pen mr-1"></i>수정</button>` : '';
+        }
+        function openWorkOwnEdit(key, workId, from) {
             const def = wcDef(key);
             const w = def ? def.works.find(x => x.id === workId) : null;
             if (!w) return;
             if (!canOwnEditWork(w)) { alert('등록자, 담당자, 관리자만 수정할 수 있습니다.'); return; }
-            workOwnEditRef = { key, workId };
+            workOwnEditRef = { key, workId, from: from || 'history' };
             const t = wcType(key, w.type);
             const fields = (t.fields || []).filter(f => f && f.id);
             const cls = 'w-full p-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500';
@@ -28934,7 +28962,14 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                             if (f.type === 'date') return `<div>${lbl(f.label)}<input id="woe-x-${f.id}" type="date" value="${escapeHtml(v)}" class="${cls}" /></div>`;
                             return `<div>${lbl(f.label)}<input id="woe-x-${f.id}" type="text" value="${escapeHtml(v)}" class="${cls}" /></div>`;
                         }).join('')}
-                        <div class="sm:col-span-2">${lbl('상세 내용')}<textarea id="woe-memo" rows="4" class="${cls}">${escapeHtml(w.memo || '')}</textarea></div>
+                        ${workOwnEditSpec(key, w).map(f => {
+                            const id = 'woe-p-' + f.prop;
+                            if (f.kind === 'entry') { const e0 = (w.intakeEntries || [])[0]; return `<div class="sm:col-span-2">${lbl(f.label)}<textarea id="${id}" rows="4" class="${cls}">${escapeHtml(e0 ? e0.text : (w.memo || ''))}</textarea></div>`; }
+                            const v = w[f.prop] == null ? '' : String(w[f.prop]);
+                            if (f.kind === 'area') return `<div class="sm:col-span-2">${lbl(f.label)}<textarea id="${id}" rows="4" class="${cls}">${escapeHtml(v)}</textarea></div>`;
+                            if (f.kind === 'select') return `<div>${lbl(f.label)}<select id="${id}" class="${cls}"><option value="">선택 안 함</option>${opt(f.options, v)}</select></div>`;
+                            return `<div>${lbl(f.label)}<input id="${id}" type="${f.kind === 'date' ? 'date' : f.kind === 'time' ? 'time' : 'text'}" value="${escapeHtml(v)}" class="${cls}" /></div>`;
+                        }).join('')}
                     </div>
                     <p class="text-[11px] text-gray-500 mt-2">바뀐 항목만 수정이력에 남습니다.</p>
                     <div class="flex justify-end gap-2 mt-4">
@@ -28962,7 +28997,22 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             set('contact', '연락처', val('woe-contact'));
             set('channel', '접수방식', val('woe-channel'));
             set('priority', '우선순위', val('woe-priority'), (v) => pri[v] || v);
-            set('memo', '상세 내용', val('woe-memo'));
+            workOwnEditSpec(ref.key, w).forEach(f => {
+                const to = val('woe-p-' + f.prop);
+                if (to === null) return;
+                if (f.kind === 'entry') {
+                    const list = Array.isArray(w.intakeEntries) ? w.intakeEntries : [];
+                    const from = list[0] ? String(list[0].text || '') : String(w.memo || '');
+                    if (from === to) return;
+                    if (list[0]) list[0].text = to; else w.intakeEntries = [distNewEntry(to)];
+                    w.memo = distEntryText(w.intakeEntries);
+                    w.title = to.split('\n')[0].slice(0, 40);
+                    pushFieldEdit(w, f.label, from, to); n++;
+                    return;
+                }
+                set(f.prop, f.label, to);
+            });
+            if (w.type === 'menu' && w.memo) w.title = String(w.memo).split('\n')[0].slice(0, 40);
             const t = wcType(ref.key, w.type);
             (t.fields || []).filter(f => f && f.id).forEach(f => {
                 const to = val('woe-x-' + f.id);
@@ -28977,7 +29027,13 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             if (syncOpsWorkSchedule(ref.key, w) && typeof renderCalendar === 'function') renderCalendar();
             saveWorks();
             if (typeof refreshWorkViews === 'function') refreshWorkViews();
-            try { openWorkHistoryDetail(ref.key, w.id); } catch (err) { /* 상세 창이 없는 화면 */ }
+            // 연 곳으로 돌아가 다시 그립니다 — 업무처리 창이면 그 창을, 업무이력 상세면 상세를
+            if (ref.from === 'action') {
+                ['renderAsActionModal', 'renderInstallActionModal', 'renderDeliveryActionModal', 'renderMenuActionModal', 'renderDistActionModal', 'renderConsultActionModal']
+                    .forEach(fn => { try { if (typeof window[fn] === 'function') window[fn](); } catch (err) { /* 열려 있지 않은 창 */ } });
+            } else {
+                try { openWorkHistoryDetail(ref.key, w.id); } catch (err) { /* 상세 창이 없는 화면 */ }
+            }
             showAppToast(`${n}개 항목을 수정했습니다.`, 'blue');
         }
 
@@ -30516,7 +30572,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             if (!w) { closeAsActionModal(); return; }
             const company = w.company || (wcCustomer(key, w.customerId) || {}).name || '';
             document.getElementById('as-action-subject').textContent = `${w.id} · ${company}`;
-            document.getElementById('as-action-status').innerHTML = wcStatusBadgeHtml(key, w.status);
+            document.getElementById('as-action-status').innerHTML = wcStatusBadgeHtml(key, w.status) + workOwnEditBtnHtml(key, w);   // 접수 내용 수정 (2026-10-26)
             document.getElementById('as-action-body').innerHTML = buildAsActionBody(key, w);
         }
 
@@ -31004,7 +31060,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             if (!w) { closeInstallActionModal(); return; }
             const company = w.company || (wcCustomer(key, w.customerId) || {}).name || '';
             document.getElementById('install-action-subject').textContent = `${w.id} · ${company}`;
-            document.getElementById('install-action-status').innerHTML = wcStatusBadgeHtml(key, w.status);
+            document.getElementById('install-action-status').innerHTML = wcStatusBadgeHtml(key, w.status) + workOwnEditBtnHtml(key, w);   // 접수 내용 수정 (2026-10-26)
             document.getElementById('install-action-body').innerHTML = buildInstallActionBody(key, w);
         }
 
@@ -32404,7 +32460,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             if (!w) { closeDeliveryActionModal(); return; }
             const company = w.company || (wcCustomer(key, w.customerId) || {}).name || '';
             document.getElementById('delivery-action-subject').textContent = `${w.id} · ${company}`;
-            document.getElementById('delivery-action-status').innerHTML = wcStatusBadgeHtml(key, w.status);
+            document.getElementById('delivery-action-status').innerHTML = wcStatusBadgeHtml(key, w.status) + workOwnEditBtnHtml(key, w);   // 접수 내용 수정 (2026-10-26)
             document.getElementById('delivery-action-body').innerHTML = buildDeliveryActionBody(key, w);
         }
 
@@ -32766,7 +32822,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             if (!w) { closeMenuActionModal(); return; }
             const company = w.company || (wcCustomer(key, w.customerId) || {}).name || '';
             document.getElementById('menu-action-subject').textContent = `${w.id} · ${company}`;
-            document.getElementById('menu-action-status').innerHTML = wcStatusBadgeHtml(key, w.status);
+            document.getElementById('menu-action-status').innerHTML = wcStatusBadgeHtml(key, w.status) + workOwnEditBtnHtml(key, w);   // 접수 내용 수정 (2026-10-26)
             document.getElementById('menu-action-body').innerHTML = buildMenuActionBody(key, w);
         }
 
@@ -33087,7 +33143,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             if (!w) { closeDistActionModal(); return; }
             const company = w.company || (wcCustomer(key, w.customerId) || {}).name || '';
             document.getElementById('dist-action-subject').textContent = `${w.id} · ${company}`;
-            document.getElementById('dist-action-status').innerHTML = wcStatusBadgeHtml(key, w.status);
+            document.getElementById('dist-action-status').innerHTML = wcStatusBadgeHtml(key, w.status) + workOwnEditBtnHtml(key, w);   // 접수 내용 수정 (2026-10-26)
             document.getElementById('dist-action-body').innerHTML = buildDistActionBody(key, w);
         }
 
@@ -33579,7 +33635,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             document.getElementById('consult-action-title').innerHTML =
                 `<i class="fas ${cfg.icon} ${cfg.text} mr-1"></i>${escapeHtml(cfg.label)} 조치 입력`;
             document.getElementById('consult-action-subject').textContent = `${w.id} · ${company}`;
-            document.getElementById('consult-action-status').innerHTML = wcStatusBadgeHtml(key, w.status);
+            document.getElementById('consult-action-status').innerHTML = wcStatusBadgeHtml(key, w.status) + workOwnEditBtnHtml(key, w);   // 접수 내용 수정 (2026-10-26)
             document.getElementById('consult-action-body').innerHTML = buildConsultActionBody(key, w);
         }
 

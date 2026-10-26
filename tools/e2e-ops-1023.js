@@ -38,7 +38,7 @@ srv.listen(8812,async()=>{const br=await pp.launch({executablePath:'/Application
    const w={id:'W-E2E-1',customerId:wc.id,company:'시험폐업매장',type:'as',title:'시험',status:'received',receiver:'정장훈',assignee:'',receivedAt:'2026-10-23',receivedTime:'10:00',memo:'처음 내용',extra:{},contact:'',channel:'전화',priority:'normal'};
    def.works.unshift(w);
    openWorkOwnEdit('ops','W-E2E-1');
-   document.getElementById('woe-memo').value='고친 내용';
+   document.getElementById('woe-p-memo').value='고친 내용';
    submitWorkOwnEdit({preventDefault(){}});
    r.ownEdit=w.memo==='고친 내용'&&(w.fieldEdits||[]).some(x=>x.label==='상세 내용');
    // 전체 업무이력
