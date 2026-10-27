@@ -2579,6 +2579,8 @@
                             <p class="text-gray-500 text-sm">부서·동료 간 협업 요청을 한 곳에서 발행하고, 받은·보낸 요청과 대기 현황을 처리합니다. <span id="collab-scope-label" class="text-indigo-600 font-medium"></span></p>
                         </div>
                         <div class="flex space-x-2">
+                            <!-- 관리자 — 예전 사람별 묶음 요청을 1건으로 정리 (2026-10-28 · 남은 묶음이 있을 때만 보임) -->
+                            <button id="collab-merge-legacy-btn" type="button" onclick="openCollabMergeLegacy()" class="hidden bg-white border border-amber-300 text-amber-800 hover:bg-amber-50 px-3 py-1.5 rounded text-sm transition-colors"><i class="fas fa-object-group mr-1"></i> 예전 묶음 요청 정리 <span id="collab-merge-legacy-cnt" class="font-bold"></span></button>
                             <button onclick="openTaskModal(currentUserDept && currentUserDept !== 'admin' ? currentUserDept : 'sales')" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded text-sm transition-colors"><i class="fas fa-plus mr-1"></i> 협업요청 등록</button>
                         </div>
                     </div>
@@ -14860,6 +14862,93 @@ const QUOTE_TEMPLATES = [
             return !(last && last.toUser === currentUserName);
         }
 
+        // ---------- 예전 묶음 요청 정리 (2026-10-28) ----------
+        // 10/19~10/23 에는 여러 명(본부 전체 포함)을 고르면 사람마다 한 건씩 만들고 collabGroupId 로 묶었습니다.
+        // 지금 방식(요청 1건 + 받는 사람 여러 명 / 본부 전체)으로 합칩니다.
+        //   · 받는 사람이 그 본부 재직자 전원이면 본부 전체(담당자 비움) — 본부 사람 모두가 봅니다
+        //   · 일부면 assigneeUsers 에 그 사람들
+        //   · 상태는 가장 많이 진행된 건을 따릅니다 (완료 > 진행중 > 보류 > 대기 > 거절 · 취소). 그 건을 처리한 사람이 handledBy
+        //   · 코멘트 · 이관 · 수정 이력은 모두 모으고, 지워지는 건을 가리키던 알림은 남는 건으로 옮깁니다
+        const COLLAB_MERGE_RANK = { completed: 5, accepted: 4, hold: 3, pending: 2, rejected: 1, cancelled: 0 };
+        function collabLegacyGroups() {
+            const g = new Map();
+            collabRequests.forEach(r => {
+                if (!r || !r.collabGroupId || isDirective(r)) return;
+                if (!g.has(r.collabGroupId)) g.set(r.collabGroupId, []);
+                g.get(r.collabGroupId).push(r);
+            });
+            return Array.from(g.entries()).filter(([, list]) => list.length > 1).map(([id, list]) => ({ id, list }));
+        }
+        function collabMergePlan(grp) {
+            const list = grp.list.slice();
+            const head = list.slice().sort((a, b) => (COLLAB_MERGE_RANK[b.status] || 0) - (COLLAB_MERGE_RANK[a.status] || 0)
+                || String(a.id).localeCompare(String(b.id), 'en', { numeric: true }))[0];
+            const names = uniqueNames(list.map(r => r.assigneeUser).filter(Boolean));
+            const dept = head.targetDept;
+            const members = (typeof pickableUsers === 'function' ? pickableUsers() : []).filter(u => u.dept === dept && !isOnLeave(u)).map(u => u.name);
+            const deptWide = members.length > 0 && members.every(n => names.includes(n));
+            return { head, list, names, deptWide, dept };
+        }
+        function updateCollabMergeLegacyBtn() {
+            const btn = document.getElementById('collab-merge-legacy-btn');
+            if (!btn) return;
+            const n = canManageAllData() ? collabLegacyGroups().length : 0;
+            btn.classList.toggle('hidden', !n);
+            const c = document.getElementById('collab-merge-legacy-cnt'); if (c) c.textContent = n ? `${n}묶음` : '';
+        }
+        function openCollabMergeLegacy() {
+            if (!canManageAllData()) { alert('관리자만 정리할 수 있습니다.'); return; }
+            const groups = collabLegacyGroups();
+            if (!groups.length) { alert('정리할 예전 묶음 요청이 없습니다.'); updateCollabMergeLegacyBtn(); return; }
+            const plans = groups.map(collabMergePlan);
+            const st = (s0) => ({ completed: '완료', accepted: '진행중', hold: '보류', pending: '대기', rejected: '거절', cancelled: '취소' })[s0] || s0;
+            const lines = plans.slice(0, 30).map(p => `· ${p.head.title} — ${p.list.length}건 → 1건 (${p.deptWide ? deptName(p.dept) + ' 전체' : '받는 사람 ' + p.names.length + '명'}, 상태 ${st(p.head.status)})`);
+            const wide = plans.filter(p => p.deptWide).length;
+            if (!confirm(`예전에 사람마다 따로 만든 협업 요청 ${plans.length}묶음(요청 ${plans.reduce((n, p) => n + p.list.length, 0)}건)을 묶음마다 1건으로 합칩니다.\n`
+                + `본부 전체 ${wide}묶음 · 받는 사람 여러 명 ${plans.length - wide}묶음\n\n${lines.join('\n')}${plans.length > 30 ? `\n… 외 ${plans.length - 30}묶음` : ''}\n\n`
+                + `상태는 가장 많이 진행된 건을 따르고, 코멘트 · 이력은 모두 모읍니다. 계속하시겠습니까?`)) return;
+            const r = mergeLegacyCollabGroups(plans);
+            showAppToast(`${r.groups}묶음을 정리했습니다 (요청 ${r.removed}건을 합침).`, 'green');
+        }
+        function mergeLegacyCollabGroups(plans) {
+            const now = new Date();
+            const removed = new Map();       // 지운 id → 남는 id
+            plans.forEach(p => {
+                const h = p.head;
+                const others = p.list.filter(r => r !== h);
+                const headReceiver = h.assigneeUser || '';           // 이 건을 처리한 사람 (받는 사람을 바꾸기 전에 받아 둠)
+                // 받는 사람
+                if (p.deptWide) { h.assigneeUser = ''; delete h.assigneeUsers; }
+                else if (p.names.length > 1) { h.assigneeUser = ''; h.assigneeUsers = p.names.slice(); }
+                else { h.assigneeUser = p.names[0] || ''; delete h.assigneeUsers; }
+                // 처리한 사람 — 상태가 대기가 아니면 그 건의 담당자
+                if (h.status !== 'pending' && !h.handledBy && headReceiver) h.handledBy = headReceiver;
+                // 기록 모으기
+                const mergeArr = (field) => {
+                    const all = [].concat(...p.list.map(r => Array.isArray(r[field]) ? r[field] : []));
+                    const seen = new Set();
+                    const out = all.filter(x => { const k = x && x.id ? 'id:' + x.id : JSON.stringify(x); if (seen.has(k)) return false; seen.add(k); return true; });
+                    if (out.length) h[field] = out;
+                };
+                ['comments', 'transfers', 'edits', 'scheduleHistory'].forEach(mergeArr);
+                if (Array.isArray(h.comments)) h.comments.sort((a, b) => `${a.at || ''} ${a.time || ''}`.localeCompare(`${b.at || ''} ${b.time || ''}`));
+                (h.edits = h.edits || []).push({ at: `${ymd(now)} ${hhmm(now)}`, by: currentUserName || '관리자', role: 'admin',
+                    changes: [{ label: '예전 묶음 정리', from: `${p.list.length}건 (${p.list.map(r => r.assigneeUser || '-').join(', ')})`, to: p.deptWide ? `${deptName(p.dept)} 전체 1건` : `1건 (${p.names.join(', ')})` }],
+                    note: '사람마다 따로 만든 요청을 1건으로 합침' });
+                h.mergedFrom = others.map(r => r.id);
+                delete h.collabGroupId;
+                others.forEach(r => removed.set(r.id, h.id));
+            });
+            collabRequests = collabRequests.filter(r => !removed.has(r.id));
+            // 지운 요청을 가리키던 알림은 남는 요청으로
+            let moved = 0;
+            collabNotifications.forEach(n => { if (n && removed.has(n.ticketId)) { n.ticketId = removed.get(n.ticketId); moved++; } });
+            if (moved && typeof saveNotifications === 'function') saveNotifications();
+            renderCollabCenter();
+            updateCollabMergeLegacyBtn();
+            return { groups: plans.length, removed: removed.size, moved };
+        }
+
         // 요청 카드 (받은/발행/펜딩 공용). mode: 'inbox' 이면 처리 버튼 노출
         function collabTicketCard(req, mode) {
             const descHTML = req.description ? `<div class="text-xs text-gray-600 mt-2 bg-gray-50 p-2 rounded border border-gray-100">${escapeHtml(req.description).replace(/\n/g, '<br>')}</div>` : '';
@@ -15161,6 +15250,7 @@ const QUOTE_TEMPLATES = [
         }
 
         function renderCollabCenter() {
+            try { updateCollabMergeLegacyBtn(); } catch (e) { /* 화면 준비 전 */ }
             saveCollabRequests();   // 바뀐 협업요청을 저장합니다 (안 바뀌었으면 아무것도 안 보냄)
             if (!document.getElementById('collab-received-list')) return;
             const name = currentUserName, dept = currentUserDept;
