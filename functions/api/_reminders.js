@@ -54,7 +54,9 @@ export function reminderTimes(sch, date) {
     const timed = !sch.allDay && /^\d{1,2}:\d{2}$/.test(s(sch.startTime));
     const start = kstMillis(date, timed ? sch.startTime : '09:00');
     if (!isFinite(start)) return null;
-    const at = rule.atDay ? kstMillis(date, rule.atDay) : start - rule.before * 60000;
+    let at = rule.atDay ? kstMillis(date, rule.atDay) : start - rule.before * 60000;
+    // '당일 오전'(08:30)보다 일찍 시작하는 일정은 시작 30분 전에 (2026-10-28 — 예전엔 아예 빠졌음)
+    if (rule.atDay && at >= start) at = start - 30 * 60000;
     return { start, at, rule };
 }
 
@@ -169,7 +171,13 @@ export async function runScheduleReminders(env, nowArg) {
     };
     const now = nowArg || Date.now();
     // 알림을 정한 일정만 (한 번에 읽기 — 하위 요청 1번)
-    const rows = (await call('GET', `schedules?select=id,data&data->>reminder=not.is.null&data->>reminder=neq.none`)) || [];
+    // 한 번에 1,000줄까지만 오므로 나눠 받습니다 (2026-10-28 — 넘으면 일부 일정 알림이 빠졌음)
+    const rows = [];
+    for (let off = 0; off < 20000; off += 1000) {
+        const page = (await call('GET', `schedules?select=id,data&data->>reminder=not.is.null&data->>reminder=neq.none&order=id.asc&limit=1000&offset=${off}`)) || [];
+        rows.push(...page);
+        if (page.length < 1000) break;
+    }
     const list = rows.map(r => Object.assign({}, r.data || {}, { id: r.id }));
     const due = dueReminders(list, now);
     if (!due.length) return { ok: true, due: 0 };

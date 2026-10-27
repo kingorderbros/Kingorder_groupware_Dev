@@ -43,6 +43,8 @@ const ok = (c, m) => { if (c) { pass++; console.log('  ✓', m); } else { fail++
         ok(R.dueReminders([sd], at('2026-10-24', '08:30')).length === 0, '직접 고르지 않은 당일 오전 — 보내지 않음');
         ok(R.dueReminders([Object.assign({}, sd, { reminderPicked: true })], at('2026-10-24', '08:30')).length === 1, '직접 고른 당일 오전 — 보냄');
         ok(R.dueReminders([Object.assign({}, sd, { reminder: '15min' })], at('2026-10-24', '13:45')).length === 1, '15분 전은 표시 없어도 보냄 (기본값으로 들어가지 않는 값)');
+        const early = Object.assign({}, sd, { startTime: '08:00', reminderPicked: true });
+        ok(R.dueReminders([early], at('2026-10-24', '07:30')).length === 1, '08:30 전에 시작하는 일정의 당일 오전 — 시작 30분 전에 보냄');
     }
 
     console.log('\n[받는 사람] 담당자 · 등록자 · 참석자(거부 제외) · 퇴사자 제외');
