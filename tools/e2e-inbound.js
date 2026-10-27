@@ -25,7 +25,7 @@ srv.listen(8797, async () => {
         await ev(() => navigate('inbound-center', document.getElementById('nav-inbound-center')));
 
         console.log('\n[1] 탭 틀');
-        const tabs = await ev(() => [...document.querySelectorAll('#sec-inbound-center button')].filter(b => /^setInboundTab\('\w+'\)$/.test(b.getAttribute('onclick') || '')).map(b => b.innerText.trim()));
+        const tabs = await ev(() => [...document.querySelectorAll('#sec-inbound-center button')].filter(b => /^setInboundTab\(['"]\w+['"]\)$/.test(b.getAttribute('onclick') || '')).map(b => b.innerText.trim()));
         ok(tabs.length === 6, '관리자 — 탭 6개: ' + tabs.join(' / '));
         ok(await ev(() => !!document.getElementById('inbound-tab-body') && /오늘 들어온 문의/.test(document.getElementById('inbound-tab-body').innerText)), '처음은 현황판');
         await shot('inb-1-dash');
@@ -107,7 +107,7 @@ srv.listen(8797, async () => {
 
         console.log('\n[6] 영업 그룹 계정');
         await ev(() => { localUsers.push({ id: 'u9', name: '이영업', dept: 'sales', email: 'sales@company.com', groupId: 'sales', level: 'manager' }); enterApp({ email: 'sales@company.com', dept: 'sales', groupId: 'sales', name: '이영업' }); navigate('inbound-center', document.getElementById('nav-inbound-center')); });
-        const st = await ev(() => [...document.querySelectorAll('#sec-inbound-center button')].filter(b => /^setInboundTab\('\w+'\)$/.test(b.getAttribute('onclick') || '')).map(b => b.innerText.trim()));
+        const st = await ev(() => [...document.querySelectorAll('#sec-inbound-center button')].filter(b => /^setInboundTab\(['"]\w+['"]\)$/.test(b.getAttribute('onclick') || '')).map(b => b.innerText.trim()));
         ok(st.length === 5 && !st.some(t => /수집/.test(t)), '영업 — 수집 · 연결 탭 없음 (' + st.join(' / ') + ')');
         await ev(() => setInboundTab('rules'));
         ok(await ev(() => /보기만 됩니다/.test(document.getElementById('inbound-tab-body').innerText)), '규칙은 보기만');

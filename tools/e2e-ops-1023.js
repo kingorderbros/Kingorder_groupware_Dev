@@ -14,7 +14,7 @@ srv.listen(8812,async()=>{const br=await pp.launch({executablePath:'/Application
    customers.push({id:'C-E2E-1',name:'시험폐업매장',businessNo:'123-45-67890',ceo:'김시험',phone:'010-0000-0000',kind:'direct',status:'폐업',channelType:'직영'});
    navigate('ops-work-center',document.getElementById('nav-ops-work-center'));
    const sec=document.getElementById('sec-ops-work-center').innerHTML;
-   r.buttons=sec.includes("createWorkCenterCustomer('ops')")&&sec.includes("openWcShopList('ops')")&&sec.includes("openWcAllWorks('ops')");
+   r.buttons=['createWorkCenterCustomer','openWcShopList','openWcAllWorks'].every(f=>[...document.querySelectorAll('#sec-ops-work-center [onclick]')].some(el=>el.getAttribute('onclick').startsWith(f+'("ops")')));
    // 가맹점 목록 → 고르기
    openWcShopList('ops');
    r.shopList=document.getElementById('wc-shop-body').innerText.includes('시험폐업매장');

@@ -19,7 +19,7 @@ srv.listen(8820,async()=>{const br=await pp.launch({executablePath:'/Application
    if(!partnerIntakeVisible(x)) { window.partnerIntakeVisible=()=>true; }
    openPartnerIntakeDetail('PI-E2E-1');
    const body=document.getElementById('pc-detail-body').innerHTML;
-   r.ackBtn=body.includes("ackPartnerReply('PI-E2E-1')");
+   r.ackBtn=[...document.querySelectorAll('#pc-detail-body [onclick]')].some(el=>el.getAttribute('onclick')==='ackPartnerReply("PI-E2E-1")');
    ackPartnerReply('PI-E2E-1');
    r.saved=x.partnerAckCount===1&&!!x.partnerAckAt&&x.partnerAckBy==='김파트너';
    r.todoAfter=inTodo();

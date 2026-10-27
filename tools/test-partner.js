@@ -88,8 +88,21 @@ const ok = (c, m) => { if (c) { pass++; console.log('  ✓', m); } else { fail++
     ok(d1.status === 'review' && d1.partnerId === 'PA-1', '개발의뢰는 진행만 고치고 상대 파트너사는 못 바꾼다');
     ok(w.list.find(x => x.id === 'D3').status === undefined && !w.list.find(x => x.id === 'D9'), '남의 개발의뢰 · 새 개발의뢰는 받지 않는다');
     ok(w.rejected.includes('D3') && w.rejected.includes('D9') && w.list.find(x => x.id === 'D1'), '개발의뢰는 지우지 못한다');
-    w = P.applyPartnerWrite('gwDevNotiQueue.v1', [{ id: 'n1' }], [{ id: 'n1' }, { id: 'n2' }], ['n1'], me);
+    w = P.applyPartnerWrite('gwDevNotiQueue.v1', [{ id: 'n1', type: 'dev-update' }], [{ id: 'n1', type: 'dev-update' }, { id: 'n2', type: 'dev-review', devId: 'D1', title: '검수', toUser: '대표', toDept: 'management' }], ['n1'], me);
     ok(w.list.map(x => x.id).join() === 'n1,n2', '알림 대기열은 새 것만 붙이고 지우지 않는다');
+    {   // 2026-10-28 보안 점검 — 파트너가 보낸 알림 · 번호 · 첨부를 서버가 다듬음
+        const n2 = w.list.find(x => x.id === 'n2');
+        ok(n2.toUser === '' && n2.toDept === 'it', '알림 받는 곳은 IT본부로 고정 (대표 · 다른 본부 지정 불가)');
+        let q = P.applyPartnerWrite('gwDevNotiQueue.v1', [], [{ id: 'n3', type: 'delete-request' }, { id: 'n4"><img src=x>', type: 'dev-update' }], [], me);
+        ok(q.list.length === 0 && q.rejected.length === 2, '정해진 종류가 아니거나 번호에 기호가 섞인 알림은 받지 않음');
+        q = P.applyPartnerWrite('gwPartnerIntakes.v1', [], [{ id: "x');alert(1);//", title: 't' }], [], me);
+        ok(q.list.length === 0 && q.rejected.length === 1, '접수 번호에 코드가 섞이면 받지 않음');
+        q = P.applyPartnerWrite('gwPartnerIntakes.v1', [], [{ id: 'PI-77', partnerName: '다른 업체', files: [{ name: 'a.png', type: 'image/png', dataUrl: 'data:image/png;base64,AAAA' }, { name: 'b', dataUrl: 'data:text/html;base64,PHNjcmlwdD4=' }, { name: 'c', dataUrl: 'javascript:alert(1)' }],
+            docs: [{ file: { dataUrl: 'data:image/svg+xml;base64,AA' } }] }], [], me);
+        const pi = q.list.find(x => x.id === 'PI-77');
+        ok(pi.partnerName === me.partnerName, '파트너사 이름은 서버가 정함 (다른 업체 사칭 불가)');
+        ok(pi.files[0].dataUrl.startsWith('data:image/png') && pi.files[1].dataUrl === '' && pi.files[2].dataUrl === '' && pi.docs[0].file.dataUrl === '', '첨부는 이미지 · PDF · 글 파일만 (html · svg · javascript 주소는 비움)');
+    }
     let threw = false; try { P.applyPartnerWrite('gwUsers.v1', [], [], [], me); } catch (e) { threw = true; }
     ok(threw, '그 밖의 자료는 저장 거절');
 

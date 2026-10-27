@@ -261,11 +261,18 @@ export function applyPartnerWrite(key, current, upserts, removes, me) {
         return Object.assign({}, res, { list: Object.assign({}, current && typeof current === 'object' ? current : {}, { seq, records: res.list }) });
     };
     const renamed = {}, rejected = [];
-    const ups = arr(upserts).filter(x => x && typeof x === 'object' && x.id !== undefined && x.id !== null && x.id !== '');
+    // 번호는 영문 · 숫자 · - _ . 만 (2026-10-28 보안 점검 — 번호에 화면 코드를 넣어 직원 화면에서 실행되게 하던 길을 막음)
+    const ups = arr(upserts).filter(x => x && typeof x === 'object' && x.id !== undefined && x.id !== null && x.id !== '')
+        .filter(x => { if (SAFE_ID.test(String(x.id))) return true; rejected.push(String(x.id).slice(0, 60)); return false; });
 
     if (key === 'gwDevNotiQueue.v1') {
-        // 알림은 새로 넣기만 — 같은 id 는 건너뛰고 최근 50건만 둡니다
-        ups.forEach(n => { if (!list.some(x => x && String(x.id) === String(n.id))) list.push(n); });
+        // 알림은 새로 넣기만 — 같은 id 는 건너뛰고 최근 50건만 둡니다.
+        // 파트너가 보낸 값을 그대로 쓰지 않고 정해진 모양으로 다시 만듭니다 (종류 2가지 · 받는 곳은 IT본부 · 2026-10-28)
+        ups.forEach(n0 => {
+            const n = devNotiOf(n0, me);
+            if (!n) { rejected.push(String(n0.id)); return; }
+            if (!list.some(x => x && String(x.id) === String(n.id))) list.push(n);
+        });
         return { list: list.slice(-50), renamed, rejected };
     }
 
@@ -359,10 +366,46 @@ function mergeExisting(key, server, incoming, me) {
     }
     return o;
 }
+// ---------- 파트너가 보낸 값 다듬기 (2026-10-28 보안 점검) ----------
+const SAFE_ID = /^[A-Za-z0-9_.-]{1,60}$/;
+// 첨부는 이미지 · PDF · 글 파일만 (data: 주소에 다른 형식 · 따옴표를 넣어 화면을 깨뜨리지 못하게)
+const SAFE_DATA_URL = /^data:(image\/(png|jpe?g|gif|webp|bmp)|application\/pdf|text\/plain|application\/octet-stream);base64,[A-Za-z0-9+/=\s]*$/;
+function cleanFile(f) {
+    if (!f || typeof f !== 'object') return f;
+    const o = Object.assign({}, f);
+    ['dataUrl', 'url', 'fileUrl'].forEach(k => { if (k in o && !(typeof o[k] === 'string' && (o[k] === '' || SAFE_DATA_URL.test(o[k])))) o[k] = ''; });
+    ['name', 'type', 'fileName', 'fileType'].forEach(k => { if (k in o) o[k] = String(o[k] == null ? '' : o[k]).slice(0, 200); });
+    return o;
+}
+function cleanIntakeFiles(o) {
+    if (Array.isArray(o.files)) o.files = o.files.map(cleanFile);
+    if (Array.isArray(o.docs)) o.docs = o.docs.map(d => {
+        if (!d || typeof d !== 'object') return d;
+        const x = cleanFile(d);
+        if (x.file) x.file = cleanFile(x.file);
+        if (Array.isArray(x.files)) x.files = x.files.map(cleanFile);
+        return x;
+    });
+    return o;
+}
+const DEV_NOTI_TYPES = ['dev-update', 'dev-review'];
+function devNotiOf(n, me) {
+    if (!n || typeof n !== 'object' || !SAFE_ID.test(String(n.id)) || !DEV_NOTI_TYPES.includes(n.type)) return null;
+    const txt = (v, max) => String(v == null ? '' : v).slice(0, max);
+    return {
+        id: String(n.id), type: n.type, ticketId: '', projectId: '',
+        devId: SAFE_ID.test(String(n.devId || '')) ? String(n.devId) : '',
+        title: txt(n.title, 120), toUser: '', toDept: 'it', toTeam: '',
+        detail: txt(n.detail, 300), date: /^\d{4}-\d{2}-\d{2}$/.test(String(n.date || '')) ? String(n.date) : '',
+        fromPartner: txt(me && me.partnerName, 60)
+    };
+}
 function sanitizeNew(key, item, me) {
     const o = clone(item);
     if (key === 'gwPartnerIntakes.v1') {
         o.partnerId = me.partnerId;
+        o.partnerName = me.partnerName;                                      // 다른 업체 이름으로 내지 못하게 (2026-10-28)
+        cleanIntakeFiles(o);
         o.status = 'received'; o.assignee = ''; o.rejectReason = ''; o.reRequestedTo = ''; o.replies = [];
         INTAKE_STAFF_FIELDS.forEach(f => { delete o[f]; });
         o.history = arr(o.history).slice(0, 1);

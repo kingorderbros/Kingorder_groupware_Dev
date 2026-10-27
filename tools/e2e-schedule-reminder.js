@@ -17,7 +17,7 @@ srv.listen(8815,async()=>{const br=await pp.launch({executablePath:'/Application
    r.text=notiText(n).includes('곧 시작');
    const js=notiClickJs(n);
    r.click=js.includes('openScheduleFromNotice');
-   eval(js);
+   eval(js.replace(/&quot;/g,'"'));
    r.opened=!document.getElementById('schedule-detail-modal').classList.contains('hidden')&&document.getElementById('detail-schedule-title').innerText.includes('알림시험 미팅');
    collabNotifications.splice(collabNotifications.indexOf(n),1);
    schedules.splice(schedules.findIndex(s=>s.id==='s-e2e-rem'),1);

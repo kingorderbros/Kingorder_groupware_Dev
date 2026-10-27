@@ -19,7 +19,7 @@ srv.listen(8818,async()=>{const br=await pp.launch({executablePath:'/Application
      Object.assign({id:'W-E2E-DL',type:'delivery',title:'택배',dlvReqDate:'2026-10-28',contractDate:'2026-10-01',shipInfo:{}},base)
    ];
    ws.forEach(w=>def.works.unshift(w));
-   const go=(open,id,x,edit)=>{ open('ops',id); const btn=document.getElementById(x+'-action-status').innerHTML.includes("openWorkOwnEdit('ops', '"+id+"', 'action')"); openWorkOwnEdit('ops',id,'action'); edit(); submitWorkOwnEdit({preventDefault(){}}); return btn; };
+   const go=(open,id,x,edit)=>{ open('ops',id); const btn=[...document.querySelectorAll('#'+x+'-action-status [onclick]')].some(el=>el.getAttribute('onclick')==='openWorkOwnEdit("ops", "'+id+'", \'action\')'); openWorkOwnEdit('ops',id,'action'); edit(); submitWorkOwnEdit({preventDefault(){}}); return btn; };
    r.asBtn=go(openAsActionModal,'W-E2E-AS','as',()=>{document.getElementById('woe-contact').value='010-1111';}); closeAsActionModal();
    r.mnBtn=go(openMenuActionModal,'W-E2E-MN','menu',()=>{document.getElementById('woe-p-requester').value='매니저';}); closeMenuActionModal();
    r.dsBtn=go(openDistActionModal,'W-E2E-DS','dist',()=>{document.getElementById('woe-p-intakeEntries').value='유통 고침';}); if(typeof closeDistActionModal==='function') closeDistActionModal();

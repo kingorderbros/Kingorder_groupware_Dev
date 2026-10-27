@@ -18,7 +18,7 @@ srv.listen(8816,async()=>{const br=await pp.launch({executablePath:'/Application
    const txt=document.getElementById('collab-received-list').innerText;
    r.seesDeptWide=txt.includes('결제본부전체요청');
    r.notOthers=!txt.includes('다른담당자요청');
-   r.canAccept=document.getElementById('collab-received-list').innerHTML.includes("openCollabAcceptModal('collab-e2e-dw')");
+   r.canAccept=[...document.querySelectorAll('#collab-received-list [onclick]')].some(el=>el.getAttribute('onclick')==='openCollabAcceptModal("collab-e2e-dw")');
    r.kpi=parseInt(document.getElementById('collab-kpi-inbox-pending').textContent)>=1;
    collabRequests.splice(collabRequests.findIndex(x=>x.id==='collab-e2e-dw'),1);
    collabRequests.splice(collabRequests.findIndex(x=>x.id==='collab-e2e-other'),1);

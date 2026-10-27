@@ -18,7 +18,7 @@ srv.listen(8801,async()=>{const br=await pp.launch({executablePath:'/Application
    const view=document.getElementById('prj-view-wbs');
    r.rowDeleteBtns=view.querySelectorAll('button[onclick^="deleteWbs("]').length;
    // ① 표 줄의 삭제 버튼
-   const b=[...view.querySelectorAll('button[onclick^="deleteWbs("]')].find(x=>x.getAttribute('onclick').includes("'e2e-w1'"));
+   const b=[...view.querySelectorAll('button[onclick^="deleteWbs("]')].find(x=>x.getAttribute('onclick').includes('e2e-w1'));
    b.click();
    const p=findProject('e2e-p1');
    r.afterRow=p.wbs.map(x=>x.id).join(',');
