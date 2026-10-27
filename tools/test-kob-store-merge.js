@@ -23,7 +23,11 @@ function makeServer(init) {
             };
             q.eq = (c, v) => { q._key = v; return q; };
             q.maybeSingle = () => Promise.resolve({ data: rows.has(q._key) ? { value: rows.get(q._key) } : null, error: null });
-            q.upsert = (list) => { list.forEach(r => rows.set(r.key, JSON.parse(JSON.stringify(r.value)))); return Promise.resolve({ error: null }); };
+            q.upsert = (list) => {
+                // 데이터베이스 규칙(schema-v8) 흉내 — denyKeys 에 든 키는 막습니다
+                if (list.some(r => (client.__deny || []).includes(r.key))) return Promise.resolve({ error: { code: '42501', message: 'KOB_PRIV: 권한 없음' } });
+                list.forEach(r => rows.set(r.key, JSON.parse(JSON.stringify(r.value)))); return Promise.resolve({ error: null });
+            };
             q.delete = () => ({ in: (c, keys) => { keys.forEach(k => rows.delete(k)); return Promise.resolve({ error: null }); } });
             return q;
         }
@@ -78,6 +82,20 @@ const flushNow = async (st) => { await st.flush(); await wait(); };
         await flushNow(A.store);
         const out = sv.rows.get('gwList.v1');
         ok(out.length === 2 && out.find(x => x.id === 'a').n === 2 && out.find(x => x.id === 'b'), '서버: 남이 넣은 b 가 지워지지 않고 a 는 고친 값');
+    }
+    console.log('\n[1-c] 데이터베이스가 권한 없는 저장을 막으면 — 되돌리고 다시 보내지 않음, 함께 보낸 다른 키는 저장 (schema-v8)');
+    {
+        const sv = makeServer({ 'gwUsers.v1': [{ id: 'u1', isAdmin: false }], 'gwConf.v1': { a: 1 } });
+        sv.client.__deny = ['gwUsers.v1'];
+        const A = boot(sv); await wait();
+        A.store.setItem('gwUsers.v1', JSON.stringify([{ id: 'u1', isAdmin: true }]));
+        A.store.setItem('gwConf.v1', JSON.stringify({ a: 2 }));
+        await flushNow(A.store); await wait(40);
+        ok(sv.rows.get('gwUsers.v1')[0].isAdmin === false, '서버 명단은 그대로');
+        ok(JSON.parse(A.store.getItem('gwUsers.v1'))[0].isAdmin === false, '이 창의 값도 서버 값으로 되돌림');
+        ok(sv.rows.get('gwConf.v1').a === 2, '함께 보낸 다른 키는 저장됨');
+        const n = A.events.length; await wait(60);
+        ok(A.events.length === n, '막힌 저장을 계속 다시 보내지 않음');
     }
     console.log('\n[2] 내가 지운 것만 지운다');
     {

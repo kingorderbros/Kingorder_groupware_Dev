@@ -147,6 +147,21 @@
         if (!hit) return v;
         return JSON.stringify(sh.wrap ? Object.assign({}, sh.wrap, { records: sh.list }) : sh.list);
     }
+    // 데이터베이스가 권한 없는 저장을 막은 것인가 (schema-v8 — 직원 명단 · 권한 그룹 등의 권한 칸)
+    function isDenied(err) { return !!err && (err.code === '42501' || /KOB_PRIV/.test(String(err.message || ''))); }
+    // 막힌 키 — 화면 값을 서버 값으로 되돌리고 알립니다 (다시 보내지 않음 · 2026-10-28)
+    function denyKey(key, err) {
+        pending.delete(key);
+        const back = synced.has(key) ? synced.get(key) : null;
+        const oldValue = cache.get(key) ?? null;
+        if (back === null) cache.delete(key); else cache.set(key, back);
+        if (back !== null) ls.set(key, back);
+        seen.delete(key);
+        const msg = String((err && err.message) || '').replace(/^.*KOB_PRIV:\s*/, '');
+        console.warn('[kob-store] 권한이 없어 저장하지 않았습니다 —', key, msg);
+        try { window.dispatchEvent(new CustomEvent('kob-store-denied', { detail: { key, message: msg } })); } catch (e) { /* 옛 브라우저 */ }
+        try { window.dispatchEvent(new StorageEvent('storage', { key, oldValue, newValue: back, storageArea: window.localStorage })); } catch (e) { /* 새로고침으로 */ }
+    }
     let flushing = false;
     async function flush() {
         flushTimer = null;
@@ -180,6 +195,7 @@
                     }
                 }
                 const { error: e2 } = await client.from('app_store').upsert([{ key, value: safeJson(out), updated_at: new Date().toISOString() }], { onConflict: 'key' });
+                if (e2 && isDenied(e2)) { denyKey(key, e2); continue; }      // 권한 없는 저장 — 되돌리고 다시 보내지 않음 (schema-v8)
                 if (e2) throw e2;
                 synced.set(key, out);
                 if (!pending.has(key)) seen.set(key, orig);   // 화면은 아직 자기가 쓴 값을 들고 있습니다 — 합친 값은 화면이 다시 읽을 때(getItem) 기준이 됩니다
@@ -190,10 +206,25 @@
                 }
             }
             if (plain.length) {
-                const { error } = await client.from('app_store').upsert(plain, { onConflict: 'key' }); if (error) throw error;
-                plain.forEach(r => synced.set(r.key, toStr(r.value)));
+                const { error } = await client.from('app_store').upsert(plain, { onConflict: 'key' });
+                if (error && isDenied(error)) {
+                    // 함께 보낸 것 중 하나가 막혔습니다 — 하나씩 다시 보내 막힌 것만 되돌립니다
+                    for (const r of plain) {
+                        const { error: e3 } = await client.from('app_store').upsert([r], { onConflict: 'key' });
+                        if (e3 && isDenied(e3)) denyKey(r.key, e3);
+                        else if (e3) throw e3;
+                        else synced.set(r.key, toStr(r.value));
+                    }
+                } else {
+                    if (error) throw error;
+                    plain.forEach(r => synced.set(r.key, toStr(r.value)));
+                }
             }
-            if (dels.length) { const { error } = await client.from('app_store').delete().in('key', dels); if (error) throw error; dels.forEach(k => synced.delete(k)); }
+            if (dels.length) {
+                const { error } = await client.from('app_store').delete().in('key', dels);
+                if (error && isDenied(error)) dels.forEach(k => denyKey(k, error));
+                else { if (error) throw error; dels.forEach(k => synced.delete(k)); }
+            }
             setStatus('ok');
         } catch (e) {
             console.error('[kob-store] 저장 실패 — 다시 시도합니다', e);

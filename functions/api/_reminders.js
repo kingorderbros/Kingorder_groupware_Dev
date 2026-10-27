@@ -210,7 +210,7 @@ export async function runScheduleReminders(env, nowArg) {
         const u = byName.get(n.toUser); if (!u) return;
         const rec = recs[push.keyOf(u.id)];
         if (!rec || !push.wants(rec, cat)) return;
-        rec.subs.forEach(sub => targets.push({ n, sub }));
+        rec.subs.filter(push.validSubscription).forEach(sub => targets.push({ n, sub }));   // 알려진 푸시 서버만 (2026-10-28)
     });
     let pushed = 0;
     await Promise.all(targets.slice(0, MAX_PUSH_PER_RUN).map(async ({ n, sub }) => {

@@ -519,7 +519,7 @@ export async function onRequest(context) {
                 const recips = push.recipientsOf(users, n, st.me.email);
                 const recs = recips.length ? await store.storeValues(recips.map(u => push.keyOf(u.id))) : {};
                 let targets = recips.map(u => ({ key: push.keyOf(u.id), rec: push.normRec(recs[push.keyOf(u.id)]) }))
-                    .filter(x => push.wants(x.rec, cat)).flatMap(x => x.rec.subs.map(sub => ({ key: x.key, sub })));
+                    .filter(x => push.wants(x.rec, cat)).flatMap(x => x.rec.subs.filter(push.validSubscription).map(sub => ({ key: x.key, sub })));   // 저장된 주소도 알려진 푸시 서버인지 다시 확인 (2026-10-28)
                 const total = targets.length;
                 targets = targets.slice(0, push.MAX_TARGETS);
                 let sent = 0; const gone = [];
@@ -717,7 +717,7 @@ export async function onRequest(context) {
                     if (!a) return json(404, { ok: false, error: '아이디를 찾을 수 없습니다.' });
                     await store.setStore(su.GUARD_KEY, su.guardClear(await store.storeValue(su.GUARD_KEY), loginId));
                     await logAudit({ action: 'temp-password', loginId, by, ok: true });
-                    return json(200, { ok: true, password: pw, account: a, hours: su.TEMP_HOURS });
+                    return json(200, { ok: true, password: pw, account: pc.publicAccount(a), hours: su.TEMP_HOURS });   // 암호값(pwHash · pwSalt)은 돌려주지 않음 (2026-10-28)
                 }
                 if (path === '/api/partner-admin/unlock' && method === 'POST') {
                     const loginId = str(input.loginId).toLowerCase();
