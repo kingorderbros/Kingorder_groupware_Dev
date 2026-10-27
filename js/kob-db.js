@@ -128,6 +128,9 @@
                     const cur = m.get(id);
                     // 내가 방금 쓴 값이 되돌아온 것이면 알리지 않습니다 (화면이 헛되이 다시 그리지 않게)
                     if (cur && cur.rev === p.new.rev) return;
+                    // 내 저장이 아직 이어지는 중에 내 앞선 저장이 되돌아온 것 — 아직 못 보낸 내 최신 수정을 덮지 않습니다 (2026-10-28)
+                    const me = who();
+                    if (inflight.has(t + ':' + id) && me && String(p.new.updated_by || '').toLowerCase() === String(me).toLowerCase()) return;
                     m.set(id, { data: withId(p.new.data, id), rev: p.new.rev || 1 });
                     fire('kob-db-change', { table: t, id, reason: 'remote' });
                 })
@@ -148,6 +151,13 @@
         return next;
     }
 
+    // 저장이 끝나 받은 판 번호 — 그사이 같은 줄을 또 저장했으면(화면이 새 값으로 바꿔 둠) 그 새 값에도 적어 둡니다.
+    // 예전에는 보낸 값에만 적어, 뒤이은 저장이 옛 판 번호로 가서 거절되고 내 수정이 사라졌습니다 (2026-10-28 구조 점검)
+    function setRev(m, id, sent, rev) {
+        sent.rev = rev;
+        const cur = m.get(id);
+        if (cur && cur !== sent) cur.rev = rev;
+    }
     async function pushRow(t, id, isNew) {
         const m = tbl(t);
         const e = m.get(id);
@@ -161,7 +171,7 @@
                     const { data, error } = await client
                         .from(t).insert({ id, data: e.data, updated_by: who() }).select('rev').single();
                     if (error) throw error;
-                    e.rev = data.rev;
+                    setRev(m, id, e, data.rev);
                 } else {
                     const { data, error } = await client
                         .from(t).update({ data: e.data, updated_by: who() })
@@ -180,7 +190,7 @@
                         fire('kob-db-change', { table: t, id, reason: 'conflict' });
                         return;
                     }
-                    e.rev = data[0].rev;
+                    setRev(m, id, e, data[0].rev);
                 }
                 failed.delete(t + ':' + id);
                 return;

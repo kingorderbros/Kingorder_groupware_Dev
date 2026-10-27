@@ -13,7 +13,8 @@ function makeServer(init) {
     const rows = new Map(Object.entries(init).map(([k, v]) => [k, JSON.parse(JSON.stringify(v))]));
     const client = {
         auth: { getSession: async () => ({ data: { session: { access_token: 't' } } }), onAuthStateChange: () => ({ data: { subscription: { unsubscribe() {} } } }) },
-        channel: () => ({ on() { return this; }, subscribe() { return this; } }),
+        __rt: [],
+        channel() { const c = this; return { on(ev, filt, cb) { c.__rt.push(cb); return this; }, subscribe() { return this; } }; },
         from(t) {
             const q = { _key: null };
             q.select = (cols) => {
@@ -63,6 +64,20 @@ const flushNow = async (st) => { await st.flush(); await wait(); };
         ok(out.length === 2 && out.find(x => x.id === 'a').n === 2 && out.find(x => x.id === 'b'), '서버: a 는 고친 값 · b 는 그대로');
         ok(JSON.parse(A.store.getItem('gwList.v1')).length === 2, '이 창에도 b 가 들어온다');
         ok(A.events.some(e => e.key === 'gwList.v1'), '화면이 다시 그리도록 알린다(storage 이벤트)');
+    }
+    console.log('\n[1-b] 실시간으로 남의 변경을 받은 뒤, 창을 열어 둔 화면이 예전 목록으로 저장 (2026-10-28 구조 점검)');
+    {
+        const sv = makeServer({ 'gwList.v1': [{ id: 'a', n: 1 }] });
+        const A = boot(sv); await wait();
+        const screen = JSON.parse(A.store.getItem('gwList.v1'));                           // 화면이 목록을 읽어 들고 있음 (창이 열려 있어 아직 다시 안 읽음)
+        const remote = [{ id: 'a', n: 1 }, { id: 'b', n: 1 }];
+        sv.rows.set('gwList.v1', remote);
+        sv.client.__rt.forEach(cb => cb({ eventType: 'UPDATE', new: { key: 'gwList.v1', value: remote } }));   // 실시간으로 b 가 들어옴
+        screen[0].n = 2;                                                                    // 화면은 예전 목록에서 a 만 고쳐 저장
+        A.store.setItem('gwList.v1', JSON.stringify(screen));
+        await flushNow(A.store);
+        const out = sv.rows.get('gwList.v1');
+        ok(out.length === 2 && out.find(x => x.id === 'a').n === 2 && out.find(x => x.id === 'b'), '서버: 남이 넣은 b 가 지워지지 않고 a 는 고친 값');
     }
     console.log('\n[2] 내가 지운 것만 지운다');
     {

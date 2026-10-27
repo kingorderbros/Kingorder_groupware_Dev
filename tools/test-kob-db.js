@@ -72,9 +72,10 @@ function makeClient(seed) {
                     state.calls.push(['update', t, q.filters.id, q.filters.rev]);
                     if (state.failNext > 0) { state.failNext--; return Promise.resolve({ data: null, error: { message: '네트워크 오류' } }); }
                     const cur = T(t).get(q.filters.id);
-                    if (!cur || cur.rev !== q.filters.rev) return Promise.resolve({ data: [], error: null });
+                    const later = (v) => state.delay ? new Promise(res => setTimeout(() => res(v), state.delay)) : Promise.resolve(v);
+                    if (!cur || cur.rev !== q.filters.rev) return later({ data: [], error: null });
                     cur.data = row.data; cur.rev = cur.rev + 1;
-                    return Promise.resolve({ data: [{ rev: cur.rev }], error: null });
+                    return later({ data: [{ rev: cur.rev }], error: null });
                 }
             };
             return chain;
@@ -295,6 +296,23 @@ function load(win) {
         let threw = null;
         try { await db2.save('notices', { id: 'n2', title: '공지2' }); } catch (e) { threw = e; }
         ok(!threw, '로그인 전이어도 저장이 터지지 않는다' + (threw ? ' — ' + threw.message : ''));
+    }
+
+    console.log('\n[+] 같은 줄을 앞 저장이 끝나기 전에 또 저장 (2026-10-28 구조 점검 — 두 번째 수정이 사라지고 남이 고쳤다고 나오던 것)');
+    {
+        const win = makeWindow();
+        const client = makeClient({ notices: [{ id: 'n9', data: { id: 'n9', v: 0 }, rev: 1 }] });
+        const db = load(win);
+        await db.__init(client, 'supabase');
+        client.__state.delay = 40;                         // 서버가 조금 늦게 답합니다
+        const p1 = db.save('notices', { id: 'n9', v: 1 });
+        await new Promise(r => setTimeout(r, 10));
+        const p2 = db.save('notices', { id: 'n9', v: 2 });
+        await Promise.all([p1, p2]);
+        const srvRow = client.__tables.get('notices').get('n9');
+        eq([srvRow.data.v, srvRow.rev], [2, 3], '서버에는 두 번째 수정까지 들어감');
+        ok(!win.__events.some(e => e.type === 'kob-db-conflict'), '내 저장끼리는 \'남이 먼저 고쳤다\' 가 나오지 않음');
+        eq(db.rows('notices').find(x => x.id === 'n9').v, 2, '화면 값도 두 번째 수정 그대로');
     }
 
     console.log('\n[+] 서버가 data 에 id 를 빼고 저장한 줄 (구글 캘린더에서 가져온 일정 · 2026-09-28)');

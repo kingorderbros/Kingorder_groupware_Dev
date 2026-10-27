@@ -46,6 +46,10 @@
 
     const cache = new Map();          // key → 문자열(JSON) — Supabase 모드에서만 씁니다
     const synced = new Map();         // key → 마지막으로 서버와 맞춘 값(문자열) — 저장할 때 '내가 바꾼 건' 을 가려내는 기준
+    // key → 화면이 마지막으로 읽거나 쓴 값 (2026-10-28 구조 점검)
+    //   실시간으로 남의 변경이 오면 synced 는 바로 새 값이 되지만, 창(모달)을 열어 둔 화면의 목록은 아직 예전 값입니다.
+    //   그 상태로 저장하면 '서버 = synced' 라 합치기를 건너뛰고 남이 넣은 항목을 덮었습니다 → 합치기 기준을 화면이 본 값으로.
+    const seen = new Map();
     let client = null;                // supabase-js 클라이언트
     let mode = 'local';
     const pending = new Map();        // key → 값(또는 null=삭제) — 모아 보낼 쓰기
@@ -165,8 +169,10 @@
                 if (e1) throw e1;
                 const serverStr = row ? toStr(row.value) : null;
                 let out = v;
-                if (serverStr !== null && serverStr !== synced.get(key)) {
-                    const merged = mergeLists(synced.has(key) ? synced.get(key) : null, v, serverStr, key);
+                // 화면이 본 값 기준 — 번호를 바꿔 둔 항목(겹친 새 번호)은 기준에서도 같은 번호로 봅니다
+                const base = seen.has(key) ? applyRenames(key, seen.get(key)) : (synced.has(key) ? synced.get(key) : null);
+                if (serverStr !== null && serverStr !== base) {
+                    const merged = mergeLists(base, v, serverStr, key);
                     if (merged !== null) {
                         out = merged.str;
                         const ks = Object.keys(merged.renamed);
@@ -176,6 +182,7 @@
                 const { error: e2 } = await client.from('app_store').upsert([{ key, value: safeJson(out), updated_at: new Date().toISOString() }], { onConflict: 'key' });
                 if (e2) throw e2;
                 synced.set(key, out);
+                if (!pending.has(key)) seen.set(key, orig);   // 화면은 아직 자기가 쓴 값을 들고 있습니다 — 합친 값은 화면이 다시 읽을 때(getItem) 기준이 됩니다
                 // 합친 결과가 내 화면 값과 다르면(남의 변경이 들어왔으면) 화면에 알립니다 — 그사이 새로 쓴 값은 건드리지 않음
                 if (out !== orig && cache.get(key) === orig && !pending.has(key)) {
                     cache.set(key, out); ls.set(key, out);
@@ -219,7 +226,9 @@
     window.kobStorage = {
         getItem(k) {
             if (mode === 'local' || isLocalOnly(k)) return ls.get(k);
-            return cache.has(k) ? cache.get(k) : null;
+            const v = cache.has(k) ? cache.get(k) : null;
+            if (v !== null) seen.set(k, v);
+            return v;
         },
         setItem(k, v) {
             const s = String(v);
@@ -228,6 +237,7 @@
             // 내용이 같으면 보내지 않습니다 — 화면을 그릴 때마다 저장하는 곳(예: 파트너사 목록)이 있어
             // 같은 값을 통째로 다시 올리면 그사이 남이 고친 것을 덮을 수 있습니다 (2026-09-28)
             if (cache.get(k) === s && !pending.has(k)) return;
+            if (!pending.has(k) && !seen.has(k) && synced.has(k)) seen.set(k, synced.get(k));   // 읽지 않고 바로 쓰는 화면 — 서버에서 받은 값이 기준
             cache.set(k, s); ls.set(k, s);            // 로컬에도 사본 (오프라인 · 새로고침 직후 대비)
             if (!canPush(k)) { holdAnon(k); return; }
             pending.set(k, s); scheduleFlush();
