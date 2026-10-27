@@ -37,6 +37,14 @@ const ok = (c, m) => { if (c) { pass++; console.log('  ✓', m); } else { fail++
         ok(R.recurDates({ date: '2026-01-31', recur: { freq: 'monthly' } }, '2026-02-01', '2026-03-31').join(',') === '2026-03-31', '매월 31일 — 2월은 건너뜀');
     }
 
+    console.log('\n[당일 오전] 기본값으로 들어간 것은 보내지 않고, 직접 고른 것만 (2026-10-28)');
+    {
+        const sd = { id: 'sd1', title: '오후 방문', date: '2026-10-24', startTime: '14:00', reminder: 'sameday', salesperson: '김영업' };
+        ok(R.dueReminders([sd], at('2026-10-24', '08:30')).length === 0, '직접 고르지 않은 당일 오전 — 보내지 않음');
+        ok(R.dueReminders([Object.assign({}, sd, { reminderPicked: true })], at('2026-10-24', '08:30')).length === 1, '직접 고른 당일 오전 — 보냄');
+        ok(R.dueReminders([Object.assign({}, sd, { reminder: '15min' })], at('2026-10-24', '13:45')).length === 1, '15분 전은 표시 없어도 보냄 (기본값으로 들어가지 않는 값)');
+    }
+
     console.log('\n[받는 사람] 담당자 · 등록자 · 참석자(거부 제외) · 퇴사자 제외');
     {
         const users = [{ id: 'u1', name: '김영업', email: 'kim@k.co' }, { id: 'u2', name: '이등록', email: 'lee@k.co' },

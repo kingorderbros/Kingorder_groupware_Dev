@@ -6140,7 +6140,7 @@
                 </div>
                 <div class="mb-4">
                     <label class="block text-sm font-medium text-gray-700 mb-1"><i class="far fa-bell mr-1 text-yellow-500"></i>알림 설정</label>
-                    <select id="schedule-reminder" class="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <select id="schedule-reminder" onchange="this.dataset.touched='1'" class="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500">
                         <option value="none">알림 없음</option>
                         <option value="15min">15분 전</option>
                         <option value="30min">30분 전</option>
@@ -6698,7 +6698,7 @@
                 </div>
                 <div class="mb-3">
                     <label class="block text-sm font-medium text-gray-700 mb-1">알림</label>
-                    <select id="wsch-reminder" class="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <select id="wsch-reminder" onchange="this.dataset.touched='1'" class="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500">
                         <option value="none">알림 없음</option>
                         <option value="15min">15분 전</option>
                         <option value="30min">30분 전</option>
@@ -17393,6 +17393,16 @@ const QUOTE_TEMPLATES = [
             return all.concat(TODO_TYPES_COMMON);
         }
         // 알림(리마인더) 옵션
+        // 사람이 알림을 직접 골랐는지 (2026-10-28) — '당일 오전' 은 여러 곳에서 기본값으로 들어가 있어,
+        // 직접 고른 경우에만 서버가 알림을 보냅니다. 15분 전 같은 다른 값은 기본값으로 들어가지 않아 고른 것으로 봅니다.
+        function reminderPickedFrom(sel, before) {
+            const v = sel ? sel.value : 'none';
+            if (!v || v === 'none') return false;
+            const touched = !!(sel && sel.dataset && sel.dataset.touched === '1');
+            if (sel && sel.dataset) delete sel.dataset.touched;
+            if (touched || v !== 'sameday') return true;
+            return !!(before && before.reminderPicked === true && before.reminder === v);
+        }
         const reminderMap = {
             none:   '알림 없음',
             '15min':'15분 전',
@@ -18380,6 +18390,7 @@ const QUOTE_TEMPLATES = [
             progSel.value = (sch && sch.progress) || DEFAULT_PROGRESS_ID;
 
             document.getElementById('wsch-reminder').value = (sch && sch.reminder) || 'sameday';
+            delete document.getElementById('wsch-reminder').dataset.touched;
             document.getElementById('wsch-desc').value = sch ? (sch.description || '') : src.description;
 
             onWorkScheduleCalendarChange(true);
@@ -18464,6 +18475,7 @@ const QUOTE_TEMPLATES = [
                 date: document.getElementById('wsch-date').value,
                 type: document.getElementById('wsch-type').value,
                 reminder: document.getElementById('wsch-reminder').value,
+                reminderPicked: reminderPickedFrom(document.getElementById('wsch-reminder'), workLinkedSchedule(kind, key, id)),
                 description: document.getElementById('wsch-desc').value,
                 allDay: allDay,
                 startTime: allDay ? '' : start,
@@ -19222,6 +19234,7 @@ const QUOTE_TEMPLATES = [
                 // 진행상황은 공유 캘린더에서만 의미가 있어, 그 외 캘린더에서는 값을 남기지 않습니다.
                 progress: getCalendar(calId).progress ? (document.getElementById('schedule-progress').value || DEFAULT_PROGRESS_ID) : '',
                 reminder: document.getElementById('schedule-reminder').value,
+                reminderPicked: reminderPickedFrom(document.getElementById('schedule-reminder'), id ? schedules.find(s => s.id === id) : null),
                 description: document.getElementById('schedule-description').value,
                 attendees: scheduleDraftAttendees.map(a => ({ ...a }))
             };
@@ -19418,6 +19431,7 @@ const QUOTE_TEMPLATES = [
             fillScheduleTypeSelect(dept, schedule.type);
             applyScheduleDeptUi(dept);
             document.getElementById('schedule-reminder').value = schedule.reminder || 'none';
+            delete document.getElementById('schedule-reminder').dataset.touched;
             document.getElementById('schedule-description').value = schedule.description || '';
             fillScheduleRecur(schedule);
             document.getElementById('schedule-modal-title').innerText = isRecurring(schedule) ? '반복 일정 수정 (전체 회차)' : '일정 수정';
