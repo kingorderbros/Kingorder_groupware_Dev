@@ -29064,6 +29064,22 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                        { prop: 'memo', label: '비고', kind: 'area' }],
             delivery: [{ prop: 'contractDate', label: '계약일', kind: 'date' }, { prop: 'dlvReqDate', label: '발송요청일', kind: 'date' }]
         };
+        // 업무처리 항목 (2026-10-28 — 처리한 내용도 고칩니다 · 완료 건 포함)
+        //   lastEntry: 누적 조치사항의 마지막 건
+        const WORK_OWN_EDIT_ACTION_COMMON = [{ prop: 'actionBy', label: '처리자' }, { prop: 'actionAt', label: '조치일', kind: 'date' }, { prop: 'actionTime', label: '조치시간', kind: 'time' }];
+        const WORK_OWN_EDIT_ACTION = {
+            menu:     [{ prop: 'actionNote', label: '조치내용', kind: 'area' }, { prop: 'replyMethod', label: '조치회신방식', kind: 'select', get options() { return MENU_REPLY_METHODS; } }].concat(WORK_OWN_EDIT_ACTION_COMMON),
+            install:  [{ prop: 'installDate', label: '설치일', kind: 'date' }, { prop: 'installTime', label: '설치시간', kind: 'time' },
+                       { prop: 'installEngineer', label: '설치자', kind: 'select', get options() { return installEngineerList(); } },
+                       { prop: 'installReason', label: '설치방문사유', kind: 'select', get options() { return INSTALL_VISIT_REASONS; } },
+                       { prop: 'installNote', label: '설치내용', kind: 'area' }],
+            delivery: [{ prop: 'dlvSender', label: '택배발송자' }, { prop: 'dlvSendDate', label: '택배발송일', kind: 'date' }, { prop: 'dlvInvoice', label: '송장번호' }].concat(WORK_OWN_EDIT_ACTION_COMMON)
+        };
+        function workOwnEditActionSpec(key, w) {
+            if (WORK_OWN_EDIT_ACTION[w.type]) return WORK_OWN_EDIT_ACTION[w.type];
+            if (Array.isArray(w.actionEntries)) return [{ prop: 'actionEntries', label: '조치사항 (마지막 입력분)', kind: 'lastEntry' }].concat(WORK_OWN_EDIT_ACTION_COMMON);   // 유통 · 렌탈/할부
+            return [{ prop: 'actionNote', label: '조치사항', kind: 'area' }].concat(WORK_OWN_EDIT_ACTION_COMMON);   // AS유지보수
+        }
         function workOwnEditSpec(key, w) {
             if (WORK_OWN_EDIT_EXTRA[w.type]) return WORK_OWN_EDIT_EXTRA[w.type];
             if (Array.isArray(w.intakeEntries)) return [{ prop: 'intakeEntries', label: '접수내용 (최초 접수분)', kind: 'entry' }];   // 렌탈/할부 등 상담형
@@ -29098,6 +29114,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                         <p class="text-xs text-gray-500 mt-0.5">${escapeHtml(w.id)} · ${escapeHtml(t.name)} · ${escapeHtml(w.company || '')}</p></div>
                         <button type="button" onclick="document.getElementById('work-own-edit-modal').classList.add('hidden')" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times"></i></button>
                     </div>
+                    <p class="text-xs font-semibold text-gray-600 mb-1.5"><i class="fas fa-inbox text-gray-400 mr-1"></i>업무접수</p>
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div>${lbl('연락처')}<input id="woe-contact" type="text" value="${escapeHtml(w.contact || '')}" class="${cls}" /></div>
                         <div>${lbl('접수방식')}<select id="woe-channel" class="${cls}">${opt(def.channels, w.channel || '')}</select></div>
@@ -29111,6 +29128,17 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                         ${workOwnEditSpec(key, w).map(f => {
                             const id = 'woe-p-' + f.prop;
                             if (f.kind === 'entry') { const e0 = (w.intakeEntries || [])[0]; return `<div class="sm:col-span-2">${lbl(f.label)}<textarea id="${id}" rows="4" class="${cls}">${escapeHtml(e0 ? e0.text : (w.memo || ''))}</textarea></div>`; }
+                            const v = w[f.prop] == null ? '' : String(w[f.prop]);
+                            if (f.kind === 'area') return `<div class="sm:col-span-2">${lbl(f.label)}<textarea id="${id}" rows="4" class="${cls}">${escapeHtml(v)}</textarea></div>`;
+                            if (f.kind === 'select') return `<div>${lbl(f.label)}<select id="${id}" class="${cls}"><option value="">선택 안 함</option>${opt(f.options, v)}</select></div>`;
+                            return `<div>${lbl(f.label)}<input id="${id}" type="${f.kind === 'date' ? 'date' : f.kind === 'time' ? 'time' : 'text'}" value="${escapeHtml(v)}" class="${cls}" /></div>`;
+                        }).join('')}
+                    </div>
+                    <p class="text-xs font-semibold text-gray-600 mt-4 mb-1.5"><i class="fas fa-screwdriver-wrench text-gray-400 mr-1"></i>업무처리</p>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        ${workOwnEditActionSpec(key, w).map(f => {
+                            const id = 'woe-a-' + f.prop;
+                            if (f.kind === 'lastEntry') { const list = w.actionEntries || []; const last = list[list.length - 1]; return `<div class="sm:col-span-2">${lbl(f.label)}<textarea id="${id}" rows="4" class="${cls}" placeholder="${list.length ? '' : '입력된 조치사항이 없습니다'}">${escapeHtml(last ? last.text : '')}</textarea></div>`; }
                             const v = w[f.prop] == null ? '' : String(w[f.prop]);
                             if (f.kind === 'area') return `<div class="sm:col-span-2">${lbl(f.label)}<textarea id="${id}" rows="4" class="${cls}">${escapeHtml(v)}</textarea></div>`;
                             if (f.kind === 'select') return `<div>${lbl(f.label)}<select id="${id}" class="${cls}"><option value="">선택 안 함</option>${opt(f.options, v)}</select></div>`;
@@ -29153,6 +29181,21 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                     if (list[0]) list[0].text = to; else w.intakeEntries = [distNewEntry(to)];
                     w.memo = distEntryText(w.intakeEntries);
                     w.title = to.split('\n')[0].slice(0, 40);
+                    pushFieldEdit(w, f.label, from, to); n++;
+                    return;
+                }
+                set(f.prop, f.label, to);
+            });
+            workOwnEditActionSpec(ref.key, w).forEach(f => {
+                const to = val('woe-a-' + f.prop);
+                if (to === null) return;
+                if (f.kind === 'lastEntry') {
+                    const list = Array.isArray(w.actionEntries) ? w.actionEntries : (w.actionEntries = []);
+                    const last = list[list.length - 1];
+                    const from = last ? String(last.text || '') : '';
+                    if (from === to) return;
+                    if (last) last.text = to; else list.push(distNewEntry(to));
+                    w.actionNote = distEntryText(list);
                     pushFieldEdit(w, f.label, from, to); n++;
                     return;
                 }
