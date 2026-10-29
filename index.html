@@ -24350,14 +24350,14 @@ const QUOTE_TEMPLATES = [
             const q = String(wcShopListQ || '').trim().toLowerCase();
             const all = wcCustomers(key).slice().sort((a, b) => String(a.name).localeCompare(String(b.name), 'ko'));
             const list = all.filter(c => !q || `${c.name} ${c.bizNo} ${c.ceo} ${c.phone} ${c.address} ${c.brand || ''}`.toLowerCase().includes(q));
-            const st = (c) => { const s0 = companyStatusList().find(x => x.id === c.status); return s0 ? `<span class="px-1.5 py-0.5 text-[11px] rounded-full ${s0.chip}">${escapeHtml(s0.id)}</span>` : ''; };
+            const st = (c) => { const s0 = companyStatusList().find(x => x.id === c.status); return s0 ? `<span class="inline-block whitespace-nowrap px-2 py-0.5 text-[11px] rounded-full ${s0.chip}">${escapeHtml(s0.id)}</span>` : '<span class="text-gray-300">-</span>'; };
             const shown = list.slice(0, 300);
             body.innerHTML = `<p class="text-xs text-gray-500 mb-2">전체 ${all.length}곳 · 검색 ${list.length}곳${list.length > shown.length ? ` (앞 ${shown.length}곳 표시 — 검색어로 좁혀 주세요)` : ''}</p>
                 <table class="w-full text-sm min-w-[820px]">
-                    <thead><tr class="bg-gray-50 text-xs text-gray-500 border-b"><th class="p-2 text-left font-medium">상호명</th><th class="p-2 text-left font-medium">상태</th><th class="p-2 text-left font-medium">사업자번호</th><th class="p-2 text-left font-medium">대표자</th><th class="p-2 text-left font-medium">연락처</th><th class="p-2 text-left font-medium">구분</th><th class="p-2 text-left font-medium">주소</th></tr></thead>
+                    <thead><tr class="bg-gray-50 text-xs text-gray-500 border-b"><th class="p-2 text-left font-medium whitespace-nowrap">상호명</th><th class="p-2 text-center font-medium whitespace-nowrap w-[80px]">상태</th><th class="p-2 text-left font-medium whitespace-nowrap">사업자번호</th><th class="p-2 text-left font-medium whitespace-nowrap">대표자</th><th class="p-2 text-left font-medium whitespace-nowrap">연락처</th><th class="p-2 text-left font-medium whitespace-nowrap">구분</th><th class="p-2 text-left font-medium whitespace-nowrap">주소</th></tr></thead>
                     <tbody>${shown.map(c => `<tr onclick="pickWcShop(${jsArg(key)}, ${jsArg(c.id)})" class="border-b border-gray-100 hover:bg-green-50 cursor-pointer">
-                        <td class="p-2 font-semibold text-gray-800 whitespace-nowrap">${escapeHtml(c.name)}</td>
-                        <td class="p-2">${st(c)}</td>
+                        <td class="p-2 font-semibold text-gray-800 max-w-[240px] truncate" title="${escapeHtml(c.name)}">${escapeHtml(c.name)}</td>
+                        <td class="p-2 whitespace-nowrap text-center">${st(c)}</td>
                         <td class="p-2 text-gray-600 whitespace-nowrap">${escapeHtml(c.bizNo || '-')}</td>
                         <td class="p-2 text-gray-600 whitespace-nowrap">${escapeHtml(c.ceo || '-')}</td>
                         <td class="p-2 text-gray-600 whitespace-nowrap">${escapeHtml(c.phone || '-')}</td>
