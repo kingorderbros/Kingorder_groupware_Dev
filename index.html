@@ -55312,10 +55312,11 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
               placeholder: '000-00-00000' },
             { key: 'shopCeo', label: '대표자명', type: 'text', required: true, noSum: true },
             { key: 'shopBiz', label: '업종 / 업태', type: 'text', required: false, noSum: true,
-              placeholder: '예: 음식점업 / 한식' },
+              placeholder: '예: 음식점업 / 한식', hint: '사업자등록증에 기재된 업종 · 업태를 입력해 주세요.' },
             // 2026-09-16 — '매장 주소' → '주소'. [주소 검색] 으로 우편번호 · 도로명주소를 찾아 채웁니다.
-            { key: 'shopAddr', label: '주소', type: 'address', required: true, noSum: true,
-              placeholder: '도로명 또는 지번 주소' },
+            // 2026-10-30 — 사업자등록증에 등록된 주소로 받습니다 (영업본부 보완)
+            { key: 'shopAddr', label: '사업장 주소 (사업자등록증 기재 주소)', type: 'address', required: true, noSum: true,
+              placeholder: '도로명 또는 지번 주소', hint: '반드시 사업자등록증에 등록된 주소로 기재해 주세요.' },
             { key: 'shopPhone', label: '담당자 휴대폰', type: 'tel', required: true, noSum: true,
               placeholder: '010-0000-0000' }
         ];
@@ -55542,8 +55543,17 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
         // ---------- 유지보수 관리비 CMS 자동이체 신청서 ----------
         // 종이 신청서 항목을 그대로 받습니다. 여기서 받으면 현장에서 다시 받지 않습니다.
         const PARTNER_CMS_ONLY = { key: 'cmsTarget', in: ['yes'] };
-        // 배달연동을 신청하면 월 10,000원이 가산됩니다 (초안 · 종이 양식과 같은 값)
+        // 배달연동을 신청하면 월 10,000원 + 부가세(11,000원)가 가산됩니다 (영업본부 보완 2026-10-30 — 부가세 추가)
         const PARTNER_CMS_DELIVERY_FEE = 10000;
+        const PARTNER_CMS_DELIVERY_FEE_VAT = Math.round(PARTNER_CMS_DELIVERY_FEE * 1.1);
+        // CMS 이용 요금 자동 계산 (영업본부 보완 2026-10-30) — 정책서 기준
+        //   포스 + 키오스크 2대까지 월 10,000원(부가세 포함), 3대째부터 1대마다 월 5,000원 추가.
+        //   발주 장비(STEP 3)를 고르면 따라 바뀌고, 직접 고친 금액은 그대로 둡니다.
+        const PARTNER_CMS_BASE_FEE = 10000, PARTNER_CMS_BASE_UNITS = 2, PARTNER_CMS_EXTRA_FEE = 5000;
+        function partnerCmsAutoFee(vals) {
+            const c = partnerHwDeviceCounts(partnerHwFormRows((vals || {}).hwList));
+            return PARTNER_CMS_BASE_FEE + Math.max(0, c.pos + c.kiosk - PARTNER_CMS_BASE_UNITS) * PARTNER_CMS_EXTRA_FEE;
+        }
         // CMS 출금 은행 — 자주 쓰는 순서. 검색으로 좁혀 고르고, 없는 곳은 그대로 적을 수 있습니다 (2026-09-16)
         const PARTNER_BANKS = [
             'KB국민은행', '신한은행', '우리은행', '하나은행', 'NH농협은행', 'IBK기업은행',
@@ -55555,11 +55565,12 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
         const PARTNER_CMS_FIELDS = [
             // 2026-10-12 UAT — CMS 청구 대상을 고르면 **이용 요금(월, 기본)을 먼저** 적고, 배달연동은 그 아래에서 고릅니다.
             // 요금 · 배달연동 · 월 청구액을 신청서 머리말(수납업체 정보)보다 위로 올렸습니다.
-            { key: 'cmsFee', label: '이용 요금(월, 기본)', type: 'number', required: true, noSum: true,
-              min: 0, placeholder: '11000', showIf: PARTNER_CMS_ONLY },
+            { key: 'cmsFee', label: '이용 요금(월, 기본 · 부가세 포함)', type: 'number', required: true, noSum: true,
+              min: 0, placeholder: '10000', showIf: PARTNER_CMS_ONLY, autoValue: partnerCmsAutoFee,
+              hint: '포스 · 키오스크 2대까지 월 10,000원, 1대 추가마다 월 5,000원이 자동 계산됩니다 (발주 장비 기준). 금액은 수정할 수 있습니다.' },
             { key: 'cmsDelivery', label: '배달연동 서비스', type: 'radio', required: true, noSum: true,
               reloadFields: true,
-              options: [{ id: 'yes', name: '신청 (월 10,000원 가산)' }, { id: 'no', name: '미신청' }],
+              options: [{ id: 'yes', name: '신청 (월 10,000원 + 부가세 = 11,000원 가산)' }, { id: 'no', name: '미신청' }],
               showIf: PARTNER_CMS_ONLY },
             // 실제 청구액 — 기본 요금에 배달연동을 더한 값이 그대로 빠져나갑니다.
             // 사람이 또 계산해 적게 두면 틀립니다.
@@ -55567,11 +55578,11 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
               showIf: PARTNER_CMS_ONLY,
               calc: (v) => {
                   const base = partnerNum((v || {}).cmsFee);
-                  const add = String((v || {}).cmsDelivery) === 'yes' ? PARTNER_CMS_DELIVERY_FEE : 0;
+                  const add = String((v || {}).cmsDelivery) === 'yes' ? PARTNER_CMS_DELIVERY_FEE_VAT : 0;
                   const sum = base + add;
                   return { value: sum,
-                           text: sum ? `월 ${partnerWon(sum)}원` : '기본 요금을 입력해 주세요',
-                           note: add ? `기본 ${partnerWon(base)} + 배달연동 ${partnerWon(add)}` : '' };
+                           text: sum ? `월 ${partnerWon(sum)}원 (부가세 포함)` : '기본 요금을 입력해 주세요',
+                           note: add ? `기본 ${partnerWon(base)} + 배달연동 ${partnerWon(PARTNER_CMS_DELIVERY_FEE)} + 부가세 ${partnerWon(add - PARTNER_CMS_DELIVERY_FEE)}` : '' };
               } },
             // 종이 신청서의 머리말과 **수납업체 고정정보** — 받는 값이 아니라 보여 주는 것입니다
             { key: 'cmsHead', label: '유지보수 관리비 CMS자동이체 신청서', type: 'note',
@@ -55584,9 +55595,9 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
               showIf: PARTNER_CMS_ONLY },
             { key: 'cmsApplicantTel', label: '신청인 연락처', type: 'tel', required: true, noSum: true,
               placeholder: '010-0000-0000', showIf: PARTNER_CMS_ONLY },
+            // 출금일은 매월 10일 고정 — 고르거나 바꿀 수 없습니다 (영업본부 보완 2026-10-30)
             { key: 'cmsDay', label: '출금일', type: 'select', required: true, noSum: true,
-              options: [{ id: '5', name: '5일' }, { id: '10', name: '10일' }, { id: '15', name: '15일' },
-                        { id: '20', name: '20일' }, { id: '25', name: '25일' }],
+              options: [{ id: '10', name: '매월 10일 (고정)' }], hint: 'CMS 출금일은 매월 10일로 고정됩니다.',
               showIf: PARTNER_CMS_ONLY },
             { key: 'cmsRelation', label: '예금주와의 관계', type: 'radio', required: true, noSum: true,
               options: [{ id: 'self', name: '본인' }, { id: 'other', name: '기타(대표자 외)' }],
@@ -55673,7 +55684,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
 
         const PARTNER_SITE_FIELDS = [
             { key: 'siteOpenDate', label: '오픈 예정일', type: 'date', required: false, noSum: true,
-              showIf: { key: 'shopOpen', in: ['new'] } },
+              showIf: { key: 'shopOpen', in: ['new'] }, hint: '신규 오픈 매장은 오픈 예정일과 아래 설치 희망일을 각각 입력해 주세요.' },
             // 유통 건은 설치를 우리가 하지 않으므로 체크리스트를 받지 않습니다
             // 하드웨어 유통(dist)만 빼고 늘 보입니다. 거래 유형 칸이 없는 접수 구분
             // (장비설치의뢰서)에서도 보여야 해서 notIn 을 씁니다. (2026-09-17)
@@ -55735,6 +55746,33 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                 }
             }
             return { qty, price, supply, vat, total: supply + vat, margin };
+        }
+
+        // ---------- 포스 · 키오스크 대수 · 설치비 자동 (영업본부 보완 2026-10-30) ----------
+        //   설치비: 포스 1대 100,000원 · 키오스크 1대 200,000원 (부가세 별도). 금액은 고칠 수 있고, 고친 값은 그대로 둡니다.
+        const PARTNER_INSTALL_FEE = { pos: 100000, kiosk: 200000 };
+        function partnerHwKindOf(r) {
+            const name = String((r && r.item) || '').replace(/\s+/g, '');
+            const cat = String((r && r.cat) || '');
+            if (!name || /설치|유지보수|하부장|모니터|프린터|스캐너|거치대|화물|배송/.test(name)) return '';
+            if (/키오스크|KIOSK/i.test(name) || (cat === '키오스크' && !/스탠드$/.test(name))) return 'kiosk';
+            if (/포스세트|포스\(단품\)|^포스$|POSSET|POS세트|오더포스/i.test(name)) return 'pos';
+            return '';
+        }
+        function partnerHwDeviceCounts(rows) {
+            const c = { pos: 0, kiosk: 0 };
+            (rows || []).forEach(r => { const k = partnerHwKindOf(r); if (k && r.auto !== 'install') c[k] += partnerNum(r.qty); });
+            return c;
+        }
+        function partnerHwApplyAutoInstall(rows) {
+            const c = partnerHwDeviceCounts(rows);
+            const fee = c.pos * PARTNER_INSTALL_FEE.pos + c.kiosk * PARTNER_INSTALL_FEE.kiosk;
+            const note = '자동 계산: ' + [c.pos ? `포스 ${c.pos}대` : '', c.kiosk ? `키오스크 ${c.kiosk}대` : ''].filter(Boolean).join(' · ');
+            const i = rows.findIndex(r => r.auto === 'install');
+            if (!fee) { if (i > -1 && !rows[i].autoEdited) rows.splice(i, 1); return rows; }
+            if (i < 0) rows.push(Object.assign(partnerHwBlankRow(), { item: '설치비', qty: 1, method: 'cash', price: fee, auto: 'install', autoFee: fee, note }));
+            else if (!rows[i].autoEdited) Object.assign(rows[i], { price: fee, autoFee: fee, qty: rows[i].qty || 1, note });
+            return rows;
         }
 
         // ---------- 가맹점 설치환경 체크 그리기 (2026-09-17) ----------
@@ -55828,11 +55866,11 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                 const c = partnerHwRowCalc(r, mode);
                 sumSupply += c.supply; sumVat += c.vat; sumTotal += c.total;
                 if (c.margin === null) marginNA = true; else sumMargin += c.margin;
-                const priceEditable = mode.editPrice || r.exception;
+                const priceEditable = mode.editPrice || r.exception || r.auto === 'install';
                 const on = partnerNum(r.qty) > 0;
-                return `<div data-hw-row="${i}" data-hw-cat="${escapeHtml(r.cat || '')}" data-hw-sub="${escapeHtml(r.sub || '')}" data-hw-item="${escapeHtml(r.item || '')}" class="rounded-xl border ${on ? 'border-indigo-200 bg-white' : 'border-gray-200 bg-gray-50/60'} p-3 sm:p-4">
+                return `<div data-hw-row="${i}" data-hw-auto="${escapeHtml(r.auto || '')}" data-hw-autofee="${partnerNum(r.autoFee)}" data-hw-autoedited="${r.autoEdited ? '1' : ''}" data-hw-cat="${escapeHtml(r.cat || '')}" data-hw-sub="${escapeHtml(r.sub || '')}" data-hw-item="${escapeHtml(r.item || '')}" class="rounded-xl border ${on ? 'border-indigo-200 bg-white' : 'border-gray-200 bg-gray-50/60'} p-3 sm:p-4">
                     <div class="flex items-center justify-between gap-2 mb-2">
-                        <span class="text-[11px] font-bold tracking-wide ${on ? 'text-indigo-600' : 'text-gray-400'}">품목 ${i + 1}${on ? '' : ' · 수량 0 (접수 제외)'}</span>
+                        <span class="text-[11px] font-bold tracking-wide ${on ? 'text-indigo-600' : 'text-gray-400'}">품목 ${i + 1}${on ? '' : ' · 수량 0 (접수 제외)'}${r.auto === 'install' ? ` <span class="ml-1 px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200 font-semibold">설치비 자동${r.autoEdited ? ' · 수정함' : ''}</span>` : ''}</span>
                         <button type="button" class="text-gray-300 hover:text-red-500 px-1" onclick="partnerHwDelRow(this)" title="품목 삭제"><i class="fas fa-times"></i></button>
                     </div>
                     <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
@@ -56021,6 +56059,14 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                     .forEach(k => { const v = get(k); if (v !== undefined) old[k] = v; });
                 const row = Object.assign({ qty: 0, method: 'cash', price: 0, resale: 0, months: 36,
                                             note: '', reason: 'general', exception: false }, old);
+                // 설치비 자동 줄 (2026-10-30) — 금액을 고치면 '수정함' 으로 두고 다시 덮지 않습니다
+                if (tr.getAttribute('data-hw-auto') === 'install') {
+                    row.auto = 'install';
+                    row.autoFee = partnerNum(tr.getAttribute('data-hw-autofee'));
+                    row.autoEdited = tr.getAttribute('data-hw-autoedited') === '1' || (old.price !== undefined && partnerNum(old.price) !== row.autoFee);
+                    row.price = partnerNum(row.price);
+                    return row;
+                }
                 // 카테고리 ↔ 장비 맞추기 (2026-10-07)
                 //   · 목록에 있는 장비를 골랐으면 카테고리를 그 장비 것으로
                 //   · 카테고리를 바꿨는데 장비가 그 카테고리 것이 아니면 장비를 비웁니다 (직접 입력한 이름은 그대로)
@@ -56047,6 +56093,17 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                 }
                 return row;
             });
+            if (!light) {
+                partnerHwApplyAutoInstall(rows);
+                // CMS 이용 요금 — 자동 값 그대로였으면 장비에 맞춰 다시 계산합니다 (2026-10-30)
+                if (typeof partnerWizardVals === 'object' && partnerWizardVals) {
+                    const prevAuto = partnerWizardVals.cmsFeeAuto;
+                    const cur = String(partnerWizardVals.cmsFee === undefined ? '' : partnerWizardVals.cmsFee);
+                    const next = partnerCmsAutoFee({ hwList: JSON.stringify(rows) });
+                    if (!cur || (prevAuto !== undefined && partnerNum(cur) === partnerNum(prevAuto)) || (prevAuto === undefined && partnerNum(cur) === PARTNER_CMS_BASE_FEE)) partnerWizardVals.cmsFee = String(next);
+                    partnerWizardVals.cmsFeeAuto = next;
+                }
+            }
             hidden.value = JSON.stringify(rows);
             if (light) { partnerHwRefreshAmounts(box, rows); return; }
             refreshPartnerTypeFields();
@@ -56406,8 +56463,10 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                           .concat(withStep(2, PARTNER_NEWSHOP_PAY_FIELDS))
                           .concat(withStep(2, PARTNER_CMS_FIELDS))
                           .concat(withStep(3, PARTNER_HW_FIELDS))
-                          .concat(withStep(4, PARTNER_SITE_FIELDS))
+                          // 오픈 예정일 · 설치 희망일을 나란히 먼저 받습니다 (영업본부 보완 2026-10-30)
+                          .concat(withStep(4, PARTNER_SITE_FIELDS.filter(f => f.key === 'siteOpenDate')))
                           .concat(withStep(4, PARTNER_INSTALL_FIELDS))
+                          .concat(withStep(4, PARTNER_SITE_FIELDS.filter(f => f.key !== 'siteOpenDate')))
                           .concat(withStep(9, PARTNER_AGREE_FIELDS)),
                       // 신규 개설은 PG신청서·TID 캡처가 아직 없으므로 공통 목록을 쓰지 않고
                       // 이 접수만의 목록을 받습니다.
@@ -56488,8 +56547,10 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                       fields: withStep(1, PARTNER_SALES_GATE_FIELDS)
                           .concat(withStep(1, PARTNER_DONATE_FIELDS))
                           .concat(withStep(3, PARTNER_HW_FIELDS))
-                          .concat(withStep(4, PARTNER_SITE_FIELDS))
+                          // 오픈 예정일 · 설치 희망일을 나란히 먼저 받습니다 (영업본부 보완 2026-10-30)
+                          .concat(withStep(4, PARTNER_SITE_FIELDS.filter(f => f.key === 'siteOpenDate')))
                           .concat(withStep(4, PARTNER_INSTALL_FIELDS))
+                          .concat(withStep(4, PARTNER_SITE_FIELDS.filter(f => f.key !== 'siteOpenDate')))
                           .concat(withStep(9, PARTNER_AGREE_FIELDS)),
                       docsOwn: true,
                       docsExtra: { all: [
@@ -57513,6 +57574,53 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
         let partnerViewZoom = 'fit';   // fit | full (이미지만)
 
         function partnerViewReset() { partnerViewFiles = []; }
+        // 제출 서류 · 첨부 일괄 다운로드 (영업본부 보완 2026-10-30) — 압축 파일 한 개로 받습니다.
+        // 압축 도구를 못 불러오면 파일을 하나씩 내려받습니다.
+        function partnerIntakeAllFiles(x) {
+            const out = [];
+            (x.docs || []).forEach(dd => partnerDocFileList(dd).forEach((f, i, all) => {
+                if (f && f.dataUrl) out.push({ f, name: `${dd.name}${all.length > 1 ? '_' + (i + 1) : ''}_${f.name}` });
+            }));
+            (x.files || []).forEach(f => { if (f && f.dataUrl) out.push({ f, name: `첨부_${f.name}` }); });
+            return out;
+        }
+        function loadJsZip() {
+            if (window.JSZip) return Promise.resolve(window.JSZip);
+            return new Promise((ok, no) => {
+                const sc = document.createElement('script');
+                sc.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
+                sc.onload = () => window.JSZip ? ok(window.JSZip) : no(new Error('JSZip'));
+                sc.onerror = () => no(new Error('JSZip'));
+                document.head.appendChild(sc);
+            });
+        }
+        async function downloadPartnerIntakeFiles(id) {
+            const x = partnerIntakeById(id);
+            if (!x) return;
+            const list = partnerIntakeAllFiles(x);
+            if (!list.length) { alert('내려받을 서류가 없습니다.'); return; }
+            const base = String(x.title || x.id).replace(/[\\/:*?"<>|]+/g, '_').slice(0, 60);
+            const safe = (n) => String(n || 'file').replace(/[\\/:*?"<>|]+/g, '_');
+            try {
+                const JSZip = await loadJsZip();
+                const zip = new JSZip();
+                const used = {};
+                for (const it of list) {
+                    let nm = safe(it.name);
+                    if (used[nm]) nm = nm.replace(/(\.[^.]*)?$/, `_${++used[nm]}$1`); else used[nm] = 1;
+                    const blob = await (await fetch(safeFileUrl(it.f.dataUrl))).blob();
+                    zip.file(nm, blob);
+                }
+                const out = await zip.generateAsync({ type: 'blob' });
+                downloadBlobAs(out, `${base}_서류.zip`);
+            } catch (e) {
+                list.forEach((it, i) => setTimeout(() => {
+                    const a = document.createElement('a');
+                    a.href = safeFileUrl(it.f.dataUrl); a.download = safe(it.name);
+                    document.body.appendChild(a); a.click(); a.remove();
+                }, i * 400));
+            }
+        }
         // 그리면서 한 건씩 담고, 누를 때 쓸 자리 번호를 돌려줍니다 (파일이 없으면 -1)
         function partnerViewAdd(f, label) {
             if (!f || !f.dataUrl) return -1;
@@ -57682,6 +57790,8 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
         //            읽기·검사·표시가 다른 항목과 똑같이 굴러가게 했습니다.
         function partnerFieldHtml(f, prefix, ring, value) {
             const id = prefix + f.key;
+            // 자동 계산 값 (CMS 이용 요금 · 2026-10-30) — 비어 있으면 계산한 값으로 채웁니다
+            if (typeof f.autoValue === 'function' && (value === undefined || value === null || value === '')) value = f.autoValue(partnerFormValuesNow());
             // 스냅샷칸은 값이 아니라 파일을 담는 자리라, 여기서는 자리만 잡고 renderPartnerVanShots() 가 그립니다
             if (f.type === 'shots') return `<div id="${prefix}shots-host" class="mb-4"></div>`;
             // 가맹점 조회칸 — 직접 타자 치는 대신 **등록된 가맹점을 찾아 고릅니다** (2026-09-14)
@@ -60512,7 +60622,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                         접수하면 아래 제출 서류에 함께 담깁니다.</p>` : ''}
                     <ul class="space-y-1.5">${docs.map(d => partnerDocRowHtml(d)).join('')}</ul>
                     <input type="file" id="pcf-doc-input" class="hidden" onchange="onPartnerDocPicked(this)" />
-                    <p class="text-xs text-gray-400 mt-2">1건당 3MB 이하 (이미지는 자동 압축 후 업로드). 필수 서류를 모두 첨부해야 접수됩니다.</p>
+                    <p class="text-xs text-gray-400 mt-2">1건당 3MB 이하 (이미지는 자동 압축 후 업로드). 서류 칸에 파일을 끌어다 놓아도 첨부됩니다. 필수 서류를 모두 첨부해야 접수됩니다.</p>
                 </div>`;
         }
         function partnerDocRowHtml(d) {
@@ -60523,7 +60633,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             const thumb = isImg
                 ? `<img src="${escapeHtml(safeFileUrl(f.dataUrl))}" alt="" class="w-9 h-9 object-cover rounded border border-gray-200 shrink-0" />`
                 : `<span class="w-9 h-9 flex items-center justify-center bg-gray-50 rounded border border-gray-200 shrink-0"><i class="fas ${ic.icon} ${ic.color}"></i></span>`;
-            return `<li class="rounded border ${has ? 'border-gray-200 bg-white' : d.required ? 'border-red-200 bg-red-50/40' : 'border-gray-200 bg-white'} p-2">
+            return `<li class="rounded border ${has ? 'border-gray-200 bg-white' : d.required ? 'border-red-200 bg-red-50/40' : 'border-gray-200 bg-white'} p-2" data-drop-handler="partnerDocDropFiles" data-drop-a="${escapeHtml(d.id)}" title="파일을 끌어다 놓아 첨부할 수 있습니다">
                 <div class="flex items-center gap-2">
                     ${thumb}
                     <span class="flex-1 min-w-0">
@@ -60555,6 +60665,11 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             const file = (input.files || [])[0];
             const docId = partnerDocTarget;
             input.value = ''; partnerDocTarget = '';
+            return partnerDocTakeFile(file, docId);
+        }
+        // 서류 칸에 끌어다 놓기 (영업본부 보완 2026-10-30)
+        function partnerDocDropFiles(files, docId) { return partnerDocTakeFile((files || [])[0], docId); }
+        async function partnerDocTakeFile(file, docId) {
             if (!file || !docId) return;
             if (file.size > PARTNER_FILE_MAX_SIZE) { alert(`${file.name} (${collabFileSize(file.size)}): ${gwFileSizeText(PARTNER_FILE_MAX_SIZE)}를 초과합니다.`); return; }
             const up = await gwUploadAsDataUrlShape(file, PARTNER_IMG_MAX_PX);
@@ -61061,6 +61176,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                     <p class="text-gray-700 font-semibold mb-1.5"><i class="fas fa-folder-open mr-1 text-gray-500"></i>제출 서류
                         <span class="text-xs font-normal text-gray-400">필수 ${need}건 · 제출 ${done}/${docs.length}건</span>
                         ${x.coRep ? '<span class="text-xs font-bold rounded-full px-2 py-0.5 border text-indigo-700 bg-indigo-50 border-indigo-200 ml-1">공동대표</span>' : ''}
+                        ${done ? `<button type="button" onclick="downloadPartnerIntakeFiles(${jsArg(x.id)})" class="float-right px-2 py-0.5 text-xs rounded border border-gray-300 bg-white text-gray-700 hover:bg-gray-50"><i class="fas fa-file-zipper mr-1"></i>서류 일괄 다운로드</button>` : ''}
                     </p>
                     <ul class="space-y-1">${docs.map(dd => {
                         // 한 서류에 파일이 여러 건일 수 있습니다 (TID 채번 스냅샷)
