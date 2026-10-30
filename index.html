@@ -1068,16 +1068,17 @@
             -webkit-mask: url(image/logo-gorilla-mark.png) center / contain no-repeat;
                     mask: url(image/logo-gorilla-mark.png) center / contain no-repeat;
         }
-        :root[data-theme="kingorder"] .gw-login-mark .lo   { background: rgba(255, 255, 255, .075); transform: translateY(2px); }   /* 아래 가장자리 빛 */
+        :root[data-theme="kingorder"] .gw-login-mark .lo   { background: rgba(255, 255, 255, .11); transform: translateY(2px); }   /* 아래 가장자리 빛 */
         :root[data-theme="kingorder"] .gw-login-mark .hi   { background: rgba(0, 0, 0, .9);         transform: translateY(-2px); }  /* 위 가장자리 그림자 */
-        :root[data-theme="kingorder"] .gw-login-mark .face { background: linear-gradient(180deg, #121110 0%, #1A1817 100%); }      /* 파인 면 — 바탕보다 조금 어둡게 */
+        :root[data-theme="kingorder"] .gw-login-mark .face { background: linear-gradient(180deg, #0E0D0C 0%, #151413 100%); }      /* 파인 면 — 바탕보다 조금 어둡게 */
 
         :root[data-theme="kingorder"] #login-card {
-            background: rgba(255, 255, 255, .06);
+            /* 흐림을 약하게 — 뒤의 고릴라 음각이 카드 너머로 비치게 (22px 이면 다 뭉개졌음) */
+            background: rgba(255, 255, 255, .035);
             border: 1px solid rgba(255, 255, 255, .14);
             border-top-color: rgba(var(--gw-accent-rgb), .85);
-            -webkit-backdrop-filter: blur(22px) saturate(1.3);
-                    backdrop-filter: blur(22px) saturate(1.3);
+            -webkit-backdrop-filter: blur(3px) saturate(1.2);
+                    backdrop-filter: blur(3px) saturate(1.2);
             box-shadow: 0 30px 80px rgba(0, 0, 0, .5), inset 0 1px 0 rgba(255, 255, 255, .10);
             border-radius: 18px;
             color: #E7E5E4;
@@ -1093,7 +1094,7 @@
         :root[data-theme="kingorder"] #login-card .text-gray-400 { color: #8C8781; }
         :root[data-theme="kingorder"] #login-card .text-gray-400 b { color: #D6D3D1; }
         :root[data-theme="kingorder"] #login-card input:not([type="checkbox"]) {
-            background: rgba(255, 255, 255, .06); border-color: rgba(255, 255, 255, .16); color: #FFFFFF;
+            background: rgba(18, 17, 16, .45); border-color: rgba(255, 255, 255, .16); color: #FFFFFF;
             transition: border-color .18s ease, background-color .18s ease;
         }
         :root[data-theme="kingorder"] #login-card input:not([type="checkbox"])::placeholder { color: rgba(255, 255, 255, .35); }
