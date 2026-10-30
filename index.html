@@ -8535,6 +8535,12 @@
                     <h3 id="quote-modal-title" class="text-lg font-bold text-gray-800">신규 견적 작성</h3>
                     <span id="quote-modal-number" class="text-sm font-mono text-gray-400"></span>
                 </div>
+                <!-- 저장한 견적 불러오기 (영업본부 보완 2026-10-30) — 새 견적을 쓸 때 예전 견적의 품목 · 조건을 그대로 가져와 고칩니다 -->
+                <div id="quote-load-wrap" class="mb-3 flex flex-wrap items-center gap-2 text-sm">
+                    <span class="text-gray-500"><i class="fas fa-folder-open mr-1"></i>저장한 견적 불러오기</span>
+                    <select id="quote-load-select" class="flex-1 min-w-[220px] p-1.5 border border-gray-300 rounded bg-white text-sm"></select>
+                    <button type="button" onclick="loadQuoteIntoDraft(document.getElementById('quote-load-select').value)" class="px-3 py-1.5 rounded border border-blue-300 text-blue-700 bg-white hover:bg-blue-50 text-sm">불러오기</button>
+                </div>
                 <form id="quote-form" onsubmit="submitQuote(event)">
                     <input type="hidden" id="edit-quote-id" value="" />
 
@@ -46894,8 +46900,10 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
         }
         // 정가 소계 (단가 열 기준)
         function quoteSubtotal(q) {
-            return ((q || {}).lines || []).reduce((sum, l) => sum + quoteLineSubtotal(l), 0);
+            return quoteCountedLines(q).reduce((sum, l) => sum + quoteLineSubtotal(l), 0);
         }
+        // 선택사항 품목 (영업본부 보완 2026-10-30) — 견적서에 보여 주되 합계 금액에서는 뺍니다
+        function quoteCountedLines(q) { return ((q || {}).lines || []).filter(l => !(l && l.optional)); }
         // ---------- 견적 할인 ----------
         // 할인은 넣을 수도, 안 넣을 수도 있습니다. **체크했을 때만** 할인율을 받고 합계에도 그때만 나옵니다.
         //   q.discountUse   — 할인 적용 여부
@@ -46949,6 +46957,8 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
         //   l.discounts = { cash, rental, installment } — 방식마다 따로 줄 수 있습니다.
         //   예전 견적은 할인율이 하나(l.discount)뿐이라 그 값을 세 방식에 그대로 씁니다.
         //   lineOn=false 면 품목 할인을 쓰지 않습니다 (전체 금액 할인 모드이거나 할인을 끈 경우)
+        // 품목 할인 단위 (영업본부 보완 2026-10-30) — '%'(정률 · 기본) 또는 '원'(정액). 줄마다 고를 수 있습니다
+        const quoteLineDiscUnit = (l) => ((l || {}).discUnit === 'won' ? 'won' : 'rate');
         function quoteLineDiscountFor(l, colId, lineOn) {
             if (lineOn === false) return 0;
             const d = (l || {}).discounts;
@@ -46960,12 +46970,18 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
         //   현금가를 비워 두면 '수량 × 단가'(정가) 를 할인 전 금액으로 씁니다.
         function quoteLineTypeAmount(l, colId, lineOn) {
             const gross = quoteCellEmpty(l[colId]) ? (colId === 'cash' ? quoteLineSubtotal(l) : 0) : (Number(l[colId]) || 0);
+            if (quoteLineDiscUnit(l) === 'won') {
+                // 정액 할인 — 그 방식의 금액에서 적은 금액만큼 뺍니다 (금액보다 크게 빼지는 않습니다)
+                if (lineOn === false) return gross;
+                const won = Math.max(0, Number(((l || {}).discWon || {})[colId]) || 0);
+                return Math.max(0, gross - won);
+            }
             return gross * (1 - quoteLineDiscountFor(l, colId, lineOn) / 100);
         }
         // 열 하나의 소계 (부가세 별도)
         function quoteColSubtotal(q, colId) {
             if (colId === 'amount') return quoteSubtotal(q);
-            const lines = ((q || {}).lines || []);
+            const lines = quoteCountedLines(q);
             const on = quoteLineDiscountOn(q);
             const anyFilled = lines.some(l => !quoteCellEmpty(l[colId]));
             if (!anyFilled && colId !== 'cash') {
@@ -46979,7 +46995,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
         // 할인을 걸기 **전** 열 소계 (품목 할인도 빼기 전)
         function quoteColSubtotalGross(q, colId) {
             if (colId === 'amount') return quoteSubtotal(q);
-            const lines = ((q || {}).lines || []);
+            const lines = quoteCountedLines(q);
             const anyFilled = lines.some(l => !quoteCellEmpty(l[colId]));
             if (!anyFilled && colId !== 'cash') return quoteColSubtotal(q, colId);   // 예전 자료 되짚기 경로
             return lines.reduce((sum, l) => sum + quoteLineTypeAmount(l, colId, false), 0);
@@ -47584,10 +47600,13 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                 ? `<tr><td colspan="${span}" class="p-3 text-center text-gray-400 text-xs">품목을 추가해 주세요.</td></tr>`
                 : quoteDraftLines.map((l, i) => `
                     <tr class="border-b border-gray-100">
-                        <td class="p-2"><input type="text" value="${escapeHtml(l.name)}" oninput="updateQuoteLine(${i}, 'name', this.value)" class="w-full p-1 border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-500" placeholder="품목명" /></td>
+                        <td class="p-2"><label class="flex items-center gap-1 text-[11px] text-gray-500 mb-0.5 cursor-pointer" title="선택사항은 견적서에 표시되지만 합계 금액에서 빠집니다"><input type="checkbox" ${l.optional ? 'checked' : ''} onchange="updateQuoteLine(${i}, 'optional', this.checked)" class="w-3 h-3" />선택사항</label><input type="text" value="${escapeHtml(l.name)}" oninput="updateQuoteLine(${i}, 'name', this.value)" class="w-full p-1 border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-500" placeholder="품목명" /></td>
                         <td class="p-2"><input type="number" min="0" value="${l.qty}" oninput="updateQuoteLine(${i}, 'qty', this.value)" class="w-full p-1 border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 text-center" /></td>
                         <td class="p-2"><input type="number" min="0" value="${l.price}" oninput="updateQuoteLine(${i}, 'price', this.value)" class="w-full p-1 border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 text-right" /></td>
-                        ${cols.map(c => (dOn ? `<td class="p-2"><input type="number" min="0" max="100" step="0.1" value="${quoteLineDiscountFor(l, c.id, true)}" oninput="updateQuoteLine(${i}, 'disc-${c.id}', this.value)" class="w-full p-1 border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 text-center" /></td>` : '')
+                        ${cols.map((c, ci) => (dOn ? `<td class="p-2"><div class="flex items-center gap-1">${quoteLineDiscUnit(l) === 'won'
+                                ? `<input type="number" min="0" step="1000" value="${Number(((l.discWon || {})[c.id])) || 0}" oninput="updateQuoteLine(${i}, 'discwon-${c.id}', this.value)" class="w-full min-w-[64px] p-1 border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 text-right" />`
+                                : `<input type="number" min="0" max="100" step="0.1" value="${quoteLineDiscountFor(l, c.id, true)}" oninput="updateQuoteLine(${i}, 'disc-${c.id}', this.value)" class="w-full min-w-[44px] p-1 border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 text-center" />`}
+                                ${ci === 0 ? `<select onchange="updateQuoteLine(${i}, 'discUnit', this.value)" title="할인 방식 — %(정률) 또는 원(정액)" class="p-1 border border-gray-200 rounded text-xs bg-white"><option value="rate"${quoteLineDiscUnit(l) === 'rate' ? ' selected' : ''}>%</option><option value="won"${quoteLineDiscUnit(l) === 'won' ? ' selected' : ''}>원</option></select>` : `<span class="text-xs text-gray-400">${quoteLineDiscUnit(l) === 'won' ? '원' : '%'}</span>`}</div></td>` : '')
                             + `<td class="p-2"><input type="number" id="quote-line-${c.id}-${i}" min="0" value="${quoteCellEmpty(l[c.id]) ? '' : l[c.id]}" oninput="updateQuoteLine(${i}, ${jsArg(c.id)}, this.value)" placeholder="${c.id === 'cash' ? formatKRW(quoteLineSubtotal(l)) : c.ph}" class="w-full p-1 border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 text-right" /></td>`).join('')}
                         <td class="p-2"><input type="text" value="${escapeHtml(l.note || '')}" oninput="updateQuoteLine(${i}, 'note', this.value)" class="w-full p-1 border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-500" placeholder="비고" /></td>
                         <td class="p-2 text-center"><button type="button" onclick="removeQuoteLine(${i})" class="text-red-400 hover:text-red-600" title="삭제"><i class="fas fa-times-circle"></i></button></td>
@@ -47599,7 +47618,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                             <th class="p-2 text-left font-medium" style="min-width:140px">품목</th>
                             <th class="p-2 text-center font-medium" style="width:64px">수량</th>
                             <th class="p-2 text-right font-medium" style="width:120px">단가(₩)<span class="block text-[10px] font-normal text-gray-400">정가 = 수량×단가</span></th>
-                            ${cols.map(c => (dOn ? `<th class="p-2 text-center font-medium ${c.cls}" style="width:66px">할인(%)<span class="block text-[10px] font-normal text-gray-400">${c.label.replace('가', '')}</span></th>` : '')
+                            ${cols.map(c => (dOn ? `<th class="p-2 text-center font-medium ${c.cls}" style="width:112px">할인(% · 원)<span class="block text-[10px] font-normal text-gray-400">${c.label.replace('가', '')}</span></th>` : '')
                                 + `<th class="p-2 text-right font-medium ${c.cls}" style="width:116px">${c.label}${c.monthly ? '<span class="block text-[10px] font-normal text-gray-400">월</span>' : ''}</th>`).join('')}
                             <th class="p-2 text-left font-medium" style="min-width:100px">비고</th>
                             <th class="p-2 text-center font-medium" style="width:36px"></th>
@@ -47624,6 +47643,15 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             const l = quoteDraftLines[index];
             if (!l) return;
             if (field === 'name' || field === 'note') { l[field] = value; return; }
+            // 선택사항 · 할인 방식은 칸 모양이 바뀌므로 표를 다시 그립니다 (2026-10-30)
+            if (field === 'optional') { l.optional = !!value; renderQuoteLines(); return; }
+            if (field === 'discUnit') { l.discUnit = value === 'won' ? 'won' : 'rate'; renderQuoteLines(); return; }
+            if (field.indexOf('discwon-') === 0) {
+                if (!l.discWon) l.discWon = {};
+                l.discWon[field.slice(8)] = Math.max(0, Number(value) || 0);
+                recalcQuoteTotals();
+                return;
+            }
             if (field.indexOf('disc-') === 0) {
                 // 방식별 품목 할인율 (disc-cash · disc-rental · disc-installment)
                 const key = field.slice(5);
@@ -47743,7 +47771,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                 quoteDraftTerms = quoteTermsOf(q);
             } else {
                 document.getElementById('quote-modal-title').innerText = '신규 견적 작성';
-                document.getElementById('quote-modal-number').innerText = '';
+                document.getElementById('quote-modal-number').innerText = quoteNextId() + ' (저장 시 확정)';
                 document.getElementById('edit-quote-id').value = '';
                 document.getElementById('quote-status').value = '초안';
                 document.getElementById('quote-discount-use').checked = false;
@@ -47766,7 +47794,29 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             renderQuoteTerms();
             // 할인 체크·방식에 맞춰 칸을 펴거나 접고 합계를 다시 계산합니다
             onQuoteDiscountToggle();
+            // 저장한 견적 불러오기 — 새 견적일 때만 (2026-10-30)
+            const loadWrap = document.getElementById('quote-load-wrap');
+            if (loadWrap) {
+                loadWrap.classList.toggle('hidden', !!quoteId || !quotes.length);
+                const sel = document.getElementById('quote-load-select');
+                if (sel) sel.innerHTML = '<option value="">견적을 선택하세요</option>' + quotes.slice()
+                    .sort((a, b) => String(b.updatedAt || b.createdAt || '').localeCompare(String(a.updatedAt || a.createdAt || '')))
+                    .map(q => `<option value="${escapeHtml(q.id)}">${escapeHtml(q.id)} · ${escapeHtml(q.name || '')} · ${escapeHtml((getQuoteCustomerInfo(q) || {}).name || '')}</option>`).join('');
+            }
             modal.classList.remove('hidden');
+        }
+        // 저장한 견적의 내용(고객 · 품목 · 할인 · 조건 · 결제방식)을 새 견적으로 가져옵니다. 원래 견적은 그대로 남습니다
+        function loadQuoteIntoDraft(id) {
+            if (!id) { alert('불러올 견적을 선택해 주세요.'); return; }
+            if (!quotes.some(q => q.id === id)) return;
+            openQuoteModal(id);
+            document.getElementById('quote-modal-title').innerText = '신규 견적 작성';
+            document.getElementById('quote-modal-number').innerText = quoteNextId() + ' (저장 시 확정) · ' + id + ' 에서 불러옴';
+            document.getElementById('edit-quote-id').value = '';
+            document.getElementById('quote-status').value = '초안';
+            document.getElementById('quote-expiry').value = ymd(new Date(new Date().setDate(new Date().getDate() + 30)));
+            quoteDraftLines = quoteDraftLines.map(l => JSON.parse(JSON.stringify(l)));
+            const wrap = document.getElementById('quote-load-wrap'); if (wrap) wrap.classList.add('hidden');
         }
 
         // 고객사 선택 변경 시: '직접 입력' 선택하면 수동 입력 필드 표시
@@ -47985,6 +48035,8 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
         }
 
 
+        // 다음 견적번호 — 저장 전 견적서에도 번호를 미리 적어 둡니다 (영업본부 보완 2026-10-30). 저장하면 이 번호가 붙습니다
+        function quoteNextId() { return 'QT-' + String(quoteIdCounter).padStart(4, '0'); }
         function buildQuoteDocHtml(q) {
             const customer = getQuoteCustomerInfo(q);
             const supplier = getQuoteSupplier(q);
@@ -48000,11 +48052,11 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             const docCols = 4 + docAmtCols.length * (docDOn ? 2 : 1);
             const docPad = docCompact ? 'py-1.5 px-1.5' : 'py-2 px-2';
             const lineRows = (q.lines || []).map((l, i) => `
-                <tr class="border-b border-gray-200">
-                    <td class="${docPad}">${escapeHtml(l.name)}</td>
+                <tr class="border-b border-gray-200${l.optional ? ' text-gray-500' : ''}">
+                    <td class="${docPad}">${escapeHtml(l.name)}${l.optional ? ' <span class="text-[10px] text-gray-500">(선택사항 · 합계 제외)</span>' : ''}</td>
                     <td class="${docPad} text-center whitespace-nowrap">${(Number(l.qty) || 0).toLocaleString('en-US')}</td>
                     <td class="${docPad} text-right whitespace-nowrap">${formatKRW(l.price)}</td>
-                    ${docAmtCols.map(c => (docDOn ? `<td class="${docPad} text-center whitespace-nowrap text-gray-500">${quoteLineDiscountFor(l, c.id, true)}%</td>` : '')
+                    ${docAmtCols.map(c => (docDOn ? `<td class="${docPad} text-center whitespace-nowrap text-gray-500">${quoteLineDiscUnit(l) === 'won' ? formatKRW(Number((l.discWon || {})[c.id]) || 0) : quoteLineDiscountFor(l, c.id, true) + '%'}</td>` : '')
                         + `<td class="${docPad} text-right whitespace-nowrap">${formatKRW(Math.round(quoteLineTypeAmount(l, c.id, docDOn)))}</td>`).join('')}
                     <td class="${docPad} text-gray-600 ${docCompact ? 'text-[11px]' : 'text-xs'} whitespace-pre-line">${escapeHtml(l.note || '')}</td>
                 </tr>
@@ -48022,7 +48074,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                         <p class="text-sm text-gray-500 mt-2">QUOTATION</p>
                     </div>
                     <div class="text-right text-sm">
-                        <p><span class="text-gray-500">견적번호 </span><span class="font-mono font-medium">${q.id || '(미저장)'}</span>${q.requoteOf ? ` <span class="text-xs text-emerald-600">(재견적)</span>` : ''}</p>
+                        <p><span class="text-gray-500">견적번호 </span><span class="font-mono font-medium">${q.id || quoteNextId()}</span>${q.requoteOf ? ` <span class="text-xs text-emerald-600">(재견적)</span>` : ''}</p>
                         ${q.requoteOf ? `<p class="mt-1 text-xs text-gray-400">원견적: ${escapeHtml(q.requoteOf)}</p>` : ''}
                         <p class="mt-1"><span class="text-gray-500">작성일 </span>${ymd(new Date())}</p>
                         <p class="mt-1"><span class="text-gray-500">유효기간 </span><span class="${expired ? 'text-red-600 font-bold' : ''}">${q.expiry || '-'}${expired ? ' (만료)' : ''}</span></p>
@@ -48141,9 +48193,23 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             const printArea = document.getElementById('print-area');
             if (!doc || !printArea) { window.print(); return; }
             printArea.innerHTML = doc.innerHTML;
+            // 견적서 전체가 A4 한 장에 들어가도록 넘치면 비율대로 줄입니다 (영업본부 보완 2026-10-30)
+            //   A4(210×297mm) − 여백 12mm × 2 = 186 × 273mm ≈ 703 × 1032px (96dpi)
+            printArea.style.zoom = '';
+            try {
+                const probe = document.createElement('div');
+                probe.style.cssText = 'position:absolute;left:-10000px;top:0;width:703px;visibility:hidden;background:#fff';
+                probe.innerHTML = doc.innerHTML;
+                document.body.appendChild(probe);
+                const h = probe.scrollHeight;
+                probe.remove();
+                const fit = h > 1020 ? Math.max(0.5, Math.floor(1020 / h * 100) / 100) : 1;
+                if (fit < 1) printArea.style.zoom = String(fit);
+            } catch (e) { /* 재지 못하면 그대로 인쇄합니다 */ }
             document.body.classList.add('printing');
             const cleanup = () => {
                 document.body.classList.remove('printing');
+                printArea.style.zoom = '';
                 printArea.innerHTML = '';
                 window.removeEventListener('afterprint', cleanup);
             };
