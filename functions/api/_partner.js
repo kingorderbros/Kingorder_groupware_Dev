@@ -66,8 +66,13 @@ async function hmacKey(secret) {
     const derived = await crypto.subtle.sign('HMAC', base, enc.encode('kob-partner-token-v1'));
     return crypto.subtle.importKey('raw', derived, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign', 'verify']);
 }
-export async function makeToken(secret, loginId, partnerId, nowMs) {
-    const body = b64u(enc.encode(JSON.stringify({ l: loginId, p: partnerId, exp: Math.floor((nowMs || Date.now()) / 1000) + TOKEN_DAYS * 86400 })));
+// extra.proxy — 대리 접수 (영업본부 보완 2026-10-30): { by: 직원 이메일, name: 직원 이름, ttlSec }. 짧게(기본 2시간) 씁니다
+export async function makeToken(secret, loginId, partnerId, nowMs, extra) {
+    const px = extra && extra.proxy;
+    const ttl = px ? Math.max(60, Number(px.ttlSec) || PROXY_TTL_SEC) : TOKEN_DAYS * 86400;
+    const payload = { l: loginId, p: partnerId, exp: Math.floor((nowMs || Date.now()) / 1000) + ttl };
+    if (px) payload.x = { by: s(px.by), n: s(px.name) };
+    const body = b64u(enc.encode(JSON.stringify(payload)));
     const sig = await crypto.subtle.sign('HMAC', await hmacKey(secret), enc.encode(body));
     return body + '.' + b64u(sig);
 }
@@ -81,7 +86,23 @@ export async function readToken(secret, token, nowMs) {
     if (!good) return null;
     let o; try { o = JSON.parse(new TextDecoder().decode(unb64u(body))); } catch (e) { return null; }
     if (!o || !o.l || !o.exp || o.exp < Math.floor((nowMs || Date.now()) / 1000)) return null;
-    return { loginId: o.l, partnerId: o.p || '' };
+    const out = { loginId: o.l, partnerId: o.p || '' };
+    if (o.x && o.x.by) { out.proxyBy = s(o.x.by); out.proxyName = s(o.x.n); }
+    return out;
+}
+export const PROXY_TTL_SEC = 2 * 3600;
+export const PROXY_LOGIN_PREFIX = 'proxy:';
+// 대리 접수 세션 — 파트너센터 아이디 없이 직원이 그 업체로 접수합니다. 아이디 대신 'proxy:직원이메일' 을 씁니다
+export async function resolveProxy(io, t, opts) {
+    const o = opts || {};
+    if (!t || !t.proxyBy || !t.partnerId) return null;
+    const rows = await io.companies([t.partnerId]);
+    const company = arr(rows)[0] || null;
+    const acct = { loginId: t.loginId, partnerId: t.partnerId, role: 'staff', active: true, proxy: true };
+    const me = { loginId: t.loginId, partnerId: t.partnerId, partnerName: company ? partnerName(company) : '', kind: kindOf(company), company, shops: [],
+                 role: 'staff', mustChangePw: false, proxyBy: t.proxyBy, proxyName: t.proxyName };
+    if (company && o.withShops && PARENT_KINDS.includes(me.kind)) me.shops = arr(await io.children(company.id));
+    return { acct, accounts: [], company, missing: !company, me };
 }
 
 // ---------- 계정 ----------
@@ -442,6 +463,9 @@ function sanitizeNew(key, item, me) {
         o.status = 'received'; o.assignee = ''; o.rejectReason = ''; o.reRequestedTo = ''; o.replies = [];
         INTAKE_STAFF_FIELDS.forEach(f => { delete o[f]; });
         o.history = arr(o.history).slice(0, 1);
+        // 대리 접수 — 누가 대신 냈는지는 서버가 토큰에서 적습니다 (화면이 보낸 값은 쓰지 않음)
+        delete o.proxyBy; delete o.proxyByEmail;
+        if (me.proxyBy) { o.proxyBy = s(me.proxyName) || s(me.proxyBy); o.proxyByEmail = s(me.proxyBy); }
     }
     if (key === 'gwInboundRecords.v1') {
         const keep = { id: o.id, createdAt: o.createdAt || new Date().toISOString(), vendor: me.partnerName,

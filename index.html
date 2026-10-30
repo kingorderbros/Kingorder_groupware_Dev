@@ -57349,6 +57349,19 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                 + (t === 'partnerShop' && p.parentPartnerName ? ` <span class="text-[11px] text-gray-500">${escapeHtml(p.parentPartnerName)}</span>` : '');
         }
         // 파트너사 자료를 붙인 계정 목록 — 로그인 · 권한 · 개발요청 · 인바운드가 모두 이것을 씁니다
+        // 대리 접수 세션의 '계정' — 업체 정보에 직원 이름을 담당자로 둡니다
+        function partnerProxyHit(sess) {
+            const p = (typeof partners !== 'undefined' ? partners : []).find(x => x.id === sess.partnerId) || null;
+            return {
+                loginId: sess.loginId, partnerId: sess.partnerId, role: 'staff', active: true, proxy: true,
+                proxyName: sess.proxyName || '', proxyBy: sess.proxyBy || '',
+                partnerName: p ? String(p.name || '').replace(/\n/g, ' ').trim() : (sess.partnerName || ''),
+                manager: `${sess.proxyName || '킹오더'} (대리 접수)`, phone: '',
+                custType: p ? (p.custType || '') : '', franchiseHq: p ? (p.franchiseHq || '') : '',
+                franchiseName: p ? (p.franchiseName || '') : '',
+                parentPartnerId: p ? (p.parentPartnerId || '') : '', parentPartnerName: p ? (p.parentPartnerName || '') : ''
+            };
+        }
         function partnerAccountList() {
             const ps = (typeof partners !== 'undefined' ? partners : []);
             return partnerAccounts.map(a => {
@@ -59048,6 +59061,8 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             if (kobStorage.mode === 'partner' && window.kobPartner && kobPartner.session) {
                 const me = partnerAccountList().find(a => a.loginId === kobPartner.session.loginId);
                 if (me) enterPartner(me);
+                // 대리 접수 (2026-10-30) — 파트너센터 아이디가 없는 직원 세션입니다. 업체 정보로 들어갑니다
+                else if (kobPartner.session.proxyBy) enterPartner(partnerProxyHit(kobPartner.session));
             }
         }
 
@@ -59801,6 +59816,18 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             const ctBox = document.getElementById('pc-cust-type');
             if (ctBox) ctBox.innerHTML = partnerAccountTypeChip();
             setPartnerWatermark(true);   // 로그인한 뒤부터 배경 로고를 보여 줍니다
+            // 대리 접수 중 안내 띠 (2026-10-30)
+            let pb = document.getElementById('pc-proxy-banner');
+            if (hit.proxy) {
+                if (!pb) {
+                    pb = document.createElement('div');
+                    pb.id = 'pc-proxy-banner';
+                    pb.className = 'bg-indigo-700 text-white text-sm px-4 py-2 text-center';
+                    const app = document.getElementById('partner-app');
+                    if (app) app.insertBefore(pb, app.firstChild);
+                }
+                pb.innerHTML = `<i class="fas fa-user-pen mr-1"></i><b>대리 접수 중</b> · ${escapeHtml(hit.partnerName)} — 접수에 <b>${escapeHtml(hit.proxyName || '')}</b> 님이 대리 접수한 것으로 남습니다 (2시간 후 닫힘)`;
+            } else if (pb) pb.remove();
             // 첫 화면은 홈입니다 (2026-09-14) — 파트너사가 가장 먼저 보는 것은
             // '무엇을 낼까' 가 아니라 '내가 낸 게 어떻게 됐나' 입니다.
             switchPartnerTab('home');
@@ -61244,7 +61271,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             const dash = '<span class="text-gray-400">-</span>';
             let html = `<div class="bg-gray-50 rounded border border-gray-100 p-3 space-y-2">
                 ${row('접수처', `${escapeHtml(d.name)} <span class="text-gray-400">·</span> ${escapeHtml(partnerIntakeTypeName(x))}`)}
-                ${row('파트너사', `<b>${escapeHtml(x.partnerName)}</b>`)}
+                ${row('파트너사', `<b>${escapeHtml(x.partnerName)}</b>${x.proxyBy ? ` <span class="ml-1 px-1.5 py-0.5 text-[11px] rounded bg-indigo-50 text-indigo-700 border border-indigo-200 font-semibold"><i class="fas fa-user-pen mr-0.5"></i>대리 접수 · ${escapeHtml(x.proxyBy)}</span>` : ''}`)}
                 ${row('접수자', `${escapeHtml(x.byName || '-')}${x.byPhone ? ` <span class="text-gray-400">·</span> ${escapeHtml(x.byPhone)}` : ''}${x.byEmail ? ` <span class="text-gray-400">·</span> ${escapeHtml(x.byEmail)}` : ''}`)}
                 ${row('접수일시', `${escapeHtml(x.at || '-')} <span class="text-gray-400">·</span> ${escapeHtml(x.id)}`)}
                 ${row('담당자', x.assignee ? `<b>${escapeHtml(x.assignee)}</b>` : '<span class="text-gray-400">미배정</span>')}
@@ -61552,6 +61579,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                     <div class="flex flex-wrap gap-2">
                         ${canHandle && dept === 'ops' ? `<button onclick="openAsOptions()" class="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded text-sm"><i class="fas fa-list-check mr-1"></i>접수 항목 관리</button>` : ''}
                         ${canHandle && dept === 'payment' ? `<button onclick="openPartnerDocModal()" class="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded text-sm font-semibold"><i class="fas fa-folder-open mr-1"></i>제출서류 관리</button>` : ''}
+                        ${canHandle ? `<button onclick="openPartnerProxyPicker(${jsArg(dept)})" title="파트너사를 골라 그 업체로 대신 접수합니다 (접수에 대리 접수한 직원 이름이 남습니다)" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded text-sm"><i class="fas fa-user-pen mr-1"></i>대리 접수</button>` : ''}
                         <button onclick="copyPartnerCenterLink()" class="px-3 py-1.5 bg-white border border-gray-300 text-gray-700 rounded text-sm hover:bg-gray-50"><i class="fas fa-link mr-1"></i>파트너 접수 주소 복사</button>
                     </div>
                 </div>
@@ -62609,6 +62637,64 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             if (p.owner) return String(p.owner).trim();
             const parent = all.find(c => c && (c.id === p.parentPartnerId || c.id === p.parentId));
             return parent && parent.owner ? String(parent.owner).trim() : '';
+        }
+        // ---------- 대리 접수 (영업본부 보완 2026-10-30) ----------
+        // 파트너센터 아이디를 본부마다 따로 두지 않고, 접수함 담당 직원이 업체를 골라 **그 업체의 파트너센터 접수 창**을 새 탭으로 엽니다.
+        // 서버가 2시간짜리 대리 접수 열쇠를 주고, 그 창에서 낸 접수에는 대리 접수한 직원 이름이 남습니다.
+        let partnerProxyQ = '';
+        const PARTNER_PROXY_KINDS = ['partner', 'hq', 'franchise', 'partnerShop', 'direct', 'dist'];
+        function partnerProxyCompanies() {
+            const all = (typeof partners !== 'undefined' && Array.isArray(partners)) ? partners : [];
+            return all.filter(c => c && c.id && c.name && (PARTNER_PROXY_KINDS.includes(c.kind) || PARTNER_PROXY_KINDS.includes(c.custType)));
+        }
+        function openPartnerProxyPicker(dept) {
+            let m = document.getElementById('partner-proxy-modal');
+            if (!m) {
+                m = document.createElement('div');
+                m.id = 'partner-proxy-modal';
+                m.className = 'hidden fixed inset-0 bg-black/50 z-[70] flex items-center justify-center p-4';
+                m.addEventListener('click', (e) => { if (e.target === m) m.classList.add('hidden'); });
+                document.body.appendChild(m);
+            }
+            partnerProxyQ = '';
+            m.innerHTML = `<div class="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[85vh] flex flex-col">
+                <div class="px-5 py-3 border-b border-gray-200 flex items-center justify-between">
+                    <h3 class="text-base font-bold text-gray-800"><i class="fas fa-user-pen text-indigo-600 mr-1"></i>대리 접수 — 업체 선택</h3>
+                    <button type="button" onclick="document.getElementById('partner-proxy-modal').classList.add('hidden')" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times"></i></button>
+                </div>
+                <div class="px-5 pt-3 text-xs text-gray-500">고른 업체의 파트너센터 접수 창이 새 탭으로 열립니다 (2시간). 그 창에서 낸 접수에는 <b>대리 접수 · ${escapeHtml(currentUserName || '')}</b> 이 함께 남습니다.</div>
+                <div class="px-5 py-3"><input id="partner-proxy-q" type="text" oninput="partnerProxyQ=this.value; renderPartnerProxyList()" placeholder="상호 · 사업자번호 · 대표자 검색" class="w-full p-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500" /></div>
+                <div id="partner-proxy-list" class="flex-1 overflow-y-auto px-5 pb-4"></div>
+            </div>`;
+            m.classList.remove('hidden');
+            renderPartnerProxyList();
+            setTimeout(() => { const q = document.getElementById('partner-proxy-q'); if (q) q.focus(); }, 50);
+        }
+        function renderPartnerProxyList() {
+            const host = document.getElementById('partner-proxy-list');
+            if (!host) return;
+            const q = String(partnerProxyQ || '').replace(/\s+/g, '').toLowerCase();
+            const list = partnerProxyCompanies().filter(c => !q || [c.name, c.businessNo, c.bizNo, c.ceo].join(' ').replace(/\s+/g, '').toLowerCase().includes(q))
+                .sort((a, b) => String(a.name).localeCompare(String(b.name), 'ko')).slice(0, 100);
+            const kindName = (c) => (PARTNER_CUST_TYPES.find(t => t.id === (c.custType || c.kind)) || {}).name || c.kind || '';
+            host.innerHTML = list.length ? `<ul class="divide-y divide-gray-100 border border-gray-200 rounded">${list.map(c => `<li>
+                <button type="button" onclick="startPartnerProxy(${jsArg(c.id)})" class="w-full text-left px-3 py-2 hover:bg-indigo-50 flex items-center justify-between gap-2">
+                    <span class="min-w-0"><span class="block text-sm font-semibold text-gray-800 truncate">${escapeHtml(c.name)}</span>
+                        <span class="block text-[11px] text-gray-400">${escapeHtml([kindName(c), c.businessNo || c.bizNo, c.ceo].filter(Boolean).join(' · '))}</span></span>
+                    <i class="fas fa-arrow-up-right-from-square text-gray-300"></i></button></li>`).join('')}</ul>`
+                : '<p class="py-8 text-center text-sm text-gray-400">조건에 맞는 업체가 없습니다.</p>';
+        }
+        async function startPartnerProxy(partnerId) {
+            const win = window.open('about:blank', '_blank');   // 팝업 차단을 피하려고 누른 순간 창부터 엽니다
+            try {
+                const j = await kobAuth.call('/api/partner-admin/proxy', { partnerId });
+                const url = location.origin + location.pathname + '?mode=partner#proxy=' + encodeURIComponent(j.token);
+                if (win) win.location.href = url; else window.open(url, '_blank');
+                const m = document.getElementById('partner-proxy-modal'); if (m) m.classList.add('hidden');
+            } catch (e) {
+                if (win) win.close();
+                alert('대리 접수 창을 열지 못했습니다.\n\n· ' + (e && e.message ? e.message : e));
+            }
         }
         function autoAssignPartnerIntakes(dept) {
             if (dept !== 'sales' || !canHandlePartnerIntake('sales')) return;

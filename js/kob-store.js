@@ -300,7 +300,17 @@
     const pcChain = new Map();        // 키 → 진행 중인 저장 (같은 키는 차례대로)
     const pcBusy = new Map();         // 키 → 보내는 중인 저장 수 (그동안 받아 온 옛 값으로 덮지 않게)
     const pcWrites = new Map();       // 키 → 이 화면에서 쓴 횟수 — 받아 오는 사이에 쓴 키는 받은 (옛) 값으로 덮지 않습니다
-    function pcToken() { return ls.get(PC_TOKEN_KEY) || ''; }
+    // 대리 접수 (2026-10-30) — 그룹웨어가 연 새 탭의 주소 '#proxy=열쇠' 를 그 탭에만(sessionStorage) 둡니다.
+    // 같은 브라우저의 파트너 로그인 토큰(localStorage)과 섞이지 않고, 탭을 닫으면 사라집니다.
+    const PC_PROXY_KEY = 'pcProxyToken.v1';
+    function pcProxyToken() { try { return sessionStorage.getItem(PC_PROXY_KEY) || ''; } catch (e) { return ''; } }
+    function pcTakeProxyFromHash() {
+        const m = /[#&]proxy=([^&]+)/.exec(location.hash || '');
+        if (!m) return;
+        try { sessionStorage.setItem(PC_PROXY_KEY, decodeURIComponent(m[1])); } catch (e) { /* 저장 못 하면 일반 로그인 */ }
+        try { history.replaceState(null, '', location.pathname + location.search); } catch (e) { /* 주소창 정리 실패는 무시 */ }
+    }
+    function pcToken() { return pcProxyToken() || ls.get(PC_TOKEN_KEY) || ''; }
     async function pcFetch(method, path, bodyObj) {
         const res = await fetch(API + path, {
             method, cache: 'no-store',
@@ -365,6 +375,12 @@
         }
     }
     function pcExpired() {
+        if (pcProxyToken()) {
+            try { sessionStorage.removeItem(PC_PROXY_KEY); } catch (e) { /* */ }
+            alert('대리 접수 시간이 끝났습니다. 그룹웨어 파트너센터에서 [대리 접수]를 다시 눌러 주세요.');
+            window.close();
+            return;
+        }
         ls.del(PC_TOKEN_KEY);
         alert('로그인이 만료되었습니다. 다시 로그인해 주세요.');
         window.location.reload();
@@ -389,10 +405,12 @@
     }
     async function bootPartner() {
         mode = 'partner';
+        pcTakeProxyFromHash();
         if (pcToken()) {
             try {
                 const r = await pcFetch('GET', '/api/partner/boot');
-                if (r.status === 401) ls.del(PC_TOKEN_KEY);
+                if (r.status === 401 && pcProxyToken()) { try { sessionStorage.removeItem(PC_PROXY_KEY); } catch (e) { /* */ } alert((r.j && r.j.error) || '대리 접수 시간이 끝났습니다.'); }
+                else if (r.status === 401) ls.del(PC_TOKEN_KEY);
                 // 임시 비밀번호로 들어온 아이디 — 자료는 받지 않고 비밀번호 바꾸기 화면만 엽니다 (2026-10-05 S4)
                 else if (r.status === 403 && r.j && r.j.mustChange) { pcSession = r.j.session; pcMustChange = true; }
                 else if (r.j && r.j.ok) {
@@ -425,6 +443,7 @@
         },
         async logout() {
             await Promise.all(Array.from(pcChain.values()));     // 보내는 중인 저장은 끝내고
+            if (pcProxyToken()) { try { sessionStorage.removeItem(PC_PROXY_KEY); } catch (e) { /* */ } window.close(); return; }
             ls.del(PC_TOKEN_KEY);
             window.location.reload();
         }

@@ -709,6 +709,22 @@ export async function onRequest(context) {
                 const st = await requireStaff(env, store, request);
                 if (st.error) return st.error;
                 const by = str(st.me.email).toLowerCase();
+                // 대리 접수 (영업본부 보완 2026-10-30) — 파트너센터 접수함을 처리하는 직원이 그 업체로 2시간짜리 접수 창을 엽니다.
+                // 누가 냈는지 접수에 남도록 토큰에 직원 이메일 · 이름을 담습니다.
+                if (path === '/api/partner-admin/proxy' && method === 'POST') {
+                    if (!st.admin && !st.can(['partner-center', 'partner-center-sales', 'partner-center-payment', 'partner-center-ops', 'partner-center-it'])) {
+                        return json(403, { ok: false, error: '대리 접수 권한이 없습니다. 파트너센터 접수함 권한이 있는 직원만 사용할 수 있습니다.' });
+                    }
+                    const input = await body();
+                    const partnerId = str(input.partnerId);
+                    const rows = partnerId ? await partnerIo(store).companies([partnerId]) : [];
+                    const company = Array.isArray(rows) ? rows[0] : null;
+                    if (!company) return json(404, { ok: false, error: '업체를 찾을 수 없습니다.' });
+                    const name = str(st.rec.name) || by;
+                    const token = await pc.makeToken(secret, pc.PROXY_LOGIN_PREFIX + by, partnerId, nowMs, { proxy: { by, name } });
+                    await logAudit({ action: 'proxy', loginId: pc.PROXY_LOGIN_PREFIX + by, by, ok: true, note: `${partnerId} · ${str(company.name).slice(0, 40)}` });
+                    return json(200, { ok: true, token, hours: pc.PROXY_TTL_SEC / 3600 });
+                }
                 const permAll = (await store.storeValue('gwPartnerAdminPerm.v1')) || {};
                 const myPerm = ((permAll && permAll.users) || {})[by] || {};
                 const need = path === '/api/partner-admin/signup-decide' ? 'signups' : 'ids';
@@ -849,10 +865,19 @@ export async function onRequest(context) {
             // ===== 로그인한 파트너 =====
             const isBoot = path === '/api/partner/boot' && method === 'GET';
             const t = await pc.readToken(secret, str(request.headers.get('Authorization')).replace(/^Bearer\s+/i, ''));
-            const rp = t ? await pc.resolvePartner(partnerIo(store), t.loginId, { withShops: isBoot }) : null;
-            if (!rp || rp.missing || rp.acct.active === false || rp.acct.partnerId !== t.partnerId) return json(401, { ok: false, error: '다시 로그인해 주세요.' });
+            const rp = !t ? null : t.proxyBy ? await pc.resolveProxy(partnerIo(store), t, { withShops: isBoot })
+                : await pc.resolvePartner(partnerIo(store), t.loginId, { withShops: isBoot });
+            if (!rp || rp.missing || rp.acct.active === false || rp.acct.partnerId !== t.partnerId) return json(401, { ok: false, error: t && t.proxyBy ? '대리 접수 시간이 끝났습니다. 그룹웨어에서 다시 열어 주세요.' : '다시 로그인해 주세요.' });
             const me = rp.me;
             const session = { loginId: me.loginId, partnerId: me.partnerId, partnerName: me.partnerName, mustChangePw: me.mustChangePw };
+            if (me.proxyBy) {
+                // 대리 접수 세션 — 직원이 아직 재직 중인지 매번 확인하고, 비밀번호 · 가입 승인 같은 계정 일은 막습니다
+                const users = (await store.storeValue('gwUsers.v1')) || [];
+                const staff = (Array.isArray(users) ? users : []).find(u => str(u.email).toLowerCase() === str(me.proxyBy).toLowerCase() && u.resigned !== true);
+                if (!staff) return json(401, { ok: false, error: '대리 접수 권한이 없습니다. 그룹웨어에서 다시 열어 주세요.' });
+                if (path === '/api/partner/password' || path === '/api/partner/signup-decide') return json(403, { ok: false, error: '대리 접수 중에는 사용할 수 없습니다.' });
+                session.proxyName = me.proxyName; session.proxyBy = me.proxyBy;
+            }
             // 비밀번호 바꾸기 (S3 · S4) — 임시 비밀번호로 들어온 사람도 이것만은 됩니다
             if (path === '/api/partner/password' && method === 'POST') {
                 const input = await body();
