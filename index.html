@@ -105,6 +105,10 @@
         html:not([data-kob-ready]) #login-view button[type="submit"],
         html:not([data-kob-ready]) #partner-login button[type="submit"],
         html:not([data-kob-ready]) #m-auth-btn { opacity: .55; pointer-events: none; }
+        /* 사용자/권한관리 — 표의 제목 줄은 고정하고 내용만 스크롤 (2026-10-30 · 모든 탭) */
+        #sec-admin-center .overflow-x-auto:has(> table) { max-height: calc(100vh - 260px); min-height: 160px; overflow-y: auto; }
+        #sec-admin-center .overflow-x-auto > table > thead th { position: sticky; top: -1px; z-index: 3; background-color: #f9fafb; box-shadow: inset 0 -1px 0 #e5e7eb; }
+        #sec-admin-center .overflow-x-auto > table > thead th.bg-rose-50\/60 { background-color: #fff5f6; }
     </style>
     <!-- 저장된 테마를 첫 페인트 전에 적용 (색상 깜빡임 방지) -->
     <script>
@@ -8106,8 +8110,8 @@
                                 </label>
                             </div>
                             <div>
-                                <label class="block text-xs font-medium text-gray-600 mb-1">권한 그룹</label>
-                                <select id="org-edit-group" onchange="onOrgEditAdminChange()" class="w-full p-2 text-sm border border-gray-300 rounded bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"></select>
+                                <label class="block text-xs font-medium text-gray-600 mb-1">권한 그룹 <span class="font-normal text-gray-400">(여러 개 선택 가능 · 메뉴는 고른 그룹을 모두 합침)</span></label>
+                                <div id="org-edit-group" class="w-full p-2 text-sm border border-gray-300 rounded bg-white max-h-40 overflow-y-auto grid grid-cols-1 gap-1"></div>
                             </div>
                         </div>
                         <p class="text-[11px] text-gray-400 px-3 pb-2">여기서 등록·수정한 구성원은 <b>사용자/권한관리</b> 목록에도 함께 반영됩니다(동일 데이터 사용).</p>
@@ -10962,6 +10966,20 @@ const QUOTE_TEMPLATES = [
             return out;
         }
 
+        // 권한 그룹 여러 개 (2026-10-30) — groupId 는 대표 그룹(예전 자료 · 서버 · 사외 계정 판단), groupIds 는 고른 그룹 전부.
+        // 메뉴 권한은 고른 그룹의 메뉴를 모두 합칩니다.
+        function userGroupIds(u) {
+            if (!u) return [];
+            return Array.from(new Set([u.groupId].concat(Array.isArray(u.groupIds) ? u.groupIds : []).filter(Boolean)));
+        }
+        function groupsPermissionsOf(ids) {
+            const out = new Set();
+            (ids || []).forEach(id => { const g = permissionGroups.find(x => x.id === id); if (g) (g.permissions || []).forEach(p => out.add(p)); });
+            return Array.from(out);
+        }
+        function groupNamesOf(u) {
+            return userGroupIds(u).map(id => (permissionGroups.find(g => g.id === id) || {}).name).filter(Boolean);
+        }
         let permissionGroups = [
             { id: 'admin', name: '관리자 그룹', permissions: pagesConfig.map(p => p.id) },
             { id: 'management', name: '경영진 그룹', permissions: ['it', 'it-work-center', 'it-wc-projects', 'it-wc-dev', 'dashboard-personal', 'exec-center', 'collab-center', 'project-center', 'inbound-center', 'inbound-kob', 'calendar-center', 'sales', 'ops', 'payment', 'payment-work-center', 'management', 'management-work-center', 'management-vehicle', 'management-card', 'card-perm', 'management-org', 'org-chart', 'common'] },
@@ -10973,7 +10991,9 @@ const QUOTE_TEMPLATES = [
             { id: 'management-hq', name: '관리본부 그룹', permissions: ['dashboard-personal', 'collab-center', 'project-center', 'calendar-center', 'management', 'management-work-center', 'management-vehicle', 'management-card', 'card-perm', 'org-chart'] },
             // IT 그룹 — 외주 개발 의뢰(파트너센터 › IT본부 › 개발요청)를 맡습니다.
             // IT본부는 아직 전용 업무센터 화면이 없어 부서 메뉴 없이 공용 메뉴 + 개발요청만 씁니다. (2026-09-05)
-            { id: 'it', name: 'IT 그룹', permissions: ['dashboard-personal', 'collab-center', 'project-center', 'calendar-center', 'partner-center-it', 'management-card', 'org-chart', 'common', 'it', 'it-work-center', 'it-wc-projects', 'it-wc-dev'] }
+            { id: 'it', name: 'IT 그룹', permissions: ['dashboard-personal', 'collab-center', 'project-center', 'calendar-center', 'partner-center-it', 'management-card', 'org-chart', 'common', 'it', 'it-work-center', 'it-wc-projects', 'it-wc-dev'] },
+            // KOP 그룹 (2026-10-30) — KOP 본부. 전용 화면이 없어 공용 메뉴만 기본으로 두고, 필요한 메뉴는 권한 관리에서 켭니다
+            { id: 'kop', name: 'KOP 그룹', permissions: ['dashboard-personal', 'collab-center', 'project-center', 'calendar-center', 'management-card', 'org-chart'] }
             // '외주업체 그룹 (인바운드 대행)' 은 없앴습니다 (2026-09-08).
             // 인바운드 상담 대행사는 그룹웨어가 아니라 **파트너센터**(?mode=partner)로 들어와
             // 영업본부 › 인바운드 접수만 씁니다. 사내 시스템에 문을 하나 더 둘 까닭이 없습니다.
@@ -11114,6 +11134,7 @@ const QUOTE_TEMPLATES = [
 
         // 지금 로그인한 사용자의 권한 그룹 (권한을 고쳤을 때 내 메뉴를 다시 칠하는 데 씁니다)
         let currentUserGroupId = '';
+        let currentUserGroupIds = [];   // 고른 권한 그룹 전부 (2026-10-30)
         let currentUserIsAdmin = false;   // 계정에 겸직으로 붙인 그룹웨어 관리자 권한 (user.isAdmin · 2026-09-21)
 
         // ==================== 타 본부 메뉴 ====================
@@ -11410,12 +11431,12 @@ const QUOTE_TEMPLATES = [
                 userName = user.name || '관리자';
             } else {
                 // 등록된 사용자 계정: 부서·권한그룹·직책 레벨을 그대로 적용
-                const group = permissionGroups.find(g => g.id === user.groupId);
                 role = user.dept;
                 deptId = user.dept;
                 level = user.level || 'manager';
                 groupId = user.groupId;
-                allowedPages = group ? group.permissions : [];
+                allowedPages = groupsPermissionsOf(userGroupIds(user));   // 고른 권한 그룹의 메뉴를 모두 합칩니다 (2026-10-30)
+                if (userGroupIds(user).indexOf('admin') > -1) allowedPages = permissionGroups.find(g => g.id === 'admin').permissions;
                 // 겸직 관리자 — 소속 · 직급 · 권한 그룹은 그대로 두고 화면은 관리자처럼 전부 (2026-09-21)
                 if (user.isAdmin === true) allowedPages = permissionGroups.find(g => g.id === 'admin').permissions;
                 userName = user.name;
@@ -11425,6 +11446,7 @@ const QUOTE_TEMPLATES = [
             allowedPageIds = allowedPages.slice();   // 화면 안의 탭 노출 판단에 재사용
             currentUserIsAdmin = user.isAdmin === true;
             currentUserGroupId = groupId;
+            currentUserGroupIds = user.dept === 'admin' ? ['admin'] : userGroupIds(user);
             currentUserName = userName;
             currentUserRole = role;
             currentUserEmail = email;
@@ -12007,7 +12029,7 @@ const QUOTE_TEMPLATES = [
                     <p class="text-[11px] text-gray-500">${label}</p>
                     <p class="text-sm font-medium text-gray-800 truncate" title="${escapeHtml(value || '')}">${value ? escapeHtml(value) : '<span class="text-gray-300 font-normal">-</span>'}</p>
                 </div>`;
-            const group = (permissionGroups.find(g => g.id === (me ? me.groupId : currentUserGroupId)) || {}).name || '';
+            const group = (me ? groupNamesOf(me) : groupNamesOf({ groupId: currentUserGroupId, groupIds: currentUserGroupIds })).join(', ');
             document.getElementById('my-profile-body').innerHTML = `
                 <div class="flex flex-wrap items-center gap-4" data-drop-input="my-photo-file">
                     <div id="my-photo-preview" class="w-24 h-24 rounded-full bg-gray-100 border border-gray-200 flex items-center justify-center text-gray-300 text-3xl shrink-0 overflow-hidden">
@@ -14229,7 +14251,7 @@ const QUOTE_TEMPLATES = [
                         <td class="p-4">${escapeHtml(user.rank || '')}</td>
                         <td class="p-4 bg-rose-50/30 max-w-[220px]"><span class="block truncate ${duty ? 'text-gray-700' : 'text-gray-300'}" title="${escapeHtml(duty)}">${duty ? escapeHtml(duty) : '미지정'}</span></td>
                         <td class="p-4"><span class="px-2 py-1 ${levelBadgeClass(lvl)} rounded-full text-xs">${escapeHtml(levelNames[lvl] || '매니저')}</span></td>
-                        <td class="p-4"><span class="px-2 py-1 bg-purple-100 text-purple-700 rounded-full text-xs">${escapeHtml(groupName(user.groupId))}</span>${user.isAdmin === true ? ' <span class="px-2 py-1 bg-indigo-100 text-indigo-700 rounded-full text-xs" title="그룹웨어 관리자 권한 겸직"><i class="fas fa-user-shield mr-0.5"></i>관리자</span>' : ''}</td>
+                        <td class="p-4">${(groupNamesOf(user).length ? groupNamesOf(user) : ['미지정']).map(n => `<span class="inline-block whitespace-nowrap px-2 py-1 mb-0.5 bg-purple-100 text-purple-700 rounded-full text-xs">${escapeHtml(n)}</span>`).join(' ')}${user.isAdmin === true ? ' <span class="px-2 py-1 bg-indigo-100 text-indigo-700 rounded-full text-xs" title="그룹웨어 관리자 권한 겸직"><i class="fas fa-user-shield mr-0.5"></i>관리자</span>' : ''}</td>
                         <td class="p-4">${escapeHtml(user.email)}</td>
                         ${presenceUserCells(user)}
                         <td class="p-4 text-center whitespace-nowrap" onclick="event.stopPropagation()">
@@ -14331,9 +14353,9 @@ const QUOTE_TEMPLATES = [
             });
             savePermissionGroups();
             // 지금 로그인한 사람의 권한도 바로 반영합니다 (다시 로그인하지 않아도 되도록)
-            const myGroup = permissionGroups.find(g => g.id === currentUserGroupId);
-            if (myGroup && currentUserGroupId !== 'admin') {
-                allowedPageIds = myGroup.permissions.slice();
+            const myIds = (currentUserGroupIds && currentUserGroupIds.length) ? currentUserGroupIds : [currentUserGroupId];
+            if (myIds.indexOf('admin') < 0 && currentUserIsAdmin !== true && myIds.some(id => permissionGroups.find(g => g.id === id))) {
+                allowedPageIds = groupsPermissionsOf(myIds);
                 applyMenuPermissions();
             }
             alert('메뉴별 권한이 저장되었습니다.\n(다른 사용자는 다음 로그인 때 반영됩니다.)');
@@ -36821,7 +36843,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             const dataGroups = (typeof permissionGroups !== 'undefined' ? permissionGroups : [])
                 .filter(g => (g.permissions || []).indexOf('data-admin') > -1).map(g => g.id);
             return Array.from(new Set((typeof localUsers !== 'undefined' ? localUsers : [])
-                .filter(u => u && u.name && (isAdminAccount(u) || dataGroups.indexOf(u.groupId) > -1))
+                .filter(u => u && u.name && (isAdminAccount(u) || userGroupIds(u).some(id => dataGroups.indexOf(id) > -1)))
                 .map(u => u.name)));
         }
 
@@ -37227,7 +37249,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
         }
         // 계정 객체 기준 (조회 범위처럼 이름 · 부서 · 직책을 인자로 받는 함수에서 씁니다)
         // isAdmin — 본부 소속 · 직급 · 권한 그룹은 그대로 두고 관리자 권한만 겸직으로 얹은 계정 (2026-09-21)
-        function isAdminAccount(u) { return !!u && (u.isAdmin === true || u.dept === 'admin' || u.level === 'admin' || u.groupId === 'admin'); }
+        function isAdminAccount(u) { return !!u && (u.isAdmin === true || u.dept === 'admin' || u.level === 'admin' || userGroupIds(u).indexOf('admin') > -1); }
         function canWriteNotice() { return canManageAllData() || noticeWriters().includes(currentUserName); }
 
         // ---------- 승인권자 구성원 ----------
@@ -40555,7 +40577,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
         // 그룹웨어 관리자(권한 그룹 '관리자 그룹' 또는 직책 '관리자')는 조직도에 그리지 않습니다 (2026-09-21).
         // 관리자는 실제 직책과 겸직인 계정이라, 조직도에는 실제 직책의 계정만 나옵니다.
         // 사람 고르기(담당자 · 참석자 · 카드 소유자)와 사용자/권한관리 목록에는 그대로 나옵니다.
-        function isOrgAdminAccount(u) { return !!u && (u.groupId === 'admin' || u.level === 'admin'); }
+        function isOrgAdminAccount(u) { return !!u && (userGroupIds(u).indexOf('admin') > -1 || u.level === 'admin'); }
         // 구성원 창에서 [조직도에 표시하지 않음] 을 켠 사람도 뺍니다 (2026-09-23).
         // 계정은 그대로 살아 있어 로그인 · 사용자 목록 · 사람 고르기(담당자 · 참석자 · 카드 소유자)에는 나옵니다.
         // 본부를 지울 수 있는지 볼 때는 orgMembers() 를 그대로 쓰므로, 숨긴 사람이 있으면 그 본부는 지워지지 않습니다.
@@ -41731,10 +41753,15 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
         // ---------- 등록 · 수정 ----------
         // 관리자(권한 그룹 '관리자 그룹' 또는 직책 '관리자')는 부서 · 직급 · 팀이 선택 사항입니다 (2026-09-21).
         // 그 밖의 사람은 예전처럼 부서 · 직급이 필수이고 '소속 없음' 은 고를 수 없습니다.
+        // 수정 창에서 고른 권한 그룹 — 관리자 그룹이 있으면 그것을, 없으면 목록 순서상 첫 그룹을 대표 그룹(groupId)으로 씁니다
+        function orgEditGroupIds() {
+            const ids = Array.from(document.querySelectorAll('input[name="org-edit-group-cb"]:checked')).map(x => x.value);
+            return ids.indexOf('admin') > -1 ? ['admin'].concat(ids.filter(x => x !== 'admin')) : ids;
+        }
         function orgEditIsAdmin() {
             const v = k => ((document.getElementById('org-edit-' + k) || {}).value || '');
             const chk = document.getElementById('org-edit-admin');
-            return v('group') === 'admin' || v('level') === 'admin' || !!(chk && chk.checked);
+            return orgEditGroupIds().indexOf('admin') > -1 || v('level') === 'admin' || !!(chk && chk.checked);
         }
         // 직급을 고르면 직책(권한 레벨)을 그 직급의 레벨로 맞춥니다 (2026-09-21). 관리자로 두었던 직책은 건드리지 않습니다.
         function onOrgEditRankChange() {
@@ -41815,8 +41842,9 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             document.getElementById('org-edit-level').innerHTML = PERM_LEVELS
                 .map(k => `<option value="${escapeHtml(k)}" ${curLv === k ? 'selected' : ''}>${escapeHtml(levelNames[k] || k)}${k === 'admin' ? '' : ' (' + escapeHtml(levelClassNames[levelClass(k)] || '') + ')'}</option>`).join('')
                 + (curLv && PERM_LEVELS.indexOf(curLv) < 0 ? `<option value="${escapeHtml(curLv)}" selected>${escapeHtml(levelNames[curLv] || curLv)} (옛 직책)</option>` : '');
+            const curGroups = u ? userGroupIds(u) : ['sales'];
             document.getElementById('org-edit-group').innerHTML = permissionGroups
-                .map(g => `<option value="${escapeHtml(g.id)}" ${u && u.groupId === g.id ? 'selected' : ''}>${escapeHtml(g.name)}</option>`).join('');
+                .map(g => `<label class="inline-flex items-center gap-2 cursor-pointer"><input type="checkbox" name="org-edit-group-cb" value="${escapeHtml(g.id)}" ${curGroups.indexOf(g.id) > -1 ? 'checked' : ''} onchange="onOrgEditAdminChange()" class="w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"><span>${escapeHtml(g.name)}</span></label>`).join('');
 
             set('org-edit-name', u ? (u.name || '') : '');
             set('org-edit-rank', u ? (u.rank || '') : '');
@@ -41859,6 +41887,8 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             if (!rank && !admin) { alert('직급을 입력해 주세요.'); return; }
             if (v('dept') === 'admin' && !admin) { alert("'소속 없음' 은 관리자(권한 그룹 관리자 · 직책 관리자)만 선택할 수 있습니다. 부서를 선택해 주세요."); return; }
             if (!email) { alert('이메일을 입력해 주세요. 로그인 계정으로도 사용됩니다.'); return; }
+            const groupIds = orgEditGroupIds();
+            if (!groupIds.length) { alert('권한 그룹을 하나 이상 선택해 주세요.'); return; }
             const resignNow = !!((document.getElementById('org-edit-resigned') || {}).checked);
             const before = orgEditId ? orgFindAccount(orgEditId) : null;
             if (resignNow && before && String(before.email || '').toLowerCase() === String(currentUserEmail || '').toLowerCase()) { alert('현재 로그인한 본인은 퇴사 처리할 수 없습니다.'); return; }
@@ -41880,7 +41910,8 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                 // photo 는 담지 않습니다 — 본인이 [내 정보] 에서 올린 사진을 덮어쓰지 않기 위해서입니다
                 note: v('note'),
                 level: v('level') || 'manager',
-                groupId: v('group') || 'sales',
+                groupId: groupIds[0],
+                groupIds: groupIds,   // 권한 그룹 여러 개 (2026-10-30)
                 isAdmin: !!((document.getElementById('org-edit-admin') || {}).checked),   // 겸직 관리자 (2026-09-21)
                 hideInOrg: !!((document.getElementById('org-edit-hide-org') || {}).checked),   // 조직도에 안 내보내기 (2026-09-23)
                 onLeave: !!((document.getElementById('org-edit-on-leave') || {}).checked),     // 휴직중 표시 (2026-10-19)
@@ -43208,7 +43239,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             const admin = isGroupwareAdmin();
             if (!partnerAdminPermDraft) partnerAdminPermDraft = JSON.parse(JSON.stringify(partnerAdminPerm().users || {}));
             const d = partnerAdminPermDraft;
-            const isAdm = (u) => u.groupId === 'admin' || u.dept === 'admin' || u.level === 'admin' || u.isAdmin === true;
+            const isAdm = (u) => userGroupIds(u).indexOf('admin') > -1 || u.dept === 'admin' || u.level === 'admin' || u.isAdmin === true;
             const staff = (localUsers || []).filter(u => u && u.email && u.dept !== 'vendor')
                 .sort((a, b) => (isAdm(b) - isAdm(a)) || String(a.name || '').localeCompare(String(b.name || ''), 'ko'));
             const saved = partnerAdminPerm();

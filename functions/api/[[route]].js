@@ -178,6 +178,21 @@ function tempPassword() {
 }
 // 로그인한 그룹웨어 직원인가 (2026-09-28 · 4단계 — 법인차량 · 운행일지)
 //   { rec: 직원 기록, admin: 관리자인가, can(perms): 권한 그룹에 그중 하나가 켜져 있는가 }
+// 권한 그룹 여러 개 (2026-10-30) — groupId(대표) + groupIds(고른 그룹 전부). 메뉴 · 권한은 고른 그룹을 모두 합칩니다.
+function recGroupIds(rec) {
+    if (!rec) return [];
+    return Array.from(new Set([rec.groupId].concat(Array.isArray(rec.groupIds) ? rec.groupIds : []).filter(Boolean)));
+}
+function recIsAdmin(rec) {
+    return !!rec && (recGroupIds(rec).includes('admin') || rec.dept === 'admin' || rec.level === 'admin' || rec.isAdmin === true);
+}
+function recPermissions(rec, pg) {
+    const groups = Array.isArray(pg) ? pg : (pg && Array.isArray(pg.groups) ? pg.groups : []);   // 저장 모양: { groups: [...], version } (예전엔 배열)
+    const ids = recGroupIds(rec);
+    const out = new Set();
+    groups.forEach(g => { if (g && ids.includes(g.id) && Array.isArray(g.permissions)) g.permissions.forEach(p => out.add(p)); });
+    return out;
+}
 async function requireStaff(env, store, request) {
     const me = await authAdmin(env).whoami(request);
     if (!me) return { error: json(401, { ok: false, error: '로그인이 필요합니다. 그룹웨어 아이디로 로그인해 주세요.' }) };
@@ -185,11 +200,8 @@ async function requireStaff(env, store, request) {
     const users = Array.isArray(v['gwUsers.v1']) ? v['gwUsers.v1'] : [];
     const rec = users.find(u => str(u.email).toLowerCase() === str(me.email).toLowerCase() && u.resigned !== true);   // 퇴사자 제외 (2026-10-19)
     if (!rec) return { error: json(403, { ok: false, error: '직원 목록에 없는 계정입니다. 관리자에게 문의해 주세요.' }) };
-    const admin = rec.groupId === 'admin' || rec.dept === 'admin' || rec.level === 'admin' || rec.isAdmin === true;
-    const pg = v['gwPermissionGroups.v2'];
-    const groups = Array.isArray(pg) ? pg : (pg && Array.isArray(pg.groups) ? pg.groups : []);
-    const g = groups.find(x => x && x.id === rec.groupId);
-    const perms = new Set(g && Array.isArray(g.permissions) ? g.permissions : []);
+    const admin = recIsAdmin(rec);
+    const perms = recPermissions(rec, v['gwPermissionGroups.v2']);
     return { me, rec, admin, can: (list) => admin || list.some(p => perms.has(p)) };
 }
 // 고치기 · 지우기 권한 (2026-09-28) — 관리자 이거나, 권한 그룹에 perms 중 하나가 켜져 있으면 통과.
@@ -200,12 +212,10 @@ async function requirePerm(env, store, request, perms) {
     const v = await store.storeValues(['gwUsers.v1', 'gwPermissionGroups.v2']);
     const users = Array.isArray(v['gwUsers.v1']) ? v['gwUsers.v1'] : [];
     const rec = users.find(u => str(u.email).toLowerCase() === str(me.email).toLowerCase() && u.resigned !== true);   // 퇴사자 제외 (2026-10-19)
-    let ok = !!rec && (rec.groupId === 'admin' || rec.dept === 'admin' || rec.level === 'admin' || rec.isAdmin === true);
+    let ok = recIsAdmin(rec);
     if (!ok && rec) {
-        const pg = v['gwPermissionGroups.v2'];                  // 저장 모양: { groups: [...], version } (예전엔 배열)
-        const groups = Array.isArray(pg) ? pg : (pg && Array.isArray(pg.groups) ? pg.groups : []);
-        const g = groups.find(x => x && x.id === rec.groupId);
-        ok = !!(g && Array.isArray(g.permissions) && perms.some(p => g.permissions.includes(p)));
+        const have = recPermissions(rec, v['gwPermissionGroups.v2']);
+        ok = perms.some(p => have.has(p));
     }
     if (!ok) return { error: json(403, { ok: false, error: '수정 또는 삭제 권한이 없습니다.' }) };
     return { me, rec };
@@ -216,7 +226,7 @@ async function requireAdmin(env, store, request) {
     if (!me) return { error: json(401, { ok: false, error: '로그인이 필요합니다.' }) };
     const users = (await store.storeValue('gwUsers.v1')) || [];
     const rec = (Array.isArray(users) ? users : []).find(u => str(u.email).toLowerCase() === str(me.email).toLowerCase() && u.resigned !== true);
-    const ok = rec && (rec.groupId === 'admin' || rec.dept === 'admin' || rec.level === 'admin' || rec.isAdmin === true);
+    const ok = recIsAdmin(rec);
     if (!ok) return { error: json(403, { ok: false, error: '관리자만 사용할 수 있는 기능입니다.' }) };
     return { me, rec, users: Array.isArray(users) ? users : [] };
 }
@@ -866,7 +876,7 @@ export async function onRequest(context) {
             const staff = Array.isArray(pv['gwUsers.v1']) ? pv['gwUsers.v1'] : [];
             // 스위치 · 업체 체크를 켠 사람이 지금도 그룹웨어 관리자인가 (requireAdmin 과 같은 기준)
             const isAdminEmail = (email) => { const e = str(email).toLowerCase(); const u = e && staff.find(x => str(x.email).toLowerCase() === e);
-                                              return !!(u && (u.groupId === 'admin' || u.dept === 'admin' || u.level === 'admin' || u.isAdmin === true)); };
+                                              return recIsAdmin(u); };
             const canApprove = su.parentMayApprove(pv[su.POLICY_KEY], me.company, rp.acct, isAdminEmail);
             if (isBoot) {
                 const v = await store.storeValues(pc.ALL_KEYS.concat([su.SIGNUP_KEY]));
@@ -968,7 +978,7 @@ export async function onRequest(context) {
                 const users = (await store.storeValue('gwUsers.v1')) || [];
                 const meRec = (Array.isArray(users) ? users : []).find(u => str(u.email).toLowerCase() === str(me.email).toLowerCase() && u.resigned !== true);
                 // 관리자 그룹, 소속 없는 관리자 계정(dept 'admin'), 직책 관리자, 겸직 관리자(isAdmin) 모두 됩니다 (2026-09-21)
-                const meAdmin = meRec && (meRec.groupId === 'admin' || meRec.dept === 'admin' || meRec.level === 'admin' || meRec.isAdmin === true);
+                const meAdmin = recIsAdmin(meRec);
                 if (!meAdmin) return json(403, { ok: false, error: '관리자만 계정을 관리할 수 있습니다.' });
 
                 const input = await body();
