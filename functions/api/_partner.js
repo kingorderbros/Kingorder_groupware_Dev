@@ -217,6 +217,10 @@ export function franchiseBrandFor(data, company) {
     if (t !== 'hq' && t !== 'franchise') return null;
     const brands = arr((data || {}).brands);
     const hqId = t === 'hq' ? s(c.id) : s(c.parentId || c.parentPartnerId);
+    // 업체목록과 연결한 업체 (2026-10-30) — 자기 업체 또는 상위 본사가 그 브랜드의 연결 업체면
+    const ids = [s(c.id), hqId].filter(Boolean);
+    const byLink = brands.find(b => b && arr(b.companyIds).some(id => ids.includes(s(id))));
+    if (byLink) return byLink;
     const byId = hqId ? brands.find(b => b && s(b.hqId) && s(b.hqId) === hqId) : null;
     if (byId) return byId;
     const names = [t === 'hq' ? c.name : c.franchiseName, c.franchiseName].map(brandKey).filter(Boolean);

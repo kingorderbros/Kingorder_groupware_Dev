@@ -39744,6 +39744,118 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                 || franchiseHqCompanies().find(c => { const n = franchiseNameKey(c.name); return n && k && (n.includes(k) || k.includes(n)); });
             return hit ? hit.id : '';
         }
+        // ---------- 업체목록과 연결 (2026-10-30) ----------
+        // 업체목록의 매장은 대부분 '교촌치킨 강남역점' 같은 직영 · 가맹점이라 본사 하나로는 이어지지 않습니다.
+        // 브랜드마다 업체 id 목록(b.companyIds)을 두고, 저장할 때 그 업체에 브랜드 이름(c.brand)을 적습니다.
+        //   자동 찾기: 상호에 브랜드 이름이 들어간 업체 (파트너사 · 유통 제외). 두 브랜드에 걸리는 업체(예: 60계치킨앤스텔라떡볶이)는 자동으로 잇지 않고 '확인 필요' 로 둡니다.
+        //   한 업체는 한 브랜드에만 연결됩니다.
+        const FRANCHISE_LINK_KINDS = ['direct', 'franchise', 'partnerShop', 'hq'];
+        const franchiseBrandLabel = (b) => String((b && b.brand) || '').split('>').pop().trim();
+        const franchiseBrandKeys = (b) => String((b && b.brand) || '').split('>').map(franchiseNameKey).filter(k => k.length >= 2);
+        function franchiseNameHits(b) {
+            const keys = franchiseBrandKeys(b);
+            return customers.filter(c => c && c.id && FRANCHISE_LINK_KINDS.includes(c.kind) && keys.some(k => franchiseNameKey(companyNameOf(c)).includes(k)));
+        }
+        // 모든 브랜드의 자동 찾기 결과 — { 업체id: [브랜드 순번 …] }
+        function franchiseHitMap(d) {
+            const map = {};
+            ((d && d.brands) || []).forEach((b, bi) => franchiseNameHits(b).forEach(c => { (map[c.id] = map[c.id] || []).push(bi); }));
+            return map;
+        }
+        // 이미 연결한 것은 두고, 이름이 한 브랜드에만 걸리는 업체를 더합니다. 돌려주는 값: 더한 수 · 확인 필요 수
+        function franchiseAutoLink(d) {
+            const map = franchiseHitMap(d);
+            const taken = new Set();
+            d.brands.forEach(b => (b.companyIds || []).forEach(id => taken.add(id)));
+            let added = 0, unsure = 0;
+            Object.keys(map).forEach(id => {
+                if (taken.has(id)) return;
+                if (map[id].length > 1) { unsure++; return; }
+                const b = d.brands[map[id][0]];
+                b.companyIds = (b.companyIds || []).concat([id]);
+                added++;
+            });
+            return { added, unsure };
+        }
+        function franchiseLinkedBrandIndex(id) {
+            return ((franchisePriceDraft || {}).brands || []).findIndex(b => (b.companyIds || []).includes(id));
+        }
+        function franchiseLinkCompany(bi, id) {
+            const d = franchisePriceDraft;
+            if (!d || !id) return;
+            d.brands.forEach(b => { b.companyIds = (b.companyIds || []).filter(x => x !== id); });   // 한 업체는 한 브랜드에만
+            d.brands[bi].companyIds = (d.brands[bi].companyIds || []).concat([id]);
+            franchiseLinkOpen = bi;
+            renderFranchisePriceModal();
+        }
+        function franchiseUnlinkCompany(bi, id) {
+            const b = franchisePriceDraft && franchisePriceDraft.brands[bi];
+            if (!b) return;
+            b.companyIds = (b.companyIds || []).filter(x => x !== id);
+            franchiseLinkOpen = bi;
+            renderFranchisePriceModal();
+        }
+        function runFranchiseAutoLink() {
+            if (!franchisePriceDraft) return;
+            const r = franchiseAutoLink(franchisePriceDraft);
+            renderFranchisePriceModal();
+            showAppToast(`업체목록에서 ${r.added}곳을 새로 연결했습니다.${r.unsure ? ` 두 브랜드에 걸리는 ${r.unsure}곳은 직접 골라 주세요.` : ''} 저장해야 반영됩니다.`, 'blue');
+        }
+        // 브랜드 칸 안의 업체 찾기 — 상호 · 사업자번호로
+        let franchiseLinkOpen = -1;
+        let franchiseLinkQ = '';
+        function franchiseLinkSearch(bi, v) {
+            franchiseLinkQ = v;
+            const box = document.getElementById('fr-link-results-' + bi);
+            if (box) box.innerHTML = franchiseLinkResultsHtml(bi);
+        }
+        function franchiseLinkResultsHtml(bi) {
+            const q = String(franchiseLinkQ || '').replace(/\s+/g, '').toLowerCase();
+            const b = franchisePriceDraft.brands[bi];
+            const mine = new Set(b.companyIds || []);
+            const hitIds = new Set(franchiseNameHits(b).map(c => c.id));
+            const list = q
+                ? customers.filter(c => c && c.id && !mine.has(c.id) && String(companyNameOf(c) + (c.businessNo || '')).replace(/\s+/g, '').toLowerCase().includes(q)).slice(0, 30)
+                : franchiseNameHits(b).filter(c => !mine.has(c.id));       // 검색어가 없으면 '이름이 걸렸지만 아직 안 이은 업체'
+            if (!list.length) return `<p class="text-xs text-gray-400 py-1">${q ? '찾는 업체가 없습니다.' : '이름이 걸리는 업체는 모두 연결했습니다. 다른 업체는 위 칸에서 찾아 주세요.'}</p>`;
+            return list.map(c => {
+                const other = franchiseLinkedBrandIndex(c.id);
+                const note = other > -1 ? `<span class="text-amber-600">${escapeHtml(franchiseBrandLabel(franchisePriceDraft.brands[other]))} 에 연결됨 → 옮김</span>` : (hitIds.has(c.id) ? '<span class="text-violet-600">이름 일치</span>' : '');
+                return `<button type="button" onclick="franchiseLinkCompany(${bi}, ${jsArg(c.id)})" class="w-full text-left px-2 py-1 text-xs rounded hover:bg-violet-50 flex flex-wrap items-center gap-2">
+                    <i class="fas fa-plus text-violet-500"></i><span class="text-gray-800">${escapeHtml(companyNameOf(c))}</span>
+                    <span class="text-gray-400">${escapeHtml(partnerCustTypeName(c.kind) || '')}${c.businessNo ? ' · ' + escapeHtml(c.businessNo) : ''}</span>${note}</button>`;
+            }).join('');
+        }
+        function franchiseLinkBoxHtml(b, bi) {
+            const ids = (b.companyIds || []).filter(id => customers.some(c => c.id === id));
+            const chips = ids.map(id => {
+                const c = customers.find(x => x.id === id);
+                return `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-violet-50 border border-violet-200 text-violet-800">${escapeHtml(companyNameOf(c))}
+                    <button type="button" onclick="franchiseUnlinkCompany(${bi}, ${jsArg(id)})" class="text-violet-400 hover:text-red-600" title="연결 해제"><i class="fas fa-times"></i></button></span>`;
+            }).join('');
+            return `<div class="px-3 py-2 border-t border-violet-100 bg-violet-50/30">
+                <p class="text-xs font-semibold text-violet-800 mb-1"><i class="fas fa-link mr-1"></i>연결 업체 ${ids.length}곳 <span class="font-normal text-gray-500">— 업체목록의 이 브랜드 매장 · 본사</span></p>
+                <div class="flex flex-wrap gap-1 mb-2">${chips || '<span class="text-xs text-gray-400">아직 연결한 업체가 없습니다.</span>'}</div>
+                <input type="text" placeholder="상호 · 사업자번호로 업체 찾기" value="${bi === franchiseLinkOpen ? escapeHtml(franchiseLinkQ) : ''}" oninput="franchiseLinkOpen=${bi}; franchiseLinkSearch(${bi}, this.value)" class="w-full sm:w-80 p-1.5 border border-gray-300 rounded text-xs mb-1" />
+                <div id="fr-link-results-${bi}" class="max-h-40 overflow-y-auto">${franchiseLinkResultsHtml(bi)}</div>
+            </div>`;
+        }
+        // 저장할 때 업체에 브랜드 이름을 적고, 연결을 푼 업체에서는 지웁니다 (이 기능이 적은 것만 · brandFrom)
+        function applyFranchiseBrandsToCompanies(d) {
+            const want = {};
+            d.brands.forEach(b => (b.companyIds || []).forEach(id => { want[id] = franchiseBrandLabel(b); }));
+            let changed = 0;
+            customers.forEach(c => {
+                if (!c || !c.id) return;
+                if (want[c.id]) {
+                    if (c.brand !== want[c.id] || c.brandFrom !== 'franchise-price') { c.brand = want[c.id]; c.brandFrom = 'franchise-price'; changed++; }
+                } else if (c.brandFrom === 'franchise-price') {
+                    delete c.brand; delete c.brandFrom; changed++;
+                }
+            });
+            if (changed) saveCustomers();
+            return changed;
+        }
         function openFranchisePriceModal() {
             const saved = loadJsonStore(FRANCHISE_PRICE_KEY, null);
             franchisePriceDraft = saved && Array.isArray(saved.brands) ? JSON.parse(JSON.stringify(saved)) : null;
@@ -39763,6 +39875,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             if (!m) return;
             const d = franchisePriceDraft;
             const hqs = franchiseHqCompanies();
+            const prevScroll = (m.querySelector('[data-fr-scroll]') || {}).scrollTop || 0;   // 업체를 붙이고 떼도 보던 자리 그대로
             const won = v => v ? Number(v).toLocaleString('ko-KR') : '';
             m.innerHTML = `<div class="bg-white rounded-lg shadow-xl w-full max-w-5xl max-h-[88vh] flex flex-col">
                 <div class="px-5 py-3 border-b border-gray-200 flex items-center justify-between gap-2">
@@ -39774,13 +39887,20 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                     <div class="flex flex-wrap items-center gap-2">
                         <input type="file" id="franchise-price-file" accept=".xlsx" onchange="onFranchisePriceFile(this)" class="text-sm" />
                         ${d ? `<span class="text-xs text-gray-500">${escapeHtml(d.sourceFile || '')} · 브랜드 ${d.brands.length}곳 · 장비 ${d.brands.reduce((n, b) => n + b.items.length, 0)}줄${d.savedAt ? ' · 저장 ' + escapeHtml(d.savedAt) : ' · 저장 전'}</span>` : '<span class="text-xs text-gray-400">아직 올린 엑셀이 없습니다.</span>'}
+                        ${d ? `<button type="button" onclick="runFranchiseAutoLink()" class="ml-auto px-3 py-1.5 text-xs rounded border border-violet-500 text-violet-700 bg-white hover:bg-violet-50"><i class="fas fa-link mr-1"></i>업체목록과 자동 연결</button>` : ''}
                     </div>
+                    ${d ? (() => {
+                        const linked = d.brands.reduce((n, b) => n + (b.companyIds || []).length, 0);
+                        const none = d.brands.filter(b => !(b.companyIds || []).length && !b.hqId).map(franchiseBrandLabel);
+                        return `<p class="text-xs"><i class="fas fa-building text-violet-500 mr-1"></i>업체목록 연결 <b>${linked}곳</b>${none.length ? ` · <span class="text-amber-700">연결 업체 없는 브랜드 ${none.length}곳: ${escapeHtml(none.join(', '))}</span>` : ''}</p>`;
+                    })() : ''}
                 </div>
-                <div class="flex-1 overflow-y-auto px-5 py-3">
-                    ${d ? d.brands.map((b, bi) => `<details class="mb-2 border border-gray-200 rounded">
+                <div data-fr-scroll class="flex-1 overflow-y-auto px-5 py-3">
+                    ${d ? d.brands.map((b, bi) => `<details class="mb-2 border border-gray-200 rounded"${bi === franchiseLinkOpen ? ' open' : ''}>
                         <summary class="px-3 py-2 cursor-pointer flex flex-wrap items-center gap-2 text-sm">
                             <b class="text-gray-800">${escapeHtml(b.brand)}</b>
                             <span class="text-xs text-gray-500">${escapeHtml([b.van, b.program].filter(Boolean).join(' · '))} · 장비 ${b.items.length}줄</span>
+                            <span class="px-1.5 py-0.5 rounded text-[11px] ${(b.companyIds || []).length ? 'bg-violet-100 text-violet-800' : 'bg-amber-50 text-amber-700'}">업체 ${(b.companyIds || []).length}곳</span>
                             <span class="ml-auto flex items-center gap-1 text-xs" onclick="event.stopPropagation()">연결 본사
                                 <select onchange="franchisePriceDraft.brands[${bi}].hqId=this.value" class="p-1 border ${b.hqId ? 'border-gray-300' : 'border-amber-400 bg-amber-50'} rounded text-xs">
                                     <option value="">이름으로 찾기 (연결 안 함)</option>
@@ -39794,6 +39914,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                                 <td class="p-1.5 text-gray-500">${escapeHtml([it.hqText, it.shopText].filter(Boolean).join(' / '))}</td>
                                 <td class="p-1.5 text-gray-500">${escapeHtml([it.asText, it.note].filter(Boolean).join(' · '))}</td></tr>`).join('')}</tbody>
                         </table>
+                        ${franchiseLinkBoxHtml(b, bi)}
                     </details>`).join('') : '<p class="text-sm text-gray-400 py-8 text-center">엑셀을 올려 주세요.</p>'}
                 </div>
                 <div class="px-5 py-3 border-t border-gray-200 flex justify-end gap-2">
@@ -39801,6 +39922,8 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                     ${d ? '<button type="button" onclick="saveFranchisePrices()" class="px-4 py-2 text-sm rounded bg-violet-600 text-white hover:bg-violet-700">저장</button>' : ''}
                 </div>
             </div>`;
+            const sc = m.querySelector('[data-fr-scroll]');
+            if (sc) sc.scrollTop = prevScroll;
         }
         async function onFranchisePriceFile(input) {
             const file = (input.files || [])[0];
@@ -39808,10 +39931,11 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             try {
                 const brands = parseFranchisePriceRows(await readXlsxRows(file)).filter(b => b.items.length);
                 if (!brands.length) { alert('엑셀에서 브랜드를 찾지 못했습니다. 첫 줄이 제목(브랜드명 · PG/VAN · 프로그램 · 장비구분 …)인지 확인해 주세요.'); return; }
-                const prev = {};
-                ((franchisePriceDraft || {}).brands || []).forEach(b => { if (b.hqId) prev[b.brand] = b.hqId; });
-                brands.forEach(b => { b.hqId = prev[b.brand] || franchiseAutoMatch(b); });
+                const prev = {}, prevIds = {};
+                ((franchisePriceDraft || {}).brands || []).forEach(b => { if (b.hqId) prev[b.brand] = b.hqId; if ((b.companyIds || []).length) prevIds[b.brand] = b.companyIds.slice(); });
+                brands.forEach(b => { b.hqId = prev[b.brand] || franchiseAutoMatch(b); b.companyIds = prevIds[b.brand] || []; });
                 franchisePriceDraft = { version: 1, sourceFile: file.name, brands };
+                franchiseAutoLink(franchisePriceDraft);       // 업체목록과 이름으로 연결 (2026-10-30)
                 renderFranchisePriceModal();
             } catch (e) { alert('엑셀을 읽지 못했습니다.\n\n· ' + (e && e.message ? e.message : e)); }
         }
@@ -39819,9 +39943,12 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             if (!franchisePriceDraft) return;
             franchisePriceDraft.savedAt = ymd(new Date());
             franchisePriceDraft.savedBy = currentUserName || '';
+            franchisePriceDraft.brands.forEach(b => { b.companyIds = (b.companyIds || []).filter(id => customers.some(c => c.id === id)); });
             saveJsonStore(FRANCHISE_PRICE_KEY, franchisePriceDraft);
+            const changed = applyFranchiseBrandsToCompanies(franchisePriceDraft);
             renderFranchisePriceModal();
-            showAppToast(`프랜차이즈 장비단가를 저장했습니다 (브랜드 ${franchisePriceDraft.brands.length}곳).`, 'blue');
+            const linked = franchisePriceDraft.brands.reduce((n, b) => n + (b.companyIds || []).length, 0);
+            showAppToast(`프랜차이즈 장비단가를 저장했습니다 (브랜드 ${franchisePriceDraft.brands.length}곳 · 연결 업체 ${linked}곳${changed ? ` · 업체 ${changed}곳 브랜드 갱신` : ''}).`, 'blue');
         }
         function renderPriceBook() {
             savePriceBook();
@@ -43344,7 +43471,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
         function companyMatches(c, q) {
             if (!q) return true;
             const norm = v => String(v || '').replace(/\s+/g, '').toLowerCase();
-            return norm([c.name, c.businessNo, c.contactName, c.phone, c.address, c.note, c.memo, partnerCustTypeName(c.kind), companyParentName(c)].join(' ')).includes(q);
+            return norm([c.name, c.businessNo, c.contactName, c.phone, c.address, c.note, c.memo, c.brand, partnerCustTypeName(c.kind), companyParentName(c)].join(' ')).includes(q);
         }
         // 계약 칸 값 — 거르기용 (가맹점 3종만 계약을 셉니다)
         function companyContractKey(c, map) {
@@ -43471,7 +43598,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                     <div class="px-4 py-3 flex flex-wrap items-end gap-2">
                         <div class="min-w-[220px] flex-1">
                             <label class="block text-xs font-medium text-gray-600 mb-1">검색</label>
-                            <input type="text" id="company-search" value="${escapeHtml(f.q)}" oninput="companyFilter.q = this.value; companyFilter.limit = COMPANY_PAGE; drawCompanyRows()" placeholder="상호 · 사업자번호 · 담당자 · 연락처 · 상위업체" class="w-full ${selCls}" />
+                            <input type="text" id="company-search" value="${escapeHtml(f.q)}" oninput="companyFilter.q = this.value; companyFilter.limit = COMPANY_PAGE; drawCompanyRows()" placeholder="상호 · 사업자번호 · 담당자 · 연락처 · 상위업체 · 브랜드" class="w-full ${selCls}" />
                         </div>
                         <div><label class="block text-xs font-medium text-gray-600 mb-1">거래상태</label>
                             <select onchange="setCompanyFilter('status', this.value)" class="${selCls}"><option value="">전체</option>${PARTNER_STATUS.map(o => `<option value="${o.id}"${f.status === o.id ? ' selected' : ''}>${escapeHtml(o.id)}</option>`).join('')}</select></div>
@@ -43741,7 +43868,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             return `
                 <tr class="border-b border-gray-50 last:border-0 hover:bg-cyan-50/50 cursor-pointer" onclick="openCompanyModal(${jsArg(id)})">
                     <td class="px-3 py-2 whitespace-nowrap">${indent ? '<span class="text-gray-300 mr-1">└</span>' : ''}${partnerCustTypeChip(Object.assign({}, c, { franchiseName: '', parentPartnerName: '' }))}</td>
-                    <td class="px-3 py-2 whitespace-nowrap font-medium text-gray-800">${escapeHtml(companyNameOf(c))}${c.signupId ? ` <span class="ml-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-indigo-100 text-indigo-700" title="파트너센터 회원가입으로 등록 (${escapeHtml(c.signupId)})">회원가입</span>` : ''}</td>
+                    <td class="px-3 py-2 whitespace-nowrap font-medium text-gray-800">${escapeHtml(companyNameOf(c))}${c.brand ? ` <span class="ml-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-violet-100 text-violet-700" title="프랜차이즈 브랜드${c.brandFrom === 'franchise-price' ? ' (공급 단가표 › 프랜차이즈 장비단가에서 연결)' : ''}">${escapeHtml(c.brand)}</span>` : ''}${c.signupId ? ` <span class="ml-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-indigo-100 text-indigo-700" title="파트너센터 회원가입으로 등록 (${escapeHtml(c.signupId)})">회원가입</span>` : ''}</td>
                     <td class="px-3 py-2 whitespace-nowrap text-gray-600">${parent ? escapeHtml(parent) : (companyParentKind(c.kind) ? '<span class="text-rose-500 text-xs">연결 안 됨</span>' : '<span class="text-gray-300">-</span>')}</td>
                     <td class="px-3 py-2 whitespace-nowrap text-gray-600">${escapeHtml(c.businessNo || '-')}</td>
                     <td class="px-3 py-2 whitespace-nowrap">${escapeHtml(c.contactName || '-')}</td>
