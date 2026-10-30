@@ -60520,17 +60520,35 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             (st && typeof st.nameOf === 'function') ? st.nameOf(vals || partnerFormValuesNow()) : (st || {}).name || '';
 
         // 위쪽 단계 표시줄
+        // 계정 유형 때문에 통째로 건너뛴 단계 (프랜차이즈 본사의 STEP 2 · 2026-10-30) — 표시줄에 '생략' 으로 남겨 번호가 밀려 보이지 않게 합니다
+        function partnerWizardSkippedSteps(list, vals) {
+            const all = partnerTypeSteps() || [];
+            const t = partnerTypeDef(partnerPickedDept, partnerFormType) || {};
+            const v = vals || partnerFormValuesNow();
+            return all.filter(st => !st.last && !list.some(x => x.n === st.n)).filter(st => {
+                const fs = (t.fields || []).filter(f => (f.step || 1) === st.n);
+                return fs.length && fs.every(f => f.hideIf && Array.isArray(f.hideIf.in) && f.hideIf.in.map(String).includes(String(v[f.hideIf.key] || '')));
+            });
+        }
         function partnerWizardNavHtml(list, tone, vals) {
             const at = list.findIndex(st => st.n === partnerWizardStep);
+            const skipped = partnerWizardSkippedSteps(list, vals);
+            // 단계 번호는 원래 순서(건너뛴 단계 포함)로 매깁니다
+            const order = (partnerTypeSteps() || []).filter(st => list.some(x => x.n === st.n) || skipped.some(x => x.n === st.n));
+            const numOf = (st) => order.findIndex(x => x.n === st.n) + 1;
+            const skipChip = (st) => `<span class="inline-flex items-center gap-1.5 rounded-full border border-dashed border-gray-300 px-3 py-1.5 text-xs font-bold text-gray-400 bg-white" title="프랜차이즈 본사 · 가맹점은 사전 협의로 정해 이 단계를 생략합니다">
+                        <span class="inline-flex items-center justify-center w-4 h-4 rounded-full text-[10px] bg-gray-100">${numOf(st)}</span>
+                        <span class="line-through">${escapeHtml(partnerStepName(st, vals))}</span> <span class="no-underline">생략</span></span><i class="fas fa-chevron-right text-[10px] text-gray-300"></i>`;
             return `<div class="flex flex-wrap items-center gap-2 mb-6">
                 ${list.map((st, i) => {
                     const done = i < at, on = i === at;
                     const cls = on ? `${tone.btn} text-white border-transparent`
                               : done ? 'bg-white text-gray-600 border-gray-300'
                                      : 'bg-gray-50 text-gray-400 border-gray-200';
-                    return `<button type="button" onclick="partnerWizardGo(${st.n})"
+                    const before = skipped.filter(x => x.n < st.n && !list.some((y, k) => k < i && y.n > x.n)).map(skipChip).join('');
+                    return before + `<button type="button" onclick="partnerWizardGo(${st.n})"
                         class="inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-bold transition ${cls}">
-                        <span class="inline-flex items-center justify-center w-4 h-4 rounded-full text-[10px] ${on ? 'bg-white/25' : done ? 'bg-gray-200 text-gray-600' : 'bg-gray-200 text-gray-400'}">${done ? '✓' : (i + 1)}</span>
+                        <span class="inline-flex items-center justify-center w-4 h-4 rounded-full text-[10px] ${on ? 'bg-white/25' : done ? 'bg-gray-200 text-gray-600' : 'bg-gray-200 text-gray-400'}">${done ? '✓' : numOf(st)}</span>
                         ${escapeHtml(partnerStepName(st, vals))}</button>`
                         + (i < list.length - 1 ? '<i class="fas fa-chevron-right text-[10px] text-gray-300"></i>' : '');
                 }).join('')}

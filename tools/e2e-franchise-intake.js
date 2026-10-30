@@ -10,18 +10,18 @@ srv.listen(8838,async()=>{const pc=await import(path.resolve(ROOT,'functions/api
  const br=await pp.launch({executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',headless:'new'});const pg=await br.newPage();await pg.setViewport({width:1300,height:900});
  const errs=[];pg.on('pageerror',e=>errs.push(String(e).slice(0,160)));pg.on('dialog',d=>d.accept());
  await pg.goto('http://localhost:8838/?mode=partner',{waitUntil:'networkidle0'});
- const r=await pg.evaluate((items)=>{
+ const r=await pg.evaluate((items)=>{ /*nav*/
    const r={};
    saveJsonStore('gwPartnerPriceItems.v1',items);
    window.isPartnerMode=()=>true;
    enterPartner({loginId:'e2e-hq',partnerId:'HQ-X',partnerName:'교촌치킨 본사',manager:'김본사',custType:'hq'});
    window.partnerCanSeeDept=()=>true; window.partnerCanSeeMenu=()=>true;
    choosePartnerDept('sales','newshop');
-   partnerWizardVals.custType='hq';
-   refreshPartnerTypeFields(); const steps=partnerWizardVisibleSteps(Object.assign({},partnerFormValuesNow(),{custType:'hq'})).map(s=>s.n); const stepsNow=partnerWizardVisibleSteps().map(s=>s.n); r.custTypeNow=String(partnerFormValuesNow().custType);
+   const bar=(document.getElementById('partner-view')||document.body).innerText; const steps=partnerWizardVisibleSteps().map(s=>s.n); r.barHasVanPg=bar.includes('VAN/PG'); const stepsNow=partnerWizardVisibleSteps().map(s=>s.n); r.custTypeNow=String(partnerFormValuesNow().custType);
    r.stepsNo2=steps.length>0&&steps.indexOf(2)<0;
    r.steps=steps.join(','); r.stepsNow=stepsNow.join(',');
    partnerWizardStep=3; refreshPartnerTypeFields();
+   const navTxt=document.getElementById('partner-view').innerText; r.navSkip=/VAN\/PG[\s\S]{0,20}생략/.test(navTxt); r.navNum=/3\s*장비 발주/.test(navTxt);
    const box=document.querySelector('[data-hw-table]');
    const inp=box.querySelector('[data-hw="item"]'); inp.focus(); partnerHwPickShow(inp);
    const pick=box.querySelector('[data-hw-pick]').innerText;
@@ -33,7 +33,7 @@ srv.listen(8838,async()=>{const pc=await import(path.resolve(ROOT,'functions/api
    return r;
  },items);
  r.brandItems=items.length;
- const expect=['stepsNo2','pickerBrand','price','noAutoInstall'];
+ const expect=['navSkip','navNum','stepsNo2','pickerBrand','price','noAutoInstall'];
  const bad=expect.filter(k=>r[k]!==true);
- console.log(JSON.stringify(r));console.log(bad.length?'실패: '+bad.join(', '):'통과','· 오류',errs.length,JSON.stringify(errs.slice(0,5)));
+ await pg.screenshot({path:process.env.SHOT||'/dev/null',clip:{x:0,y:0,width:1300,height:420}}).catch(()=>{});console.log(JSON.stringify(r));console.log(bad.length?'실패: '+bad.join(', '):'통과','· 오류',errs.length,JSON.stringify(errs.slice(0,5)));
  await br.close();srv.close();process.exit(bad.length||errs.length?1:0);});
