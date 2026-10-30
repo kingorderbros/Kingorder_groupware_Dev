@@ -39550,6 +39550,124 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             return out;
         }
 
+        // ==================== 프랜차이즈 장비단가 (영업본부 보완 2026-10-30) ====================
+        // '인수인계_브랜드별 장비단가' 엑셀을 올리면 브랜드마다 사전 협의된 장비 · 금액을 저장합니다.
+        // 파트너센터에서 그 본사 · 가맹점이 장비를 고를 때 **자기 브랜드 장비만** 이 단가로 나옵니다 (서버가 골라 보냄).
+        //   엑셀 칸: 브랜드명 · PG/VAN · 프로그램 · 장비구분 · 장비 상세 · 본사 단가 · 가맹점 단가 · AS 유지보수 · 특이사항 · 본사 페이백
+        //   금액 칸은 '850,000원 / 월 30,000원' 처럼 적혀 있어 일시금 · 월 금액으로 나눠 읽습니다. 가맹점 단가가 있으면 그것을, 없으면 본사 단가를 씁니다.
+        const FRANCHISE_PRICE_KEY = 'gwFranchisePrices.v1';
+        let franchisePriceDraft = null;
+        function franchiseMoney(text) {
+            const t = String(text || '').replace(/\s+/g, ' ');
+            const won = (str) => { const m = String(str || '').match(/([0-9][0-9,]*)\s*원?/); return m ? Number(m[1].replace(/,/g, '')) : 0; };
+            const parts = t.split('/');
+            let price = 0, monthly = 0;
+            parts.forEach(pt => { if (/월/.test(pt)) monthly = monthly || won(pt.replace(/.*월/, '')); else price = price || won(pt.split('>').pop()); });   // '205,000원 > 200,000원' 처럼 고친 값은 뒤엣것
+            return { price, monthly };
+        }
+        function parseFranchisePriceRows(rows) {
+            const brands = [];
+            let cur = null, lastCat = '';
+            (rows || []).slice(1).forEach(r => {
+                const c = i => String((r || [])[i] == null ? '' : r[i]).trim();
+                if (!c(0) && !c(3) && !c(4) && !c(5) && !c(6)) return;
+                if (c(0)) { cur = { brand: c(0).replace(/\s+/g, ' '), van: c(1), program: c(2).replace(/\s*\n\s*/g, ' / '), hqId: '', items: [] }; brands.push(cur); lastCat = ''; }
+                if (!cur) return;
+                const cat = c(3) || lastCat; lastCat = cat;
+                const src = c(6) || c(5);
+                const m = franchiseMoney(src);
+                cur.items.push({ cat: cat.replace(/\s+/g, ' '), model: c(4).replace(/\s+/g, ' '), hqText: c(5), shopText: c(6),
+                                 price: m.price, monthly: m.monthly, asText: c(7), note: c(8), payback: c(9) });
+            });
+            return brands;
+        }
+        const franchiseHqCompanies = () => partners.filter(c => c && (c.kind === 'hq' || c.custType === 'hq'));
+        const franchiseNameKey = (v) => String(v || '').replace(/\s+/g, '').replace(/[()（）㈜]|주식회사/g, '').toLowerCase();
+        function franchiseAutoMatch(brand) {
+            const k = franchiseNameKey(brand.brand.split('>').pop());
+            const hit = franchiseHqCompanies().find(c => franchiseNameKey(c.name) === k)
+                || franchiseHqCompanies().find(c => { const n = franchiseNameKey(c.name); return n && k && (n.includes(k) || k.includes(n)); });
+            return hit ? hit.id : '';
+        }
+        function openFranchisePriceModal() {
+            const saved = loadJsonStore(FRANCHISE_PRICE_KEY, null);
+            franchisePriceDraft = saved && Array.isArray(saved.brands) ? JSON.parse(JSON.stringify(saved)) : null;
+            let m = document.getElementById('franchise-price-modal');
+            if (!m) {
+                m = document.createElement('div');
+                m.id = 'franchise-price-modal';
+                m.className = 'hidden fixed inset-0 bg-black/50 z-[70] flex items-center justify-center p-4';
+                m.addEventListener('click', (e) => { if (e.target === m) m.classList.add('hidden'); });
+                document.body.appendChild(m);
+            }
+            renderFranchisePriceModal();
+            m.classList.remove('hidden');
+        }
+        function renderFranchisePriceModal() {
+            const m = document.getElementById('franchise-price-modal');
+            if (!m) return;
+            const d = franchisePriceDraft;
+            const hqs = franchiseHqCompanies();
+            const won = v => v ? Number(v).toLocaleString('ko-KR') : '';
+            m.innerHTML = `<div class="bg-white rounded-lg shadow-xl w-full max-w-5xl max-h-[88vh] flex flex-col">
+                <div class="px-5 py-3 border-b border-gray-200 flex items-center justify-between gap-2">
+                    <h3 class="text-base font-bold text-gray-800"><i class="fas fa-store text-violet-600 mr-1"></i>프랜차이즈 장비단가</h3>
+                    <button type="button" onclick="document.getElementById('franchise-price-modal').classList.add('hidden')" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times"></i></button>
+                </div>
+                <div class="px-5 py-3 border-b border-gray-100 text-sm text-gray-600 space-y-2" data-drop-input="franchise-price-file">
+                    <p>브랜드별 장비단가 엑셀(예: 인수인계_브랜드별 장비단가_251020.xlsx)을 올리면, 파트너센터에서 그 프랜차이즈 본사 · 가맹점이 장비를 고를 때 <b>그 브랜드의 사전 협의 장비와 금액</b>만 나옵니다. 다른 브랜드 단가는 보이지 않습니다.</p>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <input type="file" id="franchise-price-file" accept=".xlsx" onchange="onFranchisePriceFile(this)" class="text-sm" />
+                        ${d ? `<span class="text-xs text-gray-500">${escapeHtml(d.sourceFile || '')} · 브랜드 ${d.brands.length}곳 · 장비 ${d.brands.reduce((n, b) => n + b.items.length, 0)}줄${d.savedAt ? ' · 저장 ' + escapeHtml(d.savedAt) : ' · 저장 전'}</span>` : '<span class="text-xs text-gray-400">아직 올린 엑셀이 없습니다.</span>'}
+                    </div>
+                </div>
+                <div class="flex-1 overflow-y-auto px-5 py-3">
+                    ${d ? d.brands.map((b, bi) => `<details class="mb-2 border border-gray-200 rounded">
+                        <summary class="px-3 py-2 cursor-pointer flex flex-wrap items-center gap-2 text-sm">
+                            <b class="text-gray-800">${escapeHtml(b.brand)}</b>
+                            <span class="text-xs text-gray-500">${escapeHtml([b.van, b.program].filter(Boolean).join(' · '))} · 장비 ${b.items.length}줄</span>
+                            <span class="ml-auto flex items-center gap-1 text-xs" onclick="event.stopPropagation()">연결 본사
+                                <select onchange="franchisePriceDraft.brands[${bi}].hqId=this.value" class="p-1 border ${b.hqId ? 'border-gray-300' : 'border-amber-400 bg-amber-50'} rounded text-xs">
+                                    <option value="">이름으로 찾기 (연결 안 함)</option>
+                                    ${hqs.map(c => `<option value="${escapeHtml(c.id)}"${b.hqId === c.id ? ' selected' : ''}>${escapeHtml(c.name)}</option>`).join('')}
+                                </select></span>
+                        </summary>
+                        <table class="w-full text-xs border-t border-gray-100">
+                            <thead><tr class="bg-gray-50 text-gray-500"><th class="p-1.5 text-left">장비구분</th><th class="p-1.5 text-left">모델 · 규격</th><th class="p-1.5 text-right">적용 단가</th><th class="p-1.5 text-right">월</th><th class="p-1.5 text-left">본사 단가 / 가맹점 단가 (원문)</th><th class="p-1.5 text-left">AS · 특이사항</th></tr></thead>
+                            <tbody>${b.items.map(it => `<tr class="border-t border-gray-50"><td class="p-1.5">${escapeHtml(it.cat)}</td><td class="p-1.5">${escapeHtml(it.model)}</td>
+                                <td class="p-1.5 text-right">${won(it.price)}</td><td class="p-1.5 text-right">${won(it.monthly)}</td>
+                                <td class="p-1.5 text-gray-500">${escapeHtml([it.hqText, it.shopText].filter(Boolean).join(' / '))}</td>
+                                <td class="p-1.5 text-gray-500">${escapeHtml([it.asText, it.note].filter(Boolean).join(' · '))}</td></tr>`).join('')}</tbody>
+                        </table>
+                    </details>`).join('') : '<p class="text-sm text-gray-400 py-8 text-center">엑셀을 올려 주세요.</p>'}
+                </div>
+                <div class="px-5 py-3 border-t border-gray-200 flex justify-end gap-2">
+                    <button type="button" onclick="document.getElementById('franchise-price-modal').classList.add('hidden')" class="px-4 py-2 text-sm rounded bg-gray-200 text-gray-700 hover:bg-gray-300">닫기</button>
+                    ${d ? '<button type="button" onclick="saveFranchisePrices()" class="px-4 py-2 text-sm rounded bg-violet-600 text-white hover:bg-violet-700">저장</button>' : ''}
+                </div>
+            </div>`;
+        }
+        async function onFranchisePriceFile(input) {
+            const file = (input.files || [])[0];
+            if (!file) return;
+            try {
+                const brands = parseFranchisePriceRows(await readXlsxRows(file));
+                if (!brands.length) { alert('엑셀에서 브랜드를 찾지 못했습니다. 첫 줄이 제목(브랜드명 · PG/VAN · 프로그램 · 장비구분 …)인지 확인해 주세요.'); return; }
+                const prev = {};
+                ((franchisePriceDraft || {}).brands || []).forEach(b => { if (b.hqId) prev[b.brand] = b.hqId; });
+                brands.forEach(b => { b.hqId = prev[b.brand] || franchiseAutoMatch(b); });
+                franchisePriceDraft = { version: 1, sourceFile: file.name, brands };
+                renderFranchisePriceModal();
+            } catch (e) { alert('엑셀을 읽지 못했습니다.\n\n· ' + (e && e.message ? e.message : e)); }
+        }
+        function saveFranchisePrices() {
+            if (!franchisePriceDraft) return;
+            franchisePriceDraft.savedAt = ymd(new Date());
+            franchisePriceDraft.savedBy = currentUserName || '';
+            saveJsonStore(FRANCHISE_PRICE_KEY, franchisePriceDraft);
+            renderFranchisePriceModal();
+            showAppToast(`프랜차이즈 장비단가를 저장했습니다 (브랜드 ${franchisePriceDraft.brands.length}곳).`, 'blue');
+        }
         function renderPriceBook() {
             savePriceBook();
             const host = document.getElementById('sec-common-price');
@@ -39605,6 +39723,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                     <div class="flex flex-wrap gap-2">
                         <button onclick="openPriceModal()" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded text-sm transition-colors whitespace-nowrap"><i class="fas fa-plus mr-1"></i>단가 등록</button>
                         <button onclick="togglePriceImport()" class="bg-white border border-green-600 text-green-700 hover:bg-green-50 px-3 py-1.5 rounded text-sm transition-colors whitespace-nowrap"><i class="fas fa-file-arrow-up mr-1"></i>엑셀 업로드</button>
+                        <button onclick="openFranchisePriceModal()" class="bg-white border border-violet-500 text-violet-700 hover:bg-violet-50 px-3 py-1.5 rounded text-sm transition-colors whitespace-nowrap"><i class="fas fa-store mr-1"></i>프랜차이즈 장비단가</button>
                         <button onclick="downloadPriceXlsx()" class="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded text-sm transition-colors whitespace-nowrap"><i class="fas fa-file-excel mr-1"></i>엑셀 다운로드</button>
                     </div>
                 </div>
@@ -55819,6 +55938,9 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
         // ---------- 포스 · 키오스크 대수 · 설치비 자동 (영업본부 보완 2026-10-30) ----------
         //   설치비: 포스 1대 100,000원 · 키오스크 1대 200,000원 (부가세 별도). 금액은 고칠 수 있고, 고친 값은 그대로 둡니다.
         const PARTNER_INSTALL_FEE = { pos: 100000, kiosk: 200000 };
+        // 프랜차이즈 본사 · 가맹점 계정 — STEP 2 를 건너뛰고, 장비는 브랜드 장비단가(설치비 포함)를 씁니다
+        const PARTNER_FRANCHISE_SKIP = { key: 'custType', in: ['hq', 'franchise'] };
+        const partnerUsesFranchisePrices = () => (typeof partnerPriceItems === 'function') && partnerPriceItems().some(x => x && x.franchise);
         function partnerHwKindOf(r) {
             const name = String((r && r.item) || '').replace(/\s+/g, '');
             const cat = String((r && r.cat) || '');
@@ -55833,6 +55955,12 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             return c;
         }
         function partnerHwApplyAutoInstall(rows) {
+            // 브랜드 장비단가를 쓰는 프랜차이즈는 단가표의 설치비 품목을 고르므로 자동으로 붙이지 않습니다
+            if (partnerUsesFranchisePrices()) {
+                const k = rows.findIndex(r => r.auto === 'install' && !r.autoEdited);
+                if (k > -1) rows.splice(k, 1);
+                return rows;
+            }
             const c = partnerHwDeviceCounts(rows);
             const fee = c.pos * PARTNER_INSTALL_FEE.pos + c.kiosk * PARTNER_INSTALL_FEE.kiosk;
             const note = '자동 계산: ' + [c.pos ? `포스 ${c.pos}대` : '', c.kiosk ? `키오스크 ${c.kiosk}대` : ''].filter(Boolean).join(' · ');
@@ -56528,8 +56656,8 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                       fields: withStep(1, PARTNER_SALES_GATE_FIELDS)
                           .concat(withStep(9, [PARTNER_BIZ_TYPE_FIELD]))
                           .concat(withStep(1, PARTNER_SHOP_FIELDS))
-                          .concat(withStep(2, PARTNER_NEWSHOP_PAY_FIELDS))
-                          .concat(withStep(2, PARTNER_CMS_FIELDS))
+                          // 프랜차이즈 본사 · 가맹점은 PG/VAN · 프로그램 · CMS 를 사전 협의로 정하므로 STEP 2 를 건너뜁니다 (영업본부 보완 2026-10-30)
+                          .concat(withStep(2, PARTNER_NEWSHOP_PAY_FIELDS.concat(PARTNER_CMS_FIELDS)).map(f => Object.assign(f, { hideIf: PARTNER_FRANCHISE_SKIP })))
                           .concat(withStep(3, PARTNER_HW_FIELDS))
                           // 오픈 예정일 · 설치 희망일을 나란히 먼저 받습니다 (영업본부 보완 2026-10-30)
                           .concat(withStep(4, PARTNER_SITE_FIELDS.filter(f => f.key === 'siteOpenDate')))
@@ -58609,6 +58737,9 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
         //   showIf: { key: '다른 항목 key', in: ['값1','값2'] }  → 그 항목을 그 값으로 골랐을 때만
         //   showIf: { key: '다른 항목 key', notIn: ['값'] }        → 그 값만 아니면 (그 항목이 아예 없는 접수 구분에서도 보입니다)
         function partnerFieldVisible(f, values) {
+            // hideIf — 이 조건이면 감춥니다 (프랜차이즈 본사 접수의 STEP 2 · 2026-10-30)
+            const h = f && f.hideIf;
+            if (h && Array.isArray(h.in) && h.in.map(String).includes(String((values || {})[h.key] || ''))) return false;
             const c = f && f.showIf;
             if (!c) return true;
             const cur = String((values || {})[c.key] || '');

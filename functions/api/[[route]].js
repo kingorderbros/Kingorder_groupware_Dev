@@ -883,7 +883,12 @@ export async function onRequest(context) {
                 if (canApprove) me.shopSignups = su.parentSignupView(v[su.SIGNUP_KEY], me.partnerId);
                 const view = pc.partnerView(v, me);
                 // 발주 장비 목록 — 그 계정 단가만 (2026-10-07). 못 읽어도 다른 자료는 그대로 내려 줍니다
-                try { view['gwPartnerPriceItems.v1'] = pc.partnerPriceView(await store.rowsWhere('price_book', 'limit=5000'), me.company, me.partnerId); }
+                try {
+                    // 프랜차이즈 본사 · 가맹점은 그 브랜드의 사전 협의 장비단가를 씁니다 (영업본부 보완 2026-10-30) — 브랜드가 없으면 공급 단가표
+                    const fr = (me.kind === 'hq' || me.kind === 'franchise' || ['hq', 'franchise'].includes(str((me.company || {}).custType)))
+                        ? pc.franchisePriceView(await store.storeValue(pc.FRANCHISE_PRICE_KEY), me.company) : null;
+                    view['gwPartnerPriceItems.v1'] = fr && fr.length ? fr : pc.partnerPriceView(await store.rowsWhere('price_book', 'limit=5000'), me.company, me.partnerId);
+                }
                 catch (e) { console.error('[partner] 공급 단가표 읽기 실패', e && e.message); view['gwPartnerPriceItems.v1'] = []; }
                 return json(200, { ok: true, session, store: view });
             }
