@@ -434,6 +434,13 @@ export async function syncPush(env, store, ctx) {
     for (const r of (rows || [])) {
         const s = Object.assign({ id: r.id }, r.data);
         try {
+            // 취소 · 삭제 표시한 일정 (2026-10-30) — 그룹웨어에는 '취소됨 · 삭제됨' 으로 남기고 구글에서는 지웁니다. 되살리면 새로 만듭니다.
+            if (s.offState) {
+                const off = await store.link(s.id);
+                if (off) { await deleteEvent(env, store, off.google_calendar_id, off.google_event_id).catch(() => {}); await store.dropLink(s.id); out.deleted++; }
+                else out.skipped++;
+                continue;
+            }
             const key = calendarKeyOf(s, ctx);
             const cal = key && ctx.calByKey.get(key);
             if (!cal || !cal.google_calendar_id) { out.skipped++; continue; }     // 아직 안 만든 캘린더

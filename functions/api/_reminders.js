@@ -114,6 +114,7 @@ export function dueReminders(list, now) {
     (list || []).forEach(sch => {
         if (!sch || !REMINDER_RULES[s(sch.reminder)]) return;
         if (sch.fromWork && sch.fromWork.auto) return;
+        if (sch.offState) return;                         // 취소 · 삭제 표시한 일정 (2026-10-30)
         if (s(sch.reminder) === 'sameday' && sch.reminderPicked !== true) return;   // '당일 오전' 은 사람이 직접 고른 것만 (기본값으로 들어간 것 제외 · 2026-10-28)   // 업무 접수로 저절로 만든 일정은 기본값('당일 오전')이 걸려 있어 알리지 않음 — 사람이 정한 알림만
         const dates = (sch.recur && sch.recur.freq) ? recurDates(sch, from, to) : [s(sch.date)];
         dates.forEach(date => {

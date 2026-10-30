@@ -27,6 +27,8 @@ const ok = (c, m) => { if (c) { pass++; console.log('  ✓', m); } else { fail++
         ok(R.dueReminders([sch], at('2026-10-24', '09:44')).length === 0, '알림 시각 전에는 보내지 않음');
         ok(R.dueReminders([sch], at('2026-10-24', '09:45')).length === 1, '알림 시각에 보냄');
         ok(R.dueReminders([sch], at('2026-10-24', '09:52')).length === 1, '서버가 늦게 돌아도 10분 안이면 따라잡음');
+        ok(R.dueReminders([Object.assign({}, sch, { offState: 'cancelled' })], at('2026-10-24', '09:45')).length === 0, '취소된 일정은 알리지 않음 (2026-10-30)');
+        ok(R.dueReminders([Object.assign({}, sch, { offState: 'deleted' })], at('2026-10-24', '09:45')).length === 0, '삭제된 일정은 알리지 않음 (2026-10-30)');
         ok(R.dueReminders([sch], at('2026-10-24', '09:56')).length === 0, '10분이 넘게 지난 알림은 보내지 않음');
         const rec = { id: 's2', title: '주간 회의', date: '2026-10-05', startTime: '09:00', reminder: '15min', recur: { freq: 'weekly', days: [1], interval: 1 } };
         ok(R.dueReminders([rec], at('2026-10-26', '08:45')).length === 1, '반복 일정 — 그 회차(10/26 월)에 보냄');

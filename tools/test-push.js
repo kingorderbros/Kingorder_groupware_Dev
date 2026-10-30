@@ -76,6 +76,7 @@ async function decrypt(b, body) {
     console.log('\n[1] 종류 · 받는 사람');
     ok(P.categoryOf('work-received') === 'work' && P.categoryOf('collab-requested') === 'collab' && P.categoryOf('delay-inquiry') === 'collab'
         && P.categoryOf('schedule-change-result') === 'collab' && P.categoryOf('dev-review') === 'dev' && P.categoryOf('뭔가') === 'etc', '알림 종류를 묶음으로');
+    ok(P.categoryOf('schedule-cancelled') === 'schedule' && P.categoryOf('schedule-deleted') === 'schedule' && P.categoryOf('schedule-reminder') === 'schedule', '일정 취소 · 삭제 알림은 일정 알림 묶음 (2026-10-30)');
     const names = (n) => P.recipientsOf(store['gwUsers.v1'], n, 'me@k.co').map(u => u.name).join();
     ok(names({ toUser: '김영업' }) === '김영업', '사람 앞 알림');
     ok(names({ toDept: 'sales' }) === '김영업,이영업,최영업', '본부 앞 알림 — 보낸 사람은 빼고');

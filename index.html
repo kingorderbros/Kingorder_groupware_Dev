@@ -6190,6 +6190,8 @@
                 <button onclick="closeScheduleDetailModal()" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times"></i></button>
             </div>
             <div class="mb-6 space-y-3">
+                <!-- 취소됨 · 삭제됨 표시 (2026-10-30) -->
+                <div id="detail-schedule-off" class="hidden rounded border px-3 py-2 text-sm"></div>
                 <div>
                     <p class="text-sm font-medium text-gray-500">캘린더</p>
                     <p id="detail-schedule-calendar" class="text-base text-gray-800"></p>
@@ -6247,8 +6249,11 @@
             <p id="detail-schedule-readonly" class="hidden text-xs text-gray-500 bg-gray-50 border border-gray-200 rounded px-3 py-2 mb-3">
                 <i class="fas fa-eye mr-1"></i><span id="detail-schedule-readonly-text"></span>
             </p>
-            <div class="flex justify-end space-x-2">
+            <div class="flex flex-wrap justify-end gap-2">
+                <button id="btn-restore-schedule" class="hidden px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition-colors"><i class="fas fa-rotate-left mr-1"></i>되살리기</button>
+                <button id="btn-purge-schedule" class="hidden px-4 py-2 bg-red-800 text-white rounded hover:bg-red-900 transition-colors" title="관리자 — 캘린더에서 완전히 지웁니다">완전 삭제</button>
                 <button id="btn-edit-schedule" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors">수정</button>
+                <button id="btn-cancel-schedule" class="px-4 py-2 bg-amber-500 text-white rounded hover:bg-amber-600 transition-colors"><i class="fas fa-ban mr-1"></i>일정 취소</button>
                 <button id="btn-delete-schedule" class="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition-colors">삭제</button>
                 <button type="button" onclick="closeScheduleDetailModal()" class="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded font-semibold transition-colors">닫기</button>
             </div>
@@ -11682,6 +11687,9 @@ const QUOTE_TEMPLATES = [
             'collab-transferred': { icon: 'fa-share-from-square', color: 'indigo', label: '요청 이관' },
             'collab-comment':     { icon: 'fa-comment-dots',      color: 'indigo', label: '협업 코멘트' },
             'schedule-reminder':  { icon: 'fa-bell',              color: 'amber',  label: '일정 알림' },
+            'schedule-cancelled': { icon: 'fa-ban',               color: 'red',    label: '일정 취소' },
+            'schedule-deleted':   { icon: 'fa-trash-can',         color: 'red',    label: '일정 삭제' },
+            'schedule-restored':  { icon: 'fa-rotate-left',       color: 'green',  label: '일정 되살림' },
             'collab-taken':       { icon: 'fa-user-check',        color: 'green',  label: '협업 처리' },
             'schedule-change':        { icon: 'fa-calendar-alt',   color: 'teal', label: '일정 변경 요청' },
             'schedule-change-result': { icon: 'fa-calendar-check', color: 'teal', label: '일정 변경 결과' },
@@ -11707,6 +11715,9 @@ const QUOTE_TEMPLATES = [
             if (n.type === 'collab-completed') return `<b>${escapeHtml(n.title)}</b> 처리가 완료되었습니다.${n.detail ? `<br><span class="text-xs text-gray-600">처리내용: ${escapeHtml(n.detail)}</span>` : ''}${n.issue ? `<br><span class="text-xs text-amber-600">이슈: ${escapeHtml(n.issue)}</span>` : ''}${n.fileCount ? `<br><span class="text-xs text-blue-700 font-semibold"><i class="fas fa-paperclip mr-1"></i>첨부자료 ${n.fileCount}건 · 클릭하여 확인</span>` : ''}`;
             if (n.type === 'delay-inquiry') return `<b>${escapeHtml(n.title)}</b> 지연에 대한 사유 확인요청이 도착했습니다.${n.detail ? `<br><span class="text-xs text-gray-600">요청: ${escapeHtml(n.detail)}</span>` : ''}`;
             if (n.type === 'delay-answer') return `<b>${escapeHtml(n.title)}</b> 지연 사유가 회신되었습니다.${n.detail ? `<br><span class="text-xs text-gray-600">사유: ${escapeHtml(n.detail)}</span>` : ''}`;
+            if (n.type === 'schedule-cancelled') return `<b>${escapeHtml(n.title)}</b> 일정이 <b>취소</b>되었습니다.${n.detail ? `<br><span class="text-xs text-gray-600">${escapeHtml(n.detail)}</span>` : ''}`;
+            if (n.type === 'schedule-deleted') return `<b>${escapeHtml(n.title)}</b> 일정이 <b>삭제</b>되었습니다.${n.detail ? `<br><span class="text-xs text-gray-600">${escapeHtml(n.detail)}</span>` : ''}`;
+            if (n.type === 'schedule-restored') return `<b>${escapeHtml(n.title)}</b> 취소 · 삭제했던 일정이 <b>다시 진행</b>됩니다.${n.detail ? `<br><span class="text-xs text-gray-600">${escapeHtml(n.detail)}</span>` : ''}`;
             if (n.type === 'schedule-reminder') return `<b>${escapeHtml(n.title)}</b> 일정이 곧 시작됩니다.${n.detail ? `<br><span class="text-xs text-gray-600">${escapeHtml(n.detail)}</span>` : ''}`;
             if (n.type === 'collab-taken') return `<b>${escapeHtml(n.title)}</b> 함께 받은 협업 요청이 처리되었습니다.${n.detail ? `<br><span class="text-xs text-gray-600">${escapeHtml(n.detail)}</span>` : ''}`;
             if (n.type === 'collab-comment') return `<b>${escapeHtml(n.title)}</b> 협업 요청에 코멘트가 등록되었습니다.${n.detail ? `<br><span class="text-xs text-gray-600">${escapeHtml(n.detail)}</span>` : ''}`;
@@ -12422,13 +12433,13 @@ const QUOTE_TEMPLATES = [
                 const progBadge = sCal.progress
                     ? ` · <span class="${getProgress(s.progress).chip} px-1 rounded">${escapeHtml(getProgress(s.progress).name)}</span>` : '';
                 return `
-                    <div onclick="openScheduleDetailModal(${jsArg(s.id)})" class="flex items-center p-2 rounded border cursor-pointer transition-colors ${isMine ? 'bg-red-50 border-red-100 hover:bg-red-100' : 'bg-gray-50 border-gray-200 hover:bg-gray-100'}">
+                    <div onclick="openScheduleDetailModal(${jsArg(s.id)})" class="flex items-center p-2 rounded border cursor-pointer transition-colors ${isMine ? 'bg-red-50 border-red-100 hover:bg-red-100' : 'bg-gray-50 border-gray-200 hover:bg-gray-100'}${isScheduleOff(s) ? ' opacity-60' : ''}">
                         <div class="w-8 h-8 rounded-full bg-white flex items-center justify-center mr-3 shrink-0 border border-gray-100">
                             <i class="fas ${sType.icon} ${sStyle.text}"></i>
                         </div>
                         <div class="flex-1 min-w-0">
                             <div class="flex items-center justify-between">
-                                <span class="text-sm font-medium text-gray-800 truncate pr-2">${calBadge}${invBadge}${deptBadge}${escapeHtml(s.title)}</span>
+                                <span class="text-sm font-medium text-gray-800 truncate pr-2">${scheduleOffBadge(s)}${calBadge}${invBadge}${deptBadge}<span class="${isScheduleOff(s) ? 'line-through' : ''}">${escapeHtml(s.title)}</span></span>
                                 ${isMine ? '<span class="text-xs bg-red-200 text-red-800 px-1.5 py-0.5 rounded whitespace-nowrap">내 일정</span>' : ''}
                             </div>
                             <p class="text-xs text-gray-500 mt-0.5"><span class="font-semibold text-gray-700 tabular-nums mr-1">${escapeHtml(scheduleTimeLabel(s))}</span><span class="${sStyle.text}">${escapeHtml(sType.name)}</span> · ${escapeHtml(s.salesperson || '담당자 미지정')}${progBadge}${reminderBadge}</p>
@@ -12558,7 +12569,7 @@ const QUOTE_TEMPLATES = [
             members.forEach(m => {
                 openTodoCnt += myTodos.filter(t => t.owner === m.name && !t.done).length;
                 // 팀원의 개인 캘린더 일정은 통합현황에서 제외 (본인만 조회 가능)
-                todaySchedCnt += scheduleInstances().filter(s => canViewSchedule(s) && s.salesperson === m.name && (s.dept || 'sales') === m.dept && s.date === todayStr).length;
+                todaySchedCnt += scheduleInstances().filter(s => !isScheduleOff(s) && canViewSchedule(s) && s.salesperson === m.name && (s.dept || 'sales') === m.dept && s.date === todayStr).length;
             });
             if (summary) {
                 summary.innerHTML = `
@@ -12585,7 +12596,7 @@ const QUOTE_TEMPLATES = [
                     return new Date(a.dueDate || '9999-12-31') - new Date(b.dueDate || '9999-12-31');
                 });
                 // 팀원별 예정 일정 (본인 부서 일정, 오늘 이후, 날짜순)
-                const scheds = scheduleInstances().filter(s => canViewSchedule(s) && s.salesperson === m.name && (s.dept || 'sales') === m.dept && s.date >= todayStr)
+                const scheds = scheduleInstances().filter(s => !isScheduleOff(s) && canViewSchedule(s) && s.salesperson === m.name && (s.dept || 'sales') === m.dept && s.date >= todayStr)
                     .slice().sort((a, b) => (new Date(a.date) - new Date(b.date)) || compareScheduleTime(a, b));
                 // 부서에서 할당된 진행중 업무 요청
                 const tasks = localTasks.filter(t => t.assignee === m.name && t.type === 'task' && t.status !== 'done');
@@ -17431,7 +17442,7 @@ const QUOTE_TEMPLATES = [
 
             // --- 오늘 일정 ---
             const today = ymd(new Date());
-            set('sdash-today-schedule', `${scheduleInstances().filter(s => canViewSchedule(s) && s.date === today && (s.dept || 'sales') === 'sales').length}건`);
+            set('sdash-today-schedule', `${scheduleInstances().filter(s => !isScheduleOff(s) && canViewSchedule(s) && s.date === today && (s.dept || 'sales') === 'sales').length}건`);
 
             // --- 갱신 임박 계약 ---
             const renewalEl = document.getElementById('sdash-renewal-list');
@@ -17853,6 +17864,25 @@ const QUOTE_TEMPLATES = [
         }
         function attendeeStatusMeta(id) { return ATTENDEE_STATUS[id] || ATTENDEE_STATUS.pending; }
 
+        // ---------- 일정 취소 · 삭제 표시 (2026-10-30) ----------
+        // 취소하거나 지운 일정도 캘린더에 '취소됨 · 삭제됨' 으로 남기고, 참석자에게 알립니다.
+        //   일정 전체   : s.offState = 'cancelled' | 'deleted', s.offAt('YYYY-MM-DD HH:MM'), s.offBy(이름), s.offReason
+        //   반복의 한 날: s.recur.offDates = { 'YYYY-MM-DD': { state, at, by, reason } }
+        //                 그 날은 exdates 에도 넣어 두어 구글 캘린더 · 일정 알림에서는 빠집니다.
+        // 구글 캘린더에서는 지우고(서버 _gcal.js), 일정 알림도 보내지 않습니다(_reminders.js). 완전 삭제는 관리자만.
+        const SCHEDULE_OFF = {
+            cancelled: { name: '취소됨', verb: '취소', chip: 'bg-gray-200 text-gray-700', icon: 'fa-ban' },
+            deleted:   { name: '삭제됨', verb: '삭제', chip: 'bg-red-100 text-red-700',  icon: 'fa-trash-can' }
+        };
+        function scheduleOffState(s) { return (s && SCHEDULE_OFF[s.offState]) ? s.offState : ''; }
+        function isScheduleOff(s) { return !!scheduleOffState(s); }
+        function scheduleOffBadge(s) {
+            const st = scheduleOffState(s);
+            if (!st) return '';
+            const m = SCHEDULE_OFF[st];
+            return `<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-semibold mr-1 ${m.chip}"><i class="fas ${m.icon}"></i>${m.name}</span>`;
+        }
+
         // 일정의 주최자 (등록한 사람)
         function scheduleOrganizer(s) { return (s && s.salesperson) || ''; }
         function isScheduleOrganizer(s, name) { return scheduleOrganizer(s) === (name || currentUserName); }
@@ -17867,6 +17897,7 @@ const QUOTE_TEMPLATES = [
         // 참가 가능한 일정: 조회할 수 있고, 내가 주최자가 아니며, 아직 참석자가 아닌 일정
         function canJoinSchedule(s) {
             if (isBirthdaySchedule(s)) return false;   // 생일에는 참가하지 않습니다 (2026-09-28)
+            if (isScheduleOff(s)) return false;        // 취소 · 삭제된 일정 (2026-10-30)
             if (!s || !currentUserName) return false;
             if (isScheduleOrganizer(s)) return false;
             if (attendeeOf(s, currentUserName)) return false;
@@ -18210,7 +18241,11 @@ const QUOTE_TEMPLATES = [
             return { from: k(a), to: k(b) };
         }
         function recurInstance(s, date) {
-            return date === s.date ? s : Object.assign({}, s, { id: s.id + RECUR_SEP + date, date, recurOf: s.id });
+            // 이 날만 취소 · 삭제했으면 그 표시를 입힙니다 (2026-10-30)
+            const off = !s.offState && s.recur && s.recur.offDates && s.recur.offDates[date];
+            const mark = off ? { offState: off.state, offAt: off.at || '', offBy: off.by || '', offReason: off.reason || '', offOne: true } : null;
+            if (date === s.date) return mark ? Object.assign({}, s, mark) : s;
+            return Object.assign({}, s, { id: s.id + RECUR_SEP + date, date, recurOf: s.id }, mark || {});
         }
         // 반복 일정을 날짜별로 펼친 목록 (반복이 아니면 그대로)
         function expandRecurring(list) {
@@ -18219,6 +18254,8 @@ const QUOTE_TEMPLATES = [
             (list || []).forEach(s => {
                 if (!isRecurring(s)) { out.push(s); return; }
                 recurDates(s, w.from, w.to).forEach(d => out.push(recurInstance(s, d)));
+                // 취소 · 삭제한 날도 그 자리에 남깁니다 (exdates 라 위에서는 빠짐 · 2026-10-30)
+                Object.keys((s.recur && s.recur.offDates) || {}).filter(d => d >= w.from && d <= w.to).forEach(d => out.push(recurInstance(s, d)));
             });
             return out;
         }
@@ -18230,7 +18267,9 @@ const QUOTE_TEMPLATES = [
                 const date = t.slice(t.indexOf(RECUR_SEP) + 1);
                 return m ? recurInstance(m, date) : null;
             }
-            return schedules.find(s => s.id === id)
+            const one = schedules.find(s => s.id === id);
+            if (one && isRecurring(one)) return recurInstance(one, one.date);   // 첫 회차만 취소 · 삭제했을 수 있음
+            return one
                 || (t.indexOf(BIRTHDAY_ID_PREFIX) === 0 ? birthdaySchedules().find(s => s.id === id) : null)
                 || null;
         }
@@ -18292,16 +18331,18 @@ const QUOTE_TEMPLATES = [
             const myStatus = myAttendeeStatus(s);
             const joinedSelf = isSelfJoined(s);
             const inviteNote = myStatus ? (joinedSelf ? ' · 참가' : ` · 초대 ${attendeeStatusMeta(myStatus).name}`) : '';
-            const tooltip = `${scheduleTimeLabel(s)} · [${cal.name}] ${deptNames[s.dept || 'sales'] || ''} · ${typeName}${progress}${inviteNote} · ${s.title} (${s.salesperson || '담당자 미지정'})`;
+            const off = scheduleOffState(s);
+            const tooltip = `${off ? `[${SCHEDULE_OFF[off].name}] ` : ''}${scheduleTimeLabel(s)} · [${cal.name}] ${deptNames[s.dept || 'sales'] || ''} · ${typeName}${progress}${inviteNote} · ${s.title} (${s.salesperson || '담당자 미지정'})`;
             const inviteIcon = myStatus
                 ? `<i class="fas ${joinedSelf ? 'fa-user-check' : attendeeStatusMeta(myStatus).icon} mr-0.5" title="${joinedSelf ? '참가' : `초대 ${attendeeStatusMeta(myStatus).name}`}"></i>` : '';
-            const dim = myStatus === 'declined' ? ' opacity-50 line-through' : '';
+            const dim = (off || myStatus === 'declined') ? ' opacity-50 line-through' : '';
+            const offIcon = off ? `<i class="fas ${SCHEDULE_OFF[off].icon} mr-0.5" title="${SCHEDULE_OFF[off].name}"></i>` : '';
             const timeHtml = shown
                 ? `<span class="font-semibold tabular-nums mr-0.5">${escapeHtml(shown)}</span>`
                 : `<span class="inline-block w-1.5 h-1.5 rounded-full mr-1 align-middle ${calendarDeptDot(s.dept)}"></span>`;
             const size = o.large ? 'px-2 py-1 text-xs sm:text-sm' : 'px-1.5 py-0.5 text-[10px] sm:text-xs';
             // 날짜 셀 전체가 '하루 요약' 클릭 영역이므로, 칩 클릭은 상세 모달만 열리도록 전파를 막는다
-            return `<div onclick="event.stopPropagation(); openScheduleDetailModal(${jsArg(s.id)})" class="rounded truncate cursor-pointer hover:opacity-80 ${size} ${cal.chip}${dim}" title="${escapeHtml(tooltip)}">${timeHtml}${inviteIcon}${isRecurring(s) ? '<i class="fas fa-repeat text-[9px] opacity-60 mr-0.5" title="반복 일정"></i>' : ''}${escapeHtml(s.title)}${isBirthdaySchedule(s) ? '' : ` <span class="opacity-70">(${escapeHtml(s.salesperson || '미지정')})</span>`}</div>`;
+            return `<div onclick="event.stopPropagation(); openScheduleDetailModal(${jsArg(s.id)})" class="rounded truncate cursor-pointer hover:opacity-80 ${size} ${cal.chip}${dim}" title="${escapeHtml(tooltip)}">${offIcon}${timeHtml}${inviteIcon}${isRecurring(s) ? '<i class="fas fa-repeat text-[9px] opacity-60 mr-0.5" title="반복 일정"></i>' : ''}${escapeHtml(s.title)}${isBirthdaySchedule(s) ? '' : ` <span class="opacity-70">(${escapeHtml(s.salesperson || '미지정')})</span>`}</div>`;
         }
 
         // ==================== 하루 일정 요약 모달 ====================
@@ -18393,7 +18434,7 @@ const QUOTE_TEMPLATES = [
             const sType = getScheduleType(sDept, s.type);
             const sStyle = scheduleTypePalette[sType.color] || scheduleTypePalette.gray;
             const myStatus = myAttendeeStatus(s);
-            const dim = myStatus === 'declined' ? ' opacity-60' : '';
+            const dim = (myStatus === 'declined' || isScheduleOff(s)) ? ' opacity-60' : '';
 
             const timeCol = isAllDaySchedule(s)
                 ? '<span class="text-xs font-semibold text-gray-500">종일</span>'
@@ -18420,7 +18461,7 @@ const QUOTE_TEMPLATES = [
             return `<div onclick="openScheduleFromSummary(${jsArg(s.id)})" class="flex gap-3 p-3 border border-gray-200 rounded-lg hover:border-blue-400 hover:bg-blue-50/40 cursor-pointer transition-colors${dim}">
                     <div class="w-14 shrink-0 text-center pt-0.5">${timeCol}</div>
                     <div class="flex-1 min-w-0 border-l border-gray-100 pl-3">
-                        <p class="text-sm font-semibold text-gray-800 truncate">${escapeHtml(s.title)}</p>
+                        <p class="text-sm font-semibold text-gray-800 truncate">${scheduleOffBadge(s)}<span class="${isScheduleOff(s) ? 'line-through' : ''}">${escapeHtml(s.title)}</span></p>
                         <div class="flex flex-wrap items-center gap-1 mt-1">${badges}</div>
                         <p class="text-xs text-gray-500 mt-1"><i class="fas fa-user mr-1"></i>${escapeHtml(s.salesperson || '담당자 미지정')}</p>
                         ${attLine}${desc}
@@ -19403,6 +19444,7 @@ const QUOTE_TEMPLATES = [
                 if (recur.end === 'until' && (!recur.until || recur.until < data.date)) { alert('반복 종료일은 일정 날짜 이후여야 합니다.'); return; }
                 const before = id ? schedules.find(s => s.id === id) : null;
                 if (before && before.recur && before.recur.exdates && before.date === data.date) recur.exdates = before.recur.exdates.slice();
+                if (before && before.recur && before.recur.offDates && before.date === data.date) recur.offDates = Object.assign({}, before.recur.offDates);
             }
             data.recur = recur;
             if (id) {
@@ -19450,11 +19492,27 @@ const QUOTE_TEMPLATES = [
             document.getElementById('detail-schedule-description').innerText = schedule.description || '상세 내용 없음';
             document.getElementById('btn-edit-schedule').onclick = () => editSchedule(id);
             document.getElementById('btn-delete-schedule').onclick = () => deleteSchedule(id);
+            document.getElementById('btn-cancel-schedule').onclick = () => cancelSchedule(id);
+            document.getElementById('btn-restore-schedule').onclick = () => restoreSchedule(id);
+            document.getElementById('btn-purge-schedule').onclick = () => purgeSchedule(id);
 
             // 타 부서 일정 / 남의 개인 일정은 조회 전용
             const editable = canEditSchedule(schedule);
-            document.getElementById('btn-edit-schedule').classList.toggle('hidden', !editable);
-            document.getElementById('btn-delete-schedule').classList.toggle('hidden', !editable);
+            // 취소 · 삭제된 일정은 되살린 뒤에 고칩니다 (2026-10-30)
+            const off = scheduleOffState(schedule);
+            document.getElementById('btn-edit-schedule').classList.toggle('hidden', !editable || !!off);
+            document.getElementById('btn-cancel-schedule').classList.toggle('hidden', !editable || !!off);
+            document.getElementById('btn-delete-schedule').classList.toggle('hidden', !editable || off === 'deleted');
+            document.getElementById('btn-restore-schedule').classList.toggle('hidden', !editable || !off);
+            document.getElementById('btn-purge-schedule').classList.toggle('hidden', !off || !canManageAllData());
+            const offBox = document.getElementById('detail-schedule-off');
+            offBox.classList.toggle('hidden', !off);
+            if (off) {
+                const m = SCHEDULE_OFF[off];
+                offBox.className = `rounded border px-3 py-2 text-sm ${off === 'deleted' ? 'bg-red-50 border-red-200 text-red-800' : 'bg-gray-50 border-gray-300 text-gray-700'}`;
+                offBox.innerHTML = `<p class="font-semibold"><i class="fas ${m.icon} mr-1"></i>${m.name}${schedule.offOne ? ' (이 날만)' : ''}</p>`
+                    + `<p class="text-xs mt-0.5">${escapeHtml([schedule.offBy, schedule.offAt].filter(Boolean).join(' · '))}${schedule.offReason ? ` · 사유: ${escapeHtml(schedule.offReason)}` : ''}</p>`;
+            }
             const roNote = document.getElementById('detail-schedule-readonly');
             const roText = document.getElementById('detail-schedule-readonly-text');
             if (roNote) roNote.classList.toggle('hidden', editable);
@@ -19511,9 +19569,10 @@ const QUOTE_TEMPLATES = [
             const leaveBox = document.getElementById('detail-schedule-leave');
             const mine = attendeeOf(schedule, currentUserName);
             const joined = !!(mine && mine.self);
-            respond.classList.toggle('hidden', !mine || joined);
+            const off = isScheduleOff(schedule);
+            respond.classList.toggle('hidden', !mine || joined || off);
             if (joinBox) joinBox.classList.toggle('hidden', !!mine || !canJoinSchedule(schedule));
-            if (leaveBox) leaveBox.classList.toggle('hidden', !joined);
+            if (leaveBox) leaveBox.classList.toggle('hidden', !joined || off);
             if (mine && !joined) {
                 const st = attendeeStatusMeta(mine.status);
                 document.getElementById('detail-schedule-my-status').innerText =
@@ -19576,6 +19635,7 @@ const QUOTE_TEMPLATES = [
             const schedule = schedules.find(s => s.id === id);
             if (!schedule) return;
             if (!canEditSchedule(schedule)) { alert('조회 권한만 있는 일정입니다. 수정할 수 없습니다.'); return; }
+            if (isScheduleOff(schedule)) { alert('취소 · 삭제된 일정입니다. [되살리기] 후 수정해 주세요.'); return; }
             document.getElementById('edit-schedule-id').value = schedule.id;
             document.getElementById('schedule-title').value = schedule.title;
             document.getElementById('schedule-date').value = schedule.date;
@@ -19595,45 +19655,139 @@ const QUOTE_TEMPLATES = [
             document.getElementById('schedule-modal-title').innerText = isRecurring(schedule) ? '반복 일정 수정 (전체 회차)' : '일정 수정';
             document.getElementById('schedule-modal').classList.remove('hidden');
         }
+        // ---------- 일정 취소 · 삭제 · 되살리기 (2026-10-30) ----------
+        // 삭제해도 일정은 남기고 '삭제됨' 으로 표시합니다. 취소는 '취소됨'. 둘 다 참석자 · 담당자에게 알립니다.
+        // 반복 일정은 '이 날만 / 반복 전체' 를 고릅니다. 캘린더에서 아예 지우는 것은 관리자의 [완전 삭제] 입니다.
+        function scheduleOffNow() {
+            const d = new Date();
+            return `${ymd(d)} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+        }
+        // 알림 받을 사람 — 참석자(거부한 사람 포함 · 알고는 있어야 함) · 담당자 · 등록한 사람, 나와 퇴사자는 뺍니다
+        function scheduleOffRecipients(s) {
+            const users = (typeof localUsers !== 'undefined' ? localUsers : []);
+            const live = n => { const u = users.find(x => x.name === n); return !u || u.resigned !== true; };
+            const names = new Set(scheduleAttendees(s).map(a => a.name));
+            if (s.salesperson) names.add(s.salesperson);
+            const by = String(s.createdBy || '').toLowerCase();
+            const creator = by && users.find(u => String(u.email || '').toLowerCase() === by);
+            if (creator) names.add(creator.name);
+            return Array.from(names).filter(n => n && n !== currentUserName && live(n));
+        }
+        // type: schedule-cancelled · schedule-deleted · schedule-restored / occDate: 반복의 한 날이면 그 날짜
+        function notifySchedulePeople(s, type, occDate, reason) {
+            const day = occDate || s.date;
+            const when = (isRecurring(s) && !occDate) ? `반복 전체 (${recurLabel(s.recur)})` : `${day} ${scheduleTimeLabel(s)}`;
+            const act = { 'schedule-cancelled': '취소', 'schedule-deleted': '삭제', 'schedule-restored': '되살림' }[type];
+            const detail = `${when} · ${currentUserName || ''} 님이 ${act}${reason ? ` · 사유: ${reason}` : ''}`;
+            const scheduleId = (occDate && occDate !== s.date) ? s.id + RECUR_SEP + occDate : s.id;
+            const to = scheduleOffRecipients(s);
+            to.forEach(name => pushNotification({
+                id: 'cnoti_' + collabNotiIdCounter++, type, title: s.title || '일정', toUser: name, toDept: '', toTeam: '',
+                scheduleId, detail, date: ymd(new Date()), read: false
+            }));
+            return to.length;
+        }
+        // 반복 일정이면 '이 날만 / 전체' 를 묻습니다 — 'one' · 'all' · '' (그만둠)
+        function askScheduleScope(schedule, day, verb) {
+            if (!isRecurring(schedule)) return confirm(`이 일정을 ${verb}하시겠습니까?`) ? 'all' : '';
+            if (confirm(`반복 일정입니다 (${recurLabel(schedule.recur)}).\n\n[확인] ${day} 이 날만 ${verb}\n[취소] 다음 단계 (반복 전체 ${verb})`)) return 'one';
+            return confirm(`반복 일정의 모든 회차를 ${verb}하시겠습니까?`) ? 'all' : '';
+        }
+        // 실제로 표시를 남기고 알립니다
+        function markScheduleOff(schedule, state, scope, day, reason) {
+            const mark = { state, at: scheduleOffNow(), by: currentUserName || '', reason: reason || '' };
+            if (scope === 'one') {
+                const r = schedule.recur;
+                r.exdates = Array.from(new Set((r.exdates || []).concat([day]))).sort();
+                r.offDates = Object.assign({}, r.offDates || {}, { [day]: mark });
+            } else {
+                Object.assign(schedule, { offState: state, offAt: mark.at, offBy: mark.by, offReason: mark.reason });
+                if (state === 'deleted') unlinkWorkFromSchedule(schedule);   // 업무센터에서 올린 일정이면 업무 쪽 연결도 끊습니다
+            }
+            saveSchedules();
+            const n = notifySchedulePeople(schedule, state === 'deleted' ? 'schedule-deleted' : 'schedule-cancelled', scope === 'one' ? day : '', mark.reason);
+            renderCalendar();
+            if (typeof renderTodaySchedule === 'function') renderTodaySchedule(currentUserName);
+            closeScheduleDetailModal();
+            if (n) alert(`${SCHEDULE_OFF[state].name}으로 표시하고 ${n}명에게 알림을 보냈습니다.`);
+        }
+        // 보고 있던 것이 반복의 몇째 날인지
+        function scheduleOccDate(id) {
+            const t = String(id);
+            return t.indexOf(RECUR_SEP) > 0 ? t.slice(t.indexOf(RECUR_SEP) + 1) : '';
+        }
+        function cancelSchedule(id) {
+            const occDate = scheduleOccDate(id);
+            const schedule = schedules.find(s => s.id === scheduleMasterId(id));
+            if (!schedule) return;
+            if (!canEditSchedule(schedule)) { alert('등록자, 관리자, 일정 대리 수정 권한자만 취소할 수 있습니다.'); return; }
+            const day = occDate || schedule.date;
+            const scope = askScheduleScope(schedule, day, '취소');
+            if (!scope) return;
+            const reason = prompt('취소 사유 (선택 — 참석자 알림에 함께 보냅니다)', '');
+            if (reason === null) return;
+            markScheduleOff(schedule, 'cancelled', scope, day, reason.trim().slice(0, 200));
+        }
         function deleteSchedule(id) {
-            const rawId = String(id);
-            const occDate = String(id).indexOf(RECUR_SEP) > 0 ? String(id).slice(String(id).indexOf(RECUR_SEP) + 1) : '';
+            const occDate = scheduleOccDate(id);
             id = scheduleMasterId(id);
             const schedule = schedules.find(s => s.id === id);
             if (!schedule) return;
             // 캘린더 일정은 삭제 요청 없이 본인(등록자·관리자·일정 대리 수정 권한자)이 바로 삭제합니다 (2026-10-19)
             if (!canEditSchedule(schedule)) { alert('등록자, 관리자, 일정 대리 수정 권한자만 삭제할 수 있습니다.'); return; }
-            // 반복 일정 — 이 날만 지울지, 반복 전체를 지울지 고릅니다 (2026-10-12)
-            if (isRecurring(schedule)) {
-                const day = occDate || schedule.date;
-                if (confirm(`반복 일정입니다 (${recurLabel(schedule.recur)}).\n\n[확인] ${day} 이 날만 삭제\n[취소] 다음 단계 (반복 전체 삭제)`)) {
-                    schedule.recur.exdates = Array.from(new Set((schedule.recur.exdates || []).concat([day]))).sort();
-                    saveSchedules();
-                    renderCalendar();
-                    if (typeof renderTodaySchedule === 'function') renderTodaySchedule(currentUserName);
-                    closeScheduleDetailModal();
-                    return;
-                }
-                if (!confirm('반복 일정의 모든 회차를 삭제하시겠습니까?')) return;
-                addDeleteLog('일정', `${schedule.date || ''} ${schedule.title || ''} (반복 전체)`.trim(), schedule, '일정 삭제');
-                unlinkWorkFromSchedule(schedule);
-                schedules = schedules.filter(s => s.id !== id);
-                saveSchedules();
-                renderCalendar();
-                if (typeof renderTodaySchedule === 'function') renderTodaySchedule(currentUserName);
-                closeScheduleDetailModal();
-                return;
+            const day = occDate || schedule.date;
+            const scope = askScheduleScope(schedule, day, '삭제');
+            if (!scope) return;
+            addDeleteLog('일정', `${scope === 'one' ? day : (schedule.date || '')} ${schedule.title || ''}${isRecurring(schedule) && scope === 'all' ? ' (반복 전체)' : ''}`.trim(), schedule, '일정 삭제');
+            markScheduleOff(schedule, 'deleted', scope, day, '');
+        }
+        // 취소 · 삭제 표시를 거둡니다 — 반복의 한 날이면 그 날만
+        function restoreSchedule(id) {
+            const occDate = scheduleOccDate(id);
+            const schedule = schedules.find(s => s.id === scheduleMasterId(id));
+            if (!schedule) return;
+            if (!canEditSchedule(schedule)) { alert('등록자, 관리자, 일정 대리 수정 권한자만 되살릴 수 있습니다.'); return; }
+            const day = occDate || schedule.date;
+            const one = !schedule.offState && schedule.recur && schedule.recur.offDates && schedule.recur.offDates[day];
+            if (!one && !schedule.offState) return;
+            if (!confirm(`이 일정을 되살리시겠습니까?${one ? ` (${day} 이 날만)` : ''}\n참석자에게 다시 진행된다는 알림을 보냅니다.`)) return;
+            if (one) {
+                const r = schedule.recur;
+                const rest = Object.assign({}, r.offDates); delete rest[day];
+                r.offDates = rest;
+                r.exdates = (r.exdates || []).filter(d => d !== day);
+            } else {
+                ['offState', 'offAt', 'offBy', 'offReason'].forEach(k => { delete schedule[k]; });
             }
-            if (confirm('정말 이 일정을 삭제하시겠습니까?')) {
-                // 업무센터에서 올린 일정이면 업무 쪽 연결도 함께 끊는다
-                addDeleteLog('일정', `${schedule.date || ''} ${schedule.title || ''}`.trim(), schedule, '일정 삭제');
+            saveSchedules();
+            const n = notifySchedulePeople(schedule, 'schedule-restored', one ? day : '', '');
+            renderCalendar();
+            if (typeof renderTodaySchedule === 'function') renderTodaySchedule(currentUserName);
+            closeScheduleDetailModal();
+            if (n) alert(`일정을 되살리고 ${n}명에게 알림을 보냈습니다.`);
+        }
+        // 관리자 — 취소 · 삭제된 일정을 캘린더에서 완전히 지웁니다 (알림 없음)
+        function purgeSchedule(id) {
+            if (!canManageAllData()) { alert('완전 삭제는 관리자만 할 수 있습니다.'); return; }
+            const occDate = scheduleOccDate(id);
+            const schedule = schedules.find(s => s.id === scheduleMasterId(id));
+            if (!schedule) return;
+            const day = occDate || schedule.date;
+            const one = !schedule.offState && schedule.recur && schedule.recur.offDates && schedule.recur.offDates[day];
+            if (!one && !schedule.offState) return;
+            if (!confirm(one ? `${day} 이 날의 취소 · 삭제 표시를 캘린더에서 지우시겠습니까?` : '이 일정을 캘린더에서 완전히 지우시겠습니까? 되돌릴 수 없습니다.')) return;
+            if (one) {
+                const rest = Object.assign({}, schedule.recur.offDates); delete rest[day];
+                schedule.recur.offDates = rest;               // exdates 는 그대로 — 그 날은 계속 빠집니다
+            } else {
+                addDeleteLog('일정', `${schedule.date || ''} ${schedule.title || ''} (완전 삭제)`.trim(), schedule, '일정 삭제');
                 unlinkWorkFromSchedule(schedule);
-                schedules = schedules.filter(s => s.id !== id);
-                saveSchedules();
-                renderCalendar();
-                if (typeof renderTodaySchedule === 'function') renderTodaySchedule(currentUserName);
-                closeScheduleDetailModal();
+                schedules = schedules.filter(s => s.id !== schedule.id);
             }
+            saveSchedules();
+            renderCalendar();
+            if (typeof renderTodaySchedule === 'function') renderTodaySchedule(currentUserName);
+            closeScheduleDetailModal();
         }
 
         // ==================== 일정 구분 관리 모달 (부서별 추가/수정/삭제) ====================
