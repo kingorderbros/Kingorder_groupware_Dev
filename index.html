@@ -39573,6 +39573,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                 if (!c(0) && !c(3) && !c(4) && !c(5) && !c(6)) return;
                 if (c(0)) { cur = { brand: c(0).replace(/\s+/g, ' '), van: c(1), program: c(2).replace(/\s*\n\s*/g, ' / '), hqId: '', items: [] }; brands.push(cur); lastCat = ''; }
                 if (!cur) return;
+                if (!c(3) && !c(4) && !c(5) && !c(6) && !c(7) && !c(8)) return;   // 브랜드 이름만 있는 줄 (예: '주요 나가는 장비')
                 const cat = c(3) || lastCat; lastCat = cat;
                 const src = c(6) || c(5);
                 const m = franchiseMoney(src);
@@ -39582,7 +39583,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             return brands;
         }
         const franchiseHqCompanies = () => partners.filter(c => c && (c.kind === 'hq' || c.custType === 'hq'));
-        const franchiseNameKey = (v) => String(v || '').replace(/\s+/g, '').replace(/[()（）㈜]|주식회사/g, '').toLowerCase();
+        const franchiseNameKey = (v) => String(v || '').replace(/\s+/g, '').replace(/\(주\)|（주）|㈜|주식회사/g, '').replace(/[()（）]/g, '').toLowerCase();
         function franchiseAutoMatch(brand) {
             const k = franchiseNameKey(brand.brand.split('>').pop());
             const hit = franchiseHqCompanies().find(c => franchiseNameKey(c.name) === k)
@@ -39651,7 +39652,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             const file = (input.files || [])[0];
             if (!file) return;
             try {
-                const brands = parseFranchisePriceRows(await readXlsxRows(file));
+                const brands = parseFranchisePriceRows(await readXlsxRows(file)).filter(b => b.items.length);
                 if (!brands.length) { alert('엑셀에서 브랜드를 찾지 못했습니다. 첫 줄이 제목(브랜드명 · PG/VAN · 프로그램 · 장비구분 …)인지 확인해 주세요.'); return; }
                 const prev = {};
                 ((franchisePriceDraft || {}).brands || []).forEach(b => { if (b.hqId) prev[b.brand] = b.hqId; });

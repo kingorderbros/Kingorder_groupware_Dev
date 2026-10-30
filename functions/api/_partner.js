@@ -210,7 +210,7 @@ export function partnerPriceView(rows, company, partnerId) {
 // 다른 브랜드 단가는 보내지 않습니다. 브랜드 찾는 차례: 연결한 본사 id → 브랜드 이름.
 //   본사 계정(hq)은 자기 업체 id · 이름, 가맹점(franchise)은 상위 본사 id(parentId) · 프랜차이즈명(franchiseName)
 export const FRANCHISE_PRICE_KEY = 'gwFranchisePrices.v1';
-const brandKey = (v) => s(v).replace(/\s+/g, '').replace(/[()（）㈜]|주식회사/g, '').toLowerCase();
+const brandKey = (v) => s(v).replace(/\s+/g, '').replace(/\(주\)|（주）|㈜|주식회사/g, '').replace(/[()（）]/g, '').toLowerCase();
 export function franchiseBrandFor(data, company) {
     const c = company || {};
     const t = s(c.custType || c.kind);
