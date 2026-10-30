@@ -55459,6 +55459,8 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             { id: 'card1',  name: '카드 일시불' },
             { id: 'card12', name: '카드 할부' },
             { id: 'paid',   name: '유상임대' },
+            // 렌탈 (영업본부 보완 2026-10-30) — 월 렌탈료 × 개월. 렌탈 품목은 영업본부 접수 화면에 '렌탈 내역' 으로 따로 모아 보여 줍니다
+            { id: 'rental', name: '렌탈' },
             { id: 'free',   name: '무상임대' }
         ];
         // 무상임대 사유 — 계약서 종류가 갈립니다
@@ -55738,7 +55740,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             let margin = null;                       // null 이면 '해당없음'
             if (mode.marginLabel) {
                 if (r.method === 'free') margin = null;
-                else if (r.method === 'paid') {
+                else if (r.method === 'paid' || r.method === 'rental') {
                     // 유상임대 — 월임대료 × 개월 × 0.79 에서 정책단가를 뺀 것이 수수료입니다
                     margin = Math.round(partnerNum(r.resale) * partnerNum(r.months) * 0.79 - price) * qty;
                 } else {
@@ -55906,7 +55908,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                         </label>` : ''}
                         ${mode.showResale ? `<label class="block">${lab(escapeHtml(mode.resaleLabel))}
                             <input class="${inp} text-right" data-hw="resale" inputmode="numeric" value="${partnerWon(r.resale)}" placeholder="${escapeHtml(mode.resaleLabel)}" /></label>
-                        ${r.method === 'paid' ? `<label class="block">${lab('임대 개월')}
+                        ${(r.method === 'paid' || r.method === 'rental') ? `<label class="block">${lab(r.method === 'rental' ? '렌탈 개월' : '임대 개월')}
                             <input class="${inp} text-right" data-hw="months" inputmode="numeric" value="${partnerNum(r.months)}" /></label>` : ''}` : ''}
                         <label class="block col-span-2 ${mode.showResale ? 'sm:col-span-4' : 'sm:col-span-2'}">${lab('비고')}
                             <input class="${inp}" data-hw="note" value="${escapeHtml(r.note || '')}" placeholder="비고" /></label>
@@ -56202,7 +56204,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             const hw = v.hwList || '';
             const hasAny = partnerHwHasMethod(hw, 'cash') || partnerHwHasMethod(hw, 'card1')
                         || partnerHwHasMethod(hw, 'card12') || partnerHwHasMethod(hw, 'paid')
-                        || partnerHwHasMethod(hw, 'free');
+                        || partnerHwHasMethod(hw, 'rental') || partnerHwHasMethod(hw, 'free');
             const out = [];
             // 무상 장비 지원은 **사는 건이 아니라 넣어 주는** 건입니다.
             // 구매계약서를 받을 일이 없고, 무상임대계약서가 언제나 필요합니다.
@@ -61326,6 +61328,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
         function renderPartnerCenter(dept) {
             const el = document.getElementById('sec-partner-center-' + dept);
             if (!el) return;
+            autoAssignPartnerIntakes(dept);   // 파트너사별 담당자 자동 배정 (2026-10-30)
             const d = partnerDeptDef(dept);
             const all = partnerIntakesOf(dept);
             const f = partnerCenterFilter[dept] || 'open';
@@ -61712,7 +61715,14 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                             <button type="button" onclick="assignPartnerIntake(${jsArg(x.id)})" class="px-3 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded text-sm font-semibold">지정</button>
                             <button type="button" onclick="assignPartnerIntakeToMe(${jsArg(x.id)})" class="px-3 py-2 bg-white border border-teal-300 text-teal-700 rounded text-sm font-semibold">내가 처리</button>
                         </div>
+                        ${x.autoAssigned && x.assignee === x.autoAssigned ? `<p class="text-[11px] text-gray-400 mt-1"><i class="fas fa-circle-info mr-1"></i>거래처 관리의 영업 담당자로 자동 배정되었습니다.</p>` : ''}
                     </div>
+                    ${partnerIntakeDepts(x).indexOf('sales') > -1 ? `<div>
+                        <p class="text-gray-500 font-medium mb-1">지원금 상계처리</p>
+                        <div class="flex flex-wrap gap-1.5">${PARTNER_SUBSIDY_OFFSET.map(o => `<button type="button" onclick="setPartnerSubsidyOffset(${jsArg(x.id)}, ${jsArg(o.id)})"
+                            class="px-2.5 py-1.5 rounded-full text-xs font-bold border transition ${x.subsidyOffset === o.id ? 'bg-teal-600 text-white border-teal-600' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'}">${escapeHtml(o.name)}</button>`).join('')}</div>
+                    </div>` : ''}
+                    ${partnerRentalListHtml(x)}
                     ${partnerDonateApprovalHtml(x)}
                     ${partnerSiteConfirmHtml(x)}
                     ${partnerInstallRequestHtml(x)}
@@ -61737,6 +61747,12 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                     <button type="button" onclick="deletePartnerIntake(${jsArg(x.id)})" class="px-3 py-1.5 text-xs bg-red-50 text-red-600 border border-red-200 rounded hover:bg-red-100">
                         <i class="fas fa-trash mr-1"></i>접수 삭제 (관리자)</button>
                 </div>`;
+            } else if (partnerIntakeDepts(x).indexOf('sales') > -1 && canHandlePartnerIntake('sales')) {
+                // 영업본부 담당자도 영업본부 접수함의 건을 지웁니다 (영업본부 보완 2026-10-30)
+                html += `<div class="flex justify-end gap-2 mt-3">
+                    <button type="button" onclick="deletePartnerIntake(${jsArg(x.id)})" class="px-3 py-1.5 text-xs bg-red-50 text-red-600 border border-red-200 rounded hover:bg-red-100">
+                        <i class="fas fa-trash mr-1"></i>접수 삭제</button>
+                </div>`;
             }
 
             document.getElementById('pi-detail-body').innerHTML = html;
@@ -61759,7 +61775,10 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
         function deletePartnerIntake(id) {
             const x = partnerIntakeById(id);
             if (!x) return;
-            if (!adminDeleteGate('deletePartnerIntake', [id], '파트너센터 접수', `${x.id} · ${x.title || partnerIntakeTypeName(x)}`)) return;
+            // 영업본부 접수함의 건은 영업본부 담당자도 바로 삭제합니다 (영업본부 보완 2026-10-30) — 삭제 이력은 그대로 남깁니다
+            const salesCanDelete = partnerIntakeDepts(x).indexOf('sales') > -1 && canHandlePartnerIntake('sales');
+            if (salesCanDelete) watchDeletion('deletePartnerIntake', [id], '파트너센터 접수', `${x.id} · ${x.title || partnerIntakeTypeName(x)}`, x);
+            else if (!adminDeleteGate('deletePartnerIntake', [id], '파트너센터 접수', `${x.id} · ${x.title || partnerIntakeTypeName(x)}`)) return;
             if (!confirm(`접수 ${x.id} (${x.title || partnerIntakeTypeName(x)}) 을(를) 삭제하시겠습니까?\n파트너 화면에서도 삭제되며 복구할 수 없습니다.`)) return;
             partnerIntakes = partnerIntakes.filter(y => y.id !== id);
             savePartnerIntakes();
@@ -62013,6 +62032,25 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
         function partnerCanRequestInstall(x) {
             if (!x || !partnerHasSiteCheck(x)) return false;
             return x.dept === 'sales';                     // 영업본부가 받은 건만 (신규 개설 · 추가 장비 구매 · 무상 지원)
+        }
+        // 렌탈 내역 (영업본부 보완 2026-10-30) — 렌탈로 고른 품목만 모아 영업본부 접수 화면에 보여 줍니다
+        function partnerRentalRows(x) {
+            const f = partnerIntakeFieldsOf(x).find(ff => ff.type === 'hwtable');
+            if (!f) return [];
+            return partnerHwRows(((x || {}).extra || {})[f.key]).filter(r => r.method === 'rental' && partnerNum(r.qty) > 0);
+        }
+        function partnerRentalListHtml(x) {
+            if (partnerIntakeDepts(x).indexOf('sales') < 0) return '';
+            const rows = partnerRentalRows(x);
+            if (!rows.length) return '';
+            return `<div>
+                <p class="text-gray-500 font-medium mb-1">렌탈 내역 <span class="text-xs font-normal text-gray-400">(렌탈로 접수된 품목)</span></p>
+                <table class="w-full text-xs border border-gray-200 bg-white">
+                    <thead><tr class="bg-gray-50 text-gray-500"><th class="p-1.5 text-left">품목</th><th class="p-1.5 text-right">수량</th><th class="p-1.5 text-right">렌탈 개월</th><th class="p-1.5 text-right">월 렌탈료</th><th class="p-1.5 text-right">단가</th></tr></thead>
+                    <tbody>${rows.map(r => `<tr class="border-t border-gray-100"><td class="p-1.5">${escapeHtml(r.item || '')}</td><td class="p-1.5 text-right">${partnerNum(r.qty)}</td>
+                        <td class="p-1.5 text-right">${partnerNum(r.months)}</td><td class="p-1.5 text-right">${r.resale ? partnerWon(r.resale) + '원' : '-'}</td><td class="p-1.5 text-right">${r.price ? partnerWon(r.price) + '원' : '-'}</td></tr>`).join('')}</tbody>
+                </table>
+            </div>`;
         }
         function partnerInstallDevicesText(x) {
             const f = partnerIntakeFieldsOf(x).find(ff => ff.type === 'hwtable');
@@ -62352,6 +62390,42 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             openPartnerIntakeModal(id);
         }
         function assignPartnerIntakeToMe(id) { assignPartnerIntake(id, currentUserName || ''); }
+        // ---------- 지원금 상계처리 여부 (영업본부 보완 2026-10-30) ----------
+        const PARTNER_SUBSIDY_OFFSET = [{ id: 'yes', name: '상계처리' }, { id: 'no', name: '상계 안 함' }, { id: 'na', name: '해당 없음' }];
+        function setPartnerSubsidyOffset(id, v) {
+            const x = partnerIntakeById(id);
+            if (!x || !canHandleIntake(x)) { alert('처리 권한이 없습니다.'); return; }
+            if (x.subsidyOffset === v) return;
+            x.subsidyOffset = v;
+            (x.history = x.history || []).push({ at: partnerNowStamp(), by: currentUserName || '', text: `지원금 상계처리 → ${(PARTNER_SUBSIDY_OFFSET.find(o => o.id === v) || {}).name || v}` });
+            savePartnerIntakes();
+            refreshPartnerCenterViews();
+            openPartnerIntakeModal(id);
+        }
+        // ---------- 파트너사별 담당자 자동 배정 (영업본부 보완 2026-10-30) ----------
+        // 거래처 관리의 '영업 담당' 을 영업본부 접수의 담당자로 저절로 넣습니다 (가맹점 계정이면 상위 파트너사의 담당).
+        // 이미 담당자가 있거나 한 번 자동 배정한 건은 건드리지 않습니다.
+        function partnerOwnerOf(partnerId) {
+            const all = (typeof partners !== 'undefined' && Array.isArray(partners)) ? partners : [];
+            const p = all.find(c => c && c.id === partnerId);
+            if (!p) return '';
+            if (p.owner) return String(p.owner).trim();
+            const parent = all.find(c => c && (c.id === p.parentPartnerId || c.id === p.parentId));
+            return parent && parent.owner ? String(parent.owner).trim() : '';
+        }
+        function autoAssignPartnerIntakes(dept) {
+            if (dept !== 'sales' || !canHandlePartnerIntake('sales')) return;
+            let n = 0;
+            partnerIntakesOf('sales').forEach(x => {
+                if (x.assignee || x.autoAssigned || !PARTNER_OPEN_STATUSES.includes(x.status)) return;
+                const owner = partnerOwnerOf(x.partnerId);
+                if (!owner || !(typeof localUsers !== 'undefined' && localUsers.some(u => u.name === owner && !isResigned(u)))) return;
+                x.assignee = owner; x.autoAssigned = owner;
+                (x.history = x.history || []).push({ at: partnerNowStamp(), by: '시스템', text: `담당자 자동 배정 → ${owner} (거래처 영업 담당)` });
+                n++;
+            });
+            if (n) savePartnerIntakes();
+        }
         function addPartnerIntakeReply(id) {
             const x = partnerIntakeById(id);
             if (!x || !canHandleIntake(x)) { alert('처리 권한이 없습니다.'); return; }
