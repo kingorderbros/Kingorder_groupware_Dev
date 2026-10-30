@@ -1,5 +1,5 @@
 ﻿<!DOCTYPE html>
-<html lang="ko" data-theme="blue">
+<html lang="ko" data-theme="kingorder">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
@@ -114,9 +114,11 @@
     <script>
         (function () {
             try {
-                var ok = ['blue', 'green', 'slate', 'soft', 'compact'];
+                var ok = ['kingorder', 'blue', 'green', 'slate', 'soft', 'compact'];
                 var t = localStorage.getItem('gwTheme');
-                document.documentElement.setAttribute('data-theme', ok.indexOf(t) >= 0 ? t : 'blue');
+                // 2026-10-30 기본 디자인을 '킹오더' 로 — 한 번만 바꾸고, 그 뒤 고른 것은 그대로 둡니다
+                if (!localStorage.getItem('gwThemeKO')) { t = 'kingorder'; localStorage.setItem('gwThemeKO', '1'); localStorage.setItem('gwTheme', t); }
+                document.documentElement.setAttribute('data-theme', ok.indexOf(t) >= 0 ? t : 'kingorder');
                 // 파트너센터 색 테마도 같은 방식으로 미리 걸어 둡니다
                 var pcOk = ['indigo', 'teal', 'navy'];
                 var pt = localStorage.getItem('pcTheme');
@@ -305,6 +307,25 @@
             --gw-p-800: #3D2E8B;
             --gw-p-900: #2E2368;
             --gw-p-rgb: 93, 70, 210;
+        }
+        /* kingorder — 킹오더 브랜드 (2026-10-30): 로고 먹색 #121212 + 홈페이지 포인트 분홍 #EA0E69.
+           단추 · 선택은 먹색, 분홍은 선택된 메뉴 · 포커스 · 로고처럼 작은 곳에만 씁니다. */
+        :root[data-theme="kingorder"] {
+            /* 옅은 칸(50~300)은 분홍을 아주 옅게 — 파랑으로 구분하던 상태 표시가 회색과 섞이지 않게 */
+            --gw-p-50:  #FDF3F7;
+            --gw-p-100: #FAE4ED;
+            --gw-p-200: #F2C6D8;
+            --gw-p-300: #E59BBA;
+            --gw-p-400: #7C7873;
+            --gw-p-500: #3D3A37;
+            --gw-p-600: #1A1918;
+            --gw-p-700: #121212;
+            --gw-p-800: #0A0A0A;
+            --gw-p-900: #000000;
+            --gw-p-rgb: 26, 25, 24;
+            --gw-accent:     #E00D66;   /* 킹오더 분홍 (#EA0E69 를 흰 바탕 글자 대비 4.5:1 넘게 한 단계 짙게) */
+            --gw-accent-rgb: 224, 13, 102;
+            --gw-accent-50:  #FDEEF4;
         }
         :root[data-theme="compact"] {
             --gw-p-50:  #ECF3F6;
@@ -509,6 +530,59 @@
             --gw-side-active-bar: inset 2px 0 0 var(--gw-p-600);
         }
 
+        /* kingorder — 따뜻한 흰색 · 옅은 회색 바탕, 먹색 사이드바, 부드러운 모서리와 얕은 그림자 */
+        :root[data-theme="kingorder"] {
+            --gw-bg:          #F6F5F3;
+            --gw-surface:     #FFFFFF;
+            --gw-line:        #E8E6E2;
+            --gw-line-soft:   #F0EEEB;
+            --gw-line-strong: #D9D6D1;
+            --gw-head:        #FAF9F7;
+            --gw-row-hover:   #FAF8F6;
+            --gw-track:       #EFEDEA;
+            --gw-text:        #161514;
+            --gw-text-sub:    #57534E;
+            --gw-text-mute:   #8C8781;
+
+            --gw-radius:    8px;
+            --gw-radius-lg: 10px;
+            --gw-radius-xl: 14px;
+            --gw-radius-sm: 6px;
+
+            --gw-shadow-sm:    0 1px 2px rgba(22, 21, 20, .04), 0 0 0 1px rgba(22, 21, 20, .03);
+            --gw-shadow:       0 1px 3px rgba(22, 21, 20, .06), 0 0 0 1px rgba(22, 21, 20, .03);
+            --gw-shadow-md:    0 4px 14px rgba(22, 21, 20, .07), 0 0 0 1px rgba(22, 21, 20, .03);
+            --gw-shadow-hover: 0 8px 22px rgba(22, 21, 20, .10), 0 0 0 1px rgba(22, 21, 20, .04);
+            --gw-accent-bar:   3px;
+
+            --gw-fs-base:  14px;
+            --gw-fs-nav:   13.5px;
+            --gw-fs-th:    12px;
+            --gw-fs-td:    13.5px;
+            --gw-fs-form:  13.5px;
+            --gw-fs-title: 17px;
+            --gw-cell-lg:  11px 16px;
+            --gw-cell-sm:  10px 13px;
+            --gw-header-h: 60px;
+            --gw-side-w:   244px;
+            --gw-nav-pad:  14px 12px;
+
+            /* 먹색 사이드바 */
+            --gw-side-bg:         #121212;
+            --gw-side-line:       rgba(255, 255, 255, .08);
+            --gw-side-text:       #A8A29E;
+            --gw-side-title:      #FFFFFF;
+            --gw-side-label:      #6B6560;
+            --gw-side-icon:       #78716C;
+            --gw-side-icon-hover: #FFFFFF;
+            --gw-side-hover-bg:   rgba(255, 255, 255, .06);
+            --gw-side-hover-text: #FFFFFF;
+            --gw-side-active-bg:  rgba(255, 255, 255, .09);
+            --gw-side-active-txt: #FFFFFF;
+            --gw-side-active-bar: inset 3px 0 0 var(--gw-accent);
+            --gw-side-logo-icon:  var(--gw-accent);
+        }
+
         /* 카드 내부 여백·간격도 버전 밀도에 맞춤.
            표 셀(th/td.p-4, .p-3)은 9번 규칙이 더 높은 명시도로 처리하므로 영향받지 않습니다.
            모달·견적서는 대상에서 제외(#app-view 한정)합니다. */
@@ -705,6 +779,8 @@
         /* 다크 사이드바에서는 로그아웃 hover 를 어두운 톤으로 */
         :root[data-theme="slate"] #sidebar button:hover  { background-color: rgba(239, 68, 68, .16); color: #FCA5A5; }
         :root[data-theme="slate"] #sidebar #user-initial { background-color: var(--gw-p-400); }
+        :root[data-theme="kingorder"] #sidebar button:hover  { background-color: rgba(var(--gw-accent-rgb), .14); color: #FDA4C8; }
+        :root[data-theme="kingorder"] #sidebar #user-initial { background-color: var(--gw-accent); }
 
         /* ---------- 7. 상단 헤더 ---------- */
         :root[data-theme] #app-view header.h-16 {
@@ -827,6 +903,7 @@
         .gw-theme-switch button[data-gw-theme="slate"]   .gw-dot { background: #1E2634; }
         .gw-theme-switch button[data-gw-theme="soft"]    .gw-dot { background: #5D46D2; }
         .gw-theme-switch button[data-gw-theme="compact"] .gw-dot { background: #0E5D78; }
+        .gw-theme-switch button[data-gw-theme="kingorder"] .gw-dot { background: #121212; box-shadow: inset 0 0 0 2px #121212, inset 0 0 0 4px #EA0E69; }
         /* soft/compact 는 형태 차이도 점 모양으로 미리 보여 줌 */
         .gw-theme-switch button[data-gw-theme="compact"] .gw-dot { border-radius: 2px; }
 
@@ -837,7 +914,7 @@
             box-shadow: 0 1px 2px rgba(16, 24, 40, .10);
         }
         /* 좁은 화면에서는 색상 점만 표시 (버전이 5개라 기준폭을 넓게 잡음) */
-        @media (max-width: 1279px) {
+        @media (max-width: 1439px) {
             .gw-theme-switch button .gw-label { display: none; }
             .gw-theme-switch button { padding: 5px; }
         }
@@ -917,6 +994,74 @@
 
         /* 가로 스크롤 — 인원이 많아 넓어져도 본문이 밀리지 않게 */
         .org-scroll { overflow-x: auto; padding-bottom: 8px; }
+
+        /* ---------- 14. kingorder 테마 마감 (2026-10-30) ----------
+           브랜드 톤에 맞춘 세부 — 로고 · 선택 표시 · 단추 · 표 숫자 · 창 · 움직임 */
+        /* 먹색 사이드바에서는 로고를 흰색으로 */
+        :root[data-theme="kingorder"] #sidebar > div:first-of-type img { background: transparent; filter: invert(1); padding: 0; }
+        :root[data-theme="kingorder"] #sidebar > div:first-of-type { font-weight: 700; letter-spacing: -0.03em; }
+        :root[data-theme="kingorder"] #sidebar nav > p { letter-spacing: .12em; font-weight: 600; }
+        :root[data-theme="kingorder"] #sidebar .nav-item { transition: background-color .18s ease, color .18s ease; }
+        :root[data-theme="kingorder"] #sidebar .nav-item.bg-blue-600\/25 .fas,
+        :root[data-theme="kingorder"] #sidebar .nav-item.bg-blue-600\/25 .far { color: var(--gw-accent); }
+
+        /* 상단 — 흰 바탕 + 얇은 선, 제목은 또렷하게 */
+        :root[data-theme="kingorder"] #app-view header.h-16 { background: rgba(255, 255, 255, .92); backdrop-filter: saturate(1.4) blur(8px); }
+        :root[data-theme="kingorder"] #page-title { font-weight: 700; letter-spacing: -0.03em; }
+        :root[data-theme="kingorder"] #app-view h3 { letter-spacing: -0.03em; }
+
+        /* 주 단추 — 먹색, 누르면 한 단계 더 짙게 */
+        :root[data-theme="kingorder"] button.bg-blue-600,
+        :root[data-theme="kingorder"] button.bg-indigo-600,
+        :root[data-theme="kingorder"] a.bg-blue-600 {
+            box-shadow: 0 1px 2px rgba(0, 0, 0, .12), inset 0 1px 0 rgba(255, 255, 255, .08);
+            transition: background-color .18s ease, box-shadow .18s ease, transform .12s ease;
+        }
+        :root[data-theme="kingorder"] button.bg-blue-600:active,
+        :root[data-theme="kingorder"] button.bg-indigo-600:active { transform: translateY(1px); }
+
+        /* 포커스 — 키보드로 움직일 때 분홍 테두리 */
+        :root[data-theme="kingorder"] .focus\:ring-blue-500:focus,
+        :root[data-theme="kingorder"] .focus\:ring-indigo-500:focus,
+        :root[data-theme="kingorder"] .focus\:ring-sky-500:focus,
+        :root[data-theme="kingorder"] .focus\:ring-cyan-500:focus,
+        :root[data-theme="kingorder"] .focus\:ring-purple-500:focus { --tw-ring-color: rgba(var(--gw-accent-rgb), .28); }
+        :root[data-theme="kingorder"] #app-view input:not([type="checkbox"]):not([type="radio"]):focus,
+        :root[data-theme="kingorder"] #app-view select:focus,
+        :root[data-theme="kingorder"] #app-view textarea:focus,
+        :root[data-theme="kingorder"] div[id$="-modal"] input:not([type="checkbox"]):not([type="radio"]):focus,
+        :root[data-theme="kingorder"] div[id$="-modal"] select:focus,
+        :root[data-theme="kingorder"] div[id$="-modal"] textarea:focus { border-color: var(--gw-accent); }
+        :root[data-theme="kingorder"] a:focus-visible,
+        :root[data-theme="kingorder"] button:focus-visible { outline: 2px solid rgba(var(--gw-accent-rgb), .55); outline-offset: 2px; }
+        :root[data-theme="kingorder"] ::selection { background: rgba(var(--gw-accent-rgb), .16); }
+
+        /* 표 — 머리줄은 작고 단정하게, 숫자는 자릿수 맞춤 */
+        :root[data-theme="kingorder"] #app-view thead th,
+        :root[data-theme="kingorder"] div[id$="-modal"]:not(#quote-preview-modal) thead th { color: var(--gw-text-mute); letter-spacing: .01em; border-top: 0; }
+        :root[data-theme="kingorder"] #app-view tbody td,
+        :root[data-theme="kingorder"] div[id$="-modal"]:not(#quote-preview-modal) tbody td { font-variant-numeric: tabular-nums; }
+        :root[data-theme="kingorder"] #app-view tbody tr { transition: background-color .12s ease; }
+
+        /* 카드 — 마우스를 올리면 살짝 떠오름 */
+        :root[data-theme="kingorder"] #app-view .hover\:shadow-md { transition: box-shadow .2s ease, transform .2s ease; }
+        :root[data-theme="kingorder"] #app-view .hover\:shadow-md:hover { transform: translateY(-1px); }
+
+        /* 창(모달) — 뒤 바탕을 흐리게, 창은 둥글고 깊게 */
+        :root[data-theme="kingorder"] div[id$="-modal"].fixed.inset-0 { backdrop-filter: blur(3px); }
+        :root[data-theme="kingorder"] div[id$="-modal"] .shadow-xl,
+        :root[data-theme="kingorder"] div[id$="-modal"] .shadow-2xl { box-shadow: 0 24px 60px rgba(22, 21, 20, .22), 0 0 0 1px rgba(22, 21, 20, .05); }
+
+        /* 로그인 화면 — 먹색 바탕 위 흰 카드, 분홍 한 줄 */
+        :root[data-theme="kingorder"] #login-view { background: radial-gradient(120% 90% at 50% 0%, #2A2726 0%, #121212 60%); }
+        :root[data-theme="kingorder"] #login-view > div { border-top: 3px solid var(--gw-accent); box-shadow: 0 30px 80px rgba(0, 0, 0, .45); }
+
+        :root[data-theme="kingorder"] #app-view ::-webkit-scrollbar-thumb { background: #D6D2CC; background-clip: content-box; }
+        :root[data-theme="kingorder"] #app-view ::-webkit-scrollbar-thumb:hover { background: #B3AEA7; background-clip: content-box; }
+
+        @media (prefers-reduced-motion: reduce) {
+            :root[data-theme="kingorder"] * { transition: none !important; transform: none !important; }
+        }
 
         /* 인쇄 시에는 테마 레이어가 견적서 출력에 개입하지 않도록 */
         @media print {
@@ -1915,7 +2060,11 @@
                 <div class="flex items-center space-x-3 md:space-x-4 shrink-0">
                     <!-- 디자인 버전 전환 -->
                     <div id="gw-theme-switch" class="gw-theme-switch" role="radiogroup" aria-label="디자인 버전 선택">
-                        <button type="button" data-gw-theme="blue" role="radio" aria-checked="true"
+                        <button type="button" data-gw-theme="kingorder" role="radio" aria-checked="false"
+                                onclick="setGwTheme('kingorder')" title="킹오더: 브랜드 먹색 + 분홍 포인트 (기본)">
+                            <span class="gw-dot" aria-hidden="true"></span><span class="gw-label">킹오더</span>
+                        </button>
+                        <button type="button" data-gw-theme="blue" role="radio" aria-checked="false"
                                 onclick="setGwTheme('blue')" title="블루: 기본 업무용 디자인">
                             <span class="gw-dot" aria-hidden="true"></span><span class="gw-label">블루</span>
                         </button>
@@ -12830,10 +12979,11 @@ const QUOTE_TEMPLATES = [
         // soft            : 큰 라운드 + 넉넉한 여백
         // compact         : 초고밀도 + 무그림자
         // (실제 톤은 <style id="gw-theme"> 의 --gw-* 토큰이 결정하며, 마크업은 공용입니다)
-        const GW_THEMES = ['blue', 'green', 'slate', 'soft', 'compact'];
+        // kingorder       : 킹오더 브랜드 (먹색 사이드바 + 분홍 포인트) — 기본 (2026-10-30)
+        const GW_THEMES = ['kingorder', 'blue', 'green', 'slate', 'soft', 'compact'];
 
         function setGwTheme(theme) {
-            if (!GW_THEMES.includes(theme)) theme = 'blue';
+            if (!GW_THEMES.includes(theme)) theme = 'kingorder';
             document.documentElement.setAttribute('data-theme', theme);
             try { kobStorage.setItem('gwTheme', theme); } catch (e) { /* 스토리지 차단 환경 무시 */ }
             syncGwThemeSwitch(theme);
@@ -12847,7 +12997,7 @@ const QUOTE_TEMPLATES = [
         }
 
         // 저장된 테마로 스위치 초기 상태 동기화 (색상 자체는 <head>에서 이미 적용됨)
-        syncGwThemeSwitch(document.documentElement.getAttribute('data-theme') || 'blue');
+        syncGwThemeSwitch(document.documentElement.getAttribute('data-theme') || 'kingorder');
 
         // 사이드바 토글 (모바일 & 데스크탑)
         function toggleSidebar() {
