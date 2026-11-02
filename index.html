@@ -11725,6 +11725,8 @@ const QUOTE_TEMPLATES = [
             try {
                 const q = new URLSearchParams(location.search);
                 if (q.has('noti')) { q.delete('noti'); history.replaceState(null, '', location.pathname + (q.toString() ? '?' + q : '') + location.hash); setTimeout(openNotiFromPush, 300); }
+                // 킹오더챗 대화방 공지 칸에서 누르고 들어온 경우 — ?notice=공지번호 → 공지 상세 창 (2026-11-02)
+                if (q.has('notice')) { const nid = q.get('notice'); q.delete('notice'); history.replaceState(null, '', location.pathname + (q.toString() ? '?' + q : '') + location.hash); setTimeout(() => openNoticeView(nid), 400); }
             } catch (e) { /* 주소를 손대지 못하면 그냥 둡니다 */ }
         }
 
@@ -37750,7 +37752,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             return list.map((n, i) => `
                 <div class="bg-yellow-50 p-2 rounded text-sm text-gray-800 border border-yellow-100 ${(hasPrev || i > 0) ? 'mt-2' : ''}">
                     <div class="flex justify-between items-start gap-2">
-                        <span class="flex-1 min-w-0">
+                        <span class="flex-1 min-w-0 cursor-pointer hover:underline" onclick="openNoticeView(${jsArg(n.id)})" title="상세 보기">
                             <i class="fas ${n.pinned ? 'fa-thumbtack' : 'fa-info-circle'} text-yellow-600 mr-1"></i>
                             <b>[공지]</b> ${escapeHtml(n.title)}
                         </span>
@@ -37764,6 +37766,41 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                     ${n.content ? `<p class="text-xs text-gray-600 mt-1 whitespace-pre-line">${escapeHtml(n.content)}</p>` : ''}
                     <p class="text-[11px] text-gray-400 mt-1">${escapeHtml(n.author || '')}</p>
                 </div>`).join('');
+        }
+
+        // ---------- 공지사항 상세 창 (2026-11-02) ----------
+        // 킹오더챗 대화방 공지 칸 → 그룹웨어 ?notice=공지번호 로 들어오면 이 창을 엽니다.
+        function openNoticeView(noticeId) {
+            const n = notices.find(x => String(x.id) === String(noticeId));
+            if (!n) { alert('공지사항을 찾을 수 없습니다.\n삭제되었거나 볼 수 없는 공지입니다.'); return; }
+            let modal = document.getElementById('notice-view-modal');
+            if (!modal) {
+                modal = document.createElement('div');
+                modal.id = 'notice-view-modal';
+                modal.className = 'hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4';
+                modal.addEventListener('click', (e) => { if (e.target === modal) closeNoticeView(); });
+                document.body.appendChild(modal);
+            }
+            modal.innerHTML = `
+                <div class="bg-white rounded-lg shadow-xl w-full max-w-lg max-h-[85vh] flex flex-col">
+                    <div class="flex items-start justify-between gap-3 px-5 py-4 border-b">
+                        <div class="min-w-0">
+                            <p class="text-xs text-yellow-600 font-semibold mb-1"><i class="fas ${n.pinned ? 'fa-thumbtack' : 'fa-bullhorn'} mr-1"></i>공지사항${n.pinned ? ' · 상단 고정' : ''}</p>
+                            <h3 class="text-lg font-bold text-gray-800 break-words">${escapeHtml(n.title || '')}</h3>
+                            <p class="text-xs text-gray-500 mt-1">${escapeHtml(n.author || '')}${n.author && n.date ? ' · ' : ''}${escapeHtml(n.date || '')}</p>
+                        </div>
+                        <button onclick="closeNoticeView()" class="text-gray-400 hover:text-gray-700 px-1" title="닫기"><i class="fas fa-times"></i></button>
+                    </div>
+                    <div class="px-5 py-4 overflow-y-auto text-sm text-gray-800 whitespace-pre-line break-words">${n.content ? escapeHtml(n.content) : '<span class="text-gray-400">내용이 없습니다.</span>'}</div>
+                    <div class="px-5 py-3 border-t flex justify-end">
+                        <button onclick="closeNoticeView()" class="px-4 py-2 text-sm rounded bg-gray-100 hover:bg-gray-200 text-gray-700">닫기</button>
+                    </div>
+                </div>`;
+            modal.classList.remove('hidden');
+        }
+        function closeNoticeView() {
+            const modal = document.getElementById('notice-view-modal');
+            if (modal) modal.classList.add('hidden');
         }
 
         // 오늘/어제는 사람이 읽기 쉽게
