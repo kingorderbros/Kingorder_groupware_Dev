@@ -26216,7 +26216,7 @@ const QUOTE_TEMPLATES = [
 
         let inboundRecords = [];
         let inboundSeq = 13;
-        let inboundFilter = { q: '', route: '', service: '', result: '', contact: '', from: '', to: '', quick: '', channel: '', dept: '' };
+        let inboundFilter = { q: '', route: '', service: '', result: '', contact: '', from: '', to: '', quick: '', channel: '', site: '', dept: '' };
 
         // ---------- 인입 자료를 두 화면이 나눠 씁니다 (2026-09-07) ----------
         // 외주업체는 **별도 페이지(?mode=inbound)** 로 들어와 인입만 넣습니다.
@@ -26286,6 +26286,7 @@ const QUOTE_TEMPLATES = [
                 if (f.quick === 'check' && !inboundNeedsCheck(r)) return false;
                 if (f.quick === 'stop' && (!inboundStopped(r) || (r.kob || {}).result)) return false;
                 if (f.channel && inboundChannelOf(r) !== f.channel) return false;
+                if (f.site && inboundSiteOf(r) !== f.site) return false;
                 if (f.dept && canSeeInboundKob() && (f.dept === 'none' ? !!(r.kob || {}).dept : (r.kob || {}).dept !== f.dept)) return false;
                 if (f.from && (r.inDate || '') < f.from) return false;
                 if (f.to && (r.inDate || '') > f.to) return false;
@@ -26311,7 +26312,7 @@ const QUOTE_TEMPLATES = [
             rerenderKeepFocus(renderInboundList);
         }
         function resetInboundFilter() {
-            inboundFilter = { q: '', route: '', service: '', result: '', contact: '', from: '', to: '', quick: '', channel: '', dept: '' };
+            inboundFilter = { q: '', route: '', service: '', result: '', contact: '', from: '', to: '', quick: '', channel: '', site: '', dept: '' };
             renderInboundCenter();
         }
 
@@ -26390,6 +26391,8 @@ const QUOTE_TEMPLATES = [
                             </select></div>` : ''}
                         <div><label class="block text-xs font-medium text-gray-600 mb-1">수집 채널</label>
                             <select onchange="setInboundFilter('channel', this.value)" class="${selCls}"><option value="">전체</option>${Object.keys(INBOUND_CHANNELS).map(k => `<option value="${k}" ${inboundFilter.channel === k ? 'selected' : ''}>${escapeHtml(INBOUND_CHANNELS[k].name)}</option>`).join('')}</select></div>
+                        <div><label class="block text-xs font-medium text-gray-600 mb-1">홈페이지</label>
+                            <select onchange="setInboundFilter('site', this.value)" class="${selCls}"><option value="">전체</option>${INBOUND_SITES.map(s => `<option value="${escapeHtml(s)}" ${inboundFilter.site === s ? 'selected' : ''}>${escapeHtml(s)}</option>`).join('')}</select></div>
                         ${kob ? `<div><label class="block text-xs font-medium text-gray-600 mb-1">본부</label>
                             <select onchange="setInboundFilter('dept', this.value)" class="${selCls}">${[['', '전체'], ['영업', '영업본부'], ['운영', '운영본부'], ['none', '미배정']].map(([v, n]) => `<option value="${v}" ${inboundFilter.dept === v ? 'selected' : ''}>${n}</option>`).join('')}</select></div>` : ''}
                         <button type="button" onclick="resetInboundFilter()" class="px-3 py-2 text-sm rounded bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors">초기화</button>
@@ -26421,7 +26424,7 @@ const QUOTE_TEMPLATES = [
         function inboundColumns() {
             const cols = [
                 { label: '인입일자', get: r => r.inAt || r.inDate, cls: 'whitespace-nowrap text-gray-500' },
-                { label: '수집 채널', get: r => INBOUND_CHANNELS[inboundChannelOf(r)].name, html: r => inboundChannelChip(r) + ((r.flags || []).length || r.dupOf ? ` <span class="text-amber-600" title="${escapeHtml((r.flags || []).join(' · '))}">⚠</span>` : '') },
+                { label: '수집 채널', get: r => inboundChannelLabel(r), html: r => inboundChannelChip(r) + ((r.flags || []).length || r.dupOf ? ` <span class="text-amber-600" title="${escapeHtml((r.flags || []).join(' · '))}">⚠</span>` : '') },
                 { label: '인입 경로', get: r => inboundListText(r.routes), cls: 'whitespace-nowrap' },
                 { label: '게시판 서비스 유형', get: r => inboundListText(r.services) },
                 { label: '업체명', get: r => r.company, cls: 'whitespace-nowrap font-medium' },
@@ -26782,12 +26785,12 @@ const QUOTE_TEMPLATES = [
 
         // ---------- 채널 ----------
         const INBOUND_CHANNELS = {
-            kod_contact: { name: '킹오더닷컴 · 문의하기',    group: '홈페이지', icon: 'fas fa-globe',        auto: true },
-            kod_popup:   { name: '킹오더닷컴 · 상담 팝업',   group: '홈페이지', icon: 'fas fa-globe',        auto: true },
-            kod_qr:      { name: '킹오더닷컴 · QR킹 폼',     group: '홈페이지', icon: 'fas fa-globe',        auto: true },
-            qrk_contact: { name: '큐알킹 · 문의하기',        group: '홈페이지', icon: 'fas fa-globe',        auto: true },
-            bf_contact:  { name: '브랜드팩토리 · 문의하기',  group: '홈페이지', icon: 'fas fa-globe',        auto: true },
-            mk_contact:  { name: '메디킹 · 문의하기',        group: '홈페이지', icon: 'fas fa-globe',        auto: true },
+            kod_contact: { name: '킹오더닷컴 · 문의하기',    group: '홈페이지', site: '킹오더닷컴',   icon: 'fas fa-globe', auto: true },
+            kod_popup:   { name: '킹오더닷컴 · 상담 팝업',   group: '홈페이지', site: '킹오더닷컴',   icon: 'fas fa-globe', auto: true },
+            kod_qr:      { name: '킹오더닷컴 · QR킹 폼',     group: '홈페이지', site: '킹오더닷컴',   icon: 'fas fa-globe', auto: true },
+            qrk_contact: { name: '큐알킹 · 문의하기',        group: '홈페이지', site: '큐알킹',       icon: 'fas fa-globe', auto: true },
+            bf_contact:  { name: '브랜드팩토리 · 문의하기',  group: '홈페이지', site: '브랜드팩토리', icon: 'fas fa-globe', auto: true },
+            mk_contact:  { name: '메디킹 · 문의하기',        group: '홈페이지', site: '메디킹',       icon: 'fas fa-globe', auto: true },
             mail:        { name: '아임웹 알림 메일',         group: '홈페이지', icon: 'fas fa-envelope',     auto: true },
             blog:        { name: '네이버 블로그',            group: '블로그',   icon: 'fas fa-blog',         auto: false },
             cafe:        { name: '네이버 카페',              group: '카페',     icon: 'fas fa-mug-hot',      auto: false },
@@ -26799,10 +26802,25 @@ const QUOTE_TEMPLATES = [
             partner:     { name: '파트너센터(대행사)',       group: '대행사',   icon: 'fas fa-building',     auto: false },
             etc:         { name: '기타',                     group: '기타',     icon: 'fas fa-circle',       auto: false },
         };
+        const INBOUND_SITES = ['킹오더닷컴', '큐알킹', '브랜드팩토리', '메디킹'];
         function inboundChannelOf(r) { return INBOUND_CHANNELS[r.channel] ? r.channel : (r.vendor ? 'partner' : 'etc'); }
+        // 어느 홈페이지로 들어왔는지 (2026-11-02) — 홈페이지 폼은 채널로, 예전 아임웹 알림 메일은 메일 제목으로 서버가 적어 둔 source.site 로
+        function inboundSiteOf(r) {
+            const c = INBOUND_CHANNELS[inboundChannelOf(r)];
+            if (c.site) return c.site;
+            if (inboundChannelOf(r) === 'mail') return String((r.source || {}).site || '').trim();
+            return '';
+        }
+        // 수집 채널 + 홈페이지 이름 (예: '킹오더닷컴 · 문의하기', '브랜드팩토리 · 아임웹 알림 메일')
+        function inboundChannelLabel(r) {
+            const c = INBOUND_CHANNELS[inboundChannelOf(r)];
+            const site = inboundSiteOf(r);
+            return site && c.name.indexOf(site) !== 0 ? `${site} · ${c.name}` : c.name;
+        }
         function inboundChannelChip(r) {
             const c = INBOUND_CHANNELS[inboundChannelOf(r)];
-            return `<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-[11px] whitespace-nowrap ${c.auto ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-white border-gray-200 text-gray-700'}" title="${escapeHtml(c.name)}"><i class="${c.icon}"></i>${escapeHtml(c.group)}</span>`;
+            const site = inboundSiteOf(r);       // 홈페이지로 들어온 건은 '홈페이지' 대신 홈페이지 이름을 보여 줍니다
+            return `<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-[11px] whitespace-nowrap ${c.auto ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-white border-gray-200 text-gray-700'}" title="${escapeHtml(inboundChannelLabel(r))}"><i class="${c.icon}"></i>${escapeHtml(site || c.group)}</span>`;
         }
         function inboundDeptChip(r) {
             const d = (r.kob || {}).dept;
@@ -27748,7 +27766,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             document.getElementById('inbound-origin-body').innerHTML = `
                 ${(d.flags || []).length ? `<div class="flex flex-wrap gap-1 mb-2">${d.flags.map(f => `<span class="px-1.5 py-0.5 rounded text-[11px] ${f.startsWith('재문의') ? 'bg-amber-100 text-amber-800 cursor-pointer' : 'bg-rose-50 text-rose-700'}" ${d.dupOf && f.startsWith('재문의') ? `onclick="openInboundModal('${escapeHtml(d.dupOf)}')" title="이전 건 열기"` : ''}>⚠ ${escapeHtml(f)}</span>`).join('')}</div>` : ''}
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>${kv('채널', `${inboundChannelChip(d)} ${escapeHtml(INBOUND_CHANNELS[inboundChannelOf(d)].name)}`)}${kv('접수 시각', escapeHtml(d.inAt || d.inDate || ''))}
+                    <div>${kv('채널', `${inboundChannelChip(d)} ${escapeHtml(inboundChannelLabel(d))}`)}${kv('접수 시각', escapeHtml(d.inAt || d.inDate || ''))}
                         ${kv('출처', escapeHtml(src.label || ''))}${kv('사이트 · 페이지', escapeHtml([src.site, src.page].filter(Boolean).join(' ')))}${kv('글 · 게시물', escapeHtml(src.post || ''))}
                         ${src.url ? kv('원문 주소', `<a href="${escapeHtml(src.url)}" target="_blank" rel="noopener" class="text-blue-600 hover:underline">${escapeHtml(src.url)}</a>`) : ''}${kv('등록', escapeHtml(d.createdBy || ''))}</div>
                     <div>${kv('실제 유입', escapeHtml(utm))}${kv('캠페인', escapeHtml(src.utm_campaign || ''))}${kv('검색어', src.keyword ? `<span class="px-1.5 rounded bg-green-100 text-green-800">${escapeHtml(src.keyword)}</span>` : '')}
