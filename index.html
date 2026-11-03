@@ -20217,12 +20217,13 @@ const QUOTE_TEMPLATES = [
             { key: 'method',  name: '처리방법', hint: '처리방법을 선택하는 목록입니다. <b>택배</b>를 선택하면 접수 폼에 택배 정보 항목이 표시됩니다.' }
         ];
         const AS_OPTION_SEED = {
-            device:  ['POS 단말', '카드리더', '주방프린터', '라벨프린터', 'KIOSK', '기타'],
+            device:  ['POS 단말', '카드리더', '주방프린터', '라벨프린터', 'KIOSK', '테이블오더', '기타'],
             symptom: ['전원 불량', '인식 불량', '인쇄 불량', '네트워크', '소프트웨어', '기타'],
             method:  ['현장방문', '원격', '전화통화', '택배', '외주업체(청호)', '기타']
         };
         // 나중에 기본 목록에 더한 값 — 이미 저장된 목록에도 한 번 끼워 넣고, 관리자가 지운 뒤에는 다시 넣지 않습니다
-        const AS_OPTION_ADDED = [{ id: 'method-chungho-20261026', kind: 'method', value: '외주업체(청호)', before: '기타' }];
+        const AS_OPTION_ADDED = [{ id: 'method-chungho-20261026', kind: 'method', value: '외주업체(청호)', before: '기타' },
+                                 { id: 'device-tableorder-20261103', kind: 'device', value: '테이블오더', before: '기타' }];   // 대상 장비에 테이블오더 (2026-11-03)
         let asOptions = loadAsOptions();
         function loadAsOptions() {
             const seed = () => JSON.parse(JSON.stringify(AS_OPTION_SEED));
