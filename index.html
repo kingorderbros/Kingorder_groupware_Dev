@@ -67,6 +67,9 @@
                 // manifest 는 정적 파일이라 dev 전용(dev-*.webmanifest)을 따로 둡니다. prod 는 설정이 'prod' 라 원래 이름 그대로.
                 if ((window.KOB_CONFIG || {}).env === 'dev') {
                     app = { f: 'dev-' + app.f, t: '[DEV]' + app.t, s: '[DEV]' + ({ '운행기록': '운행일지' }[app.s] || app.s), c: app.c };
+                    // 개발환경 아이콘은 검정 바탕 로고 (2026-11-03) — 홈 화면 · 탭에서 운영과 한눈에 구분
+                    var ico = document.querySelector('link[rel="icon"]'); if (ico) ico.href = 'assets/pwa/dev-icon-192.png';
+                    var ati = document.querySelector('link[rel="apple-touch-icon"]'); if (ati) ati.href = 'assets/pwa/dev-apple-touch-icon.png';
                 }
                 // 인바운드 접수는 2026-09-08 부터 그룹웨어 안(파트너센터 › 영업본부 › 인바운드 관리)으로 들어왔습니다.
                 // 별도 주소(?mode=inbound)와 그 홈 화면 이름은 더 쓰지 않습니다.
