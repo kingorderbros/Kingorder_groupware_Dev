@@ -93,21 +93,33 @@
     // ---------- 표 하나 받아 오기 ----------
     async function fetchTable(t) {
         const m = tbl(t);
-        m.clear();
         if (mode !== 'supabase') {
+            m.clear();
             lsRead(t).forEach(r => m.set(r.id, { data: r.data, rev: r.rev || 1 }));
             loaded.add(t);
             return m.size;
         }
+        // 다 받은 뒤 한 번에 바꿔 넣습니다 — 받는 사이 화면이 빈 표를 보지 않게 (2026-11-03)
+        const rows = [];
         for (let from = 0; ; from += PAGE) {
             const { data, error } = await client
                 .from(t).select('id,data,rev').order('id', { ascending: true }).range(from, from + PAGE - 1);
             if (error) throw error;
-            (data || []).forEach(r => m.set(r.id, { data: withId(r.data, r.id), rev: r.rev || 1 }));
+            (data || []).forEach(r => rows.push(r));
             if (!data || data.length < PAGE) break;
         }
+        m.clear();
+        rows.forEach(r => m.set(r.id, { data: withId(r.data, r.id), rev: r.rev || 1 }));
         loaded.add(t);
         return m.size;
+    }
+    // 여러 표를 한꺼번에 받습니다 (2026-11-03 — 하나씩 차례로 받던 것을 동시에: 18개 약 1.4초 → 한 번 왕복)
+    //   돌려주는 값: 못 받은 표 이름들
+    async function fetchMany(list) {
+        const out = await Promise.allSettled(list.map(t => fetchTable(t)));
+        const bad = [];
+        out.forEach((r, i) => { if (r.status === 'rejected') { console.error('[kob-db] 표를 받지 못했습니다:', list[i], r.reason); bad.push(list[i]); } });
+        return bad;
     }
 
     // ---------- 다른 사람이 고친 것 받기 ----------
@@ -227,10 +239,7 @@
     // 그래서 로그인이 끝나는 순간 다시 받아 오고, 로그아웃하면 화면에 남은 자료를 비웁니다.
     async function reloadAll(reason) {
         const list = Array.from(new Set(PRELOAD.concat(Array.from(loaded))));
-        for (const t of list) {
-            try { await fetchTable(t); }
-            catch (e) { console.error('[kob-db] 다시 받기 실패:', t, e); }
-        }
+        await fetchMany(list);
         fire('kob-db-change', { table: null, id: null, reason });
     }
 
@@ -356,16 +365,16 @@
         async __init(supabaseClient, storeMode) {
             client = supabaseClient || null;
             mode = (storeMode === 'supabase' && client) ? 'supabase' : 'local';
-            const failedTables = [];
-            for (const t of PRELOAD) {
-                try { await fetchTable(t); watch(t); }
-                catch (e) {
-                    // 표 하나를 못 받아도 화면은 떠야 합니다 — 그 표만 비워 두고 알립니다.
-                    console.error('[kob-db] 표를 받지 못했습니다:', t, e);
-                    loaded.delete(t);
-                    failedTables.push(t);
-                }
+            // 이미 로그인된 채로 열었으면 그 상태를 먼저 적어 둡니다 — 아래 hookAuth 가 '방금 로그인했다' 로 보고
+            // 같은 표를 처음부터 한 번 더 받던 일이 있었습니다 (2026-11-03 측정: 로그인 뒤 두 번 받아 약 1.4초 더 걸림)
+            if (mode === 'supabase' && client.auth && client.auth.getSession) {
+                try { const { data } = await client.auth.getSession(); authed = !!(data && data.session && data.session.access_token); }
+                catch (e) { authed = false; }
             }
+            // 표 하나를 못 받아도 화면은 떠야 합니다 — 그 표만 비워 두고 알립니다.
+            const failedTables = await fetchMany(PRELOAD);
+            failedTables.forEach(t => loaded.delete(t));
+            PRELOAD.forEach(t => { if (!failedTables.includes(t)) watch(t); });
             if (failedTables.length) fire('kob-db-error', { table: failedTables.join(', '), message: '데이터를 불러올 수 없습니다.' });
             hookAuth();                       // 로그인이 끝나면 다시 받아 옵니다
 
