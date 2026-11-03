@@ -26652,7 +26652,7 @@ const QUOTE_TEMPLATES = [
                         <div>
                             <label class="block text-xs font-medium text-gray-600 mb-1">담당자</label>
                             <input type="text" id="inb-kob-owner" list="inb-owner-list" value="${escapeHtml(k.owner || '')}" oninput="setInboundKobField('owner', this.value)" placeholder="이름 선택 또는 입력" class="${cls}" />
-                            <datalist id="inb-owner-list">${(k.dept ? inboundDeptUsers(k.dept) : (localUsers || []).map(u => u.name)).map(n => `<option value="${escapeHtml(n)}"></option>`).join('')}</datalist>
+                            <datalist id="inb-owner-list">${(k.dept ? inboundDeptUsers(k.dept) : pickableUsers().map(u => u.name)).map(n => `<option value="${escapeHtml(n)}"></option>`).join('')}</datalist>
                         </div>
                         <div class="sm:col-span-2">
                             <label class="block text-xs font-medium text-gray-600 mb-1">고객 영업 현황</label>
@@ -27028,8 +27028,9 @@ const QUOTE_TEMPLATES = [
         // 담당자 고르기 — 부서 이름에 영업 · 운영이 들어간 구성원
         function inboundDeptUsers(dept) {
             const word = dept === '운영' ? '운영' : '영업';
-            const list = (localUsers || []).filter(u => String(deptName(u.dept) || '').includes(word)).map(u => u.name).filter(Boolean);
-            return list.length ? list : (localUsers || []).map(u => u.name).filter(Boolean);
+            const all = pickableUsers();   // 휴직자 · 퇴사자 제외 (2026-11-03)
+            const list = all.filter(u => String(deptName(u.dept) || '').includes(word)).map(u => u.name).filter(Boolean);
+            return list.length ? list : all.map(u => u.name).filter(Boolean);
         }
 
         // ---------- 탭 틀 ----------
@@ -50529,6 +50530,9 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             if (!s) return null;
             return localUsers.find(u => u.name === s || u.id === s || (u.email && String(u.email).toLowerCase() === s.toLowerCase())) || null;
         }
+        // 고를 수 없는 사람 — 휴직중 · 퇴사 (2026-11-03). 목록에는 회색으로 남겨 왜 안 되는지 보이게 합니다.
+        function ptreeUnpickable(u) { return !!u && (isOnLeave(u) || isResigned(u)); }
+        function ptreeOffChip(u) { return isResigned(u) ? orgResignedChip(u) : orgLeaveChip(u); }
         function ptreeRowsHtml(users, personHtml, opts) {
             const o = opts || {};
             const groups = orgGrouped(users);
@@ -50562,10 +50566,14 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             users = uniquePeopleByName(users);
             const sel = new Set(selected || []);
             if (!users.length) return `<p class="text-xs text-gray-400 px-2 py-2">${escapeHtml(o.empty || '선택할 수 있는 직원이 없습니다.')}</p>`;
-            const person = u => `<label class="flex items-center gap-2 px-2 py-1 text-sm cursor-pointer hover:bg-blue-50/50">
-                    <input type="checkbox" data-ptree-person class="${escapeHtml(cls)} rounded border-gray-300 text-blue-600 focus:ring-blue-500" value="${escapeHtml(u.name)}" ${sel.has(u.name) ? 'checked' : ''}${o.onchange ? ` onchange="${o.onchange}"` : ''} />
-                    <span class="text-gray-800">${escapeHtml(u.name)}</span><span class="text-xs text-gray-400">${escapeHtml(u.rank || '')}</span>
+            // 휴직자 · 퇴사자는 고를 수 없게 막습니다 — 이미 골라 둔 사람은 풀 수 있게 그대로 둡니다 (2026-11-03)
+            const person = u => {
+                const off = ptreeUnpickable(u) && !sel.has(u.name);
+                return `<label class="flex items-center gap-2 px-2 py-1 text-sm ${off ? 'cursor-not-allowed opacity-60' : 'cursor-pointer hover:bg-blue-50/50'}"${off ? ' title="휴직중인 구성원은 선택할 수 없습니다"' : ''}>
+                    <input type="checkbox" data-ptree-person class="${escapeHtml(cls)} rounded border-gray-300 text-blue-600 focus:ring-blue-500" value="${escapeHtml(u.name)}" ${sel.has(u.name) ? 'checked' : ''}${off ? ' disabled' : ''}${o.onchange ? ` onchange="${o.onchange}"` : ''} />
+                    <span class="text-gray-800">${escapeHtml(u.name)}</span><span class="text-xs text-gray-400">${escapeHtml(u.rank || '')}</span>${ptreeOffChip(u)}
                 </label>`;
+            };
             return `<div data-ptree class="text-left">${ptreeRowsHtml(users, person, { multi: true, isOpen: u => sel.has(u.name) })}</div>`;
         }
         function ptreeToggle(btn) {
@@ -50613,7 +50621,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             const people = [], specials = [];
             Array.from(sel.options).forEach(op => {
                 const u = ptreeUserOf(op.value);
-                if (u) people.push({ value: op.value, label: op.text, user: u });
+                if (u) people.push({ value: op.value, label: op.text, user: u, off: ptreeUnpickable(u) && op.value !== sel.value });
                 // 빈 값의 안내용 선택지('+ 추가…' · '선택하세요')는 창에 넣지 않습니다 — '선택 안함 · 미지정 · 전체' 처럼 비우는 뜻이면 둡니다
                 else if (op.value === '' && (/^\s*\+|선택하세요|…|\.\.\./.test(op.text) || !op.text.trim())) return;
                 else specials.push({ value: op.value, label: op.text });
@@ -50708,11 +50716,18 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             const cur = sel.value;
             const q = String((document.getElementById('ptree-search') || {}).value || '').trim().toLowerCase();
             const valOf = new Map(info.people.map(p => [p.user, p.value]));
+            const offOf = new Set(info.people.filter(p => p.off).map(p => p.user));
             document.getElementById('ptree-specials').innerHTML = info.specials.map((o, i) =>
                 `<button type="button" onclick="ptreePick(${JSON.stringify(o.value).replace(/"/g, '&quot;')})" class="px-2.5 py-1 rounded-full text-xs border ${o.value === cur ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'}">${escapeHtml(o.label || '(비움)')}</button>`).join('');
             const person = u => {
                 const v = valOf.get(u);
                 const on = v === cur;
+                // 휴직자 · 퇴사자는 눌러도 고르지 않습니다 (2026-11-03)
+                if (offOf.has(u)) return `<div class="w-full flex items-center gap-2 px-2 py-1.5 text-sm text-left opacity-60 cursor-not-allowed" title="휴직중인 구성원은 선택할 수 없습니다">
+                        <i class="fas fa-circle text-gray-200 text-xs"></i>
+                        <span class="text-gray-800">${escapeHtml(u.name)}</span><span class="text-xs text-gray-400">${escapeHtml(u.rank || '')}</span>${ptreeOffChip(u)}
+                        ${q ? `<span class="ml-auto text-[11px] text-gray-400">${escapeHtml(deptName(u.dept))}${u.team ? ' · ' + escapeHtml(u.team) : ''}</span>` : ''}
+                    </div>`;
                 return `<button type="button" onclick="ptreePick(${JSON.stringify(v).replace(/"/g, '&quot;')})" class="w-full flex items-center gap-2 px-2 py-1.5 text-sm text-left ${on ? 'bg-blue-50' : 'hover:bg-gray-50'}">
                         <i class="fas ${on ? 'fa-circle-dot text-blue-600' : 'fa-circle text-gray-200'} text-xs"></i>
                         <span class="text-gray-800">${escapeHtml(u.name)}</span><span class="text-xs text-gray-400">${escapeHtml(u.rank || '')}</span>
@@ -50732,6 +50747,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
         function ptreePick(v) {
             const sel = ptreeCurSel;
             if (!sel) return;
+            if (v !== sel.value && ptreeUnpickable(ptreeUserOf(v))) return;   // 휴직자 · 퇴사자 (2026-11-03)
             sel.value = v;
             sel.dispatchEvent(new Event('input', { bubbles: true }));
             sel.dispatchEvent(new Event('change', { bubbles: true }));
