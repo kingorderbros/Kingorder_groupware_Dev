@@ -5478,6 +5478,34 @@
         </div>
     </div>
 
+    <div id="wbs-replan-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div class="bg-white w-full max-w-md p-6 rounded-lg shadow-xl max-h-[90vh] overflow-y-auto">
+            <h3 class="text-lg font-bold text-gray-800 mb-1"><i class="fas fa-calendar-days text-orange-600 mr-1"></i>일정 재수립</h3>
+            <p id="wbsreplan-subject" class="text-sm text-gray-500 mb-3"></p>
+            <p id="wbsreplan-reason" class="mb-4 bg-orange-50 border border-orange-200 rounded p-2.5 text-sm text-gray-800"></p>
+            <form id="wbs-replan-form" onsubmit="submitWbsReplan(event)">
+                <input type="hidden" id="wbsreplan-project-id" />
+                <input type="hidden" id="wbsreplan-wbs-id" />
+                <div class="grid grid-cols-2 gap-3 mb-3">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">시작 예정일 <span class="text-red-500">*</span></label>
+                        <input type="date" id="wbsreplan-start" onchange="onWbsReplanDateChange()" class="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:bg-gray-100 disabled:text-gray-500" />
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">종료 예정일 <span class="text-red-500">*</span></label>
+                        <input type="date" id="wbsreplan-end" required onchange="onWbsReplanDateChange()" class="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-orange-500" />
+                    </div>
+                </div>
+                <p id="wbsreplan-note" class="hidden mb-3 text-xs font-semibold text-red-600"></p>
+                <p class="text-xs text-gray-500 mb-5">날짜를 바꾸지 않고 확정하면 지금 일정을 그대로 유지합니다.</p>
+                <div class="flex justify-end space-x-2">
+                    <button type="button" onclick="closeWbsReplanModal()" class="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition-colors">닫기</button>
+                    <button type="submit" class="px-4 py-2 bg-orange-500 text-white rounded hover:bg-orange-600 transition-colors">일정 확정</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <!-- ==================== 프로젝트 이슈 등록 모달 ==================== -->
     <div id="prj-issue-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
         <div class="bg-white w-full max-w-md p-6 rounded-lg shadow-xl max-h-[90vh] overflow-y-auto">
@@ -11974,6 +12002,8 @@ const QUOTE_TEMPLATES = [
             'project-delay-reason': { icon: 'fa-comment-dots',         color: 'amber',  label: '지연 사유' },
             'project-wbs-hold':     { icon: 'fa-circle-pause',         color: 'amber',  label: 'WBS 보류' },
             'project-wbs-resume':   { icon: 'fa-play',                 color: 'green',  label: 'WBS 보류 취소' },
+            'project-wbs-replan':   { icon: 'fa-calendar-days',        color: 'amber',  label: 'WBS 일정 확인 요청' },
+            'project-wbs-replanned': { icon: 'fa-calendar-check',      color: 'green',  label: 'WBS 일정 재수립' },
             'project-wbs-done':     { icon: 'fa-flag-checkered',       color: 'blue',   label: 'WBS 완료' },
             'project-works-done':   { icon: 'fa-list-check',           color: 'purple', label: '업무 전건 완료' },
             'work-received':        { icon: 'fa-inbox',                color: 'red',    label: '업무접수' },
@@ -12006,6 +12036,8 @@ const QUOTE_TEMPLATES = [
             if (n.type === 'project-delay') return `<b>${escapeHtml(n.title)}</b> 작업이 일정보다 지연되었습니다.${n.detail ? `<br><span class="text-xs text-gray-600">${escapeHtml(n.detail)}</span>` : ''}`;
             if (n.type === 'project-wbs-hold') return `<b>${escapeHtml(n.title)}</b> 작업이 보류되었습니다.${n.detail ? `<br><span class="text-xs text-gray-600">${escapeHtml(n.detail)}</span>` : ''}`;
             if (n.type === 'project-wbs-resume') return `<b>${escapeHtml(n.title)}</b> 작업의 보류가 취소되어 일정이 다시 계산되었습니다.${n.detail ? `<br><span class="text-xs text-gray-600">${escapeHtml(n.detail)}</span>` : ''}`;
+            if (n.type === 'project-wbs-replan') return `<b>${escapeHtml(n.title)}</b> 작업의 선행 작업 일정이 바뀌었습니다. 일정을 확인해 다시 정해 주세요.${n.detail ? `<br><span class="text-xs text-gray-600">${escapeHtml(n.detail)}</span>` : ''}`;
+            if (n.type === 'project-wbs-replanned') return `<b>${escapeHtml(n.title)}</b> 작업의 일정을 담당자가 다시 정했습니다.${n.detail ? `<br><span class="text-xs text-gray-600">${escapeHtml(n.detail)}</span>` : ''}`;
             if (n.type === 'project-delay-reason') return `<b>${escapeHtml(n.title)}</b> 지연 사유가 등록되었습니다.${n.detail ? `<br><span class="text-xs text-gray-600">${escapeHtml(n.detail)}</span>` : ''}`;
             if (n.type === 'project-wbs-done') return `<b>${escapeHtml(n.title)}</b> WBS가 완료되었습니다.${n.detail ? `<br><span class="text-xs text-gray-600">${escapeHtml(n.detail)}</span>` : ''}`;
             if (n.type === 'project-works-done') return `<b>${escapeHtml(n.title)}</b> 연결된 업무가 모두 완료되었습니다.${n.detail ? `<br><span class="text-xs text-gray-600">${escapeHtml(n.detail)}</span>` : ''}`;
@@ -20939,6 +20971,43 @@ const QUOTE_TEMPLATES = [
         function canHoldWbs(p, w) {
             return !!p && !!w && w.status !== 'done' && !wbsIsSummary(p, w) && isWbsHandler(p, w);
         }
+        // 일정 재수립 (2026-11-04) — 선행 작업의 보류 취소로 일정이 겹쳐도 후속 작업 일정을 자동으로 옮기지 않습니다.
+        // 담당자 · PM 에게 확인을 요청하고, 그 사람이 날짜를 정해 확정해야 일정이 바뀝니다.
+        const wbsNeedsReplan = (w) => !!w && !!w.replan && w.status !== 'done';
+        const projectReplans = (p) => wbsLeaves(p).filter(wbsNeedsReplan);
+        const canReplanWbs = (p, w) => wbsNeedsReplan(w) && isWbsHandler(p, w);
+        // 이 작업의 새 종료 예정일과 겹치는 후속 작업 (요약 작업이면 그 아래 실제 작업)
+        function wbsReplanTargets(p, w, newEnd) {
+            if (!newEnd) return [];
+            const seen = new Set();
+            return wbsSuccessors(p, w)
+                .flatMap(x => wbsIsSummary(p, x) ? wbsDescendants(p, x).filter(y => !wbsIsSummary(p, y)) : [x])
+                .filter(x => {
+                    if (seen.has(x.id)) return false;
+                    seen.add(x.id);
+                    return x.status !== 'done' && x.startPlan && x.startPlan <= newEnd;
+                });
+        }
+        function requestWbsReplan(p, w, newEnd) {
+            const fromName = `${w.code ? w.code + '. ' : ''}${w.name}`;
+            wbsReplanTargets(p, w, newEnd).forEach(x => {
+                x.replan = { fromId: w.id, fromName, fromEnd: newEnd, by: currentUserName || '', at: ymd(new Date()) };
+                notifyWbsHold(p, x, 'project-wbs-replan', `선행 작업 ${fromName} 종료 예정 ${newEnd} · 이 작업 시작 예정 ${x.startPlan}`);
+            });
+        }
+        // 일정을 다시 정한 기록을 남기고 확인 요청을 닫습니다
+        function closeWbsReplan(w, before) {
+            w.replanHistory = (w.replanHistory || []).concat([{
+                fromName: w.replan.fromName, fromEnd: w.replan.fromEnd, before,
+                after: { startPlan: w.startPlan || '', endPlan: w.endPlan || '' },
+                by: currentUserName || '', at: ymd(new Date())
+            }]);
+            delete w.replan;
+        }
+        function wbsReplanChipHtml(w, cls) {
+            if (!wbsNeedsReplan(w)) return '';
+            return `<span class="text-xs font-bold rounded-full px-2 py-0.5 border text-orange-700 bg-orange-50 border-orange-200 ${cls || ''}"><i class="fas fa-calendar-days mr-0.5"></i>일정 재수립 필요</span>`;
+        }
         function notifyWbsHold(p, w, type, detail) {
             uniqueNames([w.assignee, p.owner]).filter(n => n !== currentUserName).forEach(n => pushNotification({
                 id: 'cnoti_' + collabNotiIdCounter++,
@@ -21222,6 +21291,7 @@ const QUOTE_TEMPLATES = [
             document.getElementById('prj-d-name').innerHTML = `${projectCompanyChip(p)} ${escapeHtml(p.name)}`;   // 회사 구분 (2026-10-23)
             document.getElementById('prj-d-delay').innerHTML = dl.length
                 ? `<span class="text-xs font-bold rounded-full px-2 py-0.5 border text-red-700 bg-red-50 border-red-200"><i class="fas fa-triangle-exclamation mr-0.5"></i>지연 ${dl.length}건</span>` : '';
+            if (projectReplans(p).length) document.getElementById('prj-d-delay').innerHTML += ` <span class="text-xs font-bold rounded-full px-2 py-0.5 border text-orange-700 bg-orange-50 border-orange-200"><i class="fas fa-calendar-days mr-0.5"></i>일정 재수립 ${projectReplans(p).length}건</span>`;
             if (projectHolds(p).length) document.getElementById('prj-d-delay').innerHTML += ` <span class="text-xs font-bold rounded-full px-2 py-0.5 border text-yellow-700 bg-yellow-50 border-yellow-200"><i class="fas fa-circle-pause mr-0.5"></i>보류 ${projectHolds(p).length}건</span>`;
             document.getElementById('prj-d-meta').innerHTML =
                 `${escapeHtml(deptNames[p.dept] || p.dept)} · PM <b class="text-gray-700">${escapeHtml(p.owner)}</b> · 예정 ${escapeHtml(p.startPlan)} ~ ${escapeHtml(projectEndLabel(p))}`
@@ -21444,6 +21514,7 @@ const QUOTE_TEMPLATES = [
                             ${!blocked && workPending ? '<br><span class="text-xs font-bold rounded-full px-2 py-0.5 border text-amber-800 bg-amber-100 border-amber-300 mt-0.5 inline-block"><i class="fas fa-diagram-next mr-0.5"></i>업무 미완료</span>' : ''}
                             ${d ? `<br><span class="text-xs font-bold text-red-600 mt-0.5 inline-block">${d.label} ${d.days}일</span>` : ''}
                             ${isWbsHeld(w) ? `<div class="mt-0.5">${wbsHoldChipHtml(w)}</div>` : ''}
+                            ${wbsNeedsReplan(w) ? `<div class="mt-0.5">${wbsReplanChipHtml(w)}</div>` : ''}
                             ${summary && heldKids ? `<br><span class="text-xs font-bold text-yellow-700 mt-0.5 inline-block"><i class="fas fa-circle-pause mr-0.5"></i>하위 보류 ${heldKids}건</span>` : ''}
                         </td>
                         <td class="p-3 text-xs text-gray-600 align-top min-w-[11rem]" onclick="event.stopPropagation()"${canDeliv ? ` data-drop-handler="wbsDeliverableDropFiles" data-drop-a="${p.id}" data-drop-b="${w.id}" title="파일을 드래그하거나 Ctrl+V로 붙여넣어 첨부할 수 있습니다"` : ''}>
@@ -21464,6 +21535,7 @@ const QUOTE_TEMPLATES = [
                                 ${!summary && !held && !blocked && workPending && isWbsHandler(p, w) ? `<button onclick="alertWbsWorkPending(${jsArg(p.id)},${jsArg(w.id)})" class="px-2 py-1 bg-amber-100 border border-amber-300 text-amber-800 rounded text-xs font-semibold" title="부속 업무 미완료"><i class="fas fa-diagram-next mr-1"></i>업무 미완료</button>` : ''}
                                 ${canStart ? `<button onclick="openWbsStartModal(${jsArg(p.id)},${jsArg(w.id)})" class="px-2 py-1 bg-green-600 hover:bg-green-700 text-white rounded text-xs font-semibold">시작</button>` : ''}
                                 ${canDone ? `<button onclick="openWbsDoneModal(${jsArg(p.id)},${jsArg(w.id)})" class="px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs font-semibold">완료</button>` : ''}
+                                ${canReplanWbs(p, w) ? `<button onclick="openWbsReplanModal(${jsArg(p.id)},${jsArg(w.id)})" class="text-xs px-2 py-1 bg-orange-500 hover:bg-orange-600 text-white rounded font-semibold whitespace-nowrap"><i class="fas fa-calendar-days mr-0.5"></i>일정 재수립</button>` : ''}
                                 ${held && canHoldWbs(p, w) ? `<button onclick="openWbsResumeModal(${jsArg(p.id)},${jsArg(w.id)})" class="px-2 py-1 bg-yellow-500 hover:bg-yellow-600 text-white rounded text-xs font-semibold">보류 취소</button>
                                     <button onclick="openWbsHoldModal(${jsArg(p.id)},${jsArg(w.id)})" class="px-2 py-1 bg-white border border-yellow-400 text-yellow-700 hover:bg-yellow-50 rounded text-xs">보류 수정</button>` : ''}
                                 ${!held && canHoldWbs(p, w) ? `<button onclick="openWbsHoldModal(${jsArg(p.id)},${jsArg(w.id)})" class="px-2 py-1 bg-white border border-yellow-400 text-yellow-700 hover:bg-yellow-50 rounded text-xs font-semibold">보류</button>` : ''}
@@ -22046,7 +22118,10 @@ const QUOTE_TEMPLATES = [
             if (id) {
                 const w = findWbs(p, id);
                 if (!w) return;
+                const planBefore = { startPlan: w.startPlan || '', endPlan: w.endPlan || '' };
                 Object.assign(w, data);
+                // 수정 창에서 날짜를 다시 정해도 일정 재수립으로 봅니다
+                if (w.replan && (planBefore.startPlan !== (w.startPlan || '') || planBefore.endPlan !== (w.endPlan || ''))) closeWbsReplan(w, planBefore);
             } else {
                 p.wbs = p.wbs || [];
                 p.wbs.push(Object.assign({ id: 'WB-' + wbsSeq++, works: [], autoProgress: false, delayReason: '', delayNotified: false, predecessors: [], parentId: '', deliverableFiles: [] }, data));
@@ -22104,6 +22179,7 @@ const QUOTE_TEMPLATES = [
                 `<span class="text-xs font-bold rounded-full px-2 py-0.5 border ${ws.chip}">${ws.name}</span>`
                 + (isEarlyStarted(w) ? ' <span class="text-xs font-bold rounded-full px-2 py-0.5 border text-amber-800 bg-amber-100 border-amber-300"><i class="fas fa-bolt mr-0.5"></i>조기착수</span>' : '')
                 + (isWbsHeld(w) ? ' ' + wbsHoldChipHtml(w, 'inline-block') : '')
+                + (wbsNeedsReplan(w) ? ' ' + wbsReplanChipHtml(w, 'inline-block') : '')
                 + (blocked ? ` <span class="text-xs font-bold rounded-full px-2 py-0.5 border text-gray-700 bg-gray-200 border-gray-300"><i class="fas fa-lock mr-0.5"></i>${isEarlyStarted(w) ? '선행 미완료' : '선행 대기'}</span>` : '')
                 + (workPending ? ' <span class="text-xs font-bold rounded-full px-2 py-0.5 border text-amber-800 bg-amber-100 border-amber-300"><i class="fas fa-diagram-next mr-0.5"></i>업무 미완료</span>' : '')
                 + (d ? ` <span class="text-xs font-bold rounded-full px-2 py-0.5 border ${d.kind === 'doneLate' ? 'text-gray-600 bg-gray-100 border-gray-300' : 'text-red-700 bg-red-50 border-red-200'}">${d.label} ${d.days}일</span>` : '');
@@ -22130,6 +22206,23 @@ const QUOTE_TEMPLATES = [
                 </div>
                 ${d ? `<p class="text-xs mt-1.5 ${d.kind === 'doneLate' ? 'text-gray-500' : 'text-red-600 font-semibold'}"><i class="fas fa-triangle-exclamation mr-1"></i>${d.label} ${d.days}일</p>` : ''}
             </div>`;
+
+            // 일정 재수립 — 확인 요청과 지난 기록
+            if (wbsNeedsReplan(w)) {
+                html += `<div class="bg-orange-50 border border-orange-200 rounded p-3 space-y-1">
+                    <p class="text-orange-800 font-semibold"><i class="fas fa-calendar-days mr-1"></i>일정 재수립 필요</p>
+                    <p class="text-gray-700">선행 작업 <b>${escapeHtml(w.replan.fromName)}</b>의 종료 예정일이 <b>${escapeHtml(w.replan.fromEnd)}</b>로 바뀌어 이 작업 일정과 겹칩니다. 일정은 자동으로 바뀌지 않았습니다. 확인 후 다시 정해 주세요.</p>
+                    <p class="text-xs text-gray-500">요청 ${escapeHtml(w.replan.by || '-')} · ${escapeHtml(w.replan.at || '')}</p>
+                </div>`;
+            }
+            if ((w.replanHistory || []).length) {
+                html += `<div class="bg-white border border-gray-200 rounded p-3">
+                    <p class="text-gray-500 font-medium mb-1"><i class="fas fa-clock-rotate-left mr-1 text-gray-400"></i>일정 재수립 기록</p>
+                    <ul class="space-y-1">${w.replanHistory.slice().reverse().map(x => `<li class="text-xs text-gray-700 border-t border-gray-100 pt-1 first:border-t-0 first:pt-0">
+                        <b>${escapeHtml(x.before.startPlan || '-')} ~ ${escapeHtml(x.before.endPlan || '-')} → ${escapeHtml(x.after.startPlan || '-')} ~ ${escapeHtml(x.after.endPlan || '-')}</b><br>
+                        <span class="text-gray-500">선행 작업 ${escapeHtml(x.fromName || '')} · ${escapeHtml(x.by || '-')} · ${escapeHtml(x.at || '')}</span></li>`).join('')}</ul>
+                </div>`;
+            }
 
             // 보류 — 지금 보류 중인 내용과 지난 보류 기록
             if (isWbsHeld(w)) {
@@ -22246,6 +22339,7 @@ const QUOTE_TEMPLATES = [
             // 처리 버튼 (표와 동일한 권한 규칙)
             const acts = [];
             const isSum = wbsIsSummary(p, w);
+            if (canReplanWbs(p, w)) acts.push(`<button type="button" onclick="closeWbsDetailModal(); openWbsReplanModal(${jsArg(p.id)},${jsArg(w.id)})" class="px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded text-sm font-semibold"><i class="fas fa-calendar-days mr-1"></i>일정 재수립</button>`);
             if (isWbsHeld(w) && canHoldWbs(p, w)) {
                 acts.push(`<button type="button" onclick="closeWbsDetailModal(); openWbsResumeModal(${jsArg(p.id)},${jsArg(w.id)})" class="px-3 py-1.5 bg-yellow-500 hover:bg-yellow-600 text-white rounded text-sm font-semibold"><i class="fas fa-play mr-1"></i>보류 취소</button>`);
                 acts.push(`<button type="button" onclick="closeWbsDetailModal(); openWbsHoldModal(${jsArg(p.id)},${jsArg(w.id)})" class="px-3 py-1.5 bg-white border border-yellow-400 text-yellow-700 hover:bg-yellow-50 rounded text-sm">보류 수정</button>`);
@@ -23227,11 +23321,11 @@ const QUOTE_TEMPLATES = [
             const box = document.getElementById('wbsresume-preview');
             if (!p || !isWbsHeld(w) || !v || v < w.hold.from) { box.innerHTML = '재시작일을 입력해 주세요.'; return; }
             const r = wbsResumePlan(w, v);
-            const late = wbsSuccessors(p, w).filter(x => x.status !== 'done' && x.startPlan && r.endPlan && x.startPlan <= r.endPlan);
+            const late = wbsReplanTargets(p, w, r.endPlan);
             box.innerHTML = `<p>보류 기간 <b>${r.days}일</b> (${escapeHtml(w.hold.from)} ~ ${escapeHtml(v)})</p>
                 <p class="mt-1">시작 예정일 ${escapeHtml(w.startPlan || '-')} → <b>${escapeHtml(r.startPlan || '-')}</b>${w.startActual ? ` <span class="text-xs text-gray-500">(이미 ${escapeHtml(w.startActual)} 시작)</span>` : ''}</p>
                 <p>종료 예정일 ${escapeHtml(w.endPlan || '-')} → <b>${escapeHtml(r.endPlan || '-')}</b></p>
-                ${late.length ? `<p class="mt-1 text-red-600 text-xs font-semibold"><i class="fas fa-triangle-exclamation mr-1"></i>후속 작업 일정은 자동으로 바뀌지 않습니다. 확인이 필요합니다: ${late.map(x => escapeHtml((x.code ? x.code + '. ' : '') + x.name)).join(', ')}</p>` : ''}`;
+                ${late.length ? `<p class="mt-1 text-red-600 text-xs font-semibold"><i class="fas fa-triangle-exclamation mr-1"></i>후속 작업 일정은 자동으로 바뀌지 않습니다. 담당자에게 일정 재수립을 요청합니다: ${late.map(x => escapeHtml((x.code ? x.code + '. ' : '') + x.name)).join(', ')}</p>` : ''}`;
         }
         function submitWbsResume(event) {
             event.preventDefault();
@@ -23253,7 +23347,63 @@ const QUOTE_TEMPLATES = [
             w.delayNotified = false;
             recalcWbsRollups(p);
             notifyWbsHold(p, w, 'project-wbs-resume', `${currentUserName} · 재시작 ${v} · 예정 ${r.startPlan || '-'} ~ ${r.endPlan || '-'}`);
+            requestWbsReplan(p, w, r.endPlan);
             closeWbsResumeModal();
+            renderProjectCenter();
+        }
+
+        // ---------- 일정 재수립 ----------
+        function openWbsReplanModal(projectId, wbsId) {
+            const p = findProject(projectId), w = p ? findWbs(p, wbsId) : null;
+            if (!canReplanWbs(p, w)) return;
+            document.getElementById('wbs-replan-form').reset();
+            document.getElementById('wbsreplan-project-id').value = p.id;
+            document.getElementById('wbsreplan-wbs-id').value = w.id;
+            document.getElementById('wbsreplan-subject').textContent = `${p.name} · ${w.code ? w.code + '. ' : ''}${w.name}`;
+            document.getElementById('wbsreplan-reason').innerHTML = `선행 작업 <b>${escapeHtml(w.replan.fromName)}</b>의 종료 예정일이 <b>${escapeHtml(w.replan.fromEnd)}</b>로 바뀌었습니다.`;
+            const start = document.getElementById('wbsreplan-start');
+            start.value = w.startPlan || '';
+            start.disabled = !!w.startActual;   // 이미 시작한 작업은 종료 예정일만 다시 정합니다
+            document.getElementById('wbsreplan-end').value = w.endPlan || '';
+            onWbsReplanDateChange();
+            document.getElementById('wbs-replan-modal').classList.remove('hidden');
+        }
+        function closeWbsReplanModal() {
+            document.getElementById('wbs-replan-modal').classList.add('hidden');
+            document.getElementById('wbs-replan-form').reset();
+        }
+        function onWbsReplanDateChange() {
+            const p = findProject(document.getElementById('wbsreplan-project-id').value);
+            const w = p ? findWbs(p, document.getElementById('wbsreplan-wbs-id').value) : null;
+            if (!wbsNeedsReplan(w)) return;
+            const start = document.getElementById('wbsreplan-start').value;
+            const end = document.getElementById('wbsreplan-end').value;
+            const notes = [];
+            if (start && start <= w.replan.fromEnd && !w.startActual) notes.push('시작 예정일이 아직 선행 작업 종료 예정일과 겹칩니다.');
+            const next = end && end !== (w.endPlan || '') ? wbsReplanTargets(p, w, end) : [];
+            if (next.length) notes.push(`확정하면 다음 후속 작업 담당자에게도 일정 재수립을 요청합니다: ${next.map(x => (x.code ? x.code + '. ' : '') + x.name).join(', ')}`);
+            const box = document.getElementById('wbsreplan-note');
+            box.textContent = notes.join(' ');
+            box.classList.toggle('hidden', !notes.length);
+        }
+        function submitWbsReplan(event) {
+            event.preventDefault();
+            const p = findProject(document.getElementById('wbsreplan-project-id').value);
+            const w = p ? findWbs(p, document.getElementById('wbsreplan-wbs-id').value) : null;
+            if (!canReplanWbs(p, w)) { alert('일정 재수립 권한이 없습니다.'); return; }
+            const start = w.startActual ? (w.startPlan || '') : document.getElementById('wbsreplan-start').value;
+            const end = document.getElementById('wbsreplan-end').value;
+            if (!start || !end) { alert('시작 예정일과 종료 예정일을 입력해 주세요.'); return; }
+            if (end < start) { alert('종료 예정일이 시작 예정일보다 빠릅니다.'); return; }
+            const before = { startPlan: w.startPlan || '', endPlan: w.endPlan || '' };
+            w.startPlan = start;
+            w.endPlan = end;
+            closeWbsReplan(w, before);
+            recalcWbsRollups(p);
+            notifyWbsHold(p, w, 'project-wbs-replanned', `${currentUserName} · ${before.startPlan || '-'} ~ ${before.endPlan || '-'} → ${start} ~ ${end}`);
+            // 종료 예정일이 바뀌어 다음 작업과 겹치면, 그 담당자에게도 자동 변경 없이 확인을 요청합니다
+            if (end !== before.endPlan) requestWbsReplan(p, w, end);
+            closeWbsReplanModal();
             renderProjectCenter();
         }
 
