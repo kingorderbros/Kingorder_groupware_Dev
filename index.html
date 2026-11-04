@@ -5428,6 +5428,56 @@
         </div>
     </div>
 
+    <!-- ==================== WBS 보류 · 보류 취소 모달 (2026-11-04) ==================== -->
+    <div id="wbs-hold-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div class="bg-white w-full max-w-md p-6 rounded-lg shadow-xl max-h-[90vh] overflow-y-auto">
+            <h3 class="text-lg font-bold text-gray-800 mb-1"><i class="fas fa-circle-pause text-yellow-600 mr-1"></i><span id="wbshold-title">보류</span></h3>
+            <p id="wbshold-subject" class="text-sm text-gray-500 mb-4"></p>
+            <form id="wbs-hold-form" onsubmit="submitWbsHold(event)">
+                <input type="hidden" id="wbshold-project-id" />
+                <input type="hidden" id="wbshold-wbs-id" />
+                <div class="grid grid-cols-2 gap-3 mb-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">보류일 <span class="text-red-500">*</span></label>
+                        <input type="date" id="wbshold-from" required class="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-yellow-500" />
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">재시작 예정일</label>
+                        <input type="date" id="wbshold-restart" class="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-yellow-500" />
+                    </div>
+                </div>
+                <div class="mb-6">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">보류 사유 <span class="text-red-500">*</span></label>
+                    <textarea id="wbshold-reason" rows="3" required class="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-yellow-500"></textarea>
+                    <p class="text-xs text-gray-500 mt-1">보류 중에는 시작 · 완료 처리를 할 수 없으며, 지연으로 집계하지 않습니다.</p>
+                </div>
+                <div class="flex justify-end space-x-2">
+                    <button type="button" onclick="closeWbsHoldModal()" class="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition-colors">취소</button>
+                    <button type="submit" class="px-4 py-2 bg-yellow-500 text-white rounded hover:bg-yellow-600 transition-colors">저장</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    <div id="wbs-resume-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div class="bg-white w-full max-w-md p-6 rounded-lg shadow-xl max-h-[90vh] overflow-y-auto">
+            <h3 class="text-lg font-bold text-gray-800 mb-1"><i class="fas fa-play text-yellow-600 mr-1"></i>보류 취소</h3>
+            <p id="wbsresume-subject" class="text-sm text-gray-500 mb-4"></p>
+            <form id="wbs-resume-form" onsubmit="submitWbsResume(event)">
+                <input type="hidden" id="wbsresume-project-id" />
+                <input type="hidden" id="wbsresume-wbs-id" />
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">재시작일 <span class="text-red-500">*</span></label>
+                    <input type="date" id="wbsresume-date" required onchange="onWbsResumeDateChange()" class="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-yellow-500" />
+                </div>
+                <div id="wbsresume-preview" class="mb-6 bg-yellow-50 border border-yellow-200 rounded p-2.5 text-sm text-gray-800"></div>
+                <div class="flex justify-end space-x-2">
+                    <button type="button" onclick="closeWbsResumeModal()" class="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition-colors">닫기</button>
+                    <button type="submit" class="px-4 py-2 bg-yellow-500 text-white rounded hover:bg-yellow-600 transition-colors">보류 취소 · 일정 반영</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <!-- ==================== 프로젝트 이슈 등록 모달 ==================== -->
     <div id="prj-issue-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
         <div class="bg-white w-full max-w-md p-6 rounded-lg shadow-xl max-h-[90vh] overflow-y-auto">
@@ -11922,6 +11972,8 @@ const QUOTE_TEMPLATES = [
             'directive-cancelled': { icon: 'fa-ban',           color: 'red',    label: '지시 취소' },
             'project-delay':        { icon: 'fa-triangle-exclamation', color: 'red',    label: '프로젝트 지연' },
             'project-delay-reason': { icon: 'fa-comment-dots',         color: 'amber',  label: '지연 사유' },
+            'project-wbs-hold':     { icon: 'fa-circle-pause',         color: 'amber',  label: 'WBS 보류' },
+            'project-wbs-resume':   { icon: 'fa-play',                 color: 'green',  label: 'WBS 보류 취소' },
             'project-wbs-done':     { icon: 'fa-flag-checkered',       color: 'blue',   label: 'WBS 완료' },
             'project-works-done':   { icon: 'fa-list-check',           color: 'purple', label: '업무 전건 완료' },
             'work-received':        { icon: 'fa-inbox',                color: 'red',    label: '업무접수' },
@@ -11952,6 +12004,8 @@ const QUOTE_TEMPLATES = [
             if (n.type === 'directive-due') return `<b>${escapeHtml(n.title)}</b> 지시의 완료기한이 변경되었습니다.${n.detail ? `<br><span class="text-xs text-gray-600">${escapeHtml(n.detail)}</span>` : ''}`;
             if (n.type === 'directive-cancelled') return `<b>${escapeHtml(n.title)}</b> 지시가 취소되었습니다.${n.detail ? `<br><span class="text-xs text-gray-600">${escapeHtml(n.detail)}</span>` : ''}`;
             if (n.type === 'project-delay') return `<b>${escapeHtml(n.title)}</b> 작업이 일정보다 지연되었습니다.${n.detail ? `<br><span class="text-xs text-gray-600">${escapeHtml(n.detail)}</span>` : ''}`;
+            if (n.type === 'project-wbs-hold') return `<b>${escapeHtml(n.title)}</b> 작업이 보류되었습니다.${n.detail ? `<br><span class="text-xs text-gray-600">${escapeHtml(n.detail)}</span>` : ''}`;
+            if (n.type === 'project-wbs-resume') return `<b>${escapeHtml(n.title)}</b> 작업의 보류가 취소되어 일정이 다시 계산되었습니다.${n.detail ? `<br><span class="text-xs text-gray-600">${escapeHtml(n.detail)}</span>` : ''}`;
             if (n.type === 'project-delay-reason') return `<b>${escapeHtml(n.title)}</b> 지연 사유가 등록되었습니다.${n.detail ? `<br><span class="text-xs text-gray-600">${escapeHtml(n.detail)}</span>` : ''}`;
             if (n.type === 'project-wbs-done') return `<b>${escapeHtml(n.title)}</b> WBS가 완료되었습니다.${n.detail ? `<br><span class="text-xs text-gray-600">${escapeHtml(n.detail)}</span>` : ''}`;
             if (n.type === 'project-works-done') return `<b>${escapeHtml(n.title)}</b> 연결된 업무가 모두 완료되었습니다.${n.detail ? `<br><span class="text-xs text-gray-600">${escapeHtml(n.detail)}</span>` : ''}`;
@@ -20805,7 +20859,7 @@ const QUOTE_TEMPLATES = [
         }
         // 조기 착수 버튼을 띄울 수 있는 상태인가 — 선행 미완료 + 아직 시작 전 + 담당자/PM
         function canEarlyStartWbs(p, w) {
-            if (!p || !w || w.status === 'done') return false;
+            if (!p || !w || w.status === 'done' || isWbsHeld(w)) return false;
             if (w.startActual) return false;
             if (!isWbsBlocked(p, w)) return false;      // 안 막혀 있으면 일반 '시작' 경로
             if (!w.startPlan) return false;             // 예정일이 없으면 '조기' 판정 자체가 불가
@@ -20839,11 +20893,65 @@ const QUOTE_TEMPLATES = [
                 }
                 return null;
             }
+            if (isWbsHeld(w)) return null;   // 보류 중에는 지연으로 세지 않고 '보류'로 표시합니다 (2026-11-04)
             if (w.endPlan && today > w.endPlan) return { kind: 'end', days: dayDiff(w.endPlan, today), label: '종료 지연' };
             if (!w.startActual && w.startPlan && today > w.startPlan) return { kind: 'start', days: dayDiff(w.startPlan, today), label: '시작 지연' };
             return null;
         }
         const dayDiff = (from, to) => Math.max(0, Math.round((new Date(to) - new Date(from)) / 86400000));
+
+        // ---------- WBS 보류 (2026-11-04) ----------
+        // w.hold = { from, restartPlan, reason, by, at, delayAtHold } — 진행 상태(대기 · 진행중)는 그대로 두고 보류만 얹습니다.
+        // 보류 중에는 시작 · 완료를 막고, 지연으로 세지 않으며, 상태 칸에 '보류'로 표시합니다.
+        // 취소하면 재시작일로 일정을 다시 계산하고 w.holdHistory 에 남깁니다.
+        const isWbsHeld = (w) => !!(w && w.hold && w.status !== 'done');
+        const projectHolds = (p) => wbsLeaves(p).filter(isWbsHeld);
+        function wbsAddDays(date, n) {
+            const d = new Date(date + 'T00:00:00');
+            d.setDate(d.getDate() + n);
+            return ymd(d);
+        }
+        // 재시작 예정일이 지났으면 지난 일수, 아니면 0
+        function wbsHoldOverdue(w) {
+            const today = ymd(new Date());
+            return isWbsHeld(w) && w.hold.restartPlan && today > w.hold.restartPlan ? dayDiff(w.hold.restartPlan, today) : 0;
+        }
+        function wbsHoldChipHtml(w, cls) {
+            if (!isWbsHeld(w)) return '';
+            const over = wbsHoldOverdue(w);
+            return `<span class="text-xs font-bold rounded-full px-2 py-0.5 border text-yellow-700 bg-yellow-50 border-yellow-200 ${cls || ''}"><i class="fas fa-circle-pause mr-0.5"></i>보류 ${dayDiff(w.hold.from, ymd(new Date()))}일</span>`
+                + (w.hold.restartPlan ? `<span class="block text-[11px] mt-0.5 ${over ? 'text-red-600 font-semibold' : 'text-gray-500'}">재시작 예정 ${escapeHtml(w.hold.restartPlan)}${over ? ` · ${over}일 지남` : ''}</span>` : '');
+        }
+        // 보류를 취소할 때 일정 계산 — 시작 전: 재시작일을 새 시작 예정일로(기간 유지), 시작 후: 보류한 날수만큼 종료 예정일을 뒤로
+        function wbsResumePlan(w, restart) {
+            const days = dayDiff(w.hold.from, restart);
+            let startPlan = w.startPlan || '', endPlan = w.endPlan || '';
+            if (!w.startActual) {
+                if (restart > startPlan) {
+                    if (endPlan && startPlan) endPlan = wbsAddDays(restart, dayDiff(startPlan, endPlan));
+                    startPlan = restart;
+                }
+            } else if (endPlan && days > 0) {
+                endPlan = wbsAddDays(endPlan, days);
+            }
+            return { days, startPlan, endPlan };
+        }
+        function canHoldWbs(p, w) {
+            return !!p && !!w && w.status !== 'done' && !wbsIsSummary(p, w) && isWbsHandler(p, w);
+        }
+        function notifyWbsHold(p, w, type, detail) {
+            uniqueNames([w.assignee, p.owner]).filter(n => n !== currentUserName).forEach(n => pushNotification({
+                id: 'cnoti_' + collabNotiIdCounter++,
+                type,
+                ticketId: '',
+                projectId: p.id,
+                title: `${p.name} · ${w.code ? w.code + '. ' : ''}${w.name}`,
+                toUser: n,
+                toDept: w.dept,
+                detail,
+                date: ymd(new Date())
+            }));
+        }
 
         // 프로젝트 안에서 지연된 WBS 목록
         // 지연 집계는 리프 기준 — 요약 작업의 지연은 하위 지연의 반영이라 함께 세면 중복입니다.
@@ -20877,14 +20985,14 @@ const QUOTE_TEMPLATES = [
         //  ① 선행작업이 아직 안 끝남
         //  ② 이 WBS 에 딸린 부속 업무(업무센터에서 등록된 업무)가 아직 안 끝남
         function canCompleteWbs(p, w) {
-            if (!p || !w || w.status === 'done') return false;
+            if (!p || !w || w.status === 'done' || isWbsHeld(w)) return false;
             if (isWbsBlocked(p, w)) return false;
             if (isWbsWorkPending(w)) return false;
             return isWbsHandler(p, w);
         }
         // 시작 버튼 — 아직 시작 전(실제 시작일 없음)이고 선행작업이 모두 끝났을 때만
         function canStartWbs(p, w) {
-            if (!p || !w || w.status === 'done') return false;
+            if (!p || !w || w.status === 'done' || isWbsHeld(w)) return false;
             if (w.startActual) return false;
             if (isWbsBlocked(p, w)) return false;
             return isWbsHandler(p, w);
@@ -20955,7 +21063,7 @@ const QUOTE_TEMPLATES = [
             });
             const today = ymd(new Date());
             const soon = list.reduce((s, p) => s + wbsLeaves(p).filter(w => {
-                if (w.status === 'done' || !w.endPlan) return false;
+                if (w.status === 'done' || isWbsHeld(w) || !w.endPlan) return false;
                 const d = Math.round((new Date(w.endPlan) - new Date(today)) / 86400000);
                 return d >= 0 && d <= 7;
             }).length, 0);
@@ -21073,7 +21181,8 @@ const QUOTE_TEMPLATES = [
                 ? list.map(p => {
                     const st = PROJECT_STATUS[p.status] || PROJECT_STATUS.planning;
                     const dl = projectDelays(p).length;
-                    return `<option value="${p.id}">[${escapeHtml(projectCompanyName(p))}] ${escapeHtml(p.name)} — ${escapeHtml(deptNames[p.dept] || p.dept)} · ${st.name} · ${projectProgress(p)}%${dl ? ` · 지연 ${dl}` : ''}</option>`;
+                    const hl = projectHolds(p).length;
+                    return `<option value="${p.id}">[${escapeHtml(projectCompanyName(p))}] ${escapeHtml(p.name)} — ${escapeHtml(deptNames[p.dept] || p.dept)} · ${st.name} · ${projectProgress(p)}%${dl ? ` · 지연 ${dl}` : ''}${hl ? ` · 보류 ${hl}건` : ''}</option>`;
                 }).join('')
                 : `<option value="">${projectDeptFilter ? '이 본부에 프로젝트가 없습니다' : '조회 가능한 프로젝트가 없습니다'}</option>`;
             if (currentProjectId) sel.value = currentProjectId;
@@ -21113,6 +21222,7 @@ const QUOTE_TEMPLATES = [
             document.getElementById('prj-d-name').innerHTML = `${projectCompanyChip(p)} ${escapeHtml(p.name)}`;   // 회사 구분 (2026-10-23)
             document.getElementById('prj-d-delay').innerHTML = dl.length
                 ? `<span class="text-xs font-bold rounded-full px-2 py-0.5 border text-red-700 bg-red-50 border-red-200"><i class="fas fa-triangle-exclamation mr-0.5"></i>지연 ${dl.length}건</span>` : '';
+            if (projectHolds(p).length) document.getElementById('prj-d-delay').innerHTML += ` <span class="text-xs font-bold rounded-full px-2 py-0.5 border text-yellow-700 bg-yellow-50 border-yellow-200"><i class="fas fa-circle-pause mr-0.5"></i>보류 ${projectHolds(p).length}건</span>`;
             document.getElementById('prj-d-meta').innerHTML =
                 `${escapeHtml(deptNames[p.dept] || p.dept)} · PM <b class="text-gray-700">${escapeHtml(p.owner)}</b> · 예정 ${escapeHtml(p.startPlan)} ~ ${escapeHtml(projectEndLabel(p))}`
                 + (p.startActual ? ` · 실제 시작 <b class="text-gray-700">${escapeHtml(p.startActual)}</b>` : '')
@@ -21170,6 +21280,7 @@ const QUOTE_TEMPLATES = [
             const byStatus = { todo: 0, doing: 0, hold: 0, done: 0 };
             list.forEach(w => { byStatus[w.status] = (byStatus[w.status] || 0) + 1; });
             const delays = projectDelays(p);
+            const holdCnt = projectHolds(p).length;
             const pct = projectProgress(p);
 
             // 일정 대비 진척 — 기간 경과율과 실제 진척률을 비교해 앞섰는지/뒤졌는지 판단
@@ -21199,7 +21310,7 @@ const QUOTE_TEMPLATES = [
                     ${statCard('실제 작업', list.length + '개' + (summaryCnt ? ` <span class="text-xs font-normal text-gray-400">(+요약 ${summaryCnt})</span>` : ''), 'text-gray-800')}
                     ${statCard('완료', byStatus.done + '개', 'text-blue-600')}
                     ${statCard('진행중', (byStatus.doing || 0) + '개', 'text-green-600')}
-                    ${statCard('지연', delays.length + '건', delays.length ? 'text-red-600' : 'text-gray-400')}
+                    ${statCard('지연', delays.length + '건' + (holdCnt ? ` <span class="text-xs font-bold text-yellow-700">· 보류 ${holdCnt}건</span>` : ''), delays.length ? 'text-red-600' : 'text-gray-400')}
                 </div>
 
                 ${endTbd ? `<div class="bg-white border border-gray-200 rounded p-4 mb-4">
@@ -21285,6 +21396,8 @@ const QUOTE_TEMPLATES = [
                     const dSt = deliverableState(w);
                     const dFiles = wbsDeliverableFiles(w);
                     const canDeliv = !summary && canManageDeliverable(p, w);
+                    const held = isWbsHeld(w);
+                    const heldKids = summary ? wbsDescendants(p, w).filter(isWbsHeld).length : 0;
                     return `<tr onclick="openWbsDetailModal(${jsArg(p.id)},${jsArg(w.id)})" title="클릭하여 WBS 상세 보기" class="border-b border-gray-100 cursor-pointer hover:bg-blue-50/40 ${summary ? 'bg-indigo-50/50' : blocked ? 'bg-gray-50' : d && d.kind !== 'doneLate' ? 'bg-red-50/40' : ''}">
                         <td class="p-3 text-gray-500 whitespace-nowrap ${summary ? 'font-bold text-indigo-700' : ''}">${escapeHtml(w.code || '')}</td>
                         <td class="p-3" style="padding-left:${0.75 + (level - 1) * 1.5}rem">
@@ -21311,6 +21424,7 @@ const QUOTE_TEMPLATES = [
                                     <span class="shrink-0 text-gray-400">${escapeHtml(WORK_CENTERS[r.key].title || '')}</span>
                                 </li>`).join('')}</ul>
                             </div>` : ''}
+                            ${isWbsHeld(w) ? `<p class="text-xs text-yellow-700 mt-0.5"><i class="fas fa-circle-pause mr-1"></i>보류사유: ${escapeHtml(w.hold.reason)}</p>` : ''}
                             ${w.delayReason ? `<p class="text-xs text-red-600 mt-0.5"><i class="fas fa-comment-dots mr-1"></i>지연사유: ${escapeHtml(w.delayReason)}</p>` : ''}
                             ${isEarlyStarted(w) ? `<p class="text-xs text-amber-700 mt-0.5"><i class="fas fa-bolt mr-1"></i>조기착수(${w.earlyStart.daysEarly}일 앞당김): ${escapeHtml(w.earlyStart.reason)}${isEarlyStartWaiting(p, w) ? ' <span class="text-red-600 font-semibold">· 선행 완료 후 완료 처리 가능</span>' : ''}</p>` : ''}
                         </td>
@@ -21329,6 +21443,8 @@ const QUOTE_TEMPLATES = [
                             ${blocked ? `<br><span class="text-xs font-bold rounded-full px-2 py-0.5 border text-gray-700 bg-gray-200 border-gray-300 mt-0.5 inline-block"><i class="fas fa-lock mr-0.5"></i>${isEarlyStarted(w) ? '선행 미완료' : '선행 대기'}</span>` : ''}
                             ${!blocked && workPending ? '<br><span class="text-xs font-bold rounded-full px-2 py-0.5 border text-amber-800 bg-amber-100 border-amber-300 mt-0.5 inline-block"><i class="fas fa-diagram-next mr-0.5"></i>업무 미완료</span>' : ''}
                             ${d ? `<br><span class="text-xs font-bold text-red-600 mt-0.5 inline-block">${d.label} ${d.days}일</span>` : ''}
+                            ${isWbsHeld(w) ? `<div class="mt-0.5">${wbsHoldChipHtml(w)}</div>` : ''}
+                            ${summary && heldKids ? `<br><span class="text-xs font-bold text-yellow-700 mt-0.5 inline-block"><i class="fas fa-circle-pause mr-0.5"></i>하위 보류 ${heldKids}건</span>` : ''}
                         </td>
                         <td class="p-3 text-xs text-gray-600 align-top min-w-[11rem]" onclick="event.stopPropagation()"${canDeliv ? ` data-drop-handler="wbsDeliverableDropFiles" data-drop-a="${p.id}" data-drop-b="${w.id}" title="파일을 드래그하거나 Ctrl+V로 붙여넣어 첨부할 수 있습니다"` : ''}>
                             <p class="text-gray-700">${w.deliverable ? escapeHtml(w.deliverable) : '<span class="text-gray-300">-</span>'}</p>
@@ -21344,10 +21460,13 @@ const QUOTE_TEMPLATES = [
                             <div class="flex flex-wrap gap-1">
                                 ${summary ? `<span class="text-xs text-indigo-500 self-center" title="하위 작업에서 진행·완료를 처리하면 여기에 자동 반영됩니다"><i class="fas fa-sitemap mr-1"></i>하위에서 자동 집계</span>` : ''}
                                 ${!summary && blocked && canEarlyStartWbs(p, w) ? `<button onclick="openWbsStartModal(${jsArg(p.id)},${jsArg(w.id)})" class="px-2 py-1 bg-amber-500 hover:bg-amber-600 text-white rounded text-xs font-semibold" title="선행작업 완료 전, 예정일보다 먼저 시작합니다 (사유 입력 필요)"><i class="fas fa-bolt mr-1"></i>조기 착수</button>` : ''}
-                                ${!summary && blocked && !canEarlyStartWbs(p, w) && isWbsHandler(p, w) ? `<button onclick="alertWbsBlocked(${jsArg(p.id)},${jsArg(w.id)})" class="px-2 py-1 bg-gray-200 text-gray-500 rounded text-xs font-semibold cursor-not-allowed" title="선행작업 미완료"><i class="fas fa-lock mr-1"></i>진행 불가</button>` : ''}
-                                ${!summary && !blocked && workPending && isWbsHandler(p, w) ? `<button onclick="alertWbsWorkPending(${jsArg(p.id)},${jsArg(w.id)})" class="px-2 py-1 bg-amber-100 border border-amber-300 text-amber-800 rounded text-xs font-semibold" title="부속 업무 미완료"><i class="fas fa-diagram-next mr-1"></i>업무 미완료</button>` : ''}
+                                ${!summary && !held && blocked && !canEarlyStartWbs(p, w) && isWbsHandler(p, w) ? `<button onclick="alertWbsBlocked(${jsArg(p.id)},${jsArg(w.id)})" class="px-2 py-1 bg-gray-200 text-gray-500 rounded text-xs font-semibold cursor-not-allowed" title="선행작업 미완료"><i class="fas fa-lock mr-1"></i>진행 불가</button>` : ''}
+                                ${!summary && !held && !blocked && workPending && isWbsHandler(p, w) ? `<button onclick="alertWbsWorkPending(${jsArg(p.id)},${jsArg(w.id)})" class="px-2 py-1 bg-amber-100 border border-amber-300 text-amber-800 rounded text-xs font-semibold" title="부속 업무 미완료"><i class="fas fa-diagram-next mr-1"></i>업무 미완료</button>` : ''}
                                 ${canStart ? `<button onclick="openWbsStartModal(${jsArg(p.id)},${jsArg(w.id)})" class="px-2 py-1 bg-green-600 hover:bg-green-700 text-white rounded text-xs font-semibold">시작</button>` : ''}
                                 ${canDone ? `<button onclick="openWbsDoneModal(${jsArg(p.id)},${jsArg(w.id)})" class="px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs font-semibold">완료</button>` : ''}
+                                ${held && canHoldWbs(p, w) ? `<button onclick="openWbsResumeModal(${jsArg(p.id)},${jsArg(w.id)})" class="px-2 py-1 bg-yellow-500 hover:bg-yellow-600 text-white rounded text-xs font-semibold">보류 취소</button>
+                                    <button onclick="openWbsHoldModal(${jsArg(p.id)},${jsArg(w.id)})" class="px-2 py-1 bg-white border border-yellow-400 text-yellow-700 hover:bg-yellow-50 rounded text-xs">보류 수정</button>` : ''}
+                                ${!held && canHoldWbs(p, w) ? `<button onclick="openWbsHoldModal(${jsArg(p.id)},${jsArg(w.id)})" class="px-2 py-1 bg-white border border-yellow-400 text-yellow-700 hover:bg-yellow-50 rounded text-xs font-semibold">보류</button>` : ''}
                                 ${d && d.kind !== 'doneLate' && (canDone || editable) ? `<button onclick="openWbsDelayModal(${jsArg(p.id)},${jsArg(w.id)})" class="px-2 py-1 ${w.delayReason ? 'bg-white border border-red-300 text-red-600' : 'bg-red-600 text-white'} rounded text-xs font-semibold">지연사유</button>` : ''}
                                 ${editable ? `<button onclick="openWbsModal(${jsArg(p.id)},${jsArg(w.id)})" class="px-2 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded text-xs">수정</button>` : ''}
                                 ${editable ? `<button onclick="deleteWbs(${jsArg(p.id)},${jsArg(w.id)})" class="px-2 py-1 bg-white border border-red-200 hover:bg-red-50 text-red-600 rounded text-xs" title="잘못 입력한 WBS 삭제 (하위 작업도 함께 삭제)"><i class="fas fa-trash"></i></button>` : ''}
@@ -21396,6 +21515,7 @@ const QUOTE_TEMPLATES = [
                 // 조기 착수한 작업은 '선행 대기(회색)'가 아니라 진행 중으로 보여야 하므로 호박색으로 구분합니다
                 const early = isEarlyStarted(w);
                 const barCls = summary ? 'bg-indigo-500'
+                    : isWbsHeld(w) ? 'bg-yellow-500'
                     : early && w.status !== 'done' ? 'bg-amber-500'
                     : blocked ? 'bg-gray-400'
                     : w.status === 'done' ? 'bg-blue-500'
@@ -21624,7 +21744,7 @@ const QUOTE_TEMPLATES = [
             const active = all.filter(p => p.status === 'planning' || p.status === 'active');
             const delayCnt = active.reduce((n, p) => n + projectDelays(p).length, 0);
             const soon = active.reduce((n, p) => n + wbsLeaves(p).filter(w => {
-                if (w.status === 'done' || !w.endPlan) return false;
+                if (w.status === 'done' || isWbsHeld(w) || !w.endPlan) return false;
                 const d = Math.round((new Date(w.endPlan) - new Date(today)) / 86400000);
                 return d >= 0 && d <= 7;
             }).length, 0);
@@ -21983,6 +22103,7 @@ const QUOTE_TEMPLATES = [
             document.getElementById('wbsdetail-badges').innerHTML =
                 `<span class="text-xs font-bold rounded-full px-2 py-0.5 border ${ws.chip}">${ws.name}</span>`
                 + (isEarlyStarted(w) ? ' <span class="text-xs font-bold rounded-full px-2 py-0.5 border text-amber-800 bg-amber-100 border-amber-300"><i class="fas fa-bolt mr-0.5"></i>조기착수</span>' : '')
+                + (isWbsHeld(w) ? ' ' + wbsHoldChipHtml(w, 'inline-block') : '')
                 + (blocked ? ` <span class="text-xs font-bold rounded-full px-2 py-0.5 border text-gray-700 bg-gray-200 border-gray-300"><i class="fas fa-lock mr-0.5"></i>${isEarlyStarted(w) ? '선행 미완료' : '선행 대기'}</span>` : '')
                 + (workPending ? ' <span class="text-xs font-bold rounded-full px-2 py-0.5 border text-amber-800 bg-amber-100 border-amber-300"><i class="fas fa-diagram-next mr-0.5"></i>업무 미완료</span>' : '')
                 + (d ? ` <span class="text-xs font-bold rounded-full px-2 py-0.5 border ${d.kind === 'doneLate' ? 'text-gray-600 bg-gray-100 border-gray-300' : 'text-red-700 bg-red-50 border-red-200'}">${d.label} ${d.days}일</span>` : '');
@@ -22009,6 +22130,27 @@ const QUOTE_TEMPLATES = [
                 </div>
                 ${d ? `<p class="text-xs mt-1.5 ${d.kind === 'doneLate' ? 'text-gray-500' : 'text-red-600 font-semibold'}"><i class="fas fa-triangle-exclamation mr-1"></i>${d.label} ${d.days}일</p>` : ''}
             </div>`;
+
+            // 보류 — 지금 보류 중인 내용과 지난 보류 기록
+            if (isWbsHeld(w)) {
+                const h = w.hold;
+                html += `<div class="bg-yellow-50 border border-yellow-200 rounded p-3 space-y-1">
+                    <p class="text-yellow-800 font-semibold"><i class="fas fa-circle-pause mr-1"></i>보류 중</p>
+                    ${row('보류일', `<b>${escapeHtml(h.from)}</b> <span class="text-gray-400">· ${dayDiff(h.from, ymd(new Date()))}일째</span>`)}
+                    ${row('재시작 예정일', h.restartPlan ? `<b class="${wbsHoldOverdue(w) ? 'text-red-600' : ''}">${escapeHtml(h.restartPlan)}</b>${wbsHoldOverdue(w) ? ` <span class="text-red-600 text-xs font-semibold">${wbsHoldOverdue(w)}일 지남</span>` : ''}` : '<span class="text-gray-400">미정</span>')}
+                    ${row('사유', `<span class="whitespace-pre-line">${escapeHtml(h.reason)}</span>`)}
+                    ${h.delayAtHold ? row('보류 전 상태', `<span class="text-red-600">${escapeHtml(h.delayAtHold)}</span>`) : ''}
+                    ${row('처리', `${escapeHtml(h.by || '-')} · ${escapeHtml(h.at || '')}`)}
+                </div>`;
+            }
+            if ((w.holdHistory || []).length) {
+                html += `<div class="bg-white border border-gray-200 rounded p-3">
+                    <p class="text-gray-500 font-medium mb-1"><i class="fas fa-clock-rotate-left mr-1 text-gray-400"></i>보류 기록</p>
+                    <ul class="space-y-1">${w.holdHistory.slice().reverse().map(x => `<li class="text-xs text-gray-700 border-t border-gray-100 pt-1 first:border-t-0 first:pt-0">
+                        <b>${escapeHtml(x.from)} ~ ${escapeHtml(x.to)}</b> (${x.days}일) · ${escapeHtml(x.reason || '')}<br>
+                        <span class="text-gray-500">예정 ${escapeHtml(x.before.startPlan || '-')} ~ ${escapeHtml(x.before.endPlan || '-')} → ${escapeHtml(x.after.startPlan || '-')} ~ ${escapeHtml(x.after.endPlan || '-')} · 취소 ${escapeHtml(x.resumedBy || '')}</span></li>`).join('')}</ul>
+                </div>`;
+            }
 
             // 지연 사유
             if (w.delayReason) {
@@ -22104,8 +22246,14 @@ const QUOTE_TEMPLATES = [
             // 처리 버튼 (표와 동일한 권한 규칙)
             const acts = [];
             const isSum = wbsIsSummary(p, w);
-            if (!isSum && blocked && isWbsHandler(p, w)) acts.push(`<button type="button" onclick="alertWbsBlocked(${jsArg(p.id)},${jsArg(w.id)})" class="px-3 py-1.5 bg-gray-200 text-gray-500 rounded text-sm font-semibold"><i class="fas fa-lock mr-1"></i>진행 불가</button>`);
-            if (!isSum && !blocked && workPending && isWbsHandler(p, w)) acts.push(`<button type="button" onclick="alertWbsWorkPending(${jsArg(p.id)},${jsArg(w.id)})" class="px-3 py-1.5 bg-amber-100 border border-amber-300 text-amber-800 rounded text-sm font-semibold"><i class="fas fa-diagram-next mr-1"></i>업무 미완료</button>`);
+            if (isWbsHeld(w) && canHoldWbs(p, w)) {
+                acts.push(`<button type="button" onclick="closeWbsDetailModal(); openWbsResumeModal(${jsArg(p.id)},${jsArg(w.id)})" class="px-3 py-1.5 bg-yellow-500 hover:bg-yellow-600 text-white rounded text-sm font-semibold"><i class="fas fa-play mr-1"></i>보류 취소</button>`);
+                acts.push(`<button type="button" onclick="closeWbsDetailModal(); openWbsHoldModal(${jsArg(p.id)},${jsArg(w.id)})" class="px-3 py-1.5 bg-white border border-yellow-400 text-yellow-700 hover:bg-yellow-50 rounded text-sm">보류 수정</button>`);
+            } else if (canHoldWbs(p, w)) {
+                acts.push(`<button type="button" onclick="closeWbsDetailModal(); openWbsHoldModal(${jsArg(p.id)},${jsArg(w.id)})" class="px-3 py-1.5 bg-white border border-yellow-400 text-yellow-700 hover:bg-yellow-50 rounded text-sm font-semibold"><i class="fas fa-circle-pause mr-1"></i>보류</button>`);
+            }
+            if (!isSum && !isWbsHeld(w) && blocked && isWbsHandler(p, w)) acts.push(`<button type="button" onclick="alertWbsBlocked(${jsArg(p.id)},${jsArg(w.id)})" class="px-3 py-1.5 bg-gray-200 text-gray-500 rounded text-sm font-semibold"><i class="fas fa-lock mr-1"></i>진행 불가</button>`);
+            if (!isSum && !isWbsHeld(w) && !blocked && workPending && isWbsHandler(p, w)) acts.push(`<button type="button" onclick="alertWbsWorkPending(${jsArg(p.id)},${jsArg(w.id)})" class="px-3 py-1.5 bg-amber-100 border border-amber-300 text-amber-800 rounded text-sm font-semibold"><i class="fas fa-diagram-next mr-1"></i>업무 미완료</button>`);
             if (!isSum && canStartWbs(p, w)) acts.push(`<button type="button" onclick="closeWbsDetailModal(); openWbsStartModal(${jsArg(p.id)},${jsArg(w.id)})" class="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded text-sm font-semibold">시작</button>`);
             if (!isSum && canCompleteWbs(p, w)) acts.push(`<button type="button" onclick="closeWbsDetailModal(); openWbsDoneModal(${jsArg(p.id)},${jsArg(w.id)})" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded text-sm font-semibold">완료</button>`);
             if (d && d.kind !== 'doneLate' && (isWbsHandler(p, w) || canEditProject(p))) acts.push(`<button type="button" onclick="closeWbsDetailModal(); openWbsDelayModal(${jsArg(p.id)},${jsArg(w.id)})" class="px-3 py-1.5 ${w.delayReason ? 'bg-white border border-red-300 text-red-600' : 'bg-red-600 text-white'} rounded text-sm font-semibold">지연사유</button>`);
@@ -23008,6 +23156,104 @@ const QUOTE_TEMPLATES = [
             });
 
             closeWbsDelayModal();
+            renderProjectCenter();
+        }
+
+        // ---------- WBS 보류 · 보류 취소 (2026-11-04) ----------
+        function openWbsHoldModal(projectId, wbsId) {
+            const p = findProject(projectId), w = p ? findWbs(p, wbsId) : null;
+            if (!canHoldWbs(p, w)) return;
+            const h = isWbsHeld(w) ? w.hold : null;
+            document.getElementById('wbs-hold-form').reset();
+            document.getElementById('wbshold-project-id').value = p.id;
+            document.getElementById('wbshold-wbs-id').value = w.id;
+            document.getElementById('wbshold-title').textContent = h ? '보류 수정' : '보류';
+            document.getElementById('wbshold-subject').textContent = `${p.name} · ${w.code ? w.code + '. ' : ''}${w.name}`;
+            const today = ymd(new Date());
+            document.getElementById('wbshold-from').value = h ? h.from : today;
+            document.getElementById('wbshold-from').max = today;
+            document.getElementById('wbshold-restart').value = h ? (h.restartPlan || '') : '';
+            document.getElementById('wbshold-reason').value = h ? (h.reason || '') : '';
+            document.getElementById('wbs-hold-modal').classList.remove('hidden');
+        }
+        function closeWbsHoldModal() {
+            document.getElementById('wbs-hold-modal').classList.add('hidden');
+            document.getElementById('wbs-hold-form').reset();
+        }
+        function submitWbsHold(event) {
+            event.preventDefault();
+            const p = findProject(document.getElementById('wbshold-project-id').value);
+            const w = p ? findWbs(p, document.getElementById('wbshold-wbs-id').value) : null;
+            if (!canHoldWbs(p, w)) { alert('보류 처리 권한이 없습니다.'); return; }
+            const from = document.getElementById('wbshold-from').value;
+            const restartPlan = document.getElementById('wbshold-restart').value;
+            const reason = document.getElementById('wbshold-reason').value.trim();
+            if (!from) { alert('보류일을 입력해 주세요.'); return; }
+            if (from > ymd(new Date())) { alert('보류일은 오늘 이후로 입력할 수 없습니다.'); return; }
+            if (restartPlan && restartPlan < from) { alert('재시작 예정일이 보류일보다 빠릅니다.'); return; }
+            if (!reason) { alert('보류 사유를 입력해 주세요.'); return; }
+            const editing = isWbsHeld(w);
+            const d = editing ? null : wbsDelay(w);
+            w.hold = editing
+                ? Object.assign(w.hold, { from, restartPlan, reason })
+                : { from, restartPlan, reason, by: currentUserName || '', at: ymd(new Date()), delayAtHold: d && d.kind !== 'doneLate' ? `${d.label} ${d.days}일` : '' };
+            notifyWbsHold(p, w, 'project-wbs-hold', `${currentUserName} · 재시작 예정 ${restartPlan || '미정'} · ${reason}`);
+            closeWbsHoldModal();
+            renderProjectCenter();
+        }
+        function openWbsResumeModal(projectId, wbsId) {
+            const p = findProject(projectId), w = p ? findWbs(p, wbsId) : null;
+            if (!canHoldWbs(p, w) || !isWbsHeld(w)) return;
+            document.getElementById('wbs-resume-form').reset();
+            document.getElementById('wbsresume-project-id').value = p.id;
+            document.getElementById('wbsresume-wbs-id').value = w.id;
+            document.getElementById('wbsresume-subject').textContent = `${p.name} · ${w.code ? w.code + '. ' : ''}${w.name}`;
+            const today = ymd(new Date());
+            const date = document.getElementById('wbsresume-date');
+            date.min = w.hold.from;
+            date.value = today < w.hold.from ? w.hold.from : today;
+            onWbsResumeDateChange();
+            document.getElementById('wbs-resume-modal').classList.remove('hidden');
+        }
+        function closeWbsResumeModal() {
+            document.getElementById('wbs-resume-modal').classList.add('hidden');
+            document.getElementById('wbs-resume-form').reset();
+        }
+        // 재시작일을 바꾸면 계산될 일정을 바로 보여 줍니다
+        function onWbsResumeDateChange() {
+            const p = findProject(document.getElementById('wbsresume-project-id').value);
+            const w = p ? findWbs(p, document.getElementById('wbsresume-wbs-id').value) : null;
+            const v = document.getElementById('wbsresume-date').value;
+            const box = document.getElementById('wbsresume-preview');
+            if (!p || !isWbsHeld(w) || !v || v < w.hold.from) { box.innerHTML = '재시작일을 입력해 주세요.'; return; }
+            const r = wbsResumePlan(w, v);
+            const late = wbsSuccessors(p, w).filter(x => x.status !== 'done' && x.startPlan && r.endPlan && x.startPlan <= r.endPlan);
+            box.innerHTML = `<p>보류 기간 <b>${r.days}일</b> (${escapeHtml(w.hold.from)} ~ ${escapeHtml(v)})</p>
+                <p class="mt-1">시작 예정일 ${escapeHtml(w.startPlan || '-')} → <b>${escapeHtml(r.startPlan || '-')}</b>${w.startActual ? ` <span class="text-xs text-gray-500">(이미 ${escapeHtml(w.startActual)} 시작)</span>` : ''}</p>
+                <p>종료 예정일 ${escapeHtml(w.endPlan || '-')} → <b>${escapeHtml(r.endPlan || '-')}</b></p>
+                ${late.length ? `<p class="mt-1 text-red-600 text-xs font-semibold"><i class="fas fa-triangle-exclamation mr-1"></i>후속 작업 일정은 자동으로 바뀌지 않습니다. 확인이 필요합니다: ${late.map(x => escapeHtml((x.code ? x.code + '. ' : '') + x.name)).join(', ')}</p>` : ''}`;
+        }
+        function submitWbsResume(event) {
+            event.preventDefault();
+            const p = findProject(document.getElementById('wbsresume-project-id').value);
+            const w = p ? findWbs(p, document.getElementById('wbsresume-wbs-id').value) : null;
+            if (!canHoldWbs(p, w) || !isWbsHeld(w)) { alert('보류 취소 권한이 없습니다.'); return; }
+            const v = document.getElementById('wbsresume-date').value;
+            if (!v || v < w.hold.from) { alert('재시작일은 보류일 이후로 입력해 주세요.'); return; }
+            const r = wbsResumePlan(w, v);
+            w.holdHistory = (w.holdHistory || []).concat([{
+                from: w.hold.from, to: v, days: r.days, restartPlan: w.hold.restartPlan || '', reason: w.hold.reason, by: w.hold.by, at: w.hold.at,
+                resumedBy: currentUserName || '', resumedAt: ymd(new Date()),
+                before: { startPlan: w.startPlan || '', endPlan: w.endPlan || '' },
+                after: { startPlan: r.startPlan, endPlan: r.endPlan }
+            }]);
+            w.startPlan = r.startPlan;
+            w.endPlan = r.endPlan;
+            delete w.hold;
+            w.delayNotified = false;
+            recalcWbsRollups(p);
+            notifyWbsHold(p, w, 'project-wbs-resume', `${currentUserName} · 재시작 ${v} · 예정 ${r.startPlan || '-'} ~ ${r.endPlan || '-'}`);
+            closeWbsResumeModal();
             renderProjectCenter();
         }
 
@@ -25398,16 +25644,17 @@ const QUOTE_TEMPLATES = [
                     detail: p.description || '', raw: p
                 }));
                 wbsLeaves(p).forEach(w => {
-                    const late2 = w.status !== 'done' && w.endPlan && w.endPlan < today;
+                    const heldW = isWbsHeld(w);
+                    const late2 = !heldW && w.status !== 'done' && w.endPlan && w.endPlan < today;
                     const blocked = w.status !== 'done' && isWbsBlocked(p, w) && !isEarlyStarted(w);
                     out.push(execItem({
                         kind: 'wbs', kindName: 'WBS 작업', id: w.id,
                         title: `${w.code ? w.code + '. ' : ''}${w.name}`, dept: w.dept, owner: w.assignee || '',
-                        statusName: w.status === 'done' ? '완료' : (w.status === 'doing' ? `진행 ${wbsProgress(w)}%` : '대기'),
-                        chip: w.status === 'done' ? 'bg-green-100 text-green-700' : (late2 ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-700'),
+                        statusName: heldW ? '보류' : w.status === 'done' ? '완료' : (w.status === 'doing' ? `진행 ${wbsProgress(w)}%` : '대기'),
+                        chip: heldW ? 'bg-yellow-100 text-yellow-700' : w.status === 'done' ? 'bg-green-100 text-green-700' : (late2 ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-700'),
                         due: w.endPlan || '', overdue: late2 ? execDaysPast(w.endPlan) : 0,
                         done: w.status === 'done', doneAt: w.endActual || '',
-                        issue: blocked ? '선행 작업 대기' : (w.delayReason ? '지연 사유 등록됨' : ''),
+                        issue: heldW ? `보류 · 재시작 예정 ${w.hold.restartPlan || '미정'}` : blocked ? '선행 작업 대기' : (w.delayReason ? '지연 사유 등록됨' : ''),
                         detail: `${p.name}${w.deliverable ? ' · ' + w.deliverable : ''}`,
                         raw: w, projectId: p.id, projectName: p.name
                     }));
@@ -25883,7 +26130,7 @@ const QUOTE_TEMPLATES = [
             }
             body.innerHTML = list.map(p => {
                 const prog = projectProgress(p);
-                const lateWbs = wbsLeaves(p).filter(w => w.status !== 'done' && w.endPlan && w.endPlan < today).length;
+                const lateWbs = wbsLeaves(p).filter(w => w.status !== 'done' && !isWbsHeld(w) && w.endPlan && w.endPlan < today).length;
                 const issues = (p.issues || []).filter(x => !x.resolved).length;
                 const late = p.status === 'active' && p.endPlan && p.endPlan < today;
                 return `
