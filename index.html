@@ -1951,7 +1951,9 @@
         <!-- 사이드바 (Navigation) -->
         <aside id="sidebar" class="fixed inset-y-0 left-0 transform -translate-x-full md:relative md:translate-x-0 transition duration-200 ease-in-out z-30 w-64 bg-slate-900 text-white flex flex-col h-full">
             <div class="h-16 flex items-center px-4 border-b border-slate-700/60 font-bold text-base tracking-wide truncate">
-                <img src="image/logo.png" alt="킹오더브라더스 로고" class="h-9 w-9 mr-2 rounded-md bg-white object-contain p-0.5 shrink-0" onerror="this.onerror=null;this.outerHTML='&lt;i class=&quot;fas fa-layer-group mr-2 text-blue-500&quot;&gt;&lt;/i&gt;'" /> 킹오더브라더스 그룹웨어
+                <img src="image/logo.png" alt="킹오더브라더스 로고" class="h-9 w-9 mr-2 rounded-md bg-white object-contain p-0.5 shrink-0" onerror="this.onerror=null;this.outerHTML='&lt;i class=&quot;fas fa-layer-group mr-2 text-blue-500&quot;&gt;&lt;/i&gt;'" /> <span class="truncate min-w-0 flex-1">킹오더브라더스 그룹웨어</span>
+                <!-- 휴대폰에서는 열린 메뉴가 머리 줄의 줄 세 개를 가립니다 — 메뉴 안에서 바로 닫는 단추 (2026-11-04) -->
+                <button type="button" id="sidebar-close" onclick="toggleSidebar()" aria-label="메뉴 닫기" title="메뉴 닫기" class="md:hidden ml-2 -mr-1 w-10 h-10 shrink-0 grid place-items-center rounded-md text-gray-300 focus:outline-none"><i class="fas fa-xmark text-lg"></i></button>
             </div>
             
             <nav class="flex-1 px-4 py-6 space-y-1 overflow-y-auto">
