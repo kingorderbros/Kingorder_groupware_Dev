@@ -147,6 +147,11 @@
             input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
             select, textarea { font-size: 16px !important; }
         }
+        /* 휴대폰에서 닫힌 메뉴는 그리지 않습니다 — 닫힌 상태인데도 메뉴가 떠서 줄 세 개를 가리고 메뉴 · 뒤 화면이 모두 눌리던 아이폰 문제 (2026-11-04) */
+        @media (max-width: 767.98px) {
+            #sidebar { transition: transform .2s ease-in-out, visibility 0s; }
+            #sidebar.-translate-x-full { visibility: hidden; transition: transform .2s ease-in-out, visibility 0s .2s; }
+        }
         /* 홈 화면에서 띄웠을 때(주소창이 없을 때) 아래 여백이 잘리지 않게 */
         @media (display-mode: standalone) {
             body { padding-bottom: env(safe-area-inset-bottom); }
