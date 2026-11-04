@@ -25032,7 +25032,8 @@ const QUOTE_TEMPLATES = [
             if (!m) {
                 m = document.createElement('div');
                 m.id = 'wc-allworks-modal';
-                m.className = 'hidden fixed inset-0 bg-black/40 z-[60] flex items-center justify-center p-4';
+                // 여기서 여는 업무이력 상세(z-50)와 그 안의 창(z-60 이상)이 앞에 오도록 일반 창보다 한 단계 낮게 둡니다 (메뉴 z-30 보다는 앞)
+                m.className = 'hidden fixed inset-0 bg-black/40 z-40 flex items-center justify-center p-4';
                 m.addEventListener('click', (e) => { if (e.target === m) m.classList.add('hidden'); });
                 document.body.appendChild(m);
             }
