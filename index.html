@@ -866,7 +866,27 @@
         /* 모달 본문 기준 글자 크기도 동일한 밀도로 */
         :root[data-theme] div[id$="-modal"]:not(#quote-preview-modal) { font-size: var(--gw-fs-base); }
 
-        /* ---------- 11. 머리 줄 화면 디자인 · 바로 가기 드롭다운 (2026-11-05) ---------- */
+        /* ---------- 11. 머리 줄 바로 가기 단추 · 화면 디자인 드롭다운 (2026-11-05) ---------- */
+        .gw-link-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            height: 32px;
+            padding: 0 10px;
+            background: var(--gw-track);
+            border: 1px solid var(--gw-line);
+            border-radius: 999px;
+            color: var(--gw-text-sub);
+            font-size: 12px;
+            font-weight: 600;
+            line-height: 1;
+            white-space: nowrap;
+            text-decoration: none;
+            cursor: pointer;
+            transition: color .15s;
+        }
+        .gw-link-btn:hover { color: var(--gw-text); }
+        .gw-link-btn.hidden { display: none; }
         .gw-display-btn {
             display: inline-flex;
             align-items: center;
@@ -891,7 +911,7 @@
             top: 100%;
             right: 0;
             z-index: 50;
-            width: 14rem;
+            width: 11rem;
             margin-top: 8px;
             padding: 6px;
             background: #FFFFFF;
@@ -906,7 +926,6 @@
             font-weight: 700;
             color: #6B7280;
         }
-        .gw-menu-line { height: 1px; margin: 6px 2px; background: #F3F4F6; }
         .gw-menu-item {
             display: flex;
             align-items: center;
@@ -926,8 +945,6 @@
             cursor: pointer;
         }
         .gw-menu-item:hover { background: #F3F4F6; color: #111827; }
-        .gw-menu-item .gw-menu-ic { width: 16px; text-align: center; color: #6B7280; }
-        .gw-menu-item .gw-menu-end { margin-left: auto; font-size: 11px; color: #9CA3AF; }
         .gw-menu-item .gw-check { margin-left: auto; font-size: 11px; color: var(--gw-p-600); visibility: hidden; }
         .gw-menu-item[aria-checked="true"] { background: #F3F4F6; color: #111827; font-weight: 700; }
         .gw-menu-item[aria-checked="true"] .gw-check { visibility: visible; }
@@ -945,10 +962,14 @@
         .gw-display-wrap [data-gw-theme="soft"]    .gw-dot { background: #5D46D2; }
         .gw-display-wrap [data-gw-theme="compact"] .gw-dot { background: #0E5D78; border-radius: 2px; }
         .gw-display-wrap [data-gw-theme="kingorder"] .gw-dot { background: #121212; box-shadow: inset 0 0 0 2px #121212, inset 0 0 0 4px #EA0E69; }
-        /* 휴대폰 — 단추는 색 점과 화살표만, 창은 화면 안에 맞춥니다 */
+        /* 휴대폰 — 바로 가기는 아이콘만, 디자인 단추는 색 점만, 창은 화면 안에 맞춥니다 */
         @media (max-width: 640px) {
             .gw-display-btn .gw-label, .gw-display-btn .gw-face-ic { display: none; }
-            .gw-display-btn { padding: 0 8px; }
+            .gw-head-tools > * + * { margin-left: 2px !important; }   /* 단추가 늘어도 페이지 제목이 보이게 */
+            .gw-display-btn .gw-chev { display: none; }
+            .gw-display-btn { width: 32px; padding: 0; justify-content: center; }
+            .gw-link-btn .gw-label { display: none; }
+            .gw-link-btn { width: 32px; padding: 0; justify-content: center; }
             .gw-display-menu { position: fixed; top: 56px; right: 12px; margin-top: 0; }
         }
 
@@ -2155,11 +2176,18 @@
                     </button>
                     <h2 id="page-title" class="text-lg md:text-xl font-semibold text-gray-800 truncate">Management Dashboard</h2>
                 </div>
-                <div class="flex items-center space-x-3 md:space-x-4 shrink-0">
-                    <!-- 화면 디자인 · 바로 가기 드롭다운 (2026-11-05) -->
+                <div class="flex items-center space-x-3 md:space-x-4 shrink-0 gw-head-tools">
+                    <!-- 바로 가기 단추 — 자료실 · 킹오더챗 (2026-11-05). 권한에 따라 syncGwShortcuts 가 보여 줍니다 -->
+                    <button type="button" id="gw-link-archive" class="gw-link-btn hidden" onclick="navigate('archive', document.getElementById('nav-archive'))" title="자료실" aria-label="자료실">
+                        <i class="fas fa-folder-tree" aria-hidden="true"></i><span class="gw-label">자료실</span>
+                    </button>
+                    <a id="gw-link-chat" class="gw-link-btn hidden" target="_blank" rel="noopener" title="킹오더챗 (새 창)" aria-label="킹오더챗 (새 창)">
+                        <i class="fas fa-comments" aria-hidden="true"></i><span class="gw-label">킹오더챗</span>
+                    </a>
+                    <!-- 화면 디자인 드롭다운 (2026-11-05) -->
                     <div class="relative gw-display-wrap" id="gw-display-wrap">
                         <button type="button" id="gw-display-btn" class="gw-display-btn" onclick="toggleGwDisplayMenu()"
-                                title="화면 디자인 · 바로 가기" aria-label="화면 디자인 · 바로 가기" aria-haspopup="true" aria-expanded="false">
+                                title="화면 디자인" aria-label="화면 디자인" aria-haspopup="true" aria-expanded="false">
                             <i class="fas fa-palette gw-face-ic" aria-hidden="true"></i>
                             <span class="gw-dot" aria-hidden="true"></span><span id="gw-display-name" class="gw-label">킹오더</span>
                             <i class="fas fa-chevron-down gw-chev" aria-hidden="true"></i>
@@ -2191,16 +2219,6 @@
                                     onclick="setGwTheme('compact')" title="컴팩트: 초고밀도 무그림자 (ERP 스타일)">
                                 <span class="gw-dot" aria-hidden="true"></span><span>컴팩트</span><i class="fas fa-check gw-check" aria-hidden="true"></i>
                             </button>
-                            </div>
-                            <div id="gw-shortcuts">
-                                <div class="gw-menu-line"></div>
-                                <p class="gw-menu-title">바로 가기</p>
-                                <button type="button" id="gw-shortcut-archive" class="gw-menu-item" onclick="gwShortcutArchive()">
-                                    <i class="fas fa-folder-tree gw-menu-ic" aria-hidden="true"></i><span>자료실</span>
-                                </button>
-                                <a id="gw-shortcut-chat" class="gw-menu-item" target="_blank" rel="noopener" onclick="closeGwDisplayMenu()">
-                                    <i class="fas fa-comments gw-menu-ic" aria-hidden="true"></i><span>킹오더챗</span><i class="fas fa-arrow-up-right-from-square gw-menu-end" aria-hidden="true"></i>
-                                </a>
                             </div>
                         </div>
                     </div>
@@ -11665,6 +11683,7 @@ const QUOTE_TEMPLATES = [
             document.getElementById('nav-org-chart').classList.toggle('hidden', !isAllowed('org-chart'));
             document.getElementById('nav-common').classList.toggle('hidden', !isAllowed('common'));
             document.getElementById('nav-archive').classList.toggle('hidden', !isAllowed('archive'));
+            syncGwShortcuts();
 
             // 다른 부서 화면을 하나만 쓰는 경우 — 본부메뉴 없이 메뉴명만 한 줄로
             renderCrossDeptMenus();
@@ -13209,35 +13228,29 @@ const QUOTE_TEMPLATES = [
             });
         }
 
-        // ---------- 머리 줄 화면 디자인 · 바로 가기 드롭다운 (2026-11-05) ----------
+        // ---------- 머리 줄 바로 가기 단추 · 화면 디자인 드롭다운 (2026-11-05) ----------
         // 킹오더챗은 아직 개발환경에만 있어, 주소가 있는 환경에서만 단추를 보여 줍니다.
         // 운영에 킹오더챗을 열 때 여기에 prod 주소를 넣으면 됩니다.
         const GW_CHAT_URLS = { dev: 'https://kingorder-chat-dev.kingorderbros.workers.dev' };
         function gwChatUrl() {
             return externalUser ? '' : (GW_CHAT_URLS[(window.KOB_CONFIG || {}).env] || '');
         }
-        function syncGwShortcuts() {
+        function syncGwShortcuts() {                                // 메뉴 권한이 정해질 때 함께 부릅니다
             const nav = document.getElementById('nav-archive');
             const canArchive = !!nav && !nav.classList.contains('hidden');    // 왼쪽 메뉴의 자료실 권한과 같게
             const chat = gwChatUrl();
-            const chatEl = document.getElementById('gw-shortcut-chat');
-            document.getElementById('gw-shortcut-archive').classList.toggle('hidden', !canArchive);
+            const chatEl = document.getElementById('gw-link-chat');
+            document.getElementById('gw-link-archive').classList.toggle('hidden', !canArchive);
             chatEl.classList.toggle('hidden', !chat);
             if (chat) chatEl.href = chat; else chatEl.removeAttribute('href');
-            document.getElementById('gw-shortcuts').classList.toggle('hidden', !canArchive && !chat);
         }
         function toggleGwDisplayMenu(force) {
             const menu = document.getElementById('gw-display-menu');
             const open = typeof force === 'boolean' ? force : menu.classList.contains('hidden');
-            if (open) syncGwShortcuts();
             menu.classList.toggle('hidden', !open);
             document.getElementById('gw-display-btn').setAttribute('aria-expanded', String(open));
         }
         function closeGwDisplayMenu() { toggleGwDisplayMenu(false); }
-        function gwShortcutArchive() {
-            closeGwDisplayMenu();
-            navigate('archive', document.getElementById('nav-archive'));
-        }
         document.addEventListener('click', (e) => {                // 바깥을 누르면 닫습니다
             const w = document.getElementById('gw-display-wrap');
             const m = document.getElementById('gw-display-menu');
