@@ -156,13 +156,6 @@
         @media (display-mode: standalone) {
             body { padding-bottom: env(safe-area-inset-bottom); }
         }
-        /* 좁은 화면에서는 디자인 전환 단추의 글자를 접고 색 점만 남깁니다
-           (다섯 개가 글자까지 늘어서면 머리줄이 넘칩니다) */
-        @media (max-width: 640px) {
-            .gw-theme-switch .gw-label { display: none; }
-            .gw-theme-switch button { padding: 5px 7px; }
-        }
-
         /* 첨부 구역에 파일을 끌어다 놓는 중 — 테두리와 바탕을 눈에 띄게 */
         .gw-drop-on {
             outline: 2px dashed #2563eb !important;
@@ -873,58 +866,90 @@
         /* 모달 본문 기준 글자 크기도 동일한 밀도로 */
         :root[data-theme] div[id$="-modal"]:not(#quote-preview-modal) { font-size: var(--gw-fs-base); }
 
-        /* ---------- 11. 헤더 디자인 버전 전환 스위치 ---------- */
-        .gw-theme-switch {
+        /* ---------- 11. 머리 줄 화면 디자인 · 바로 가기 드롭다운 (2026-11-05) ---------- */
+        .gw-display-btn {
             display: inline-flex;
             align-items: center;
-            gap: 2px;
-            padding: 2px;
+            gap: 6px;
+            height: 32px;
+            padding: 0 10px;
             background: var(--gw-track);
             border: 1px solid var(--gw-line);
             border-radius: 999px;
-        }
-        .gw-theme-switch button {
-            display: inline-flex;
-            align-items: center;
-            gap: 5px;
-            padding: 4px 10px 4px 7px;
-            border: 0;
-            border-radius: 999px;
-            background: transparent;
-            color: var(--gw-text-mute);
+            color: var(--gw-text-sub);
             font-size: 12px;
             font-weight: 600;
             line-height: 1;
             cursor: pointer;
             transition: background .15s, color .15s;
         }
-        .gw-theme-switch button:hover { color: var(--gw-text-sub); }
-        .gw-theme-switch button .gw-dot {
+        .gw-display-btn:hover, .gw-display-btn[aria-expanded="true"] { color: var(--gw-text); }
+        .gw-display-btn .gw-chev { font-size: 9px; transition: transform .15s; }
+        .gw-display-btn[aria-expanded="true"] .gw-chev { transform: rotate(180deg); }
+        .gw-display-menu {
+            position: absolute;
+            top: 100%;
+            right: 0;
+            z-index: 50;
+            width: 14rem;
+            margin-top: 8px;
+            padding: 6px;
+            background: #FFFFFF;
+            border: 1px solid #E5E7EB;
+            border-radius: 10px;
+            box-shadow: 0 10px 24px rgba(16, 24, 40, .16);
+        }
+        .gw-display-menu.hidden { display: none; }
+        .gw-menu-title {
+            padding: 6px 8px 4px;
+            font-size: 11px;
+            font-weight: 700;
+            color: #6B7280;
+        }
+        .gw-menu-line { height: 1px; margin: 6px 2px; background: #F3F4F6; }
+        .gw-menu-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            width: 100%;
+            min-height: 34px;
+            padding: 6px 8px;
+            border: 0;
+            border-radius: 6px;
+            background: transparent;
+            color: #374151;
+            font-size: 13px;
+            font-weight: 500;
+            line-height: 1.2;
+            text-align: left;
+            text-decoration: none;
+            cursor: pointer;
+        }
+        .gw-menu-item:hover { background: #F3F4F6; color: #111827; }
+        .gw-menu-item .gw-menu-ic { width: 16px; text-align: center; color: #6B7280; }
+        .gw-menu-item .gw-menu-end { margin-left: auto; font-size: 11px; color: #9CA3AF; }
+        .gw-menu-item .gw-check { margin-left: auto; font-size: 11px; color: var(--gw-p-600); visibility: hidden; }
+        .gw-menu-item[aria-checked="true"] { background: #F3F4F6; color: #111827; font-weight: 700; }
+        .gw-menu-item[aria-checked="true"] .gw-check { visibility: visible; }
+        .gw-display-wrap .gw-dot {
+            flex: 0 0 auto;
             width: 10px;
             height: 10px;
             border-radius: 50%;
             box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .08);
         }
         /* 버전별 식별 점 — 각 디자인의 대표색 */
-        .gw-theme-switch button[data-gw-theme="blue"]    .gw-dot { background: #1A5FD0; }
-        .gw-theme-switch button[data-gw-theme="green"]   .gw-dot { background: #0F7B5A; }
-        .gw-theme-switch button[data-gw-theme="slate"]   .gw-dot { background: #1E2634; }
-        .gw-theme-switch button[data-gw-theme="soft"]    .gw-dot { background: #5D46D2; }
-        .gw-theme-switch button[data-gw-theme="compact"] .gw-dot { background: #0E5D78; }
-        .gw-theme-switch button[data-gw-theme="kingorder"] .gw-dot { background: #121212; box-shadow: inset 0 0 0 2px #121212, inset 0 0 0 4px #EA0E69; }
-        /* soft/compact 는 형태 차이도 점 모양으로 미리 보여 줌 */
-        .gw-theme-switch button[data-gw-theme="compact"] .gw-dot { border-radius: 2px; }
-
-        /* 선택 상태는 aria-checked 로 판단 → 버전이 늘어도 규칙 추가 불필요 */
-        .gw-theme-switch button[aria-checked="true"] {
-            background: #FFFFFF;
-            color: var(--gw-text);
-            box-shadow: 0 1px 2px rgba(16, 24, 40, .10);
-        }
-        /* 좁은 화면에서는 색상 점만 표시 (버전이 5개라 기준폭을 넓게 잡음) */
-        @media (max-width: 1439px) {
-            .gw-theme-switch button .gw-label { display: none; }
-            .gw-theme-switch button { padding: 5px; }
+        .gw-display-wrap [data-gw-theme="blue"]    .gw-dot { background: #1A5FD0; }
+        .gw-display-wrap [data-gw-theme="green"]   .gw-dot { background: #0F7B5A; }
+        .gw-display-wrap [data-gw-theme="slate"]   .gw-dot { background: #1E2634; }
+        .gw-display-wrap [data-gw-theme="soft"]    .gw-dot { background: #5D46D2; }
+        .gw-display-wrap [data-gw-theme="compact"] .gw-dot { background: #0E5D78; border-radius: 2px; }
+        .gw-display-wrap [data-gw-theme="kingorder"] .gw-dot { background: #121212; box-shadow: inset 0 0 0 2px #121212, inset 0 0 0 4px #EA0E69; }
+        /* 휴대폰 — 단추는 색 점과 화살표만, 창은 화면 안에 맞춥니다 */
+        @media (max-width: 640px) {
+            .gw-display-btn .gw-label, .gw-display-btn .gw-face-ic { display: none; }
+            .gw-display-btn { padding: 0 8px; }
+            .gw-display-menu { position: fixed; top: 56px; right: 12px; margin-top: 0; }
         }
 
         /* ---------- 12. 로그인 화면 / 모바일 뷰 ---------- */
@@ -2131,32 +2156,53 @@
                     <h2 id="page-title" class="text-lg md:text-xl font-semibold text-gray-800 truncate">Management Dashboard</h2>
                 </div>
                 <div class="flex items-center space-x-3 md:space-x-4 shrink-0">
-                    <!-- 디자인 버전 전환 -->
-                    <div id="gw-theme-switch" class="gw-theme-switch" role="radiogroup" aria-label="디자인 버전 선택">
-                        <button type="button" data-gw-theme="kingorder" role="radio" aria-checked="false"
-                                onclick="setGwTheme('kingorder')" title="킹오더: 브랜드 먹색 + 분홍 포인트 (기본)">
-                            <span class="gw-dot" aria-hidden="true"></span><span class="gw-label">킹오더</span>
+                    <!-- 화면 디자인 · 바로 가기 드롭다운 (2026-11-05) -->
+                    <div class="relative gw-display-wrap" id="gw-display-wrap">
+                        <button type="button" id="gw-display-btn" class="gw-display-btn" onclick="toggleGwDisplayMenu()"
+                                title="화면 디자인 · 바로 가기" aria-label="화면 디자인 · 바로 가기" aria-haspopup="true" aria-expanded="false">
+                            <i class="fas fa-palette gw-face-ic" aria-hidden="true"></i>
+                            <span class="gw-dot" aria-hidden="true"></span><span id="gw-display-name" class="gw-label">킹오더</span>
+                            <i class="fas fa-chevron-down gw-chev" aria-hidden="true"></i>
                         </button>
-                        <button type="button" data-gw-theme="blue" role="radio" aria-checked="false"
-                                onclick="setGwTheme('blue')" title="블루: 기본 업무용 디자인">
-                            <span class="gw-dot" aria-hidden="true"></span><span class="gw-label">블루</span>
-                        </button>
-                        <button type="button" data-gw-theme="green" role="radio" aria-checked="false"
-                                onclick="setGwTheme('green')" title="그린: 차분한 딥그린 디자인">
-                            <span class="gw-dot" aria-hidden="true"></span><span class="gw-label">그린</span>
-                        </button>
-                        <button type="button" data-gw-theme="slate" role="radio" aria-checked="false"
-                                onclick="setGwTheme('slate')" title="슬레이트: 다크 사이드바 + 네이비 (정통 그룹웨어)">
-                            <span class="gw-dot" aria-hidden="true"></span><span class="gw-label">슬레이트</span>
-                        </button>
-                        <button type="button" data-gw-theme="soft" role="radio" aria-checked="false"
-                                onclick="setGwTheme('soft')" title="소프트: 큰 라운드 + 넉넉한 여백 (모던 SaaS)">
-                            <span class="gw-dot" aria-hidden="true"></span><span class="gw-label">소프트</span>
-                        </button>
-                        <button type="button" data-gw-theme="compact" role="radio" aria-checked="false"
-                                onclick="setGwTheme('compact')" title="컴팩트: 초고밀도 무그림자 (ERP 스타일)">
-                            <span class="gw-dot" aria-hidden="true"></span><span class="gw-label">컴팩트</span>
-                        </button>
+                        <div id="gw-display-menu" class="gw-display-menu hidden">
+                            <p class="gw-menu-title">화면 디자인</p>
+                            <div id="gw-theme-switch" role="radiogroup" aria-label="화면 디자인 선택">
+                            <button type="button" class="gw-menu-item" data-gw-theme="kingorder" role="radio" aria-checked="false"
+                                    onclick="setGwTheme('kingorder')" title="킹오더: 브랜드 먹색 + 분홍 포인트 (기본)">
+                                <span class="gw-dot" aria-hidden="true"></span><span>킹오더</span><i class="fas fa-check gw-check" aria-hidden="true"></i>
+                            </button>
+                            <button type="button" class="gw-menu-item" data-gw-theme="blue" role="radio" aria-checked="false"
+                                    onclick="setGwTheme('blue')" title="블루: 기본 업무용 디자인">
+                                <span class="gw-dot" aria-hidden="true"></span><span>블루</span><i class="fas fa-check gw-check" aria-hidden="true"></i>
+                            </button>
+                            <button type="button" class="gw-menu-item" data-gw-theme="green" role="radio" aria-checked="false"
+                                    onclick="setGwTheme('green')" title="그린: 차분한 딥그린 디자인">
+                                <span class="gw-dot" aria-hidden="true"></span><span>그린</span><i class="fas fa-check gw-check" aria-hidden="true"></i>
+                            </button>
+                            <button type="button" class="gw-menu-item" data-gw-theme="slate" role="radio" aria-checked="false"
+                                    onclick="setGwTheme('slate')" title="슬레이트: 다크 사이드바 + 네이비 (정통 그룹웨어)">
+                                <span class="gw-dot" aria-hidden="true"></span><span>슬레이트</span><i class="fas fa-check gw-check" aria-hidden="true"></i>
+                            </button>
+                            <button type="button" class="gw-menu-item" data-gw-theme="soft" role="radio" aria-checked="false"
+                                    onclick="setGwTheme('soft')" title="소프트: 큰 라운드 + 넉넉한 여백 (모던 SaaS)">
+                                <span class="gw-dot" aria-hidden="true"></span><span>소프트</span><i class="fas fa-check gw-check" aria-hidden="true"></i>
+                            </button>
+                            <button type="button" class="gw-menu-item" data-gw-theme="compact" role="radio" aria-checked="false"
+                                    onclick="setGwTheme('compact')" title="컴팩트: 초고밀도 무그림자 (ERP 스타일)">
+                                <span class="gw-dot" aria-hidden="true"></span><span>컴팩트</span><i class="fas fa-check gw-check" aria-hidden="true"></i>
+                            </button>
+                            </div>
+                            <div id="gw-shortcuts">
+                                <div class="gw-menu-line"></div>
+                                <p class="gw-menu-title">바로 가기</p>
+                                <button type="button" id="gw-shortcut-archive" class="gw-menu-item" onclick="gwShortcutArchive()">
+                                    <i class="fas fa-folder-tree gw-menu-ic" aria-hidden="true"></i><span>자료실</span>
+                                </button>
+                                <a id="gw-shortcut-chat" class="gw-menu-item" target="_blank" rel="noopener" onclick="closeGwDisplayMenu()">
+                                    <i class="fas fa-comments gw-menu-ic" aria-hidden="true"></i><span>킹오더챗</span><i class="fas fa-arrow-up-right-from-square gw-menu-end" aria-hidden="true"></i>
+                                </a>
+                            </div>
+                        </div>
                     </div>
                     <!-- 접속 중 — 지금 그룹웨어를 열어 둔 사람 수와 목록 (2026-09-29) -->
                     <div class="relative" id="presence-wrap">
@@ -13154,8 +13200,53 @@ const QUOTE_TEMPLATES = [
         function syncGwThemeSwitch(theme) {
             document.querySelectorAll('#gw-theme-switch button[data-gw-theme]').forEach(btn => {
                 btn.setAttribute('aria-checked', String(btn.dataset.gwTheme === theme));
+                if (btn.dataset.gwTheme === theme) {
+                    const face = document.getElementById('gw-display-btn');
+                    const name = document.getElementById('gw-display-name');
+                    if (face) face.dataset.gwTheme = theme;
+                    if (name) name.textContent = btn.textContent.trim();
+                }
             });
         }
+
+        // ---------- 머리 줄 화면 디자인 · 바로 가기 드롭다운 (2026-11-05) ----------
+        // 킹오더챗은 아직 개발환경에만 있어, 주소가 있는 환경에서만 단추를 보여 줍니다.
+        // 운영에 킹오더챗을 열 때 여기에 prod 주소를 넣으면 됩니다.
+        const GW_CHAT_URLS = { dev: 'https://kingorder-chat-dev.kingorderbros.workers.dev' };
+        function gwChatUrl() {
+            return externalUser ? '' : (GW_CHAT_URLS[(window.KOB_CONFIG || {}).env] || '');
+        }
+        function syncGwShortcuts() {
+            const nav = document.getElementById('nav-archive');
+            const canArchive = !!nav && !nav.classList.contains('hidden');    // 왼쪽 메뉴의 자료실 권한과 같게
+            const chat = gwChatUrl();
+            const chatEl = document.getElementById('gw-shortcut-chat');
+            document.getElementById('gw-shortcut-archive').classList.toggle('hidden', !canArchive);
+            chatEl.classList.toggle('hidden', !chat);
+            if (chat) chatEl.href = chat; else chatEl.removeAttribute('href');
+            document.getElementById('gw-shortcuts').classList.toggle('hidden', !canArchive && !chat);
+        }
+        function toggleGwDisplayMenu(force) {
+            const menu = document.getElementById('gw-display-menu');
+            const open = typeof force === 'boolean' ? force : menu.classList.contains('hidden');
+            if (open) syncGwShortcuts();
+            menu.classList.toggle('hidden', !open);
+            document.getElementById('gw-display-btn').setAttribute('aria-expanded', String(open));
+        }
+        function closeGwDisplayMenu() { toggleGwDisplayMenu(false); }
+        function gwShortcutArchive() {
+            closeGwDisplayMenu();
+            navigate('archive', document.getElementById('nav-archive'));
+        }
+        document.addEventListener('click', (e) => {                // 바깥을 누르면 닫습니다
+            const w = document.getElementById('gw-display-wrap');
+            const m = document.getElementById('gw-display-menu');
+            if (w && m && !m.classList.contains('hidden') && e.target && e.target.isConnected !== false && !w.contains(e.target)) closeGwDisplayMenu();
+        });
+        document.addEventListener('keydown', (e) => {
+            const m = document.getElementById('gw-display-menu');
+            if (e.key === 'Escape' && m && !m.classList.contains('hidden')) closeGwDisplayMenu();
+        });
 
         // 저장된 테마로 스위치 초기 상태 동기화 (색상 자체는 <head>에서 이미 적용됨)
         syncGwThemeSwitch(document.documentElement.getAttribute('data-theme') || 'kingorder');
