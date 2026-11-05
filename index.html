@@ -27392,8 +27392,8 @@ const QUOTE_TEMPLATES = [
             });
             return out;
         }
-        function inbDeptByRules(text) {
-            const r = inboundSources.rules;
+        function inbDeptByRules(text, rules) {
+            const r = rules || inboundSources.rules;
             if ((r.opsKeywords || []).some(k => k && String(text || '').includes(k))) return '운영';
             return r.defaultDept === '운영' ? '운영' : (r.defaultDept === '영업' ? '영업' : '');
         }
@@ -27724,32 +27724,157 @@ const QUOTE_TEMPLATES = [
         }
 
         // ---------- 배정 · 규칙 ----------
+        // 배정 규칙은 고치는 동안 임시로만 두고, [저장] 에서 지금 미배정 건에도 새로 적용할지 물은 뒤 저장합니다 (2026-11-05)
+        let inbRulesDraft = null;
+        const INB_RULE_DEPT_NAMES = { '영업': '영업본부', '운영': '운영본부', '': '미배정 (담당자 지정)' };
+        function inbRulesSaved() {
+            const R = inboundSources.rules;
+            return { dupDays: R.dupDays, opsKeywords: R.opsKeywords || [], defaultDept: R.defaultDept || '',
+                     slaAssignMin: R.slaAssignMin, slaContactMin: R.slaContactMin, maxContact: inboundMaxContact };
+        }
+        // 화면에 보일 값 — 고치는 중이면 임시 값(입력한 글자 그대로), 아니면 저장된 값
+        function inbRulesForm() {
+            if (inbRulesDraft) return inbRulesDraft;
+            const v = inbRulesSaved();
+            return Object.assign({}, v, { opsKeywords: v.opsKeywords.join(', ') });
+        }
+        // 임시 값을 저장할 모양으로 다듬습니다 (빈 칸 · 잘못된 숫자는 지금 저장된 값 유지)
+        function inbRulesNormalized() {
+            const f = inbRulesForm(), now = inbRulesSaved();
+            const num = (v, old, max) => { const n = parseInt(v, 10); return n >= 1 ? (max ? Math.min(n, max) : n) : old; };
+            return { dupDays: num(f.dupDays, now.dupDays, 365),
+                     opsKeywords: String(f.opsKeywords || '').split(/[,\n]/).map(x => x.trim()).filter(Boolean),
+                     defaultDept: f.defaultDept || '',
+                     slaAssignMin: num(f.slaAssignMin, now.slaAssignMin), slaContactMin: num(f.slaContactMin, now.slaContactMin),
+                     maxContact: num(f.maxContact, now.maxContact, 20) };
+        }
+        // 바뀐 항목 — [{ label, from, to }]
+        function inbRulesChanges() {
+            const a = inbRulesSaved(), b = inbRulesNormalized(), out = [];
+            const add = (k, label, show) => { if (JSON.stringify(a[k]) !== JSON.stringify(b[k])) out.push({ label, from: show(a[k]), to: show(b[k]) }); };
+            add('dupDays', '재문의 기준', v => v + '일');
+            add('opsKeywords', '운영본부 키워드', v => v.join(', ') || '(없음)');
+            add('defaultDept', '기타 문의 배정', v => INB_RULE_DEPT_NAMES[v] || v);
+            add('slaAssignMin', '배정까지 기준 시간', v => v + '분');
+            add('slaContactMin', '1차 컨택까지 기준 시간', v => v + '분');
+            add('maxContact', '추가 컨택 중단', v => v + '회');
+            return out;
+        }
+        // 새 규칙을 적용하면 본부가 정해지는 건 — 미배정 건만 봅니다.
+        // 이미 본부가 있는 건, 결과가 난 건, 블로그 · 카페 · 인스타(문의가 아닐 수 있어 미배정으로 두는 곳)는 바꾸지 않습니다.
+        function inbRulesApplyTargets(rules) {
+            const since = ymd(new Date(Date.now() - (Number(rules.dupDays) || 30) * 86400000));
+            const out = [];
+            inboundRecords.forEach(r => {
+                if (inboundStage(r) !== '미배정') return;
+                if (['blog', 'cafe', 'insta'].includes(r.channel)) return;
+                const d = inbDigits(r.phone);
+                const prev = d.length >= 9 ? inboundRecords.find(x => x !== r && inbDigits(x.phone) === d && (x.inDate || '') >= since && x.kob && x.kob.dept) : null;
+                const dept = prev ? prev.kob.dept : inbDeptByRules(r.requestNote + ' ' + r.company, rules);
+                if (dept) out.push({ r, dept });
+            });
+            return out;
+        }
         function setInboundRule(field, value) {
             if (!canEditInboundSources()) return;
-            const R = inboundSources.rules;
-            if (field === 'opsKeywords') R.opsKeywords = String(value || '').split(/[,\n]/).map(s => s.trim()).filter(Boolean);
-            else if (['dupDays', 'slaAssignMin', 'slaContactMin'].includes(field)) R[field] = Math.max(1, parseInt(value, 10) || INBOUND_SOURCE_DEFAULTS.rules[field]);
-            else R[field] = value;
-            saveInboundSources();
-            showAppToast('배정·규칙이 저장되었습니다.', 'green');
+            if (!inbRulesDraft) inbRulesDraft = inbRulesForm();
+            inbRulesDraft[field] = value;
+            syncInbRulesBar();
+        }
+        // 입력칸을 다시 그리지 않고 저장 줄만 고칩니다 (쓰던 칸의 커서 · 저장 단추 누름이 끊기지 않게)
+        function syncInbRulesBar() {
+            const n = inbRulesChanges().length;
+            const msg = document.getElementById('inb-rules-state');
+            const save = document.getElementById('inb-rules-save-btn');
+            const undo = document.getElementById('inb-rules-undo-btn');
+            if (msg) msg.textContent = n ? `저장하지 않은 변경 ${n}건` : '변경 사항이 없습니다';
+            if (msg) msg.className = 'text-xs ' + (n ? 'text-amber-700 font-semibold' : 'text-gray-400');
+            if (save) { save.disabled = !n; save.classList.toggle('opacity-50', !n); save.classList.toggle('cursor-not-allowed', !n); }
+            if (undo) undo.classList.toggle('hidden', !n);
+        }
+        function undoInboundRules() {
+            inbRulesDraft = null;
+            renderInboundCenter();
+        }
+        function closeInbRulesSave() {
+            const m = document.getElementById('inb-rules-save-modal');
+            if (m) m.remove();
+        }
+        function openInbRulesSave() {
+            if (!canEditInboundSources()) return;
+            const changes = inbRulesChanges();
+            if (!changes.length) return;
+            const next = inbRulesNormalized();
+            const targets = inbRulesApplyTargets(next);
+            const cnt = d => targets.filter(t => t.dept === d).length;
+            const m = document.createElement('div');
+            m.id = 'inb-rules-save-modal';
+            m.className = 'fixed inset-0 bg-black/50 z-[70] flex items-center justify-center p-4';
+            m.addEventListener('click', e => { if (e.target === m) closeInbRulesSave(); });
+            m.innerHTML = `<div class="bg-white rounded-lg shadow-xl w-full max-w-lg max-h-[88vh] flex flex-col">
+                <div class="px-5 py-3 border-b border-gray-200 flex items-center justify-between">
+                    <h3 class="font-bold text-gray-800">배정 규칙 저장</h3>
+                    <button type="button" onclick="closeInbRulesSave()" class="text-gray-400 hover:text-gray-600" aria-label="닫기"><i class="fas fa-times"></i></button>
+                </div>
+                <div class="px-5 py-4 overflow-y-auto text-sm space-y-4">
+                    <div>
+                        <p class="font-semibold text-gray-800 mb-1">바뀌는 내용</p>
+                        <ul class="space-y-1 text-xs text-gray-600">${changes.map(c => `<li class="break-words"><b class="text-gray-700">${escapeHtml(c.label)}</b>: ${escapeHtml(c.from)} <i class="fas fa-arrow-right text-[10px] text-gray-400 mx-0.5"></i> <b class="text-gray-800">${escapeHtml(c.to)}</b></li>`).join('')}</ul>
+                    </div>
+                    <div id="inb-rules-apply-box" class="rounded border border-gray-200 bg-gray-50 p-3">
+                        ${targets.length ? `<p class="font-semibold text-gray-800">지금 미배정인 건에도 새 규칙을 적용할까요?</p>
+                        <p class="text-xs text-gray-600 mt-1">${targets.length}건의 본부가 정해집니다 (영업본부 ${cnt('영업')}건 · 운영본부 ${cnt('운영')}건).</p>
+                        <ul class="mt-2 max-h-40 overflow-y-auto text-xs text-gray-600 divide-y divide-gray-200">${targets.map(t => `<li class="py-1 flex justify-between gap-2"><span class="truncate">${escapeHtml(t.r.id)} ${escapeHtml(t.r.company || t.r.name || '(이름 없음)')}</span><span class="shrink-0 font-semibold text-gray-700">${escapeHtml(t.dept)}본부</span></li>`).join('')}</ul>`
+                        : '<p class="font-semibold text-gray-800">새 규칙으로 본부가 정해지는 미배정 건은 없습니다.</p>'}
+                        <p class="text-[11px] text-gray-500 mt-2">이미 본부가 정해진 건, 결과가 난 건, 블로그 · 카페 · 인스타그램 건은 바꾸지 않습니다. 앞으로 들어오는 건은 어느 쪽을 골라도 새 규칙을 따릅니다. 기준 시간과 컨택 중단 횟수는 저장하면 모든 건에 바로 적용됩니다.</p>
+                    </div>
+                </div>
+                <div class="px-5 py-3 border-t border-gray-200 flex flex-wrap justify-end gap-2">
+                    <button type="button" onclick="closeInbRulesSave()" class="px-4 py-2 text-sm rounded bg-gray-200 text-gray-700 hover:bg-gray-300">취소</button>
+                    ${targets.length ? `<button type="button" id="inb-rules-save-only" onclick="saveInboundRules(false)" class="px-4 py-2 text-sm rounded border border-gray-300 bg-white text-gray-700 hover:bg-gray-50">적용하지 않고 저장</button>
+                    <button type="button" id="inb-rules-save-apply" onclick="saveInboundRules(true)" class="px-4 py-2 text-sm rounded bg-rose-600 text-white hover:bg-rose-700">새로 적용하고 저장</button>`
+                    : '<button type="button" id="inb-rules-save-only" onclick="saveInboundRules(false)" class="px-4 py-2 text-sm rounded bg-rose-600 text-white hover:bg-rose-700">저장</button>'}
+                </div>
+            </div>`;
+            document.body.appendChild(m);
+        }
+        function saveInboundRules(applyNow) {
+            if (!canEditInboundSources()) return;
+            const next = inbRulesNormalized();
+            const targets = applyNow ? inbRulesApplyTargets(next) : [];
+            const maxContact = next.maxContact;
+            delete next.maxContact;
+            Object.assign(inboundSources.rules, next);
+            if (!saveInboundSources()) { alert('배정 규칙을 저장하지 못했습니다. 다시 시도해 주세요.'); return; }
+            targets.forEach(t => { t.r.kob = t.r.kob || {}; t.r.kob.dept = t.dept; });
+            if (targets.length) saveInboundRecords();
+            inbRulesDraft = null;
+            closeInbRulesSave();
+            setInboundMaxContact(maxContact);      // 화면도 새 값으로 다시 그립니다
+            showAppToast(targets.length ? `배정 규칙을 저장하고 미배정 ${targets.length}건에 새로 적용했습니다.` : '배정 규칙을 저장했습니다.', 'green');
         }
         function renderInboundRules(host) {
-            const R = inboundSources.rules, ed = canEditInboundSources(), dis = ed ? '' : ' disabled';
+            const R = inbRulesForm(), ed = canEditInboundSources(), dis = ed ? '' : ' disabled';
             const cls = 'p-2 text-sm border border-gray-300 rounded bg-white focus:outline-none focus:ring-2 focus:ring-rose-500' + (ed ? '' : ' bg-gray-100 text-gray-500');
             const rule = (n, cond, to, note) => `<tr><td class="px-3 py-2.5 text-xs text-gray-400">${n}</td><td class="text-sm">${cond}</td><td>${to}</td><td class="text-xs text-gray-500 pr-3">${note}</td></tr>`;
             host.innerHTML = `
                 ${ed ? '' : '<p class="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2 mb-3"><i class="fas fa-lock mr-1"></i>조회 전용입니다. 수정하려면 권한 관리에서 「수집 · 연결 설정」 권한이 필요합니다.</p>'}
+                ${ed ? `<div class="flex flex-wrap items-center justify-end gap-2 mb-3">
+                    <span id="inb-rules-state" class="text-xs text-gray-400"></span>
+                    <button type="button" id="inb-rules-undo-btn" onclick="undoInboundRules()" class="hidden px-3 py-1.5 text-sm rounded border border-gray-300 bg-white text-gray-700 hover:bg-gray-50">되돌리기</button>
+                    <button type="button" id="inb-rules-save-btn" onclick="openInbRulesSave()" class="px-4 py-1.5 text-sm rounded bg-rose-600 text-white hover:bg-rose-700"><i class="fas fa-save mr-1"></i>저장</button>
+                </div>` : ''}
                 ${inbCard(`<div class="px-4 pt-3 pb-1 font-bold text-sm text-gray-800">자동 배정 순서 <span class="font-normal text-xs text-gray-400">위에서부터 처음 일치하는 규칙 적용 (홈페이지 폼, 메일, 빠른 등록 대상이며 블로그·카페 언급과 인스타그램은 미배정으로 등록됩니다)</span></div>
                     <div class="overflow-x-auto"><table class="w-full min-w-[720px]"><thead class="bg-gray-50 text-xs text-gray-500 border-b"><tr><th class="text-left px-3 py-2 w-10">순서</th><th class="text-left">조건</th><th class="text-left">배정 대상</th><th class="text-left pr-3">메모</th></tr></thead><tbody class="divide-y">
-                    ${rule(1, `같은 연락처로 <input type="number" min="1" max="365" value="${R.dupDays}" onchange="setInboundRule('dupDays', this.value)" class="w-16 ${cls}"${dis}/> 일 이내 접수된 건이 있음`, '<span class="px-2 py-0.5 rounded bg-amber-100 text-amber-800 text-xs">이전 건의 본부</span>', "'재문의' 표시 (병합 여부는 담당자가 결정)")}
-                    ${rule(2, `문의 내용 또는 업체명에 아래 키워드 포함<textarea rows="2" onchange="setInboundRule('opsKeywords', this.value)" class="mt-1 w-full ${cls}"${dis}>${escapeHtml((R.opsKeywords || []).join(', '))}</textarea>`, '<span class="px-2 py-0.5 rounded bg-violet-100 text-violet-800 text-xs">운영본부</span>', 'AS, 사용법, 기존 고객 문의')}
+                    ${rule(1, `같은 연락처로 <input type="number" min="1" max="365" value="${R.dupDays}" oninput="setInboundRule('dupDays', this.value)" class="w-16 ${cls}"${dis}/> 일 이내 접수된 건이 있음`, '<span class="px-2 py-0.5 rounded bg-amber-100 text-amber-800 text-xs">이전 건의 본부</span>', "'재문의' 표시 (병합 여부는 담당자가 결정)")}
+                    ${rule(2, `문의 내용 또는 업체명에 아래 키워드 포함<textarea rows="2" oninput="setInboundRule('opsKeywords', this.value)" class="mt-1 w-full ${cls}"${dis}>${escapeHtml(R.opsKeywords || '')}</textarea>`, '<span class="px-2 py-0.5 rounded bg-violet-100 text-violet-800 text-xs">운영본부</span>', 'AS, 사용법, 기존 고객 문의')}
                     ${rule(3, '기타 문의', `<select onchange="setInboundRule('defaultDept', this.value)" class="${cls}"${dis}>${[['영업', '영업본부'], ['운영', '운영본부'], ['', '미배정 (담당자 지정)']].map(([v, n]) => `<option value="${v}" ${R.defaultDept === v ? 'selected' : ''}>${n}</option>`).join('')}</select>`, '담당자는 본부에서 지정합니다')}
                     </tbody></table></div>`, 'mb-4')}
                 <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
                     ${inbCard(`<div class="p-4 text-sm space-y-2"><h4 class="font-bold text-gray-800">기준 시간</h4>
-                        <label class="flex items-center justify-between gap-2">배정까지 (분)<input type="number" min="1" value="${R.slaAssignMin}" onchange="setInboundRule('slaAssignMin', this.value)" class="w-24 text-right ${cls}"${dis}/></label>
-                        <label class="flex items-center justify-between gap-2">배정 후 1차 컨택까지 (분)<input type="number" min="1" value="${R.slaContactMin}" onchange="setInboundRule('slaContactMin', this.value)" class="w-24 text-right ${cls}"${dis}/></label>
-                        <label class="flex items-center justify-between gap-2">추가 컨택 중단 (회)<input type="number" min="1" max="20" value="${inboundMaxContact}" onchange="setInboundMaxContact(this.value)" class="w-24 text-right ${cls}"/></label>
+                        <label class="flex items-center justify-between gap-2">배정까지 (분)<input type="number" min="1" value="${R.slaAssignMin}" oninput="setInboundRule('slaAssignMin', this.value)" class="w-24 text-right ${cls}"${dis}/></label>
+                        <label class="flex items-center justify-between gap-2">배정 후 1차 컨택까지 (분)<input type="number" min="1" value="${R.slaContactMin}" oninput="setInboundRule('slaContactMin', this.value)" class="w-24 text-right ${cls}"${dis}/></label>
+                        <label class="flex items-center justify-between gap-2">추가 컨택 중단 (회)<input type="number" min="1" max="20" value="${R.maxContact}" oninput="setInboundRule('maxContact', this.value)" class="w-24 text-right ${cls}"${dis}/></label>
                         <p class="text-[11px] text-gray-400">접수 시각이 있는 건만 집계합니다 (기존 엑셀 이관 건은 날짜만 있어 제외). 영업시간 기준 계산은 추후 지원 예정입니다.</p></div>`)}
                     ${inbCard(`<div class="p-4 text-sm"><h4 class="font-bold text-gray-800 mb-2">알림</h4>
                         <p class="text-gray-600 text-xs leading-relaxed">현재는 사이드바 배지(미배정 건수)와 현황판으로 알림을 제공합니다. 배정 즉시 담당자 휴대폰 푸시, 단체 대화방 대체 수단은 결정 후 적용 예정입니다 <span class="px-1.5 rounded bg-amber-100 text-amber-800">정할 것</span></p></div>`)}
@@ -27760,6 +27885,7 @@ const QUOTE_TEMPLATES = [
                         <tr><td class="py-1.5 whitespace-nowrap">수집 · 연결 설정</td><td>소스 연결, 불러오기, 규칙, 스팸 처리</td></tr>
                         <tr><td class="py-1.5 whitespace-nowrap">관리자</td><td>위 전체 + 비밀 값(메일 비밀번호, 토큰) 저장</td></tr></tbody></table></div>`)}
                 </div>`;
+            syncInbRulesBar();
         }
 
         // ==================== 수집 · 연결 (소스별 테스트 페이지) ====================
