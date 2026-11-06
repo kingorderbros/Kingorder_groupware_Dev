@@ -11480,7 +11480,9 @@ const QUOTE_TEMPLATES = [
             // (본부 메뉴가 아예 없는 그룹에는 넣지 않습니다) 2026-09-05
             const NEW_MENU_IDS = [
                 { id: 'sales-wc-meeting', parent: 'sales-work-center' },
-                { id: 'sales-wc-issue',   parent: 'sales-work-center' }
+                { id: 'sales-wc-issue',   parent: 'sales-work-center' },
+                { id: 'ops-wc-simple',    parent: 'ops-work-center' },     // 기타&단순문의 (보완사항 2026-11-06)
+                { id: 'ops-wc-allworks',  parent: 'ops-work-center' }      // 전체 업무이력 탭
             ];
             permissionGroups.forEach(g => {
                 if (g.id === 'admin' || g.external) return;
