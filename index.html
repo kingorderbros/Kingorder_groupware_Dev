@@ -10298,6 +10298,8 @@ const QUOTE_TEMPLATES = [
         const API_BASE = (window.KOB_CONFIG && window.KOB_CONFIG.apiBase) || '';   // 개발환경 — config/app-config.js
         // 개발환경은 파트너센터 창 제목에도 [DEV] 를 붙입니다 — 홈 화면 이름과 맞춤 (2026-10-12)
         const PARTNER_TITLE_PREFIX = (window.KOB_CONFIG || {}).env === 'dev' ? '[DEV]' : '';
+        // 화면에 보이는 환경 이름 — 개발 DEV · 운영 PROD (2026-11-06)
+        const GW_ENV_NAME = (window.KOB_CONFIG || {}).env === 'prod' ? 'PROD' : 'DEV';
         const VEHICLE_LOG_API = API_BASE + '/api/vehicle-logs';
         // 법인차량 · 운행일지 서버 호출 — 로그인 토큰을 붙입니다 (2026-09-28 · 4단계: 서버가 로그인한 직원만 받음)
         async function apiFetch(url, opts) {
@@ -24985,7 +24987,7 @@ const QUOTE_TEMPLATES = [
                     <div id="${wcId(key, 'search-head')}" class="flex items-center justify-between gap-2 mb-2">
                         <div class="flex items-center gap-2 min-w-0">
                             <h3 id="wc-title-${key}" class="shrink-0 text-base md:text-lg font-bold text-gray-800 truncate">${escapeHtml(c.title)}</h3>
-                            <span class="hidden sm:inline px-2 py-0.5 text-xs font-semibold rounded-full bg-amber-100 text-amber-800 whitespace-nowrap">DEV환경</span>
+                            <span class="hidden sm:inline px-2 py-0.5 text-xs font-semibold rounded-full bg-amber-100 text-amber-800 whitespace-nowrap">${GW_ENV_NAME}환경</span>
                             <!-- 접혔을 때만 — 선택된 고객사명 (applyWorkSearchCollapse) -->
                             <span id="${wcId(key, 'search-picked')}" onclick="toggleWorkSearch(${jsArg(key)})" class="hidden"></span>
                         </div>
@@ -25161,7 +25163,7 @@ const QUOTE_TEMPLATES = [
                 </div>
 
                 <p class="mt-4 text-xs text-gray-400">
-                    <i class="fas fa-circle-info mr-1"></i>DEV환경입니다. 접수한 업무와 고객 자료는 저장되며, 업무는 <b>고객을 조회한 후</b> 해당 고객의 건만 표시됩니다.
+                    <i class="fas fa-circle-info mr-1"></i>${GW_ENV_NAME}환경입니다. 접수한 업무와 고객 자료는 저장되며, 업무는 <b>고객을 조회한 후</b> 해당 고객의 건만 표시됩니다.
                 </p>
                 </div>`;
         }
@@ -28252,7 +28254,7 @@ const QUOTE_TEMPLATES = [
                         <div class="flex gap-2">${saveBtn}</div>
                         ${inbGuide(`<b>수신 주소</b> <code class="bg-white px-1 rounded">${escapeHtml(url)}</code><br>
                             킹오더닷컴 · 큐알킹 · 브랜드팩토리 신규 사이트의 폼(<code>data-inquiry-form</code>)이 이 주소로 전송합니다. 로그인 없이 수신하므로 <b>위 목록의 사이트만</b> 허용하며, 숨김 필드(<code>_hp</code>)가 입력된 봇 요청은 차단합니다.<br>
-                            ⚠ dev 주소는 Cloudflare Zero Trust(사내 전용)로 차단되어 있으면 사이트에서 전송할 수 없습니다. Access에서 <code>/api/inbound/form</code> 경로를 예외(Bypass)로 설정해야 합니다.<br>
+                            ⚠ ${GW_ENV_NAME.toLowerCase()} 주소는 Cloudflare Zero Trust(사내 전용)로 차단되어 있으면 사이트에서 전송할 수 없습니다. Access에서 <code>/api/inbound/form</code> 경로를 예외(Bypass)로 설정해야 합니다.<br>
                             동일한 <code>submissionId</code>로 중복 전송되면 한 번만 등록됩니다.`)}
                         <details class="text-xs"><summary class="cursor-pointer text-gray-600 font-medium">사이트 적용 코드 (kingorder-sites 폼 5단계에 적용)</summary>
 <pre class="mt-2 p-3 bg-gray-900 text-gray-100 rounded overflow-x-auto">// 처음 들어온 페이지의 UTM 을 기억해 두었다가 폼과 함께 보냅니다
@@ -44897,7 +44899,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                         <span class="block text-xs text-gray-500 mt-0.5">사용 시 업체 창에서 <b>'소속 가맹점 가입을 이 업체가 승인'</b>이 설정된 본사·파트너사의 <b>업체관리자</b> 아이디가 파트너센터 홈에서 소속 가맹점 신청을 승인 또는 반려합니다. 그룹웨어 관리자는 항상 승인할 수 있습니다.</span>
                         <span class="block text-[11px] mt-0.5 ${isGroupwareAdmin() ? 'text-gray-400' : 'text-rose-600'}"><i class="fas fa-lock mr-1"></i>이 설정과 업체별 체크는 <b>그룹웨어 관리자만</b> 변경할 수 있습니다.${pol.updatedBy ? ` · 마지막 변경 ${escapeHtml(pol.updatedBy)}` : ''}</span></span></label>
                 </div>
-                ${server ? '' : '<p class="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded px-3 py-2">로컬 저장소 모드입니다. 승인·반려는 서버 환경(dev 주소)에서만 가능합니다.</p>'}
+                ${server ? '' : `<p class="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded px-3 py-2">로컬 저장소 모드입니다. 승인·반려는 서버 환경(${GW_ENV_NAME.toLowerCase()} 주소)에서만 가능합니다.</p>`}
                 <div class="flex gap-2">${tab('pending', '승인대기', pend.length)}${tab('done', '처리됨', done.length)}</div>
                 ${list.length ? list.map(card).join('') : `<div class="text-sm text-gray-400 text-center py-12 bg-gray-50 rounded-lg border border-dashed border-gray-200">${companySignupTab === 'pending' ? '승인 대기 중인 가입 신청이 없습니다.' : '처리된 가입 신청이 없습니다.'}<br><span class="text-xs">업체는 파트너센터 로그인 화면의 <b>[회원가입]</b>에서 신청합니다.</span></div>`}
             </div>`;

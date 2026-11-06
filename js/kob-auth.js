@@ -122,7 +122,8 @@
         const loc = window.location;
         if (API) return `서버(${API})에 연결할 수 없습니다. 잠시 후 새로고침해 주세요.`;
         if (loc.protocol === 'file:') {
-            return '파일을 직접 열어 서버(/api)에 연결할 수 없습니다. 브라우저 주소창에 dev 주소(https://kingorder-groupware-dev.kingorderbros.workers.dev)를 입력해 접속해 주세요.';
+            const env = (window.KOB_CONFIG || {}).env === 'prod' ? 'prod' : 'dev';
+            return `파일을 직접 열어 서버(/api)에 연결할 수 없습니다. 브라우저 주소창에 ${env} 주소(https://kingorder-groupware-${env}.kingorderbros.workers.dev)를 입력해 접속해 주세요.`;
         }
         if (/^(localhost|127\.0\.0\.1)$/.test(loc.hostname)) {
             return loc.port === '8788'

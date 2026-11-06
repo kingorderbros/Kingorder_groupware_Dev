@@ -1,0 +1,9 @@
+// 사용법: node tools/e2e-env-label.js [폴더] [env]   (맥 크롬 헤드리스) — 화면에 보이는 환경 이름이 설정과 같은지
+const http=require('http'),fs=require('fs'),path=require('path'),pp=require('puppeteer-core');const ROOT=process.argv[2]||'.';const ENV=process.argv[3]||'dev';
+const srv=http.createServer((q,r)=>{let p=decodeURIComponent(q.url.split('?')[0]);if(p==='/')p='/index.html';if(p==='/config/app-config.js'){r.writeHead(200);return r.end(`window.KOB_CONFIG={env:'${ENV}',supabaseUrl:'',supabaseAnonKey:'',apiBase:''};`);}
+ if(p.startsWith('/api/')){r.writeHead(404);return r.end('{}');}
+ fs.readFile(path.join(ROOT,p),(e,b)=>{if(e){r.writeHead(404);return r.end();}r.writeHead(200,{'content-type':p.endsWith('.html')?'text/html; charset=utf-8':p.endsWith('.js')?'text/javascript':'application/octet-stream'});r.end(b);});});
+srv.listen(8865,async()=>{const br=await pp.launch({executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',headless:'new'});const pg=await br.newPage();const errs=[];pg.on('pageerror',e=>errs.push(String(e).slice(0,160)));await pg.setViewport({width:1500,height:950});await pg.goto('http://localhost:8865/',{waitUntil:'networkidle0'});
+ const r=await pg.evaluate(async()=>{enterApp({email:'a@x.kr',dept:'admin',name:'정장훈'});const out={};for(const id of ['ops-work-center','sales-work-center']){navigate(id,null);await new Promise(r=>setTimeout(r,300));const t=document.getElementById('sec-'+id).innerText;out[id]=(t.match(/(DEV|PROD)환경[^\n]{0,12}/g)||[]);out[id+'-dev']=/\bdev\b|DEV/.test(t);}return out;});
+ console.log(JSON.stringify(r));const want=ENV==='prod'?'PROD':'DEV';let bad=errs.length;for(const k of ['ops-work-center','sales-work-center']){if(!r[k].length||!r[k].every(x=>x.startsWith(want))){bad++;console.log('실패',k);}if(ENV==='prod'&&r[k+'-dev']){bad++;console.log('실패 dev 글자 남음',k);}}
+ console.log(errs.slice(0,3));console.log(bad?'실패 '+bad:'통과');await br.close();srv.close();process.exit(bad?1:0);});
