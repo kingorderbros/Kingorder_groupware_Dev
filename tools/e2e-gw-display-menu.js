@@ -1,5 +1,5 @@
 // 사용법: node tools/e2e-gw-display-menu.js [폴더] [env]   (맥 크롬 헤드리스 · npm run check 에는 넣지 않음)
-// 2026-11-05 — 머리 줄: 색상은 드롭다운, 자료실 · 킹오더챗은 별도 단추. env=prod 이면 킹오더챗 단추가 없어야 합니다.
+// 2026-11-05 — 머리 줄: 색상은 드롭다운, 자료실 · 킹오더챗은 별도 단추. 킹오더챗 단추는 환경에 맞는 주소로 연결되어야 합니다.
 const http=require('http'),fs=require('fs'),path=require('path'),pp=require('puppeteer-core');const ROOT=process.argv[2]||'.';const ENV=process.argv[3]||'dev';const SHOT=process.env.SHOT_DIR||'';
 const srv=http.createServer((q,r)=>{let p=decodeURIComponent(q.url.split('?')[0]);if(p==='/')p='/index.html';if(p==='/config/app-config.js'){r.writeHead(200);return r.end(`window.KOB_CONFIG={env:'${ENV}',supabaseUrl:'',supabaseAnonKey:'',apiBase:''};`);}
  if(p.startsWith('/api/')){r.writeHead(404);return r.end('{}');}
@@ -33,6 +33,5 @@ srv.listen(8861,async()=>{const br=await pp.launch({executablePath:'/Application
  let bad=errs.length;for(const k in out){const r=out[k];for(const x of ['open','inScreen','noPageScroll','archiveShown','archiveInScreen','btnInScreen','lastInScreen','topIsMenu','headerOneLine','noShortcutInMenu','stayOpen','outsideCloses','escCloses','archiveOpen','noPermHidden','permBack'])if(!r[x]){bad++;console.log('실패',k,x);}
   if(k!=='pc'&&r.titleW<(k==='phone'?70:30)){bad++;console.log('실패',k,'제목 폭',r.titleW);}
   if(r.theme!=='green'||r.faceName!=='그린'||r.checked!=='green'){bad++;console.log('실패',k,'디자인 변경');}
-  if(ENV==='dev'&&!(r.chatShown&&r.chatNewTab&&/kingorder-chat-dev/.test(r.chatHref||''))){bad++;console.log('실패',k,'챗 단추');}
-  if(ENV==='prod'&&(r.chatShown||r.chatHref)){bad++;console.log('실패',k,'운영에 챗 단추');}}
+  if(!(r.chatShown&&r.chatNewTab&&new RegExp('kingorder-chat-'+ENV+'\\.').test(r.chatHref||''))){bad++;console.log('실패',k,'챗 단추',r.chatHref);}}
  console.log(bad?'실패 '+bad:'통과');await br.close();srv.close();process.exit(bad?1:0);});

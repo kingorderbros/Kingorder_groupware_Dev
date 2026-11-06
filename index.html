@@ -13229,9 +13229,11 @@ const QUOTE_TEMPLATES = [
         }
 
         // ---------- 머리 줄 바로 가기 단추 · 화면 디자인 드롭다운 (2026-11-05) ----------
-        // 킹오더챗은 아직 개발환경에만 있어, 주소가 있는 환경에서만 단추를 보여 줍니다.
-        // 운영에 킹오더챗을 열 때 여기에 prod 주소를 넣으면 됩니다.
-        const GW_CHAT_URLS = { dev: 'https://kingorder-chat-dev.kingorderbros.workers.dev' };
+        // 환경별 킹오더챗 주소 — 주소가 있는 환경에서만 단추를 보여 줍니다.
+        const GW_CHAT_URLS = {
+            dev: 'https://kingorder-chat-dev.kingorderbros.workers.dev',
+            prod: 'https://kingorder-chat-prod.kingorderbros.workers.dev'
+        };
         function gwChatUrl() {
             return externalUser ? '' : (GW_CHAT_URLS[(window.KOB_CONFIG || {}).env] || '');
         }
