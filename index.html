@@ -12059,6 +12059,7 @@ const QUOTE_TEMPLATES = [
             'schedule-reminder':  { icon: 'fa-bell',              color: 'amber',  label: '일정 알림' },
             'schedule-cancelled': { icon: 'fa-ban',               color: 'red',    label: '일정 취소' },
             'schedule-deleted':   { icon: 'fa-trash-can',         color: 'red',    label: '일정 삭제' },
+            'notice-new':         { icon: 'fa-bullhorn',          color: 'amber',  label: '공지사항' },
             'schedule-restored':  { icon: 'fa-rotate-left',       color: 'green',  label: '일정 되살림' },
             'collab-taken':       { icon: 'fa-user-check',        color: 'green',  label: '협업 처리' },
             'schedule-change':        { icon: 'fa-calendar-alt',   color: 'teal', label: '일정 변경 요청' },
@@ -12124,6 +12125,7 @@ const QUOTE_TEMPLATES = [
         // 알림을 눌렀을 때 갈 곳
         // 돌려주는 글은 onclick="…" 안에 들어갑니다 — 값은 모두 jsArg 로 (알림 내용은 파트너 · 다른 직원이 만든 것일 수 있음 · 2026-10-28)
         function notiClickJs(n) {
+            if (n.noticeId) return `navigate('dashboard-personal', document.getElementById('nav-dashboard-personal'))`;   // 공지사항 알림 → 공지가 있는 마이 대시보드
             if (n.scheduleId) return `openScheduleFromNotice(${jsArg(n.scheduleId)})`;   // 일정 알림 (2026-10-23)
             if (n.deleteReqId) return `openDeleteRequests(${jsArg(n.type === 'delete-request' ? 'pending' : 'done')})`;
             if (n.devId) return `openDevFromNotice(${jsArg(n.devId)})`;
@@ -38499,12 +38501,32 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                 if (i > -1) notices[i] = { ...notices[i], ...data };
                 alert('공지사항이 수정되었습니다.');
             } else {
-                notices.unshift({ id: 'n' + noticeIdCounter++, author: currentUserName || '', ...data });
+                const added = { id: 'n' + noticeIdCounter++, author: currentUserName || '', ...data };
+                notices.unshift(added);
+                notifyNoticeRegistered(added);
                 alert('공지사항이 등록되었습니다.');
             }
             saveNotices();
             closeNoticeModal();
             if (currentUserName) renderPersonalDashboard(currentUserName, currentUserRole);
+        }
+
+        // 새 공지를 사내 직원 모두에게 알립니다(알림함 + 폰 · PC). 쓴 사람 · 휴직자 · 퇴사자 · 사외 계정 제외, 수정할 때는 보내지 않음 (2026-11-06)
+        function notifyNoticeRegistered(n) {
+            const isExternal = (u) => userGroupIds(u).some(id => (permissionGroups.find(g => g.id === id) || {}).external)
+                || (orgDepts.find(d => d.id === u.dept) || {}).external;
+            pickableUsers().filter(u => u.name && u.name !== currentUserName && !isExternal(u)).forEach(u => {
+                pushNotification({
+                    id: 'cnoti_' + collabNotiIdCounter++,
+                    type: 'notice-new',
+                    noticeId: n.id,
+                    title: n.title,
+                    toUser: u.name,
+                    toDept: '',
+                    detail: String(n.content || '').slice(0, 140),
+                    date: ymd(new Date())
+                });
+            });
         }
 
         function deleteNotice(noticeId) {
