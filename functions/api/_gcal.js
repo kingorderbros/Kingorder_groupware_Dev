@@ -319,12 +319,13 @@ function stripPeople(desc) {
 export function toGoogleEvent(s, ctx) {
     const date = str(s.date);
     const allDay = !!s.allDay || !str(s.startTime);
+    const lastDay = str(s.endDate) > date ? str(s.endDate) : date;   // 기간 일정 (2026-11-06)
     const ev = {
         summary: str(s.title) || '(제목 없음)',
         description: withPeople(str(s.description), s),
         start: allDay ? { date } : { dateTime: `${date}T${str(s.startTime)}:00`, timeZone: 'Asia/Seoul' },
-        end: allDay ? { date: addDay(date, 1) }
-                    : { dateTime: `${date}T${str(s.endTime) || addHour(s.startTime, 1)}:00`, timeZone: 'Asia/Seoul' },
+        end: allDay ? { date: addDay(lastDay, 1) }
+                    : { dateTime: `${lastDay}T${str(s.endTime) || addHour(s.startTime, 1)}:00`, timeZone: 'Asia/Seoul' },
         extendedProperties: { private: { kobId: str(s.id), kobCal: str(s.calendar), kobDept: str(s.dept), kobType: str(s.type), kobProgress: str(s.progress) } }
     };
     const atts = (Array.isArray(s.attendees) ? s.attendees : [])
@@ -372,11 +373,14 @@ export function fromGoogleEvent(ev, calRow, before, ctx) {
 
     if (ev.start && ev.start.date) {                     // 종일
         s.allDay = true; s.date = str(ev.start.date); s.startTime = ''; s.endTime = '';
+        const lastAll = ev.end && ev.end.date ? addDay(str(ev.end.date), -1) : s.date;   // 구글의 종일 끝 날짜는 다음 날입니다
+        s.endDate = lastAll > s.date ? lastAll : '';
     } else if (ev.start && ev.start.dateTime) {
         const a = seoulParts(ev.start.dateTime);
         const b = ev.end && ev.end.dateTime ? seoulParts(ev.end.dateTime) : null;
         s.allDay = false; s.date = a.date; s.startTime = a.time;
-        s.endTime = b && b.date === a.date ? b.time : '';
+        s.endTime = b ? b.time : '';
+        s.endDate = b && b.date > a.date ? b.date : '';
     }
 
     // 어느 캘린더에서 왔는지로 소속을 정합니다

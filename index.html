@@ -6140,7 +6140,7 @@
                 </div>
                 <button onclick="closeCollabDetailModal()" class="text-gray-400 hover:text-gray-600 ml-2 shrink-0"><i class="fas fa-times"></i></button>
             </div>
-            <div id="collab-detail-body" class="overflow-y-auto text-sm space-y-4"></div>
+            <div id="collab-detail-body" class="overflow-y-auto text-sm space-y-4" style="word-break: keep-all; overflow-wrap: anywhere;"></div>
             <div class="flex justify-end gap-2 mt-5 pt-4 border-t border-gray-100">
                 <span id="collab-detail-admin" class="mr-auto"></span>
                 <button type="button" onclick="closeCollabDetailModal()" class="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition-colors">닫기</button>
@@ -6428,7 +6428,23 @@
                             <input type="checkbox" id="schedule-allday" onchange="onScheduleAllDayChange()" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />종일
                         </label>
                     </div>
-                    <input type="date" id="schedule-date" required class="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                    <div class="grid grid-cols-2 gap-2">
+                        <div>
+                            <span class="block text-xs text-gray-500 mb-0.5">시작 날짜</span>
+                            <input type="date" id="schedule-date" required onchange="onScheduleDateChange()" class="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                        </div>
+                        <div>
+                            <span class="block text-xs text-gray-500 mb-0.5">끝 날짜</span>
+                            <input type="date" id="schedule-end-date" class="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                        </div>
+                    </div>
+                    <p class="text-xs text-gray-500 mt-1">하루 일정은 시작 날짜와 끝 날짜를 같게 둡니다. 기간 일정은 기간 안의 모든 날짜에 표시됩니다.</p>
+                </div>
+                <!-- 표시 색상 (2026-11-06) — 기본은 캘린더 색 -->
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">표시 색상</label>
+                    <input type="hidden" id="schedule-color" value="" />
+                    <div id="schedule-color-picker" class="flex flex-wrap gap-1.5" role="radiogroup" aria-label="일정 표시 색상"></div>
                 </div>
                 <!-- 시작/종료 시간 (시:분). '종일' 체크 시 비활성화 -->
                 <div class="mb-4" id="schedule-time-row">
@@ -11221,12 +11237,14 @@ const QUOTE_TEMPLATES = [
                             {
                                 id: 'ops-work-center', name: '운영업무센터', children: [
                                     { id: 'ops-wc-as', name: 'AS유지보수' },
+                                    { id: 'ops-wc-simple', name: '기타&단순문의' },
                                     { id: 'ops-wc-menu', name: '메뉴유지보수' },
                                     { id: 'ops-wc-dist', name: '유통유지보수' },
                                     { id: 'ops-wc-rental', name: '렌탈/할부' },
                                     { id: 'ops-wc-install', name: '장비설치' },
                                     { id: 'ops-wc-delivery', name: '택배' },
-                                    { id: 'ops-wc-ob', name: 'O/B업무' }
+                                    { id: 'ops-wc-ob', name: 'O/B업무' },
+                                    { id: 'ops-wc-allworks', name: '전체 업무이력' }
                                 ]
                             }
                         ]
@@ -15218,6 +15236,7 @@ const QUOTE_TEMPLATES = [
         }
 
         // 현재 사용자가 조회 가능한 요청 목록 (권한 스코프 적용)
+        function collabDeptSees(r, dept) { return !!dept && dept !== 'admin' && r.targetDept === dept && !isDirective(r); }
         function getVisibleTickets() {
             const name = currentUserName, dept = currentUserDept, level = currentUserLevel;
             const scope = getCollabScopeFor(name, dept, level);
@@ -15225,7 +15244,8 @@ const QUOTE_TEMPLATES = [
             if (scope === 'all' || scope === 'cross') return collabRequests.slice();
             if (scope === 'self') {
                 // 본부(부서) 전체로 온 요청은 조회 범위가 '본인'인 팀원도 봅니다 — 1건이지만 본부 모두가 받은 요청 (2026-10-23)
-                return collabRequests.filter(r => collabIsReceiver(r, name) || r.assignee === name || collabIsDeptWideFor(r, dept));
+                // 우리 부서로 온 요청은 담당자가 따로 있어도 부서원이 함께 봅니다 (보완사항 2026-11-06 · 처리는 담당자만, 업무지시는 제외)
+                return collabRequests.filter(r => collabIsReceiver(r, name) || r.assignee === name || collabIsDeptWideFor(r, dept) || collabDeptSees(r, dept));
             }
             // dept / hq: 발행 또는 수신 부서가 내 부서
             return collabRequests.filter(r => r.sourceDept === dept || r.targetDept === dept
@@ -15556,7 +15576,7 @@ const QUOTE_TEMPLATES = [
                         ${ageText}
                         ${detail}
                     </div>
-                    <div onclick="event.stopPropagation()">${actions}</div>
+                    <div onclick="event.stopPropagation()">${actions}${(req.status !== 'hold' && (canEditCollabHold(req) || (req.edits || []).length)) ? `<div class="flex flex-wrap gap-1.5 mt-2 items-center">${collabHoldEditButtons(req)}</div>` : ''}</div>
                 </div>`;
         }
 
@@ -15715,7 +15735,9 @@ const QUOTE_TEMPLATES = [
             saveCollabRequests();   // 바뀐 협업요청을 저장합니다 (안 바뀌었으면 아무것도 안 보냄)
             if (!document.getElementById('collab-received-list')) return;
             const name = currentUserName, dept = currentUserDept;
-            const visible = getVisibleTickets();
+            // 최근 요청이 맨 위로 (보완사항 2026-11-06) — 번호가 클수록 나중에 만든 요청
+            const collabSeq = r => Number(String(r.id).replace(/\D/g, '')) || 0;
+            const visible = getVisibleTickets().sort((a, b) => collabSeq(b) - collabSeq(a));
             const filtered = applyCollabFilters(visible);
 
             // 조회 범위 라벨
@@ -15728,12 +15750,13 @@ const QUOTE_TEMPLATES = [
             //  - dept↑ : 내 부서가 수신=받은 / 내 부서가 발행=발행 (개인 기준도 함께 포함)
             const wide = scope !== 'self';
             const allData = canManageAllData();     // 관리자 · 전체 자료 권한은 모든 요청의 처리 단추를 봅니다 (2026-09-28)
-            const received = filtered.filter(r => collabIsReceiver(r, name) || collabIsDeptWideFor(r, dept) || allData || (wide && ((r.targetDept === dept && dept !== 'admin') || dept === 'admin')));
+            const canActOn = r => collabIsReceiver(r, name) || collabIsDeptWideFor(r, dept) || allData || (wide && ((r.targetDept === dept && dept !== 'admin') || dept === 'admin'));
+            const received = filtered.filter(r => canActOn(r) || collabDeptSees(r, dept));
             const sent = filtered.filter(r => r.assignee === name || (wide && ((r.sourceDept === dept && dept !== 'admin') || dept === 'admin')));
 
             // 받은 요청 렌더
             const recEl = document.getElementById('collab-received-list');
-            recEl.innerHTML = received.length ? received.map(r => collabTicketCard(r, 'inbox')).join('') : collabEmpty('수신된 협업 요청이 없습니다.');
+            recEl.innerHTML = received.length ? received.map(r => collabTicketCard(r, canActOn(r) ? 'inbox' : 'view')).join('') : collabEmpty('수신된 협업 요청이 없습니다.');
             // 발행 요청 렌더
             const sentEl = document.getElementById('collab-sent-list');
             sentEl.innerHTML = sent.length ? sent.map(r => collabTicketCard(r, 'outbox')).join('') : collabEmpty('발행한 협업 요청이 없습니다.');
@@ -17135,7 +17158,7 @@ const QUOTE_TEMPLATES = [
                     <p class="${od ? 'text-red-700' : 'text-green-700'} font-semibold"><i class="fas fa-check-circle mr-1"></i>수락 정보${od ? ` · <span class="text-red-600">${collabOverdueDays(req)}일 지연</span>` : ''}</p>
                     ${req.acceptedAt ? row('수락일', escapeHtml(req.acceptedAt)) : ''}
                     ${req.date ? row('처리완료 예정일', `<b>${escapeHtml(req.date)}</b>${od ? ' <span class="text-red-600 font-semibold">(지연)</span>' : isCollabDue(req) ? ' <span class="text-blue-600 font-semibold">(도래 · 완료 처리 가능)</span>' : ''}`) : ''}
-                    ${req.memo ? row('메모', escapeHtml(req.memo)) : ''}
+                    ${req.memo ? row('메모', `<span class="whitespace-pre-line">${escapeHtml(req.memo)}</span>`) : ''}
                 </div>`;
             } else if (req.status === 'completed') {
                 html += `<div class="bg-blue-50 border border-blue-100 rounded p-3 space-y-2">
@@ -17143,8 +17166,8 @@ const QUOTE_TEMPLATES = [
                     ${req.acceptedAt ? row('수락일', escapeHtml(req.acceptedAt)) : ''}
                     ${req.date ? row('처리완료 예정일', escapeHtml(req.date)) : ''}
                     ${req.completedAt ? row('완료 처리일', `<b>${escapeHtml(req.completedAt)}</b>`) : ''}
-                    ${row('상세 처리 내용', req.completeDetail ? escapeHtml(req.completeDetail) : '<span class="text-gray-400">-</span>')}
-                    ${req.completeIssue ? row('<span class="text-amber-600">이슈</span>', `<span class="text-amber-700">${escapeHtml(req.completeIssue)}</span>`) : ''}
+                    ${row('상세 처리 내용', req.completeDetail ? `<span class="whitespace-pre-line">${escapeHtml(req.completeDetail)}</span>` : '<span class="text-gray-400">-</span>')}
+                    ${req.completeIssue ? row('<span class="text-amber-600">이슈</span>', `<span class="text-amber-700 whitespace-pre-line">${escapeHtml(req.completeIssue)}</span>`) : ''}
                     ${collabCompleteFilesHtml(req)}
                 </div>`;
             } else if (req.status === 'cancelled') {
@@ -17254,6 +17277,8 @@ const QUOTE_TEMPLATES = [
 
             // 코멘트 — 요청을 확인한 사람이 의견을 남깁니다. 입력칸은 [코멘트 작성]을 눌러야 열립니다 (2026-10-22)
             html += collabCommentsHtml(req);
+            // 보낸 요청 수정 (보완사항 2026-11-06) — 보류는 위 사유 칸에 이미 단추가 있습니다
+            if (req.status !== 'hold' && (canEditCollabHold(req) || (req.edits || []).length)) html += `<div class="flex flex-wrap gap-1.5">${collabHoldEditButtons(req)}</div>`;
 
             document.getElementById('collab-detail-body').innerHTML = html;
             document.getElementById('collab-detail-modal').classList.remove('hidden');
@@ -17517,7 +17542,13 @@ const QUOTE_TEMPLATES = [
             if (collabReceivers(req).length ? collabIsReceiver(req, currentUserName) : currentUserDept === req.targetDept) return 'receiver';
             return canManageAllData() ? 'admin' : '';
         }
-        function canEditCollabHold(req) { return !!req && req.status === 'hold' && !!collabRoleOf(req); }
+        // 요청자는 보낸 뒤에도 끝나기 전까지 내용을 고칠 수 있습니다 (보완사항 2026-11-06). 수신자는 보류 중일 때만
+        const COLLAB_OWN_EDIT_STATUS = ['pending', 'accepted', 'hold'];
+        function canEditCollabHold(req) {
+            if (!req) return false;
+            if (req.assignee && req.assignee === currentUserName && COLLAB_OWN_EDIT_STATUS.includes(req.status)) return true;
+            return req.status === 'hold' && !!collabRoleOf(req);
+        }
         function collabHoldEditButtons(req) {
             const n = (req.edits || []).length;
             return (canEditCollabHold(req) ? `<button type="button" onclick="event.stopPropagation(); openCollabEditModal(${jsArg(req.id)})" class="px-3 py-1 bg-white border border-yellow-400 text-yellow-800 hover:bg-yellow-50 rounded text-xs font-semibold">✏️ 내용 수정</button>` : '')
@@ -17529,7 +17560,7 @@ const QUOTE_TEMPLATES = [
                 <div id="collab-edit-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4">
                     <form onsubmit="submitCollabEdit(event)" class="bg-white w-full max-w-lg rounded-lg shadow-xl p-5 max-h-[90vh] overflow-y-auto">
                         <div class="flex items-center justify-between mb-3">
-                            <h3 class="text-lg font-bold text-gray-800"><i class="fas fa-pen-to-square text-yellow-500 mr-1"></i>보류 요청 내용 수정</h3>
+                            <h3 class="text-lg font-bold text-gray-800"><i class="fas fa-pen-to-square text-yellow-500 mr-1"></i>요청 내용 수정</h3>
                             <button type="button" onclick="closeCollabEditModal()" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times"></i></button>
                         </div>
                         <input type="hidden" id="collab-edit-id" />
@@ -17558,13 +17589,15 @@ const QUOTE_TEMPLATES = [
         }
         function openCollabEditModal(id) {
             const req = collabRequests.find(r => r.id === id);
-            if (!canEditCollabHold(req)) { alert('보류 중인 요청은 요청자, 수신자만 수정할 수 있습니다.'); return; }
+            if (!canEditCollabHold(req)) { alert('요청자는 완료 전까지, 수신자는 보류 중일 때만 수정할 수 있습니다.'); return; }
             ensureCollabEditModals();
             document.getElementById('collab-edit-id').value = id;
             document.getElementById('collab-edit-title').value = req.title || '';
             document.getElementById('collab-edit-desc').value = req.description || '';
             document.getElementById('collab-edit-note').value = '';
-            document.getElementById('collab-edit-reason').innerHTML = `<b>보류 사유</b> · ${escapeHtml(req.reason || '-')}`;
+            const reasonBox = document.getElementById('collab-edit-reason');
+            reasonBox.classList.toggle('hidden', req.status !== 'hold');
+            reasonBox.innerHTML = `<b>보류 사유</b> · ${escapeHtml(req.reason || '-')}`;
             document.getElementById('collab-edit-modal').classList.remove('hidden');
         }
         function closeCollabEditModal() { const m = document.getElementById('collab-edit-modal'); if (m) m.classList.add('hidden'); }
@@ -17586,14 +17619,15 @@ const QUOTE_TEMPLATES = [
             const toReceiver = role !== 'receiver';
             const editNoti = {
                 type: 'collab-requested', ticketId: req.id, title: req.title,
-                detail: `보류 중인 요청을 ${currentUserName || ''} 님이 수정했습니다${changes.length ? ' (' + changes.map(c => c.label).join(' · ') + ')' : ''}${note ? ': ' + note : ''}`,
+                detail: `요청 내용을 ${currentUserName || ''} 님이 수정했습니다${changes.length ? ' (' + changes.map(c => c.label).join(' · ') + ')' : ''}${note ? ': ' + note : ''}`,
                 date: ymd(now)
             };
             if (toReceiver) collabNotifyReceivers(req, editNoti, true);
             else pushNotification(Object.assign({ id: 'cnoti_' + collabNotiIdCounter++, toUser: req.assignee || '', toDept: req.sourceDept }, editNoti));
             closeCollabEditModal();
             renderCollabCenter();
-            if (typeof showAppToast === 'function') showAppToast('보류 요청의 내용이 수정되었습니다. 상대방에게 알림이 발송되었습니다.', 'green');
+            if (collabDetailId === req.id && !document.getElementById('collab-detail-modal').classList.contains('hidden')) openCollabDetailModal(req.id);
+            if (typeof showAppToast === 'function') showAppToast('요청 내용이 수정되었습니다. 상대방에게 알림이 발송되었습니다.', 'green');
         }
         function openCollabEditHistory(id) {
             const req = collabRequests.find(r => r.id === id);
@@ -18516,9 +18550,15 @@ const QUOTE_TEMPLATES = [
             if (s.createdBy) return String(s.createdBy).toLowerCase() === String(currentUserEmail || '').toLowerCase();
             return !!currentUserName && (s.salesperson || '') === currentUserName;
         }
-        function canEditSchedule(s) {
+        // 내용 수정은 볼 수 있는 사람 누구나 (보완사항 2026-11-06 · 다른 사람의 개인 일정은 제외).
+        // 취소 · 삭제 · 되살리기는 지금처럼 등록한 사람 · 관리자 · 대리 수정자만 (canManageSchedule)
+        function canManageSchedule(s) {
             if (!s || isBirthdaySchedule(s)) return false;     // 생일은 구성원 정보에서 고칩니다
             return canManageAllData() || isScheduleCreator(s) || isCalendarDelegateFor(s);
+        }
+        function canEditSchedule(s) {
+            if (!s || isBirthdaySchedule(s)) return false;
+            return canManageSchedule(s) || (!externalUser && scheduleCalendar(s).share !== 'self' && canViewSchedule(s));
         }
 
         // ---------- 일정 대리 수정 권한 (2026-09-28) ----------
@@ -18669,12 +18709,29 @@ const QUOTE_TEMPLATES = [
             if (date === s.date) return mark ? Object.assign({}, s, mark) : s;
             return Object.assign({}, s, { id: s.id + RECUR_SEP + date, date, recurOf: s.id }, mark || {});
         }
+        function scheduleSpansDays(s) { return !!(s && s.endDate && s.endDate > s.date); }
+        function scheduleSpanDates(s) {
+            const out = [];
+            const d = new Date(s.date + 'T00:00:00Z');
+            for (let i = 0; i < 366; i++) {
+                const v = d.toISOString().slice(0, 10);
+                if (v > s.endDate) break;
+                out.push(v);
+                d.setUTCDate(d.getUTCDate() + 1);
+            }
+            return out;
+        }
         // 반복 일정을 날짜별로 펼친 목록 (반복이 아니면 그대로)
         function expandRecurring(list) {
             const w = recurWindow();
             const out = [];
             (list || []).forEach(s => {
-                if (!isRecurring(s)) { out.push(s); return; }
+                if (!isRecurring(s)) {
+                    if (!scheduleSpansDays(s)) { out.push(s); return; }
+                    // 기간 일정 (2026-11-06) — 기간 안의 날짜마다 표시. 번호가 같아 눌러도 원래 일정이 열립니다
+                    scheduleSpanDates(s).filter(d => d >= w.from && d <= w.to).forEach(d => out.push(Object.assign({}, s, { date: d, spanStart: s.date })));
+                    return;
+                }
                 recurDates(s, w.from, w.to).forEach(d => out.push(recurInstance(s, d)));
                 // 취소 · 삭제한 날도 그 자리에 남깁니다 (exdates 라 위에서는 빠짐 · 2026-10-30)
                 Object.keys((s.recur && s.recur.offDates) || {}).filter(d => d >= w.from && d <= w.to).forEach(d => out.push(recurInstance(s, d)));
@@ -18742,6 +18799,43 @@ const QUOTE_TEMPLATES = [
 
         // 캘린더 화면에서 공통으로 쓰는 일정 칩.
         // opts.fullTime — 시작~종료를 모두 표시 (월/주간 셀은 좁아서 시작 시간만 표시)
+        // 일정 표시 색상 (2026-11-06) — 고르지 않으면 지금처럼 캘린더 색
+        const SCHEDULE_COLORS = [
+            { id: 'red',    name: '빨강', bg: '#FEE2E2', fg: '#991B1B', dot: '#EF4444' },
+            { id: 'orange', name: '주황', bg: '#FFEDD5', fg: '#9A3412', dot: '#F97316' },
+            { id: 'yellow', name: '노랑', bg: '#FEF9C3', fg: '#854D0E', dot: '#EAB308' },
+            { id: 'green',  name: '초록', bg: '#DCFCE7', fg: '#166534', dot: '#22C55E' },
+            { id: 'teal',   name: '청록', bg: '#CCFBF1', fg: '#115E59', dot: '#14B8A6' },
+            { id: 'blue',   name: '파랑', bg: '#DBEAFE', fg: '#1E40AF', dot: '#3B82F6' },
+            { id: 'purple', name: '보라', bg: '#EDE9FE', fg: '#5B21B6', dot: '#8B5CF6' },
+            { id: 'pink',   name: '분홍', bg: '#FCE7F3', fg: '#9D174D', dot: '#EC4899' },
+            { id: 'gray',   name: '회색', bg: '#E5E7EB', fg: '#1F2937', dot: '#6B7280' }
+        ];
+        function scheduleColorOf(s) { return SCHEDULE_COLORS.find(c => c.id === (s && s.color)) || null; }
+        // 칩의 색 — 고른 색이 있으면 그 색(style), 없으면 캘린더 색(class)
+        function scheduleChipLook(s, cal) {
+            const c = scheduleColorOf(s);
+            return c ? { cls: '', style: ` style="background-color:${c.bg};color:${c.fg}"` } : { cls: cal.chip, style: '' };
+        }
+        function setScheduleColor(id) {
+            document.getElementById('schedule-color').value = id || '';
+            renderScheduleColorPicker();
+        }
+        function renderScheduleColorPicker() {
+            const box = document.getElementById('schedule-color-picker');
+            if (!box) return;
+            const cur = document.getElementById('schedule-color').value || '';
+            const btn = (id, name, inner) => `<button type="button" role="radio" aria-checked="${cur === id}" aria-label="${name}" title="${name}" data-color="${id}" onclick="setScheduleColor('${id}')"
+                class="h-7 min-w-7 px-1 rounded-full border-2 flex items-center justify-center text-[11px] text-gray-600 ${cur === id ? 'border-gray-800' : 'border-transparent hover:border-gray-300'}">${inner}</button>`;
+            box.innerHTML = btn('', '캘린더 기본 색', '기본')
+                + SCHEDULE_COLORS.map(c => btn(c.id, c.name, `<span class="block w-4 h-4 rounded-full" style="background-color:${c.dot}"></span>`)).join('');
+        }
+        function onScheduleDateChange() {
+            const start = document.getElementById('schedule-date').value;
+            const end = document.getElementById('schedule-end-date');
+            if (start && (!end.value || end.value < start)) end.value = start;
+        }
+
         function scheduleChipHtml(s, opts) {
             const o = opts || {};
             const cal = scheduleCalendar(s);
@@ -18764,7 +18858,8 @@ const QUOTE_TEMPLATES = [
                 : `<span class="inline-block w-1.5 h-1.5 rounded-full mr-1 align-middle ${calendarDeptDot(s.dept)}"></span>`;
             const size = o.large ? 'px-2 py-1 text-xs sm:text-sm' : 'px-1.5 py-0.5 text-[10px] sm:text-xs';
             // 날짜 셀 전체가 '하루 요약' 클릭 영역이므로, 칩 클릭은 상세 모달만 열리도록 전파를 막는다
-            return `<div onclick="event.stopPropagation(); openScheduleDetailModal(${jsArg(s.id)})" class="rounded truncate cursor-pointer hover:opacity-80 ${size} ${cal.chip}${dim}" title="${escapeHtml(tooltip)}">${offIcon}${timeHtml}${inviteIcon}${isRecurring(s) ? '<i class="fas fa-repeat text-[9px] opacity-60 mr-0.5" title="반복 일정"></i>' : ''}${escapeHtml(s.title)}${isBirthdaySchedule(s) ? '' : ` <span class="opacity-70">(${escapeHtml(s.salesperson || '미지정')})</span>`}</div>`;
+            const look = scheduleChipLook(s, cal);
+            return `<div onclick="event.stopPropagation(); openScheduleDetailModal(${jsArg(s.id)})" class="rounded truncate cursor-pointer hover:opacity-80 ${size} ${look.cls}${dim}"${look.style} title="${escapeHtml(tooltip)}">${offIcon}${timeHtml}${inviteIcon}${isRecurring(s) ? '<i class="fas fa-repeat text-[9px] opacity-60 mr-0.5" title="반복 일정"></i>' : ''}${escapeHtml(s.title)}${isBirthdaySchedule(s) ? '' : ` <span class="opacity-70">(${escapeHtml(s.salesperson || '미지정')})</span>`}</div>`;
         }
 
         // ==================== 하루 일정 요약 모달 ====================
@@ -19388,7 +19483,7 @@ const QUOTE_TEMPLATES = [
                         const typeName = getScheduleType(s.dept || 'sales', s.type).name;
                         const progress = cal.progress ? ` · ${getProgress(s.progress).name}` : '';
                         const displayText = `${s.date} ${scheduleTimeLabel(s)} | [${cal.short}] ${typeName}${progress} · ${s.title}`;
-                        scheduleHtml += `<div onclick="openScheduleDetailModal(${jsArg(s.id)})" class="mt-2 px-2 py-1.5 rounded text-xs sm:text-sm cursor-pointer hover:opacity-80 ${cal.chip}" title="${escapeHtml(displayText)}">${escapeHtml(displayText)}</div>`;
+                        scheduleHtml += `<div onclick="openScheduleDetailModal(${jsArg(s.id)})" class="mt-2 px-2 py-1.5 rounded text-xs sm:text-sm cursor-pointer hover:opacity-80 ${scheduleChipLook(s, cal).cls}"${scheduleChipLook(s, cal).style} title="${escapeHtml(displayText)}">${escapeHtml(displayText)}</div>`;
                     });
 
                     const personDept = (personSchedules[0] && personSchedules[0].dept) || 'sales';
@@ -19768,6 +19863,8 @@ const QUOTE_TEMPLATES = [
             document.getElementById('schedule-date').value = (typeof presetDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(presetDate))
                 ? presetDate
                 : `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(new Date().getDate()).padStart(2, '0')}`;
+            document.getElementById('schedule-end-date').value = document.getElementById('schedule-date').value;
+            setScheduleColor('');
             // 기본 시간: 다음 정시부터 1시간 (예: 지금이 14:20 → 15:00~16:00)
             const nextHour = (new Date().getHours() + 1) % 24;
             fillScheduleTimeFields({
@@ -19836,8 +19933,13 @@ const QUOTE_TEMPLATES = [
             let startTime = allDayChecked ? '' : document.getElementById('schedule-start-time').value;
             let endTime = allDayChecked ? '' : document.getElementById('schedule-end-time').value;
             if (!startTime) { startTime = ''; endTime = ''; }
-            // 종료만 있고 시작이 없으면 무의미하고, 종료가 시작보다 이르면 잘못 입력한 것
-            if (startTime && endTime && endTime < startTime) {
+            // 기간 (2026-11-06)
+            const startDate = document.getElementById('schedule-date').value;
+            const endDateVal = document.getElementById('schedule-end-date').value || startDate;
+            if (endDateVal < startDate) { alert('끝 날짜가 시작 날짜보다 빠릅니다. 날짜를 다시 확인해 주세요.'); return; }
+            if (Math.round((new Date(endDateVal) - new Date(startDate)) / 86400000) > 365) { alert('기간은 1년 이내로 입력해 주세요.'); return; }
+            // 종료만 있고 시작이 없으면 무의미하고, 종료가 시작보다 이르면 잘못 입력한 것 (여러 날에 걸치면 시간 비교 안 함)
+            if (startTime && endTime && endTime < startTime && endDateVal === startDate) {
                 alert('종료 시간이 시작 시간보다 빠릅니다. 시간을 다시 확인해 주세요.');
                 return;
             }
@@ -19846,6 +19948,8 @@ const QUOTE_TEMPLATES = [
             const data = {
                 title: document.getElementById('schedule-title').value,
                 date: document.getElementById('schedule-date').value,
+                endDate: endDateVal > startDate ? endDateVal : '',
+                color: document.getElementById('schedule-color').value || '',
                 allDay: allDay,
                 startTime: startTime,
                 endTime: endTime,
@@ -19861,6 +19965,7 @@ const QUOTE_TEMPLATES = [
             };
             // 반복 — 확인하고 담습니다 (수정이면 지워 둔 회차는 그대로 이어 갑니다)
             const recur = readScheduleRecur();
+            if (recur && data.endDate) { alert('기간 일정은 반복으로 등록할 수 없습니다. 끝 날짜를 시작 날짜와 같게 하거나 반복을 해제해 주세요.'); return; }
             if (recur) {
                 if (recur.freq === 'weekly' && !(recur.days || []).length) { alert('매주 반복할 요일을 하나 이상 선택해 주세요.'); return; }
                 if (recur.end === 'until' && (!recur.until || recur.until < data.date)) { alert('반복 종료일은 일정 날짜 이후여야 합니다.'); return; }
@@ -19871,7 +19976,7 @@ const QUOTE_TEMPLATES = [
             data.recur = recur;
             if (id) {
                 const schedule = schedules.find(s => s.id === id);
-                if (schedule && !canEditSchedule(schedule)) { alert('등록자, 관리자, 일정 대리 수정 권한자만 수정할 수 있습니다.'); return; }
+                if (schedule && !canEditSchedule(schedule)) { alert('이 일정은 수정할 수 없습니다. 다른 사람의 개인 일정은 조회만 가능합니다.'); return; }
                 if (schedule) Object.assign(schedule, data);
             } else {
                 schedules.push({ id: nextScheduleId(), salesperson: currentUserName || document.getElementById('user-name').innerText,
@@ -19892,7 +19997,7 @@ const QUOTE_TEMPLATES = [
             const schedule = findScheduleForView(id);
             if (!schedule) return;
             document.getElementById('detail-schedule-title').innerText = schedule.title;
-            document.getElementById('detail-schedule-date').innerText = `${schedule.date} · ${scheduleTimeLabel(schedule)}` + (isRecurring(schedule) ? `\n🔁 ${recurLabel(schedule.recur)} (시작 ${(schedules.find(x => x.id === scheduleMasterId(schedule.id)) || schedule).date})` : '');
+            document.getElementById('detail-schedule-date').innerText = `${schedule.date}${scheduleSpansDays(schedule) ? ` ~ ${schedule.endDate}` : ''} · ${scheduleTimeLabel(schedule)}` + (isRecurring(schedule) ? `\n🔁 ${recurLabel(schedule.recur)} (시작 ${(schedules.find(x => x.id === scheduleMasterId(schedule.id)) || schedule).date})` : '');
             // 캘린더 구성 + 진행상황
             const sCal = scheduleCalendar(schedule);
             document.getElementById('detail-schedule-calendar').innerHTML =
@@ -19920,12 +20025,13 @@ const QUOTE_TEMPLATES = [
 
             // 타 부서 일정 / 남의 개인 일정은 조회 전용
             const editable = canEditSchedule(schedule);
+            const manageable = canManageSchedule(schedule);
             // 취소 · 삭제된 일정은 되살린 뒤에 고칩니다 (2026-10-30)
             const off = scheduleOffState(schedule);
             document.getElementById('btn-edit-schedule').classList.toggle('hidden', !editable || !!off);
-            document.getElementById('btn-cancel-schedule').classList.toggle('hidden', !editable || !!off);
-            document.getElementById('btn-delete-schedule').classList.toggle('hidden', !editable || off === 'deleted');
-            document.getElementById('btn-restore-schedule').classList.toggle('hidden', !editable || !off);
+            document.getElementById('btn-cancel-schedule').classList.toggle('hidden', !manageable || !!off);
+            document.getElementById('btn-delete-schedule').classList.toggle('hidden', !manageable || off === 'deleted');
+            document.getElementById('btn-restore-schedule').classList.toggle('hidden', !manageable || !off);
             document.getElementById('btn-purge-schedule').classList.toggle('hidden', !off || !canManageAllData());
             const offBox = document.getElementById('detail-schedule-off');
             offBox.classList.toggle('hidden', !off);
@@ -20061,6 +20167,8 @@ const QUOTE_TEMPLATES = [
             document.getElementById('edit-schedule-id').value = schedule.id;
             document.getElementById('schedule-title').value = schedule.title;
             document.getElementById('schedule-date').value = schedule.date;
+            document.getElementById('schedule-end-date').value = schedule.endDate || schedule.date;
+            setScheduleColor(schedule.color || '');
             fillScheduleTimeFields(schedule);
             fillScheduleAttendees(schedule);
             const calId = fillScheduleCalendarSelect(scheduleCalendarId(schedule));
@@ -20142,7 +20250,7 @@ const QUOTE_TEMPLATES = [
             const occDate = scheduleOccDate(id);
             const schedule = schedules.find(s => s.id === scheduleMasterId(id));
             if (!schedule) return;
-            if (!canEditSchedule(schedule)) { alert('등록자, 관리자, 일정 대리 수정 권한자만 취소할 수 있습니다.'); return; }
+            if (!canManageSchedule(schedule)) { alert('등록자, 관리자, 일정 대리 수정 권한자만 취소할 수 있습니다.'); return; }
             const day = occDate || schedule.date;
             const scope = askScheduleScope(schedule, day, '취소');
             if (!scope) return;
@@ -20156,7 +20264,7 @@ const QUOTE_TEMPLATES = [
             const schedule = schedules.find(s => s.id === id);
             if (!schedule) return;
             // 캘린더 일정은 삭제 요청 없이 본인(등록자·관리자·일정 대리 수정 권한자)이 바로 삭제합니다 (2026-10-19)
-            if (!canEditSchedule(schedule)) { alert('등록자, 관리자, 일정 대리 수정 권한자만 삭제할 수 있습니다.'); return; }
+            if (!canManageSchedule(schedule)) { alert('등록자, 관리자, 일정 대리 수정 권한자만 삭제할 수 있습니다.'); return; }
             const day = occDate || schedule.date;
             const scope = askScheduleScope(schedule, day, '삭제');
             if (!scope) return;
@@ -20168,7 +20276,7 @@ const QUOTE_TEMPLATES = [
             const occDate = scheduleOccDate(id);
             const schedule = schedules.find(s => s.id === scheduleMasterId(id));
             if (!schedule) return;
-            if (!canEditSchedule(schedule)) { alert('등록자, 관리자, 일정 대리 수정 권한자만 되살릴 수 있습니다.'); return; }
+            if (!canManageSchedule(schedule)) { alert('등록자, 관리자, 일정 대리 수정 권한자만 되살릴 수 있습니다.'); return; }
             const day = occDate || schedule.date;
             const one = !schedule.offState && schedule.recur && schedule.recur.offDates && schedule.recur.offDates[day];
             if (!one && !schedule.offState) return;
@@ -23627,6 +23735,18 @@ const QUOTE_TEMPLATES = [
                         ]
                     },
                     {
+                        // 단순 문의 전용 (보완사항 2026-11-06) — AS유지보수와 같은 접수 · 처리 흐름, 항목은 대상 장비 · 처리방법 · 접수내용만.
+                        // 택배 접수는 AS유지보수에서 받으므로 처리방법에서 뺍니다.
+                        id: 'simple', name: '기타&단순문의', icon: 'fa-comment-dots', active: 'bg-slate-600', memoLabel: '접수내용',
+                        desc: '장애 · 수리가 아닌 기타 · 단순 문의를 접수하고 처리 내용을 기록합니다.',
+                        fields: [
+                            { id: 'device', label: '대상 장비', type: 'select', required: true,
+                              get options() { return asOptionList('device'); } },
+                            { id: 'method', label: '처리방법', type: 'select', required: true,
+                              get options() { return asOptionList('method').filter(x => x !== '택배'); } }
+                        ]
+                    },
+                    {
                         // menuForm: true — 접수대장 → 처리 팝업 → 업무이력 흐름은 같고,
                         // 항목이 메뉴 수정 접수에 맞게 따로 구성돼 있습니다. (buildWorkMenuIntake / buildMenuActionBody)
                         id: 'menu', name: '메뉴유지보수', icon: 'fa-utensils', active: 'bg-amber-600', menuForm: true,
@@ -23666,6 +23786,13 @@ const QUOTE_TEMPLATES = [
                         // 대상은 미납 내역에서 자동으로 뽑습니다. (syncObWorks)
                         id: 'ob', name: 'O/B업무', icon: 'fa-phone-volume', active: 'bg-pink-600', noIntake: true, obForm: true,
                         desc: 'CMS, 렌탈/할부의 연체 건을 전화로 안내하고 결과를 기록합니다. 대상은 미납 내역에서 자동으로 등록됩니다.',
+                        fields: []
+                    },
+                    {
+                        // 전체 업무이력 (보완사항 2026-11-06) — 창이 아닌 탭으로, 고객 조회와 상관없이 넓게 봅니다
+                        id: 'allworks', name: '전체 업무이력', icon: 'fa-list-ul', active: 'bg-green-700', panel: 'allworks',
+                        noIntake: true, noProcess: true, hideHistory: true,
+                        desc: '고객과 상관없이 운영업무센터에 등록된 업무 전체를 봅니다. 처리가 끝나지 않은 건이 먼저 표시됩니다.',
                         fields: []
                     }
                 ],
@@ -24185,7 +24312,7 @@ const QUOTE_TEMPLATES = [
                                 <div>
                                     <label class="block text-xs font-medium text-gray-600 mb-1">접수유형 <span class="text-red-500">*</span></label>
                                     <select id="${wcId(key, 'intake-type')}" onchange="setWorkType(${jsArg(key)}, this.value)" class="${inputCls}">
-                                        ${c.types.map(t => `<option value="${escapeHtml(t.id)}">${escapeHtml(t.name)}</option>`).join('')}
+                                        ${c.types.filter(t => t.panel !== 'allworks').map(t => `<option value="${escapeHtml(t.id)}">${escapeHtml(t.name)}</option>`).join('')}
                                     </select>
                                 </div>
                                 <div>
@@ -24232,7 +24359,7 @@ const QUOTE_TEMPLATES = [
                             </div>
 
                             <div>
-                                <label class="block text-xs font-medium text-gray-600 mb-1">불만접수내용</label>
+                                <label id="${wcId(key, 'intake-memo-label')}" class="block text-xs font-medium text-gray-600 mb-1">불만접수내용</label>
                                 <textarea id="${wcId(key, 'intake-memo')}" rows="3" class="${inputCls}" placeholder="고객이 말한 불만·요청 내용을 그대로 입력해 주세요"></textarea>
                             </div>
 
@@ -24804,7 +24931,7 @@ const QUOTE_TEMPLATES = [
                                 <div>
                                     ${lbl('접수유형')}
                                     <select id="${wcId(key, 'mnu-type')}" onchange="setWorkType(${jsArg(key)}, this.value)" class="${inputCls}">
-                                        ${c.types.map(x => `<option value="${escapeHtml(x.id)}">${escapeHtml(x.name)}</option>`).join('')}
+                                        ${c.types.filter(x => x.panel !== 'allworks').map(x => `<option value="${escapeHtml(x.id)}">${escapeHtml(x.name)}</option>`).join('')}
                                     </select>
                                 </div>
                                 <div class="sm:col-span-2">
@@ -24882,6 +25009,10 @@ const QUOTE_TEMPLATES = [
                                 <label class="block text-xs font-medium text-gray-500 mb-1">${escapeHtml(sl.ceo)}</label>
                                 <input type="text" id="${wcId(key, 'search-ceo')}" onkeydown="if(event.key==='Enter')searchWorkCenterCustomer(${jsArg(key)})" placeholder="예: ${escapeHtml(ex.ceo)}" class="${inputCls}" />
                             </div>
+                            <div class="flex-1 min-w-[130px]">
+                                <label class="block text-xs font-medium text-gray-500 mb-1">연락처</label>
+                                <input type="text" id="${wcId(key, 'search-phone')}" onkeydown="if(event.key==='Enter')searchWorkCenterCustomer(${jsArg(key)})" placeholder="휴대폰 · 전화번호" class="${inputCls}" />
+                            </div>
                             <button onclick="searchWorkCenterCustomer(${jsArg(key)})" class="${c.accent.btn} flex-1 sm:flex-none text-white px-4 py-2 rounded text-sm transition-colors whitespace-nowrap">
                                 <i class="fas fa-magnifying-glass mr-1"></i>조회
                             </button>
@@ -24889,7 +25020,7 @@ const QUOTE_TEMPLATES = [
                             <!-- 보완사항 2026-10-23 — 신규 등록 · 가맹점 목록 · 전체 업무이력 -->
                             <button onclick="createWorkCenterCustomer(${jsArg(key)})" class="bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 flex-1 sm:flex-none px-3 py-2 rounded text-sm transition-colors whitespace-nowrap"><i class="fas fa-plus mr-1"></i>신규 등록</button>
                             ${key === 'ops' ? `<button onclick="openWcShopList(${jsArg(key)})" class="bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 flex-1 sm:flex-none px-3 py-2 rounded text-sm transition-colors whitespace-nowrap"><i class="fas fa-store mr-1"></i>가맹점 목록</button>
-                            <button onclick="openWcAllWorks(${jsArg(key)})" class="bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 flex-1 sm:flex-none px-3 py-2 rounded text-sm transition-colors whitespace-nowrap"><i class="fas fa-list-ul mr-1"></i>전체 업무이력</button>` : ''}
+                            <button onclick="${key === 'ops' ? `setWorkType(${jsArg(key)}, 'allworks')` : `openWcAllWorks(${jsArg(key)})`}" class="bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 flex-1 sm:flex-none px-3 py-2 rounded text-sm transition-colors whitespace-nowrap"><i class="fas fa-list-ul mr-1"></i>전체 업무이력</button>` : ''}
                         </div>
                         <div id="${wcId(key, 'customer-summary')}" class="mt-2"></div>
                     </div>
@@ -25064,21 +25195,31 @@ const QUOTE_TEMPLATES = [
         }
 
         // ---------- ① 고객검색 ----------
+        // 연락처 검색 (보완사항 2026-11-06) — 고객 정보의 번호와, 그 고객 업무에 접수된 연락처를 함께 봅니다
+        function wcPhoneDigits(v) { return String(v || '').replace(/\D/g, ''); }
+        function wcCustomerHasPhone(key, c, digits) {
+            const linked = c.linkCustomerId ? customers.find(x => x.id === c.linkCustomerId) : null;
+            const nums = [c.phone, linked && linked.contact, linked && linked.phone]
+                .concat(wcDef(key).works.filter(w => w.customerId === c.id).map(w => w.contact));
+            return nums.some(n => wcPhoneDigits(n).includes(digits));
+        }
         function searchWorkCenterCustomer(key) {
             const norm = v => (v || '').replace(/[\s-]/g, '').toLowerCase();
             const name = norm(wcEl(key, 'search-name').value);
             const bizNo = norm(wcEl(key, 'search-bizno').value);
             const ceo = norm(wcEl(key, 'search-ceo').value);
-            if (!name && !bizNo && !ceo) {
+            const phone = wcPhoneDigits((wcEl(key, 'search-phone') || {}).value);
+            if (!name && !bizNo && !ceo && !phone) {
                 const sl = wcSearchLabels(key);
-                alert(`${sl.name} · ${sl.bizNo} · ${sl.ceo} 중 하나 이상을 입력해 주세요.`);
+                alert(`${sl.name} · ${sl.bizNo} · ${sl.ceo} · 연락처 중 하나 이상을 입력해 주세요.`);
                 return;
             }
 
             const hits = wcDef(key).customers.filter(c =>
                 (!name || norm(c.name).includes(name)) &&
                 (!bizNo || norm(c.bizNo).includes(bizNo)) &&
-                (!ceo || norm(c.ceo).includes(ceo))
+                (!ceo || norm(c.ceo).includes(ceo)) &&
+                (!phone || wcCustomerHasPhone(key, c, phone))
             );
             // 1건이면 바로 선택, 여러 건이면 후보 목록을 보여 주고 고르게 함
             if (hits.length === 1) { selectWorkCenterCustomer(key, hits[0].id); return; }
@@ -25098,7 +25239,7 @@ const QUOTE_TEMPLATES = [
         //   ② 좁은 화면에서는 selectWorkCenterCustomer 가 검색 바를 접어 버려 조회 칸이 사라졌으며
         //   ③ 고객 목록이 비어 있으면 customers[0].id 에서 오류가 나 정말로 아무 일도 일어나지 않았습니다.
         function resetWorkCenterSearch(key) {
-            ['search-name', 'search-bizno', 'search-ceo'].forEach(n => { const el = wcEl(key, n); if (el) el.value = ''; });
+            ['search-name', 'search-bizno', 'search-ceo', 'search-phone'].forEach(n => { const el = wcEl(key, n); if (el) el.value = ''; });
             const st = wcState[key];
             st.customerId = null;          // 조회 결과를 비웁니다 (고객 요약이 안내 문구로 돌아갑니다)
             rememberWorkCenterCustomer(key, null);   // 지난번 고객 기억도 함께 지웁니다 (일부러 비운 것이므로 되돌리지 않습니다)
@@ -25300,47 +25441,61 @@ const QUOTE_TEMPLATES = [
             }
             m.dataset.key = key;
             const def = wcDef(key);
-            const sel = 'p-2 text-sm border border-gray-300 rounded bg-white';
             m.innerHTML = `<div class="bg-white rounded-lg shadow-xl w-full max-w-6xl max-h-[88vh] flex flex-col">
                     <div class="px-4 py-3 border-b border-gray-200 flex items-center justify-between gap-2">
                         <h3 class="text-base font-bold text-gray-800"><i class="fas fa-list-ul text-green-600 mr-1"></i>${escapeHtml(def.title)} 전체 업무이력</h3>
                         <button type="button" onclick="document.getElementById('wc-allworks-modal').classList.add('hidden')" class="w-7 h-7 text-gray-400 hover:text-gray-600"><i class="fas fa-times"></i></button>
                     </div>
-                    <div class="px-4 pt-3 flex flex-wrap gap-2 items-center">
-                        <input type="text" value="${escapeHtml(wcAllWorksFilter.q)}" oninput="wcAllWorksFilter.q=this.value; renderWcAllWorks()" placeholder="상호명 · 번호 · 내용 · 접수자 · 담당자 검색" class="flex-1 min-w-[200px] p-2 text-sm border border-gray-300 rounded" />
-                        <select onchange="wcAllWorksFilter.type=this.value; renderWcAllWorks()" class="${sel}"><option value="">업무유형 전체</option>${def.types.map(t => `<option value="${t.id}" ${wcAllWorksFilter.type === t.id ? 'selected' : ''}>${escapeHtml(t.name)}</option>`).join('')}</select>
-                        <select onchange="wcAllWorksFilter.status=this.value; renderWcAllWorks()" class="${sel}"><option value="">상태 전체</option>${Object.entries(def.statusNames || {}).map(([v, l]) => `<option value="${v}" ${wcAllWorksFilter.status === v ? 'selected' : ''}>${escapeHtml(l)}</option>`).join('')}</select>
-                    </div>
-                    <div id="wc-allworks-body" class="p-4 overflow-auto"></div>
+                    ${wcAllWorksFrameHtml(key)}
                 </div>`;
             m.classList.remove('hidden');
-            renderWcAllWorks();
+            renderWcAllWorks(key);
         }
-        function renderWcAllWorks() {
-            const m = document.getElementById('wc-allworks-modal');
-            const body = document.getElementById('wc-allworks-body');
-            if (!m || !body) return;
-            const key = m.dataset.key || 'ops';
+        // 검색줄 + 표 자리 — 창(영업)과 탭(운영 · 보완사항 2026-11-06)이 함께 씁니다
+        function wcAllWorksBodyId(key) { return 'wc-allworks-body-' + key; }
+        function wcAllWorksFrameHtml(key) {
+            const def = wcDef(key);
+            const sel = 'p-2 text-sm border border-gray-300 rounded bg-white';
+            const f = wcAllWorksFilter;
+            const opt = (v, l, cur) => `<option value="${escapeHtml(v)}" ${cur === v ? 'selected' : ''}>${escapeHtml(l)}</option>`;
+            return `<div class="px-4 pt-3 flex flex-wrap gap-2 items-center">
+                        <input type="text" value="${escapeHtml(f.q)}" oninput="wcAllWorksFilter.q=this.value; renderWcAllWorks(${jsArg(key)})" placeholder="상호명 · 연락처 · 내용 · 접수자 · 담당자 검색" class="flex-1 min-w-[220px] p-2 text-sm border border-gray-300 rounded" />
+                        <select onchange="wcAllWorksFilter.type=this.value; renderWcAllWorks(${jsArg(key)})" class="${sel}"><option value="">업무유형 전체</option>${def.types.filter(t => t.panel !== 'allworks').map(t => opt(t.id, t.name, f.type)).join('')}</select>
+                        <select onchange="wcAllWorksFilter.status=this.value; renderWcAllWorks(${jsArg(key)})" class="${sel}"><option value="">상태 전체</option>${opt('open', '미완료', f.status)}${Object.entries(def.statusNames || {}).map(([v, l]) => opt(v, l, f.status)).join('')}</select>
+                    </div>
+                    <div id="${wcAllWorksBodyId(key)}" class="p-4 overflow-auto"></div>`;
+        }
+        function renderWcAllWorks(key) {
+            const body = document.getElementById(wcAllWorksBodyId(key));
+            if (!body) return;
             const def = wcDef(key);
             const f = wcAllWorksFilter;
             const q = String(f.q || '').trim().toLowerCase();
-            const all = def.works.slice().sort((a, b) => (`${b.receivedAt || ''} ${b.receivedTime || ''}`).localeCompare(`${a.receivedAt || ''} ${a.receivedTime || ''}`) || String(b.id).localeCompare(String(a.id)));
-            const list = all.filter(w => (!f.type || w.type === f.type) && (!f.status || w.status === f.status)
-                && (!q || `${w.id} ${w.company || ''} ${w.title || ''} ${w.memo || ''} ${w.receiver || ''} ${w.assignee || ''}`.toLowerCase().includes(q)));
+            const qDigits = q.replace(/[\s-]/g, '');
+            const isOpen = w => w.status !== 'done';
+            const phoneOf = w => w.contact || (wcCustomer(key, w.customerId) || {}).phone || '';
+            // 처리가 끝나지 않은 건을 먼저, 그 안에서 최근 접수 순 — 건수가 많아도 미완료 건이 잘리지 않습니다 (보완사항 2026-11-06)
+            const all = def.works.slice().sort((a, b) => (isOpen(b) - isOpen(a))
+                || (`${b.receivedAt || ''} ${b.receivedTime || ''}`).localeCompare(`${a.receivedAt || ''} ${a.receivedTime || ''}`) || String(b.id).localeCompare(String(a.id)));
+            const list = all.filter(w => (!f.type || w.type === f.type)
+                && (!f.status || (f.status === 'open' ? isOpen(w) : w.status === f.status))
+                && (!q || `${w.id} ${w.company || ''} ${w.title || ''} ${w.memo || ''} ${w.receiver || ''} ${w.assignee || ''} ${phoneOf(w)}`.toLowerCase().includes(q)
+                       || (/^\d+$/.test(qDigits) && String(phoneOf(w)).replace(/\D/g, '').includes(qDigits))));
             const stCls = { received: 'bg-amber-100 text-amber-700', assigned: 'bg-sky-100 text-sky-700', working: 'bg-blue-100 text-blue-700', hold: 'bg-yellow-100 text-yellow-700', done: 'bg-green-100 text-green-700' };
             const shown = list.slice(0, 500);
-            body.innerHTML = `<p class="text-xs text-gray-500 mb-2">전체 ${all.length}건 · 조건 ${list.length}건 · 미완료 ${list.filter(w => w.status !== 'done').length}건${list.length > shown.length ? ` (최근 ${shown.length}건 표시)` : ''} · 줄을 누르면 상세를 엽니다</p>
+            const th = t => `<th class="p-2 text-left font-medium">${t}</th>`;
+            body.innerHTML = `<p class="text-xs text-gray-500 mb-2">전체 ${all.length}건 · 조건 ${list.length}건 · 미완료 ${list.filter(isOpen).length}건${list.length > shown.length ? ` (앞 ${shown.length}건만 표시)` : ''}</p>
                 <table class="w-full text-sm min-w-[980px]">
-                    <thead><tr class="bg-gray-50 text-xs text-gray-500 border-b"><th class="p-2 text-left font-medium">접수일</th><th class="p-2 text-left font-medium">번호</th><th class="p-2 text-left font-medium">업무유형</th><th class="p-2 text-left font-medium">상호명</th><th class="p-2 text-left font-medium">내용</th><th class="p-2 text-left font-medium">접수자</th><th class="p-2 text-left font-medium">담당자</th><th class="p-2 text-left font-medium">상태</th></tr></thead>
-                    <tbody>${shown.map(w => `<tr onclick="openWorkHistoryDetail(${jsArg(key)}, ${jsArg(w.id)})" class="border-b border-gray-100 hover:bg-green-50 cursor-pointer">
+                    <thead><tr class="bg-gray-50 text-xs text-gray-500 border-b">${['접수일', '연락처', '업무유형', '상호명', '내용', '접수자', '담당자', '상태'].map(th).join('')}</tr></thead>
+                    <tbody>${shown.map(w => `<tr onclick="openWorkHistoryDetail(${jsArg(key)}, ${jsArg(w.id)})" class="border-b border-gray-100 ${isOpen(w) ? 'bg-amber-50/50' : ''} hover:bg-green-50 cursor-pointer">
                         <td class="p-2 text-xs text-gray-600 whitespace-nowrap">${escapeHtml(w.receivedAt || '')} ${escapeHtml(w.receivedTime || '')}</td>
-                        <td class="p-2 text-xs text-gray-500 whitespace-nowrap">${escapeHtml(w.id)}</td>
+                        <td class="p-2 text-xs text-gray-600 whitespace-nowrap">${escapeHtml(phoneOf(w) || '-')}</td>
                         <td class="p-2 whitespace-nowrap"><span class="px-1.5 py-0.5 rounded text-[11px] bg-gray-100 text-gray-700">${escapeHtml(wcType(key, w.type).name)}</span></td>
                         <td class="p-2 font-semibold text-gray-800 whitespace-nowrap">${escapeHtml(w.company || '-')}</td>
                         <td class="p-2 text-gray-600 max-w-[280px] truncate" title="${escapeHtml(w.memo || w.title || '')}">${escapeHtml(w.title || w.memo || '-')}</td>
                         <td class="p-2 text-xs text-gray-600 whitespace-nowrap">${escapeHtml(w.receiver || '-')}</td>
                         <td class="p-2 text-xs text-gray-600 whitespace-nowrap">${escapeHtml(w.assignee || '-')}</td>
-                        <td class="p-2 whitespace-nowrap"><span class="px-1.5 py-0.5 rounded-full text-[11px] font-semibold ${stCls[w.status] || 'bg-gray-100 text-gray-600'}">${escapeHtml((def.statusNames || {})[w.status] || w.status || '')}</span></td>
+                        <td class="p-2 whitespace-nowrap"><span class="px-1.5 py-0.5 rounded-full text-[11px] font-semibold ${stCls[w.status] || 'bg-gray-100 text-gray-600'}">${escapeHtml((def.statusNames || {})[w.status] || w.status || '-')}</span></td>
                     </tr>`).join('') || '<tr><td colspan="8" class="p-8 text-center text-gray-400">조건에 맞는 업무가 없습니다.</td></tr>'}</tbody>
                 </table>`;
         }
@@ -25649,7 +25804,10 @@ const QUOTE_TEMPLATES = [
 
         function setWorkType(key, typeId) {
             if (!canSeePage(wcTypePerm(key, typeId))) return;   // 권한 없는 탭으로의 우회 호출 차단
+            const wasAll = wcType(key, wcState[key].activeType).panel === 'allworks';
+            const toAll = wcType(key, typeId).panel === 'allworks';
             wcState[key].activeType = typeId;
+            if (wasAll !== toAll) { wcState[key].searchOpen = !toAll; applyWorkSearchCollapse(key); }   // 전체 업무이력은 고객 조회를 접어 표를 넓게
             markWorkTabSeen(key, typeId);       // 이 탭을 열었으니 '새 정보' 숫자를 내립니다
             renderWorkTypeTabs(key);
             renderWorkTypeHeader(key);
@@ -28799,6 +28957,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             if (t.panel === 'contract') { el.innerHTML = buildContractPipelinePanel(key); return; }
             if (t.panel === 'meeting') { el.innerHTML = buildMeetingPanel(key); return; }
             if (t.panel === 'issue') { el.innerHTML = buildIssuePanel(key); return; }
+            if (t.panel === 'allworks') { el.innerHTML = wcAllWorksFrameHtml(key); renderWcAllWorks(key); return; }
             if (t.panel !== 'quote') { el.innerHTML = ''; return; }
 
             const c = wcCustomer(key, st.customerId);
@@ -29764,7 +29923,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             const cur = wcState[key].historyFilter || 'current';
             const opt = (v, label) => `<option value="${escapeHtml(v)}" ${v === cur ? 'selected' : ''}>${escapeHtml(label)}</option>`;
             let html = opt('current', '현재 탭 기준 (탭·카테고리 연동)') + opt('all', '전체 (모든 업무유형)');
-            wcDef(key).types.forEach(t => {
+            wcDef(key).types.filter(t => t.panel !== 'allworks').forEach(t => {
                 const cats = t.categorized ? (t.categories || []) : [];
                 if (cats.length) {
                     html += `<optgroup label="${escapeHtml(t.name)}">`
@@ -30457,6 +30616,8 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             const t = wcType(key, st.activeType);
             const prospect = wcEl(key, 'intake-prospect');
             if (prospect) prospect.classList.toggle('hidden', !wcIgnoresCustomer(key, st.activeType));
+            const memoLabel = wcEl(key, 'intake-memo-label');
+            if (memoLabel) memoLabel.textContent = t.memoLabel || '불만접수내용';
             const cls = `w-full p-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 ${wcDef(key).accent.ring}`;
             const mk = f => {
                 const inputId = wcId(key, `extra-${f.id}`);
@@ -31496,7 +31657,10 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             renderWorkProcess(key);
             renderWorkCustomerSummary(key);
             saveWorks();
+            wcClearAfterIntake(key);
         }
+        // 운영업무센터 — 업무를 등록하면 고객 조회를 비워 다음 건을 바로 조회합니다 (보완사항 2026-11-06)
+        function wcClearAfterIntake(key) { if (key === 'ops') resetWorkCenterSearch(key); }
 
         // ---------- ④-2 처리 ----------
         // ---------- 업무처리 목록 — 키워드 검색 (AS유지보수 · 메뉴유지보수) ----------
@@ -31727,7 +31891,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
         // 팝업 위쪽에는 업무접수에 등록된 내용을 읽기 전용으로 얹고, 아래에서 조치자가
         // 재이관 · 조치사항 · 택배장비 · 택배요청일자 · 택배 수령정보를 입력합니다.
         // 조치일 · 조치시간 · 조치자는 '조치완료'를 누르는 순간 시스템이 찍습니다.
-        function isAsProcess(key, typeId) { return key === 'ops' && typeId === 'as'; }
+        function isAsProcess(key, typeId) { return key === 'ops' && (typeId === 'as' || typeId === 'simple'); }
 
         // 택배로 보낼 장비 — 접수 항목의 '대상 장비'와 같은 선택지를 씁니다.
         const AS_SHIP_DEVICES = ['POS 단말', '카드리더', '주방프린터', '라벨프린터', 'KIOSK', '기타'];
@@ -32257,6 +32421,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             renderWorkInstallIntake(key, true);   // 다음 접수번호 · 등록시간으로 폼을 새로 맞춤
             renderWorkIntakeReceipt(key);         // 다른 접수 폼의 접수번호 미리보기도 같이 밀어 줌
             refreshWorkViews();
+            wcClearAfterIntake(key);
         }
 
         // ---------- 업무처리 목록 한 줄 ----------
@@ -33644,6 +33809,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             renderWorkDeliveryIntake(key, true);   // 다음 접수번호 · 요청시간으로 폼을 새로 맞춤
             renderWorkIntakeReceipt(key);          // 다른 접수 폼의 접수번호 미리보기도 같이 밀어 줌
             refreshWorkViews();
+            wcClearAfterIntake(key);
         }
 
         // ---------- 업무처리 목록 한 줄 ----------
@@ -34020,6 +34186,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             renderWorkMenuIntake(key, true);   // 다음 접수번호 · 접수시간으로 폼을 새로 맞춤
             renderWorkIntakeReceipt(key);      // 다른 접수 폼의 접수번호 미리보기도 같이 밀어 줌
             refreshWorkViews();
+            wcClearAfterIntake(key);
         }
 
         // ---------- 업무처리 목록 한 줄 ----------
@@ -34341,6 +34508,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             renderWorkDistIntake(key, true);
             renderWorkIntakeReceipt(key);
             refreshWorkViews();
+            wcClearAfterIntake(key);
         }
 
         // ---------- 업무처리 목록 한 줄 ----------
@@ -34829,6 +34997,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             renderWorkConsultIntake(key, typeId, true);
             renderWorkIntakeReceipt(key);
             refreshWorkViews();
+            wcClearAfterIntake(key);
         }
 
         // ---------- 업무처리 목록 한 줄 ----------
