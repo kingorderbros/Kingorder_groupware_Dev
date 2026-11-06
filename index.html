@@ -11569,12 +11569,14 @@ const QUOTE_TEMPLATES = [
         //  ② 그 화면에서 볼 수 있는 탭이 **하나뿐이면 그 탭 이름** — 실제로 들어가는 메뉴가 그것이므로
         //  ③ 그 밖에는 화면 이름
         function crossDeptMenuName(m) {
+            if (m.alias && m.perm === 'payment-work-center' && payDocIsOpsRecipient()) return m.alias.name;
             if (m.alias && allowedPageIds.includes(m.alias.when)) return m.alias.name;
             let tabs = [];
             try { tabs = m.tabs ? m.tabs() : []; } catch (e) { tabs = []; }
             return tabs.length === 1 ? tabs[0] : m.name;
         }
         function crossDeptMenuLead(m) {
+            if (m.alias && m.perm === 'payment-work-center' && payDocIsOpsRecipient()) return m.alias.lead || '';
             if (m.alias && allowedPageIds.includes(m.alias.when)) return m.alias.lead || '';
             return m.lead || '';
         }
@@ -11613,6 +11615,7 @@ const QUOTE_TEMPLATES = [
             const isAllowed = (pageId) => allowedPageIds.includes(pageId);
             // 사외 계정(외주업체 등) — 허용된 화면 하나만 보이게 하고 사내 공용 메뉴는 모두 감춥니다
             externalUser = !!(permissionGroups.find(g => g.id === currentUserGroupId) || {}).external;
+            payDocGrantOpsAccess();   // 운영팀 관리파트 · 운영팀장: 보완서류 제출함 (2026-11-06)
 
             document.getElementById('nav-dashboard-personal').classList.toggle('hidden', !isAllowed('dashboard-personal'));
             // 협업업무센터·일정캘린더: 사내 사용자에게는 항상 노출 (조회 범위는 권한 설정으로 별도 제어).
@@ -49602,7 +49605,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             const cur = payTabs.find(t => t.id === payWcActiveTab) || payTabs[0];
             const descEl = document.getElementById('paywc-tab-desc');
             // 보완서류 제출함으로 들어왔으면 영업본부가 할 일로 설명합니다
-            if (descEl) descEl.innerText = (payWcViaSalesMenu && cur && cur.id === 'docs')
+            if (descEl) descEl.innerText = ((payWcViaSalesMenu || payDocIsOpsRecipient()) && cur && cur.id === 'docs')
                 ? '결제본부가 요청한 보완서류를 확인하고, 고객사에서 받은 서류를 업로드하여 회신합니다.' : (cur ? cur.desc : '');
 
             document.querySelectorAll('.paywc-tab-panel').forEach(el => el.classList.add('hidden'));
@@ -49694,8 +49697,19 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             low:    { name: '낮음', chip: 'bg-gray-100 text-gray-400' }
         };
 
-        // 요청 수신 대상으로 고를 수 있는 영업본부 담당자
+        // 요청 수신 대상으로 고를 수 있는 담당자 — 영업본부 + 운영팀 관리파트 · 운영팀장 (2026-11-06)
         function payDocSalesStaff() { return pickableUsers().filter(u => u.dept === 'sales').map(u => u.name); }
+        function payDocOpsTarget(u) { return !!u && u.team === '운영팀' && (u.part === '관리파트' || u.rank === '팀장'); }
+        function payDocOpsStaff() { return pickableUsers().filter(payDocOpsTarget).map(u => u.name); }
+        // 로그인한 사람이 운영팀 수신 대상인지 — 이 사람들은 운영 그룹 권한은 그대로 두고 '보완서류 제출함' 만 더 씁니다
+        function payDocIsOpsRecipient() {
+            if (!currentUserName || currentUserDept === 'sales' || canManageAllData()) return false;
+            return payDocOpsTarget(activeUsers().find(u => u.name === currentUserName));
+        }
+        function payDocGrantOpsAccess() {
+            if (!payDocIsOpsRecipient()) return;
+            ['payment-work-center', 'pay-wc-docs'].forEach(id => { if (!allowedPageIds.includes(id)) allowedPageIds.push(id); });
+        }
 
         // ---------- 보완서류 요청 데이터 (DEV환경) ----------
         // 항목의 파일 관련 필드
@@ -49779,14 +49793,14 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
         // '영업본부 › 보완서류 제출함' 으로 들어오면 관리자라도 **영업본부 화면**만 — 요청을 확인하고 서류를 올려 회신합니다 (UAT 2026-10-08).
         // 요청 등록 · 서류 항목 관리 · 검토(확인 · 반려 · 취합 완료)는 '결제본부 › 결제업무센터' 로 들어올 때만 보입니다.
         // 관리자는 들어온 메뉴에 따라 한쪽 역할만 — 제출함이면 영업(확인 · 회신), 결제업무센터면 결제(요청 · 검토). 영업본부 사람은 어디로 들어와도 올릴 수 있습니다(알림 링크 등)
-        function payDocIsSales() { return currentUserDept === 'sales' || (canManageAllData() && payWcViaSalesMenu); }
+        function payDocIsSales() { return currentUserDept === 'sales' || (canManageAllData() && payWcViaSalesMenu) || payDocIsOpsRecipient(); }
         function payDocCanReview() { return !payWcViaSalesMenu && (currentUserDept === 'payment' || canManageAllData()); }
-        function payDocSalesView() { return payWcViaSalesMenu || currentUserDept === 'sales'; }
+        function payDocSalesView() { return payWcViaSalesMenu || currentUserDept === 'sales' || payDocIsOpsRecipient(); }
         // 팀 전체 요청은 영업본부 누구나, 담당자 지정 요청은 지정된 본인만 업로드할 수 있습니다.
         function payDocCanUpload(r) {
             if (!payDocIsSales()) return false;
             if (canManageAllData()) return true;
-            if (r.targetType === 'team') return true;
+            if (r.targetType === 'team') return !payDocIsOpsRecipient();    // 팀 전체는 영업본부 요청 — 운영팀은 본인 지정 건만
             return r.targetName === currentUserName;
         }
         function payDocReq(id) { return payDocRequests.find(r => r.id === id) || null; }
@@ -49813,6 +49827,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             if (currentUserDept === 'sales') {
                 return payDocRequests.filter(r => r.targetType === 'team' || r.targetName === currentUserName || r.claimedBy === currentUserName);
             }
+            if (payDocIsOpsRecipient()) return payDocRequests.filter(r => r.targetName === currentUserName || r.claimedBy === currentUserName);
             return payDocRequests.slice();
         }
         function updatePayDocBadge() {
@@ -49831,7 +49846,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
 
         function payDocFilteredRequests() {
             const kw = payDocFilter.keyword.trim().toLowerCase();
-            let list = (currentUserDept === 'sales' && payDocFilter.scope === 'mine') ? payDocMyRequests() : payDocRequests.slice();
+            let list = ((currentUserDept === 'sales' && payDocFilter.scope === 'mine') || payDocIsOpsRecipient()) ? payDocMyRequests() : payDocRequests.slice();
             if (payDocFilter.status !== 'all') {
                 list = payDocFilter.status === 'open'
                     ? list.filter(r => PAY_REQ_OPEN.includes(r.status))
@@ -49858,7 +49873,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             const host = document.getElementById('paywc-panel-docs');
             if (!host) return;
 
-            const base = (payDocSalesView() && payDocFilter.scope === 'mine') ? payDocMyRequests() : payDocRequests;
+            const base = ((payDocSalesView() && payDocFilter.scope === 'mine') || payDocIsOpsRecipient()) ? payDocMyRequests() : payDocRequests;
             const count = (s) => base.filter(r => r.status === s).length;
             const stats = [
                 { key: 'all',       label: '전체',        value: base.length,                                        cls: 'border-gray-400',   text: 'text-gray-700' },
@@ -49876,7 +49891,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                     <p class="text-2xl font-bold ${s.text} mt-1">${s.value}<span class="text-sm font-normal text-gray-400 ml-0.5">건</span></p>
                 </button>`).join('');
 
-            const scopeSwitch = payDocSalesView() ? `
+            const scopeSwitch = (payDocSalesView() && !payDocIsOpsRecipient()) ? `
                 <div class="flex rounded border border-gray-300 overflow-hidden text-sm">
                     <button type="button" onclick="setPayDocFilter('scope','mine')" class="px-3 py-2 ${payDocFilter.scope === 'mine' ? 'bg-yellow-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}">나에게 온 요청</button>
                     <button type="button" onclick="setPayDocFilter('scope','all')" class="px-3 py-2 border-l border-gray-300 ${payDocFilter.scope === 'all' ? 'bg-yellow-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}">영업본부 전체</button>
@@ -49900,7 +49915,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             const roleHint = payDocCanReview()
                 ? '<i class="fas fa-circle-info mr-1"></i>결제본부 화면입니다. 보완요청을 발송하고, 제출된 서류를 항목별로 확인·반려한 후 취합 완료 처리합니다.'
                 : (payDocIsSales()
-                    ? '<i class="fas fa-circle-info mr-1"></i>영업본부 화면입니다. 결제본부의 보완요청을 열어 <b>[요청 확인]</b>을 클릭하고, 고객사에서 받은 서류를 항목별로 업로드한 후 <b>[회신 (보완서류 제출)]</b>을 클릭해 주세요.'
+                    ? '<i class="fas fa-circle-info mr-1"></i>' + (payDocIsOpsRecipient() ? '보완서류 제출 화면입니다.' : '영업본부 화면입니다.') + ' 결제본부의 보완요청을 열어 <b>[요청 확인]</b>을 클릭하고, 고객사에서 받은 서류를 항목별로 업로드한 후 <b>[회신 (보완서류 제출)]</b>을 클릭해 주세요.'
                     : '<i class="fas fa-circle-info mr-1"></i>조회 전용 화면입니다.');
 
             host.innerHTML = `
@@ -50006,7 +50021,8 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
 
             // 담당자 후보
             document.getElementById('paydoc-assignee').innerHTML =
-                payDocSalesStaff().map(n => `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join('');
+                [['영업본부', payDocSalesStaff()], ['운영팀', payDocOpsStaff()]].filter(g => g[1].length).map(g =>
+                    `<optgroup label="${g[0]}">${g[1].map(n => `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join('')}</optgroup>`).join('');
 
             document.getElementById('paydoc-requester').value = currentUserName || '결제본부';
             document.getElementById('paydoc-due').value = dueIn(3);
@@ -50099,7 +50115,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
 
             const targetType = document.querySelector('input[name="paydoc-target"]:checked').value;
             const assignee = document.getElementById('paydoc-assignee').value;
-            if (targetType === 'person' && !assignee) { alert('요청을 받을 영업본부 담당자를 선택해 주세요.'); return; }
+            if (targetType === 'person' && !assignee) { alert('요청을 받을 담당자를 선택해 주세요.'); return; }
 
             const today = ymd(new Date());
             const id = `PD-2608-${String(payDocSeq++).padStart(4, '0')}`;
@@ -50556,7 +50572,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
 
                 <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4 bg-gray-50 rounded-lg p-4">
                     ${info('요청자 (결제본부)', escapeHtml(r.requester))}
-                    ${info('수신 (영업본부)', escapeHtml(r.targetName) + (r.claimedBy && r.targetType === 'team' ? ` <span class="text-xs text-gray-400">/ 처리 ${escapeHtml(r.claimedBy)}</span>` : ''))}
+                    ${info('수신', escapeHtml(r.targetName) + (r.claimedBy && r.targetType === 'team' ? ` <span class="text-xs text-gray-400">/ 처리 ${escapeHtml(r.claimedBy)}</span>` : ''))}
                     ${info('요청일', escapeHtml(r.requestedAt))}
                     ${info('보완 기한', escapeHtml(r.dueDate) + (dd ? ` <span class="text-xs px-1.5 py-0.5 rounded ${dd.cls}">${dd.label}</span>` : '')
                         + `<span class="block mt-1.5">${workScheduleActionHtml('paydoc', 'payment', r.id)}</span>`)}
