@@ -4604,8 +4604,9 @@
                     </div>
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-1">수신 대상 <span class="text-red-500">*</span></label>
-                        <div class="flex gap-4 items-center h-[42px]">
+                        <div class="flex flex-wrap gap-x-4 gap-y-1 items-center min-h-[42px]">
                             <label class="flex items-center text-sm text-gray-700"><input type="radio" name="paydoc-target" value="team" checked onchange="onPayDocTargetChange()" class="mr-1" /> 영업팀 전체</label>
+                            <label class="flex items-center text-sm text-gray-700"><input type="radio" name="paydoc-target" value="opsTeam" onchange="onPayDocTargetChange()" class="mr-1" /> 운영/관리파트 전체</label>
                             <label class="flex items-center text-sm text-gray-700"><input type="radio" name="paydoc-target" value="person" onchange="onPayDocTargetChange()" class="mr-1" /> 담당자 지정</label>
                         </div>
                     </div>
@@ -19033,7 +19034,7 @@ const QUOTE_TEMPLATES = [
                     sub: `결제업무센터 · ${(PAY_REG_TYPES[r.regType] || {}).name || ''} · 요청 ${r.requester}`,
                     dept: 'payment',
                     date: r.dueDate || ymd(new Date()),
-                    owner: r.targetType === 'team' ? (r.claimedBy || r.requester) : (r.targetName || r.requester),
+                    owner: payDocIsGroupTarget(r) ? (r.claimedBy || r.requester) : (r.targetName || r.requester),
                     description: `보완요청 ${r.id} · 대상 ${r.targetType === 'team' ? '영업팀 전체' : r.targetName}\n기한 ${r.dueDate}`
                 };
             }
@@ -26106,7 +26107,7 @@ const QUOTE_TEMPLATES = [
                     statusName: st.name, chip: st.chip, due: r.dueDate || '',
                     overdue: late ? execDaysPast(r.dueDate) : 0,
                     done: r.status === 'completed', doneAt: r.completedAt || '',
-                    issue: r.status === 'returned' ? '반려 · 재요청' : (open && r.targetType === 'team' && !r.claimedBy ? '담당자 미지정' : ''),
+                    issue: r.status === 'returned' ? '반려 · 재요청' : (open && payDocIsGroupTarget(r) && !r.claimedBy ? '담당자 미지정' : ''),
                     detail: r.memo || '', raw: r
                 }));
             });
@@ -49890,6 +49891,8 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
 
         // 요청 수신 대상으로 고를 수 있는 담당자 — 영업본부 + 운영팀 관리파트 · 운영팀장 (2026-11-06)
         function payDocSalesStaff() { return pickableUsers().filter(u => u.dept === 'sales').map(u => u.name); }
+        const PAY_DOC_OPS_TEAM_NAME = '운영/관리파트 전체';
+        function payDocIsGroupTarget(r) { return r.targetType === 'team' || r.targetType === 'opsTeam'; }
         function payDocOpsTarget(u) { return !!u && u.team === '운영팀' && (u.part === '관리파트' || u.rank === '팀장'); }
         function payDocOpsStaff() { return pickableUsers().filter(payDocOpsTarget).map(u => u.name); }
         // 로그인한 사람이 운영팀 수신 대상인지 — 이 사람들은 운영 그룹 권한은 그대로 두고 '보완서류 제출함' 만 더 씁니다
@@ -49991,7 +49994,8 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
         function payDocCanUpload(r) {
             if (!payDocIsSales()) return false;
             if (canManageAllData()) return true;
-            if (r.targetType === 'team') return !payDocIsOpsRecipient();    // 팀 전체는 영업본부 요청 — 운영팀은 본인 지정 건만
+            if (r.targetType === 'team') return !payDocIsOpsRecipient();    // 영업팀 전체는 영업본부 요청
+            if (r.targetType === 'opsTeam') return payDocIsOpsRecipient();   // 운영/관리파트 전체는 운영팀장 · 관리파트
             return r.targetName === currentUserName;
         }
         function payDocReq(id) { return payDocRequests.find(r => r.id === id) || null; }
@@ -50018,7 +50022,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             if (currentUserDept === 'sales') {
                 return payDocRequests.filter(r => r.targetType === 'team' || r.targetName === currentUserName || r.claimedBy === currentUserName);
             }
-            if (payDocIsOpsRecipient()) return payDocRequests.filter(r => r.targetName === currentUserName || r.claimedBy === currentUserName);
+            if (payDocIsOpsRecipient()) return payDocRequests.filter(r => r.targetType === 'opsTeam' || r.targetName === currentUserName || r.claimedBy === currentUserName);
             return payDocRequests.slice();
         }
         function updatePayDocBadge() {
@@ -50154,8 +50158,8 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             const pr = PAY_PRIORITY[r.priority] || PAY_PRIORITY.normal;
             const dd = r.status === 'completed' ? null : getDdayInfo(r.dueDate);
             const pct = (n) => p.total ? Math.round(n / p.total * 100) : 0;
-            const target = r.targetType === 'team'
-                ? `<span class="text-xs bg-sky-100 text-sky-700 px-2 py-0.5 rounded">영업팀 전체</span>${r.claimedBy ? `<span class="block text-xs text-gray-500 mt-1">처리: ${escapeHtml(r.claimedBy)}</span>` : ''}`
+            const target = payDocIsGroupTarget(r)
+                ? `<span class="text-xs bg-sky-100 text-sky-700 px-2 py-0.5 rounded">${r.targetType === 'team' ? '영업팀 전체' : escapeHtml(PAY_DOC_OPS_TEAM_NAME)}</span>${r.claimedBy ? `<span class="block text-xs text-gray-500 mt-1">처리: ${escapeHtml(r.claimedBy)}</span>` : ''}`
                 : `<span class="text-xs bg-gray-100 text-gray-700 px-2 py-0.5 rounded">${escapeHtml(r.targetName)}</span>`;
 
             // 줄 아무 곳이나 누르면 상세 창이 열립니다 (2026-10-22) — 관리 칸의 일정 등록 버튼은 따로 동작
@@ -50310,7 +50314,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
 
             const today = ymd(new Date());
             const id = `PD-2608-${String(payDocSeq++).padStart(4, '0')}`;
-            const targetName = targetType === 'team' ? '영업본부 전체' : assignee;
+            const targetName = targetType === 'team' ? '영업본부 전체' : targetType === 'opsTeam' ? PAY_DOC_OPS_TEAM_NAME : assignee;
 
             payDocRequests.unshift({
                 id,
@@ -50763,7 +50767,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
 
                 <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4 bg-gray-50 rounded-lg p-4">
                     ${info('요청자 (결제본부)', escapeHtml(r.requester))}
-                    ${info('수신', escapeHtml(r.targetName) + (r.claimedBy && r.targetType === 'team' ? ` <span class="text-xs text-gray-400">/ 처리 ${escapeHtml(r.claimedBy)}</span>` : ''))}
+                    ${info('수신', escapeHtml(r.targetName) + (r.claimedBy && payDocIsGroupTarget(r) ? ` <span class="text-xs text-gray-400">/ 처리 ${escapeHtml(r.claimedBy)}</span>` : ''))}
                     ${info('요청일', escapeHtml(r.requestedAt))}
                     ${info('보완 기한', escapeHtml(r.dueDate) + (dd ? ` <span class="text-xs px-1.5 py-0.5 rounded ${dd.cls}">${dd.label}</span>` : '')
                         + `<span class="block mt-1.5">${workScheduleActionHtml('paydoc', 'payment', r.id)}</span>`)}
