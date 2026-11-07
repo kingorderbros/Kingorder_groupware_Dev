@@ -2554,9 +2554,19 @@
                         <div class="bg-white rounded-lg shadow-sm overflow-hidden p-4 md:p-6">
                             <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4">
                                 <h3 class="font-semibold text-gray-800">페이지 접근 권한 설정</h3>
+                                <div class="flex flex-wrap gap-2 mt-2 sm:mt-0">
+                                <button type="button" onclick="openPermGroupModal()" class="bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 px-4 py-2 rounded text-sm transition-colors mt-2 sm:mt-0"><i class="fas fa-plus mr-1"></i>권한 그룹 추가</button>
                                 <button onclick="savePermissions()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded text-sm transition-colors mt-2 sm:mt-0">
                                     변경사항 저장
                                 </button>
+                                </div>
+                            </div>
+                            <div class="mb-4 p-3 rounded border border-gray-200 bg-gray-50">
+                                <div class="flex items-center justify-between gap-2 mb-2">
+                                    <p class="text-sm font-semibold text-gray-700">조직 본부</p>
+                                    <button type="button" onclick="openOrgDeptModal()" class="text-sm text-blue-600 hover:underline"><i class="fas fa-plus mr-1"></i>본부 추가</button>
+                                </div>
+                                <div id="perm-org-panel" class="flex flex-wrap gap-2"></div>
                             </div>
                             <div class="overflow-x-auto">
                                 <table class="w-full text-left border-collapse border border-gray-200">
@@ -11466,15 +11476,21 @@ const QUOTE_TEMPLATES = [
                 g.permissions = Array.from(have).filter(id => MENU_BY_ID[id]);
             });
         }
+        // 관리자 화면에서 만든 권한 그룹은 name · custom 과 함께 저장하고, 지운 그룹은 removed 로 기억합니다 (2026-11-07)
+        const PERM_BASE_GROUP_IDS = ['admin', 'management', 'sales', 'ops', 'payment', 'management-hq', 'it'];
+        let permGroupsRemoved = [];
         function savePermissionGroups() {
-            saveJsonStore(PERM_STORAGE_KEY, { version: 2, groups: permissionGroups.map(g => ({ id: g.id, permissions: g.permissions })) });
+            saveJsonStore(PERM_STORAGE_KEY, { version: 2, removed: permGroupsRemoved, groups: permissionGroups.map(g => (g.custom ? { id: g.id, name: g.name, custom: true, permissions: g.permissions } : { id: g.id, permissions: g.permissions })) });
         }
         (function loadPermissionGroups() {
             inheritChildPermissions();                        // 코드에 기재된 기본값을 먼저 펼치고
             const saved = loadJsonStore(PERM_STORAGE_KEY, null);   // 저장된 설정이 있으면 그것으로 덮습니다
             if (!saved || saved.version !== 2 || !Array.isArray(saved.groups)) return;
+            permGroupsRemoved = Array.isArray(saved.removed) ? saved.removed : [];
+            permissionGroups = permissionGroups.filter(g => permGroupsRemoved.indexOf(g.id) < 0);
             saved.groups.forEach(sg => {
-                const g = permissionGroups.find(x => x.id === sg.id);
+                let g = permissionGroups.find(x => x.id === sg.id);
+                if (!g && sg.custom && sg.name) { g = { id: sg.id, name: sg.name, custom: true, permissions: [] }; permissionGroups.push(g); }
                 if (!g || g.id === 'admin') return;
                 g.permissions = (sg.permissions || []).filter(id => MENU_BY_ID[id]);
             });
@@ -14746,7 +14762,8 @@ const QUOTE_TEMPLATES = [
                     <th class="p-2 font-medium text-center border-r border-gray-200 whitespace-nowrap">
                         <div>${escapeHtml(g.name)}</div>
                         ${g.id === 'admin' ? '<div class="text-[10px] font-normal text-gray-400 mt-0.5">전체 고정</div>'
-                            : `<button type="button" onclick="togglePermColumn(${jsArg(g.id)})" class="text-[10px] font-normal text-blue-600 hover:underline mt-0.5">전체 선택/해제</button>`}
+                            : `<button type="button" onclick="togglePermColumn(${jsArg(g.id)})" class="text-[10px] font-normal text-blue-600 hover:underline mt-0.5">전체 선택/해제</button>
+                               ${PERM_BASE_GROUP_IDS.indexOf(g.id) < 0 ? `<button type="button" onclick="deletePermGroup(${jsArg(g.id)})" class="block mx-auto text-[10px] font-normal text-red-600 hover:underline mt-0.5">그룹 삭제</button>` : ''}`}
                     </th>`).join('');
 
             let html = '';
@@ -14776,6 +14793,90 @@ const QUOTE_TEMPLATES = [
                 html += `</tr>`;
             });
             tbody.innerHTML = html;
+            renderPermOrgPanel();
+        }
+
+        // ---------- 권한 그룹 · 조직 본부 추가 / 삭제 (2026-11-07) ----------
+        function renderPermOrgPanel() {
+            const el = document.getElementById('perm-org-panel');
+            if (!el) return;
+            const people = (id) => orgMembers().filter(u => u.dept === id).length;
+            const list = orgDepts.filter(d => !d.external).slice().sort((a, b) => (a.order || 99) - (b.order || 99));
+            el.innerHTML = list.map(d => `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded border border-gray-200 bg-white text-sm text-gray-700">
+                    ${escapeHtml(d.name)} <span class="text-xs text-gray-400">${people(d.id)}명${d.hideInOrg ? ' · 조직도 미표시' : ''}</span>
+                    <button type="button" onclick="openOrgDeptModal(${jsArg(d.id)})" class="text-xs text-blue-600 hover:underline">수정</button>
+                    ${d.system ? '' : `<button type="button" onclick="deleteOrgDept(${jsArg(d.id)})" class="text-xs text-red-600 hover:underline">삭제</button>`}
+                </span>`).join('');
+        }
+        function openPermGroupModal() {
+            let m = document.getElementById('perm-group-modal');
+            if (!m) {
+                m = document.createElement('div');
+                m.id = 'perm-group-modal';
+                m.className = 'hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4';
+                document.body.appendChild(m);
+            }
+            const cls = 'w-full p-2 mb-3 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500';
+            m.innerHTML = `<form onsubmit="submitPermGroup(event)" class="bg-white w-full max-w-md rounded-lg shadow-xl p-5">
+                    <h3 class="text-lg font-bold text-gray-800 mb-4">권한 그룹 추가</h3>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">그룹 이름</label>
+                    <input type="text" id="perm-group-name" required maxlength="30" class="${cls}" placeholder="예: JSJ 그룹" />
+                    <label class="block text-sm font-medium text-gray-700 mb-1">권한 가져오기</label>
+                    <select id="perm-group-copy" class="${cls}">
+                        <option value="">가져오지 않음 (권한 없이 시작)</option>
+                        ${permissionGroups.filter(g => g.id !== 'admin').map(g => `<option value="${escapeHtml(g.id)}">${escapeHtml(g.name)}와 같게</option>`).join('')}
+                    </select>
+                    <label class="flex items-center gap-2 text-sm text-gray-700 mb-2"><input type="checkbox" id="perm-group-dept" onchange="document.getElementById('perm-group-dept-box').classList.toggle('hidden', !this.checked)" /> 조직에 본부도 함께 추가</label>
+                    <div id="perm-group-dept-box" class="hidden mb-3 pl-6">
+                        <label class="block text-xs text-gray-600 mb-1">본부 이름</label>
+                        <input type="text" id="perm-group-dept-name" maxlength="30" class="${cls}" placeholder="예: JSJ" />
+                        <label class="flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" id="perm-group-dept-show" /> 조직도에 표시</label>
+                    </div>
+                    <div class="flex justify-end gap-2 mt-2">
+                        <button type="button" onclick="document.getElementById('perm-group-modal').classList.add('hidden')" class="px-4 py-2 bg-gray-200 text-gray-700 rounded text-sm">취소</button>
+                        <button type="submit" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded text-sm font-semibold">추가</button>
+                    </div>
+                </form>`;
+            m.classList.remove('hidden');
+            document.getElementById('perm-group-name').focus();
+        }
+        function submitPermGroup(event) {
+            event.preventDefault();
+            const v = id => (document.getElementById(id).value || '').trim();
+            const withDept = document.getElementById('perm-group-dept').checked;
+            const r = createPermGroup(v('perm-group-name'), v('perm-group-copy'), withDept ? { name: v('perm-group-dept-name'), show: document.getElementById('perm-group-dept-show').checked } : null);
+            if (r.error) { alert(r.error); return; }
+            document.getElementById('perm-group-modal').classList.add('hidden');
+            renderPermissions();
+            alert(`'${r.group.name}' 그룹을 추가했습니다.${r.dept ? `\n'${r.dept.name}' 본부도 추가했습니다.` : ''}\n사용자 관리에서 직원에게 이 그룹을 지정할 수 있습니다.`);
+        }
+        function createPermGroup(name, copyFrom, dept) {
+            if (!isSystemAdmin()) return { error: '권한 그룹은 관리자만 추가할 수 있습니다.' };
+            if (!name) return { error: '그룹 이름을 입력해 주세요.' };
+            if (permissionGroups.some(g => g.name === name)) return { error: '같은 이름의 권한 그룹이 이미 있습니다.' };
+            if (dept && !dept.name) return { error: '본부 이름을 입력해 주세요.' };
+            if (dept && orgDepts.some(d => d.name === dept.name)) return { error: '같은 이름의 본부가 이미 있습니다.' };
+            let n = 1;
+            while (permissionGroups.some(g => g.id === 'pg' + n) || permGroupsRemoved.indexOf('pg' + n) > -1) n++;
+            const src = permissionGroups.find(g => g.id === copyFrom);
+            const group = { id: 'pg' + n, name, custom: true, permissions: src ? src.permissions.slice() : [] };
+            permissionGroups.push(group);
+            savePermissionGroups();
+            const newDept = dept ? orgCreateDept(dept.name, !dept.show) : null;
+            if (newDept) { saveOrgDepts(); syncOrgAll(); }
+            return { group, dept: newDept };
+        }
+        function deletePermGroup(id) {
+            if (!isSystemAdmin()) { alert('권한 그룹은 관리자만 삭제할 수 있습니다.'); return; }
+            const g = permissionGroups.find(x => x.id === id);
+            if (!g || PERM_BASE_GROUP_IDS.indexOf(id) > -1) return;
+            const users = localUsers.filter(u => !isResigned(u) && userGroupIds(u).includes(id));
+            if (users.length) { alert(`'${g.name}' 그룹을 쓰는 직원이 ${users.length}명 있습니다 (${users.map(u => u.name).join(', ')}).\n사용자 관리에서 다른 그룹으로 바꾼 뒤 삭제해 주세요.`); return; }
+            if (!confirm(`'${g.name}' 권한 그룹을 삭제하시겠습니까?`)) return;
+            permissionGroups = permissionGroups.filter(x => x.id !== id);
+            if (permGroupsRemoved.indexOf(id) < 0) permGroupsRemoved.push(id);
+            savePermissionGroups();
+            renderPermissions();
         }
 
         // 체크박스 하나를 찾습니다
@@ -19703,7 +19804,7 @@ const QUOTE_TEMPLATES = [
 
         // 초대 가능한 사람: 등록된 사용자 중 본인(주최자) 제외
         function inviteCandidates() {
-            return pickableUsers().filter(u => u.name !== currentUserName);
+            return pickableUsers().filter(u => u.name !== currentUserName && ORG_HIDDEN_DEPTS.indexOf(u.dept) < 0);   // 관리자 계정 · 사외 계정은 초대 대상이 아닙니다 (2026-11-07)
         }
 
         // ---- 계층형 고르기 (UAT 2026-10-08): 회사 전체 › 본부 › 팀 › 팀원 ----
@@ -19766,7 +19867,7 @@ const QUOTE_TEMPLATES = [
             const k = encodeURIComponent(key);
             const open = attendeeTreeOpen.has(key);
             const caret = o.noCaret ? '<span class="w-4"></span>'
-                : `<button type="button" onclick="toggleAttendeeTreeOpen(${jsArg(k)})" class="w-4 text-gray-400 hover:text-gray-700" title="${open ? '접기' : '펼치기'}"><i class="fas fa-chevron-${open ? 'down' : 'right'} text-[10px]"></i></button>`;
+                : `<button type="button" onclick="toggleAttendeeTreeOpen(${jsArg(k)})" class="w-5 h-5 shrink-0 rounded border border-gray-300 bg-white text-gray-600 hover:bg-gray-100 text-sm font-bold leading-none" title="${open ? '접기' : '펼치기'}" aria-label="${open ? '접기' : '펼치기'}">${open ? '−' : '+'}</button>`;
             return `<div class="flex items-center gap-2 ${o.pad || 'px-2'} pr-2 py-1.5 text-sm ${o.bg || 'bg-gray-50/60'}">
                     ${caret}
                     <label class="flex items-center gap-2 flex-1 min-w-0 cursor-pointer">
@@ -19778,14 +19879,15 @@ const QUOTE_TEMPLATES = [
         }
         function attendeeTreeHtml() {
             const tree = attendeeTree();
+            // 처음에는 본부만 보이고, [+] 를 누르면 그 본부의 팀과 팀원이 한 번에 펼쳐집니다 (2026-11-07)
             const rows = [attendeeGroupRow('all', '회사 전체', attendeeGroupMembers('all'), { noCaret: true, icon: 'fa-building', bg: 'bg-indigo-50/70' })];
             tree.forEach(d => {
                 rows.push(attendeeGroupRow(d.key, d.g.name, d.g.members, { icon: 'fa-sitemap' }));
                 if (!attendeeTreeOpen.has(d.key)) return;
                 d.g.heads.forEach(u => rows.push(attendeePersonRow(u, 1)));
                 d.teams.forEach(t => {
-                    rows.push(attendeeGroupRow(t.key, t.name, t.members, { pad: 'pl-7', bg: 'bg-white', icon: 'fa-users' }));
-                    if (attendeeTreeOpen.has(t.key)) t.members.forEach(u => rows.push(attendeePersonRow(u, 2)));
+                    rows.push(attendeeGroupRow(t.key, t.name, t.members, { pad: 'pl-7', bg: 'bg-white', icon: 'fa-users', noCaret: true }));
+                    t.members.forEach(u => rows.push(attendeePersonRow(u, 2)));
                 });
                 // 팀을 쓰는 본부에서 팀이 없는 사람 · 팀을 안 쓰는 본부의 구성원
                 (d.g.hasTeams ? d.g.direct : d.g.rest).forEach(u => rows.push(attendeePersonRow(u, 1)));
@@ -42879,11 +42981,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                     d.name = name;
                     if (hide) d.hideInOrg = true; else delete d.hideInOrg;
                 } else {
-                    let n = 1;
-                    while (orgFindDept('dept' + n)) n++;
-                    const nd = { id: 'dept' + n, name: name, order: Math.max(0, ...orgDepts.filter(x => !x.external).map(x => x.order || 0)) + 1, style: orgNextStyleKey() };
-                    if (hide) nd.hideInOrg = true;
-                    orgDepts.push(nd);
+                    orgCreateDept(name, hide);
                 }
                 if (hide && orgFilter.dept === (orgUnitEdit.id || '')) orgFilter.dept = '';
                 saveOrgDepts();
@@ -42908,6 +43006,15 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             }
             closeOrgUnitModal();
             syncOrgAll();
+        }
+
+        function orgCreateDept(name, hide) {
+            let n = 1;
+            while (orgFindDept('dept' + n)) n++;
+            const nd = { id: 'dept' + n, name: name, order: Math.max(0, ...orgDepts.filter(x => !x.external).map(x => x.order || 0)) + 1, style: orgNextStyleKey() };
+            if (hide) nd.hideInOrg = true;
+            orgDepts.push(nd);
+            return nd;
         }
 
         function deleteOrgDept(id) {
@@ -51387,7 +51494,8 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
         function ptreeOffChip(u) { return isResigned(u) ? orgResignedChip(u) : orgLeaveChip(u); }
         function ptreeRowsHtml(users, personHtml, opts) {
             const o = opts || {};
-            const groups = orgGrouped(users);
+            // 관리자 계정 · 사외 계정은 조직원 트리에 넣지 않습니다 (2026-11-07)
+            const groups = orgGrouped(users.filter(u => ORG_HIDDEN_DEPTS.indexOf(u.dept) < 0));
             const node = (label, icon, inner, open, count, extraCls) => `
                 <div data-ptree-node class="${extraCls || ''}">
                     <div class="ptree-hd flex items-center gap-1.5 px-2 py-1.5 bg-gray-50/70 border-b border-gray-100">
