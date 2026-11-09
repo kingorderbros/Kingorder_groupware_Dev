@@ -27076,8 +27076,8 @@ const QUOTE_TEMPLATES = [
                 if (f.site && inboundSiteOf(r) !== f.site) return false;
                 // 상담 담당자 (2026-11-09) — 'none' 은 담당자 미지정
                 if (f.owner && canSeeInboundKob()) {
-                    const o = String((r.kob || {}).owner || '').trim();
-                    if (f.owner === 'none' ? !!o : o !== f.owner) return false;
+                    const who = inboundCounselors(r).map(inboundNameKey);
+                    if (f.owner === 'none' ? who.length > 0 : who.indexOf(inboundNameKey(f.owner)) < 0) return false;
                 }
                 if (f.dept && canSeeInboundKob() && (f.dept === 'none' ? !!(r.kob || {}).dept : (r.kob || {}).dept !== f.dept)) return false;
                 if (f.from && (r.inDate || '') < f.from) return false;
@@ -27092,7 +27092,7 @@ const QUOTE_TEMPLATES = [
                 }
                 if (q) {
                     const hay = [r.company, r.name, r.phone, r.email, r.bizNo, r.requestNote,
-                                 canSeeInboundKob() ? (r.kob || {}).salesStatus : '', canSeeInboundKob() ? (r.kob || {}).owner : ''].join(' ');
+                                 canSeeInboundKob() ? (r.kob || {}).salesStatus : '', canSeeInboundKob() ? inboundCounselors(r).join(' ') : ''].join(' ');
                     if (!norm(hay).includes(norm(q))) return false;
                 }
                 return true;
@@ -27101,14 +27101,19 @@ const QUOTE_TEMPLATES = [
 
         // 상담 담당자 선택지 — 인입 건에 담당자로 적힌 이름 (건수 함께 · 2026-11-09)
         function inboundOwnerOptionsHtml(list) {
-            const cnt = {};
+            // 담당자 + 추가 컨택 상담자. 띄어쓰기만 다른 이름은 하나로 셉니다 (건수는 그 사람이 상담한 인입 건 수)
+            const cnt = {}, label = {};
             let none = 0;
-            (list || []).forEach(r => { const o = String((r.kob || {}).owner || '').trim(); if (o) cnt[o] = (cnt[o] || 0) + 1; else none++; });
+            (list || []).forEach(r => {
+                const keys = Array.from(new Set(inboundCounselors(r).map(n => { const key = inboundNameKey(n); if (!label[key]) label[key] = n; return key; })));
+                if (!keys.length) none++;
+                keys.forEach(key => { cnt[key] = (cnt[key] || 0) + 1; });
+            });
             const cur = inboundFilter.owner || '';
-            const opt = (v, label) => `<option value="${escapeHtml(v)}" ${cur === v ? 'selected' : ''}>${escapeHtml(label)}</option>`;
-            const names = Object.keys(cnt).sort((a, b) => a.localeCompare(b, 'ko'));
-            if (cur && cur !== 'none' && !cnt[cur]) names.unshift(cur);
-            return opt('', '전체') + names.map(n => opt(n, `${n} (${cnt[n] || 0})`)).join('') + opt('none', `담당자 미지정 (${none})`);
+            const opt = (v, text) => `<option value="${escapeHtml(v)}" ${cur === v ? 'selected' : ''}>${escapeHtml(text)}</option>`;
+            const keys = Object.keys(cnt).sort((a, b) => label[a].localeCompare(label[b], 'ko'));
+            if (cur && cur !== 'none' && !cnt[inboundNameKey(cur)]) { label[inboundNameKey(cur)] = cur; keys.unshift(inboundNameKey(cur)); }
+            return opt('', '전체') + keys.map(k => opt(label[k], `${label[k]} (${cnt[k] || 0})`)).join('') + opt('none', `상담자 없음 (${none})`);
         }
         function setInboundFilter(field, value) {
             inboundFilter[field] = value;
@@ -27318,6 +27323,21 @@ const QUOTE_TEMPLATES = [
         }
 
         function setInboundField(field, value) { if (inboundDraft) inboundDraft[field] = value; }
+        // 담당자 · 상담자는 직원 목록에서 고릅니다 (2026-11-09 — 직접 입력하면 같은 사람이 다르게 적혀 조회가 갈렸음).
+        // 예전에 적어 둔 이름이 목록에 없으면 그 이름도 그대로 남겨 둡니다.
+        function inboundStaffOptionsHtml(dept, cur) {
+            const names = dept ? inboundDeptUsers(dept) : pickableUsers().map(u => u.name).filter(Boolean);
+            const c = String(cur || '').trim();
+            const list = c && names.indexOf(c) < 0 ? [c].concat(names) : names;
+            return `<option value="">선택하세요</option>` + list.map(n => `<option value="${escapeHtml(n)}" ${n === c ? 'selected' : ''}>${escapeHtml(n)}</option>`).join('');
+        }
+        // 이름 비교는 띄어쓰기를 빼고 합니다
+        const inboundNameKey = v => String(v || '').replace(/\s+/g, '');
+        // 이 건을 상담한 사람 — 담당자 + 추가 컨택 상담자
+        function inboundCounselors(r) {
+            const k = r.kob || {};
+            return [k.owner].concat((k.extras || []).map(e => e.by)).map(n => String(n || '').trim()).filter(Boolean);
+        }
         function setInboundKobField(field, value) { if (inboundDraft) inboundKob(inboundDraft)[field] = value; }
         function toggleInboundMulti(field, value, on) {
             if (!inboundDraft) return;
@@ -27336,7 +27356,8 @@ const QUOTE_TEMPLATES = [
         function addInboundExtra() {
             if (!inboundDraft) return;
             const ex = inboundKob(inboundDraft).extras;
-            ex.push({ at: ymd(new Date()), note: '', memo: '' });
+            const me = pickableUsers().some(u => u.name === currentUserName) ? currentUserName : '';
+            ex.push({ at: ymd(new Date()), by: me, note: '', memo: '' });
             renderInboundExtras();
         }
         function removeInboundExtra(i) {
@@ -27365,16 +27386,20 @@ const QUOTE_TEMPLATES = [
                         <span class="text-xs font-semibold text-gray-500">추가 컨택 ${i + 1}회차</span>
                         <button type="button" onclick="removeInboundExtra(${i})" class="text-red-400 hover:text-red-600 text-xs"><i class="fas fa-times-circle mr-1"></i>삭제</button>
                     </div>
-                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    <div class="grid grid-cols-1 sm:grid-cols-4 gap-2">
                         <div>
                             <label class="block text-[11px] text-gray-500 mb-1">컨택 날짜</label>
                             <input type="date" value="${escapeHtml(e.at || '')}" onchange="setInboundExtra(${i}, 'at', this.value)" class="${cls}" />
+                        </div>
+                        <div>
+                            <label class="block text-[11px] text-gray-500 mb-1">상담자</label>
+                            <select onchange="setInboundExtra(${i}, 'by', this.value)" class="${cls}">${inboundStaffOptionsHtml(inboundKob(inboundDraft).dept, e.by)}</select>
                         </div>
                         <div class="sm:col-span-2">
                             <label class="block text-[11px] text-gray-500 mb-1">상담 내용</label>
                             <input type="text" value="${escapeHtml(e.note || '')}" oninput="setInboundExtra(${i}, 'note', this.value)" placeholder="통화·미팅 내용" class="${cls}" />
                         </div>
-                        <div class="sm:col-span-3">
+                        <div class="sm:col-span-4">
                             <label class="block text-[11px] text-gray-500 mb-1">비고</label>
                             <input type="text" value="${escapeHtml(e.memo || '')}" oninput="setInboundExtra(${i}, 'memo', this.value)" placeholder="다음 조치, 참고사항" class="${cls}" />
                         </div>
@@ -27450,8 +27475,7 @@ const QUOTE_TEMPLATES = [
                         </div>
                         <div>
                             <label class="block text-xs font-medium text-gray-600 mb-1">담당자</label>
-                            <input type="text" id="inb-kob-owner" list="inb-owner-list" value="${escapeHtml(k.owner || '')}" oninput="setInboundKobField('owner', this.value)" placeholder="이름 선택 또는 입력" class="${cls}" />
-                            <datalist id="inb-owner-list">${(k.dept ? inboundDeptUsers(k.dept) : pickableUsers().map(u => u.name)).map(n => `<option value="${escapeHtml(n)}"></option>`).join('')}</datalist>
+                            <select id="inb-kob-owner" onchange="setInboundKobField('owner', this.value)" class="${cls}">${inboundStaffOptionsHtml(k.dept, k.owner)}</select>
                         </div>
                         <div class="sm:col-span-2">
                             <label class="block text-xs font-medium text-gray-600 mb-1">고객 영업 현황</label>
@@ -27556,7 +27580,7 @@ const QUOTE_TEMPLATES = [
                 cols.map(c => c.label).concat(canSeeInboundKob() ? ['추가 컨택 내역'] : []),
                 ...list.map(r => cols.map(c => c.get(r) || '').concat(
                     canSeeInboundKob()
-                        ? [((r.kob || {}).extras || []).map((e, i) => `${i + 1}회차 ${e.at} ${e.note || ''}${e.memo ? ' (' + e.memo + ')' : ''}`).join('\n')]
+                        ? [((r.kob || {}).extras || []).map((e, i) => `${i + 1}회차 ${e.at}${e.by ? ' [' + e.by + ']' : ''} ${e.note || ''}${e.memo ? ' (' + e.memo + ')' : ''}`).join('\n')]
                         : []))
             ];
             downloadBlobAs(buildXlsxBlob(rows, 'INBOUND'), `인바운드_인입현황_${today.replace(/-/g, '')}.xlsx`);
