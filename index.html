@@ -27003,7 +27003,7 @@ const QUOTE_TEMPLATES = [
 
         let inboundRecords = [];
         let inboundSeq = 13;
-        let inboundFilter = { q: '', route: '', service: '', result: '', contact: '', from: '', to: '', quick: '', channel: '', site: '', dept: '' };
+        let inboundFilter = { q: '', route: '', service: '', result: '', contact: '', from: '', to: '', quick: '', channel: '', site: '', dept: '', owner: '' };
 
         // ---------- 인입 자료를 두 화면이 나눠 씁니다 (2026-09-07) ----------
         // 외주업체는 **별도 페이지(?mode=inbound)** 로 들어와 인입만 넣습니다.
@@ -27074,6 +27074,11 @@ const QUOTE_TEMPLATES = [
                 if (f.quick === 'stop' && (!inboundStopped(r) || (r.kob || {}).result)) return false;
                 if (f.channel && inboundChannelOf(r) !== f.channel) return false;
                 if (f.site && inboundSiteOf(r) !== f.site) return false;
+                // 상담 담당자 (2026-11-09) — 'none' 은 담당자 미지정
+                if (f.owner && canSeeInboundKob()) {
+                    const o = String((r.kob || {}).owner || '').trim();
+                    if (f.owner === 'none' ? !!o : o !== f.owner) return false;
+                }
                 if (f.dept && canSeeInboundKob() && (f.dept === 'none' ? !!(r.kob || {}).dept : (r.kob || {}).dept !== f.dept)) return false;
                 if (f.from && (r.inDate || '') < f.from) return false;
                 if (f.to && (r.inDate || '') > f.to) return false;
@@ -27087,19 +27092,30 @@ const QUOTE_TEMPLATES = [
                 }
                 if (q) {
                     const hay = [r.company, r.name, r.phone, r.email, r.bizNo, r.requestNote,
-                                 canSeeInboundKob() ? (r.kob || {}).salesStatus : ''].join(' ');
+                                 canSeeInboundKob() ? (r.kob || {}).salesStatus : '', canSeeInboundKob() ? (r.kob || {}).owner : ''].join(' ');
                     if (!norm(hay).includes(norm(q))) return false;
                 }
                 return true;
             }).sort((a, b) => (b.inDate || '').localeCompare(a.inDate || '') || (b.inAt || '').localeCompare(a.inAt || '') || (b.id || '').localeCompare(a.id || ''));
         }
 
+        // 상담 담당자 선택지 — 인입 건에 담당자로 적힌 이름 (건수 함께 · 2026-11-09)
+        function inboundOwnerOptionsHtml(list) {
+            const cnt = {};
+            let none = 0;
+            (list || []).forEach(r => { const o = String((r.kob || {}).owner || '').trim(); if (o) cnt[o] = (cnt[o] || 0) + 1; else none++; });
+            const cur = inboundFilter.owner || '';
+            const opt = (v, label) => `<option value="${escapeHtml(v)}" ${cur === v ? 'selected' : ''}>${escapeHtml(label)}</option>`;
+            const names = Object.keys(cnt).sort((a, b) => a.localeCompare(b, 'ko'));
+            if (cur && cur !== 'none' && !cnt[cur]) names.unshift(cur);
+            return opt('', '전체') + names.map(n => opt(n, `${n} (${cnt[n] || 0})`)).join('') + opt('none', `담당자 미지정 (${none})`);
+        }
         function setInboundFilter(field, value) {
             inboundFilter[field] = value;
             rerenderKeepFocus(renderInboundList);
         }
         function resetInboundFilter() {
-            inboundFilter = { q: '', route: '', service: '', result: '', contact: '', from: '', to: '', quick: '', channel: '', site: '', dept: '' };
+            inboundFilter = { q: '', route: '', service: '', result: '', contact: '', from: '', to: '', quick: '', channel: '', site: '', dept: '', owner: '' };
             renderInboundCenter();
         }
 
@@ -27182,6 +27198,8 @@ const QUOTE_TEMPLATES = [
                             <select onchange="setInboundFilter('site', this.value)" class="${selCls}"><option value="">전체</option>${INBOUND_SITES.map(s => `<option value="${escapeHtml(s)}" ${inboundFilter.site === s ? 'selected' : ''}>${escapeHtml(s)}</option>`).join('')}</select></div>
                         ${kob ? `<div><label class="block text-xs font-medium text-gray-600 mb-1">본부</label>
                             <select onchange="setInboundFilter('dept', this.value)" class="${selCls}">${[['', '전체'], ['영업', '영업본부'], ['운영', '운영본부'], ['none', '미배정']].map(([v, n]) => `<option value="${v}" ${inboundFilter.dept === v ? 'selected' : ''}>${n}</option>`).join('')}</select></div>` : ''}
+                        ${kob ? `<div><label class="block text-xs font-medium text-gray-600 mb-1">상담 담당자</label>
+                            <select onchange="setInboundFilter('owner', this.value)" class="${selCls}">${inboundOwnerOptionsHtml(all)}</select></div>` : ''}
                         <button type="button" onclick="resetInboundFilter()" class="px-3 py-2 text-sm rounded bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors">초기화</button>
                     </div>
                     ${kob ? `
