@@ -2404,7 +2404,7 @@
                             <p class="text-sm font-medium text-gray-500"><i class="fas fa-handshake mr-1 text-green-400"></i>거래 고객</p>
                             <h3 id="sdash-trade-customers" class="text-2xl font-bold text-gray-800 mt-2">0개</h3>
                         </div>
-                        <div onclick="navigate('sales-consulting', document.getElementById('nav-sales-work-center'))" class="bg-white p-5 rounded-lg shadow-sm border-t-4 border-red-500 cursor-pointer hover:shadow-md transition-shadow">
+                        <div onclick="setCaseFilter('pending'); navigate('sales-consulting', document.getElementById('nav-sales-work-center'))" class="bg-white p-5 rounded-lg shadow-sm border-t-4 border-red-500 cursor-pointer hover:shadow-md transition-shadow">
                             <p class="text-sm font-medium text-gray-500"><i class="fas fa-comments mr-1 text-red-400"></i>미처리 상담</p>
                             <h3 id="sdash-open-cases" class="text-2xl font-bold text-gray-800 mt-2">0건</h3>
                         </div>
@@ -37889,8 +37889,8 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                     : '<span class="px-2 py-1 text-xs rounded-full font-medium bg-yellow-100 text-yellow-700">미완료</span>';
                 const cell = (v) => v ? escapeHtml(v) : '<span class="text-gray-300">-</span>';
                 return `
-                    <tr class="border-b border-gray-100 hover:bg-gray-50">
-                        <td class="p-4 font-mono text-gray-500 whitespace-nowrap">${c.id}</td>
+                    <tr onclick="openCaseDetail(${jsArg(c.id)})" class="border-b border-gray-100 hover:bg-blue-50 cursor-pointer" title="눌러서 상세 보기">
+                        <td class="p-4 font-mono text-gray-500 whitespace-nowrap">${escapeHtml(c.id)}</td>
                         <td class="p-4 text-gray-600 whitespace-nowrap">${cell(c.receivedDate)}</td>
                         <td class="p-4">${cell(c.receiver)}</td>
                         <td class="p-4 text-gray-600">${cell(c.origin)}</td>
@@ -37901,13 +37901,64 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                         <td class="p-4">${cell(c.responder)}</td>
                         <td class="p-4 text-center">${completedBadge}</td>
                         <td class="p-4 text-center whitespace-nowrap">
-                            <button onclick="openCaseModal(${jsArg(c.id)})" class="text-blue-500 hover:text-blue-700 mx-1" title="상세/수정"><i class="fas fa-edit"></i></button>
-                            <button onclick="deleteCase(${jsArg(c.id)})" class="text-red-500 hover:text-red-700 mx-1" title="삭제"><i class="fas fa-trash"></i></button>
+                            <button onclick="event.stopPropagation(); openCaseModal(${jsArg(c.id)})" class="text-blue-500 hover:text-blue-700 mx-1" title="수정"><i class="fas fa-edit"></i></button>
+                            <button onclick="event.stopPropagation(); deleteCase(${jsArg(c.id)})" class="text-red-500 hover:text-red-700 mx-1" title="삭제"><i class="fas fa-trash"></i></button>
                         </td>
                     </tr>
                 `;
             }).join('');
         }
+
+        // 상담 상세 보기 (2026-11-11) — 상담 목록 줄을 누르면 읽기 전용 상세 창, [수정] 으로 수정 창
+        function openCaseDetail(caseId) {
+            const c = cases.find(x => x.id === caseId);
+            if (!c) return;
+            let m = document.getElementById('case-detail-modal');
+            if (!m) {
+                m = document.createElement('div');
+                m.id = 'case-detail-modal';
+                m.className = 'fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4';
+                m.addEventListener('click', e => { if (e.target === m) closeCaseDetail(); });
+                document.body.appendChild(m);
+            }
+            const customer = customers.find(cu => cu.id === c.customerId);
+            const v = x => (x !== undefined && x !== null && String(x).trim()) ? escapeHtml(String(x)) : '<span class="text-gray-300">-</span>';
+            const item = (label, val) => `<div><p class="text-xs text-gray-500">${label}</p><p class="text-sm text-gray-800 mt-0.5 break-words">${val}</p></div>`;
+            const block = (label, val) => `<div class="pt-3 border-t border-gray-100"><p class="text-xs text-gray-500 mb-1">${label}</p><p class="text-sm text-gray-800 whitespace-pre-wrap break-words">${v(val)}</p></div>`;
+            const badge = c.completed
+                ? '<span class="px-2 py-0.5 text-xs rounded-full font-semibold bg-green-100 text-green-700">처리 완료</span>'
+                : '<span class="px-2 py-0.5 text-xs rounded-full font-semibold bg-yellow-100 text-yellow-700">미완료</span>';
+            m.innerHTML = `<div class="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col" role="dialog" aria-modal="true" aria-labelledby="case-detail-title">
+                <div class="flex items-start justify-between gap-3 p-5 border-b border-gray-100">
+                    <div class="min-w-0"><h3 id="case-detail-title" class="text-lg font-bold text-gray-800"><i class="fas fa-comments text-blue-500 mr-1"></i>상담 상세</h3>
+                    <p class="text-sm text-gray-500 mt-0.5">${escapeHtml(c.id)} · ${customer ? escapeHtml(customer.name) : '거래처 미지정'}</p></div>
+                    <div class="flex items-center gap-2 flex-none">${badge}<button type="button" onclick="closeCaseDetail()" class="text-gray-400 hover:text-gray-600 p-1" aria-label="닫기"><i class="fas fa-times"></i></button></div>
+                </div>
+                <div class="p-5 overflow-y-auto space-y-4">
+                    <div class="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                        <p class="text-sm font-semibold text-gray-700 mb-3"><i class="fas fa-inbox mr-1 text-gray-400"></i>상담 접수</p>
+                        <div class="grid grid-cols-2 md:grid-cols-3 gap-3">
+                            ${item('접수일', v(c.receivedDate))}${item('접수자', v(c.receiver))}${item('접수방식', v(c.origin))}
+                            ${item('거래처명', customer ? escapeHtml(customer.name) : '<span class="text-gray-300">미지정</span>')}${item('문의 유형', v(c.type))}${item('조치회신 방식', v(c.replyMethod))}
+                        </div>
+                        <div class="mt-3">${block('문의 내용', c.description)}</div>
+                    </div>
+                    <div class="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                        <p class="text-sm font-semibold text-gray-700 mb-3"><i class="fas fa-reply mr-1 text-gray-400"></i>응답 · 조치</p>
+                        <div class="grid grid-cols-2 md:grid-cols-3 gap-3">
+                            ${item('문의 응답자', v(c.responder))}${item('응답일시', v(c.responseDate))}${item('처리완료여부', c.completed ? '완료' : '미완료')}
+                        </div>
+                        <div class="mt-3 space-y-3">${block('응답 내용', c.responseContent)}${block('추가 조치', c.extraAction)}${block('의사결정 요청', c.decisionRequest)}</div>
+                    </div>
+                </div>
+                <div class="flex justify-end gap-2 p-4 border-t border-gray-100">
+                    <button type="button" onclick="closeCaseDetail(); openCaseModal(${jsArg(c.id)})" class="px-4 py-2 rounded border border-blue-300 text-blue-700 hover:bg-blue-50 text-sm"><i class="fas fa-pen mr-1"></i>수정</button>
+                    <button type="button" onclick="closeCaseDetail()" class="px-4 py-2 rounded bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm">닫기</button>
+                </div></div>`;
+            m.classList.remove('hidden');
+        }
+        function closeCaseDetail() { const m = document.getElementById('case-detail-modal'); if (m) m.classList.add('hidden'); }
+        document.addEventListener('keydown', e => { if (e.key === 'Escape') { const m = document.getElementById('case-detail-modal'); if (m && !m.classList.contains('hidden')) closeCaseDetail(); } });
 
         function openCaseModal(caseId = null) {
             const modal = document.getElementById('case-modal');
