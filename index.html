@@ -2082,6 +2082,11 @@
                         <div><i class="fas fa-file-arrow-up w-4 mr-1 text-amber-400"></i> 보완서류 제출함</div>
                         <span id="nav-sales-doc-supplement-badge" class="hidden ml-auto bg-amber-500 text-white text-xs font-bold rounded-full px-2 leading-5"></span>
                     </a>
+                    <!-- 전체 업무이력 (2026-11-11) — 운영본부와 같은 방식. 화면은 영업업무센터의 '전체 업무이력', 권한 sales-wc-allworks -->
+                    <a href="#" onclick="navigate('sales-work-center', this)" id="nav-sales-allworks" class="nav-item flex items-center justify-between px-3 py-2 pl-10 rounded-md hover:bg-slate-800/70 transition-colors text-sm text-gray-300 hidden">
+                        <div><i class="fas fa-list-ul w-4 mr-1 text-sky-400"></i> 전체 업무이력</div>
+                        <span id="nav-sales-allworks-badge" class="hidden ml-auto bg-amber-500 text-white text-xs font-bold rounded-full px-2 leading-5"></span>
+                    </a>
                 </div>
                 <a href="#" onclick="toggleSubmenu('submenu-ops'); navigate('ops', this)" id="nav-ops" class="nav-item flex justify-between items-center px-3 py-2 rounded-md hover:bg-slate-800/70 transition-colors">
                     <div><i class="fas fa-cogs w-5 mr-2 text-green-400"></i><span id="nav-ops-label"> 운영본부 </span></div>
@@ -11234,7 +11239,8 @@ const QUOTE_TEMPLATES = [
                                     { id: 'sales-wc-contract', name: '계약 및 클로징 관리' },
                                     { id: 'sales-wc-transfer', name: '이관 업무' },
                                     { id: 'sales-wc-meeting', name: '회의록' },
-                                    { id: 'sales-wc-issue', name: '이슈보고서' }
+                                    { id: 'sales-wc-issue', name: '이슈보고서' },
+                                    { id: 'sales-wc-allworks', name: '전체 업무이력' }
                                 ]
                             },
                             {
@@ -11506,7 +11512,8 @@ const QUOTE_TEMPLATES = [
                 { id: 'sales-wc-meeting', parent: 'sales-work-center' },
                 { id: 'sales-wc-issue',   parent: 'sales-work-center' },
                 { id: 'ops-wc-simple',    parent: 'ops-work-center' },     // 기타&단순문의 (보완사항 2026-11-06)
-                { id: 'ops-wc-allworks',  parent: 'ops-work-center' }      // 전체 업무이력 탭
+                { id: 'ops-wc-allworks',  parent: 'ops-work-center' },     // 전체 업무이력 탭
+                { id: 'sales-wc-allworks', parent: 'sales-work-center' }   // 영업 전체 업무이력 (2026-11-11)
             ];
             permissionGroups.forEach(g => {
                 if (g.id === 'admin' || g.external) return;
@@ -11709,6 +11716,7 @@ const QUOTE_TEMPLATES = [
             document.getElementById('nav-sales-supply').classList.toggle('hidden', !seesSales || !canUseScreen('sales-supply'));
             // 결제업무센터: 결제본부 하위 메뉴 + 영업본부 하위 '보완서류 제출함' 두 입구가 같은 권한을 씁니다.
             document.getElementById('nav-sales-doc-supplement').classList.toggle('hidden', !seesSales || !canUseScreen('payment-work-center'));
+            document.getElementById('nav-sales-allworks').classList.toggle('hidden', !seesSales || !canUseScreen('sales-work-center') || !canSeePage('sales-wc-allworks'));
 
             const seesOps = isAllowed('ops');
             document.getElementById('nav-ops').classList.toggle('hidden', !seesOps);
@@ -13355,7 +13363,7 @@ const QUOTE_TEMPLATES = [
         // (예: 관리업무센터 화면에 법인카드만 보이는 사람에게는 '법인카드 사용내역' 으로)
         function pageTitleFor(sectionId) {
             if (sectionId === 'payment-work-center' && payWcViaSalesMenu) return PAY_WC_SALES_ENTRY.name;
-            if (sectionId === 'ops-work-center' && wcOpsAllWorksOn('ops')) return '전체 업무이력';   // 왼쪽 메뉴 '전체 업무이력' (2026-11-10)
+            if ((sectionId === 'ops-work-center' && wcAllWorksOn('ops')) || (sectionId === 'sales-work-center' && wcAllWorksOn('sales'))) return '전체 업무이력';   // 왼쪽 메뉴 '전체 업무이력' (2026-11-10 · 영업 11-11)
             const cm = crossDeptMenuFor(sectionId);
             if (cm) return crossDeptMenuName(cm);
             return pageTitles[sectionId] || '킹오더브라더스 그룹웨어';
@@ -13451,14 +13459,16 @@ const QUOTE_TEMPLATES = [
 
             // 운영업무센터는 두 메뉴(운영업무센터 · 전체 업무이력)로 들어옵니다 (2026-11-10).
             // 전체 업무이력 메뉴면 그 화면을, 운영업무센터 메뉴면 업무 탭(전체 업무이력이 아닌 첫 탭)을 엽니다. 실시간 다시 그리기는 그대로 둡니다.
-            let opsTabSwitch = '';
-            if (sectionId === 'ops-work-center' && !window.__gwNavSilent && element && typeof wcState !== 'undefined' && wcState.ops) {
-                const wantAll = element.id === 'nav-ops-allworks';
-                const isAll = wcType('ops', wcState.ops.activeType).panel === 'allworks';
-                if (wantAll && !isAll && canSeePage(wcTypePerm('ops', 'allworks'))) opsTabSwitch = 'allworks';
+            // 영업업무센터도 같습니다 (영업업무센터 · 전체 업무이력, 2026-11-11)
+            let wcTabSwitch = '';
+            const wcNavKey = sectionId === 'ops-work-center' ? 'ops' : sectionId === 'sales-work-center' ? 'sales' : '';
+            if (wcNavKey && !window.__gwNavSilent && element && typeof wcState !== 'undefined' && wcState[wcNavKey]) {
+                const wantAll = element.id === WC_ALLWORKS_NAV[wcNavKey];
+                const isAll = wcType(wcNavKey, wcState[wcNavKey].activeType).panel === 'allworks';
+                if (wantAll && !isAll && canSeePage(wcTypePerm(wcNavKey, 'allworks'))) wcTabSwitch = 'allworks';
                 else if (!wantAll && isAll) {
-                    const first = wcVisibleTypes('ops').find(t => t.panel !== 'allworks');
-                    if (first) opsTabSwitch = first.id;
+                    const first = wcVisibleTypes(wcNavKey).find(t => t.panel !== 'allworks');
+                    if (first) wcTabSwitch = first.id;
                 }
             }
 
@@ -13506,9 +13516,10 @@ const QUOTE_TEMPLATES = [
                 renderSettingsCenter();  // 활성 탭(설정 4종)에 맞춰 렌더
             } else if (sectionId === 'ops-work-center') {
                 renderWorkCenter('ops');
-                if (opsTabSwitch) setWorkType('ops', opsTabSwitch);   // 들어온 메뉴에 맞는 탭으로 (고객조회 접기·펼치기 포함)
+                if (wcTabSwitch) setWorkType('ops', wcTabSwitch);   // 들어온 메뉴에 맞는 탭으로 (고객조회 접기·펼치기 포함)
             } else if (sectionId === 'sales-work-center') {
                 renderWorkCenter('sales');
+                if (wcTabSwitch) setWorkType('sales', wcTabSwitch);
             } else if (sectionId === 'sales-supply') {
                 renderSupplyCenter();
             } else if (sectionId === 'payment-work-center') {
@@ -23922,7 +23933,7 @@ const QUOTE_TEMPLATES = [
                         // 전체 업무이력 (보완사항 2026-11-06) — 창이 아닌 탭으로, 고객 조회와 상관없이 넓게 봅니다
                         id: 'allworks', name: '전체 업무이력', icon: 'fa-list-ul', active: 'bg-green-700', panel: 'allworks',
                         noIntake: true, noProcess: true, hideHistory: true,
-                        desc: '고객과 상관없이 운영업무센터에 등록된 업무 전체를 봅니다. 처리가 끝나지 않은 건이 먼저 표시됩니다.',
+                        desc: '고객과 상관없이 운영업무센터에 등록된 업무 전체를 봅니다. 처리가 끝나지 않은 건이 먼저 표시되며, 줄을 누르면 상세 내용을 봅니다.',
                         fields: []
                     }
                 ],
@@ -24071,6 +24082,13 @@ const QUOTE_TEMPLATES = [
                         id: 'issue', name: '이슈보고서', icon: 'fa-triangle-exclamation', active: 'bg-red-600',
                         desc: '보고 대상을 선택하여 이슈를 등록합니다. 보고 대상자가 코멘트를 등록하면 작성자에게 알림이 발송됩니다. 조회한 고객과 관계없이 모든 보고서가 표시됩니다.',
                         panel: 'issue', noIntake: true, noProcess: true, hideHistory: true,
+                        fields: []
+                    },
+                    {
+                        // 전체 업무이력 (2026-11-11) — 운영본부와 같이 왼쪽 메뉴 '전체 업무이력' 으로 들어옵니다 (탭 줄에는 표시 안 함)
+                        id: 'allworks', name: '전체 업무이력', icon: 'fa-list-ul', active: 'bg-sky-700', panel: 'allworks',
+                        noIntake: true, noProcess: true, hideHistory: true,
+                        desc: '고객과 상관없이 영업업무센터에 등록된 업무 전체를 봅니다. 처리가 끝나지 않은 건이 먼저 표시되며, 줄을 누르면 상세 내용을 봅니다.',
                         fields: []
                     }
                 ],
@@ -24256,16 +24274,22 @@ const QUOTE_TEMPLATES = [
         let workSaved = new Map();
 
         // 왼쪽 메뉴 '전체 업무이력' 숫자 — 운영업무센터의 접수 · 보류 건 (2026-11-10, 결제업무센터 숫자와 같은 모양)
+        // 왼쪽 메뉴 '전체 업무이력' 숫자 — 접수(영업은 '등록') · 보류 건 (운영 2026-11-10 · 영업 11-11, 결제업무센터 숫자와 같은 모양)
+        const WC_ALLWORKS_NAV = { ops: 'nav-ops-allworks', sales: 'nav-sales-allworks' };
         function updateOpsAllWorksBadge() {
-            const el = typeof document !== 'undefined' && document.getElementById('nav-ops-allworks-badge');
-            if (!el || typeof WORK_CENTERS === 'undefined' || !WORK_CENTERS.ops) return;
-            const works = WORK_CENTERS.ops.works || [];
-            const rcv = works.filter(w => w && w.status === 'received').length;
-            const hold = works.filter(w => w && w.status === 'hold').length;
-            const n = rcv + hold;
-            el.innerText = n;
-            el.title = `접수 ${rcv}건 · 보류 ${hold}건`;
-            el.classList.toggle('hidden', n === 0);
+            if (typeof WORK_CENTERS === 'undefined' || typeof document === 'undefined') return;
+            ['ops', 'sales'].forEach(key => {
+                const el = document.getElementById(WC_ALLWORKS_NAV[key] + '-badge');
+                if (!el || !WORK_CENTERS[key]) return;
+                const works = WORK_CENTERS[key].works || [];
+                const names = WORK_CENTERS[key].statusNames || {};
+                const rcv = works.filter(w => w && w.status === 'received').length;
+                const hold = works.filter(w => w && w.status === 'hold').length;
+                const n = rcv + hold;
+                el.innerText = n;
+                el.title = `${names.received || '접수'} ${rcv}건 · ${names.hold || '보류'} ${hold}건`;
+                el.classList.toggle('hidden', n === 0);
+            });
         }
 
         function saveWorks() {
@@ -25165,7 +25189,7 @@ const QUOTE_TEMPLATES = [
                             <!-- 보완사항 2026-10-23 — 신규 등록 · 가맹점 목록 · 전체 업무이력 -->
                             <button onclick="createWorkCenterCustomer(${jsArg(key)})" class="bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 flex-1 sm:flex-none px-3 py-2 rounded text-sm transition-colors whitespace-nowrap"><i class="fas fa-plus mr-1"></i>신규 등록</button>
                             ${key === 'ops' ? `<button onclick="openWcShopList(${jsArg(key)})" class="bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 flex-1 sm:flex-none px-3 py-2 rounded text-sm transition-colors whitespace-nowrap"><i class="fas fa-store mr-1"></i>가맹점 목록</button>
-                            <button onclick="${key === 'ops' ? `navigate('ops-work-center', document.getElementById('nav-ops-allworks'))` : `openWcAllWorks(${jsArg(key)})`}" class="bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 flex-1 sm:flex-none px-3 py-2 rounded text-sm transition-colors whitespace-nowrap"><i class="fas fa-list-ul mr-1"></i>전체 업무이력</button>` : ''}
+                            <button onclick="${`navigate(${jsArg(key + '-work-center')}, document.getElementById(${jsArg(WC_ALLWORKS_NAV[key])}))`}" class="bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 flex-1 sm:flex-none px-3 py-2 rounded text-sm transition-colors whitespace-nowrap"><i class="fas fa-list-ul mr-1"></i>전체 업무이력</button>` : ''}
                         </div>
                         <div id="${wcId(key, 'customer-summary')}" class="mt-2"></div>
                     </div>
@@ -25337,24 +25361,25 @@ const QUOTE_TEMPLATES = [
             renderWorkHistory(key);
             renderWorkIntakeFields(key);
             renderWorkProcess(key);
-            if (key === 'ops') { applyOpsAllWorksChrome(); updateOpsAllWorksBadge(); }
+            if (key === 'ops' || key === 'sales') { applyOpsAllWorksChrome(key); updateOpsAllWorksBadge(); }
         }
 
         // 운영 '전체 업무이력' 은 왼쪽 메뉴로 따로 들어옵니다 (2026-11-10).
         // 그 화면일 때는 업무 탭 줄 · '고객 미선택' 표시를 숨기고 제목을 '전체 업무이력' 으로 바꿉니다.
-        function wcOpsAllWorksOn(key) {
-            return key === 'ops' && typeof wcState !== 'undefined' && !!wcState.ops && wcType('ops', wcState.ops.activeType).panel === 'allworks';
+        function wcAllWorksOn(key) {
+            return (key === 'ops' || key === 'sales') && typeof wcState !== 'undefined' && !!wcState[key] && wcType(key, wcState[key].activeType).panel === 'allworks';
         }
-        function applyOpsAllWorksChrome() {
-            const on = wcOpsAllWorksOn('ops');
-            const tabs = wcEl('ops', 'type-tabs');
+        function applyOpsAllWorksChrome(key) {
+            const k = key || 'ops';
+            const on = wcAllWorksOn(k);
+            const tabs = wcEl(k, 'type-tabs');
             if (tabs) tabs.classList.toggle('hidden', on);
-            const t = document.getElementById('wc-title-ops');
-            if (t) { const cm = crossDeptMenuFor('ops-work-center'); t.textContent = on ? '전체 업무이력' : (cm ? crossDeptMenuName(cm) : wcDef('ops').title); }
-            const sec = document.getElementById('sec-ops-work-center');
+            const t = document.getElementById('wc-title-' + k);
+            if (t) { const cm = crossDeptMenuFor(k + '-work-center'); t.textContent = on ? '전체 업무이력' : (cm ? crossDeptMenuName(cm) : wcDef(k).title); }
+            const sec = document.getElementById('sec-' + k + '-work-center');
             const pt = document.getElementById('page-title');
-            if (sec && pt && !sec.classList.contains('hidden')) pt.innerText = pageTitleFor('ops-work-center');
-            applyWorkSearchCollapse('ops');
+            if (sec && pt && !sec.classList.contains('hidden')) pt.innerText = pageTitleFor(k + '-work-center');
+            applyWorkSearchCollapse(k);
         }
 
         // ---------- ① 고객검색 ----------
@@ -25649,8 +25674,8 @@ const QUOTE_TEMPLATES = [
             const th = t => `<th class="p-2 text-left font-medium">${t}</th>`;
             body.innerHTML = `<p class="text-xs text-gray-500 mb-2">전체 ${all.length}건 · 조건 ${list.length}건 · 미완료 ${list.filter(isOpen).length}건${list.length > shown.length ? ` (앞 ${shown.length}건만 표시)` : ''}</p>
                 <table class="w-full text-sm min-w-[980px]">
-                    <thead><tr class="bg-gray-50 text-xs text-gray-500 border-b">${['접수일', '연락처', '업무유형', '상호명', '내용', '접수자', '담당자', '상태'].map(th).join('')}</tr></thead>
-                    <tbody>${shown.map(w => `<tr onclick="openWorkHistoryDetail(${jsArg(key)}, ${jsArg(w.id)})" class="border-b border-gray-100 ${isOpen(w) ? 'bg-amber-50/50' : ''} hover:bg-green-50 cursor-pointer">
+                    <thead><tr class="bg-gray-50 text-xs text-gray-500 border-b">${['접수일', '연락처', '업무유형', '상호명', '내용', '접수자', '담당자', '상태'].map(th).join('')}<th class="p-2"></th></tr></thead>
+                    <tbody>${shown.map(w => `<tr onclick="openWorkHistoryDetail(${jsArg(key)}, ${jsArg(w.id)})" class="group border-b border-gray-100 ${isOpen(w) ? 'bg-amber-50/50' : ''} hover:bg-green-50 cursor-pointer" title="눌러서 상세 보기">
                         <td class="p-2 text-xs text-gray-600 whitespace-nowrap">${escapeHtml(w.receivedAt || '')} ${escapeHtml(w.receivedTime || '')}</td>
                         <td class="p-2 text-xs text-gray-600 whitespace-nowrap">${escapeHtml(phoneOf(w) || '-')}</td>
                         <td class="p-2 whitespace-nowrap"><span class="px-1.5 py-0.5 rounded text-[11px] bg-gray-100 text-gray-700">${escapeHtml(wcType(key, w.type).name)}</span></td>
@@ -25659,7 +25684,8 @@ const QUOTE_TEMPLATES = [
                         <td class="p-2 text-xs text-gray-600 whitespace-nowrap">${escapeHtml(w.receiver || '-')}</td>
                         <td class="p-2 text-xs text-gray-600 whitespace-nowrap">${escapeHtml(w.assignee || '-')}</td>
                         <td class="p-2 whitespace-nowrap"><span class="px-1.5 py-0.5 rounded-full text-[11px] font-semibold ${stCls[w.status] || 'bg-gray-100 text-gray-600'}">${escapeHtml((def.statusNames || {})[w.status] || w.status || '-')}</span></td>
-                    </tr>`).join('') || '<tr><td colspan="8" class="p-8 text-center text-gray-400">조건에 맞는 업무가 없습니다.</td></tr>'}</tbody>
+                    <td class="p-2 text-right whitespace-nowrap"><span class="text-xs text-gray-400 group-hover:text-green-700" title="상세 보기">상세 <i class="fas fa-chevron-right text-[10px]"></i></span></td>
+                    </tr>`).join('') || '<tr><td colspan="9" class="p-8 text-center text-gray-400">조건에 맞는 업무가 없습니다.</td></tr>'}</tbody>
                 </table>`;
         }
 
@@ -25782,7 +25808,7 @@ const QUOTE_TEMPLATES = [
             if (picked) {
                 const c = wcCustomer(key, wcState[key].customerId);
                 picked.title = c ? '선택한 고객사: ' + c.name + ' (클릭하면 고객조회 영역이 펼쳐집니다)' : '선택한 고객이 없습니다. 클릭하면 고객조회 영역이 펼쳐집니다';
-                picked.className = (open || wcOpsAllWorksOn(key)) ? 'hidden'
+                picked.className = (open || wcAllWorksOn(key)) ? 'hidden'
                     : c ? `cursor-pointer inline-flex items-center gap-1.5 min-w-0 px-3 py-1 rounded-full text-white text-sm md:text-base font-bold shadow-sm ${wcDef(key).accent.btn.split(' ')[0]}`
                         : 'cursor-pointer inline-flex items-center gap-1.5 min-w-0 px-3 py-1 rounded-full text-sm font-semibold bg-amber-50 border border-amber-300 text-amber-700';
                 picked.innerHTML = c
@@ -25935,7 +25961,7 @@ const QUOTE_TEMPLATES = [
         function renderWorkTypeTabs(key) {
             const st = wcState[key];
             // 운영 '전체 업무이력' 은 왼쪽 메뉴로 옮겼습니다 (2026-11-10) — 탭 줄에는 표시하지 않습니다
-            const types = wcVisibleTypes(key).filter(t => !(key === 'ops' && t.panel === 'allworks'));
+            const types = wcVisibleTypes(key).filter(t => t.panel !== 'allworks');   // 운영 · 영업 모두 왼쪽 메뉴로
             if (!types.length) {
                 wcEl(key, 'type-tabs').innerHTML = '<p class="text-sm text-gray-400 px-2 py-1">접근 권한이 있는 업무유형이 없습니다.</p>';
                 return;
@@ -25981,7 +26007,7 @@ const QUOTE_TEMPLATES = [
             renderWorkHistory(key);
             renderWorkIntakeFields(key);
             renderWorkProcess(key);
-            if (key === 'ops') applyOpsAllWorksChrome();
+            if (key === 'ops' || key === 'sales') applyOpsAllWorksChrome(key);
         }
 
         function renderWorkTypeHeader(key) {
