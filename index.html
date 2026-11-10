@@ -2039,11 +2039,11 @@
                     <span id="nav-inbound-center-badge" class="hidden ml-auto bg-rose-500 text-white text-xs font-bold rounded-full px-2 leading-5"></span>
                 </a>
                 <!-- 파트너센터 — 파트너사가 별도 페이지(?mode=partner)에서 낸 접수를 본부별로 받습니다 -->
-                <a href="#" onclick="toggleSubmenu('submenu-partner-center'); navigate('partner-center', this)" id="nav-partner-center" class="nav-item flex justify-between items-center px-3 py-2 rounded-md hover:bg-slate-800/70 transition-colors">
+                <a href="#" onclick="navigate('partner-center', this)" id="nav-partner-center" class="nav-item flex justify-between items-center px-3 py-2 rounded-md hover:bg-slate-800/70 transition-colors">
                     <div><i class="fas fa-handshake w-5 mr-2 text-teal-400"></i> 파트너센터</div>
                     <div class="flex items-center gap-1.5">
                         <span id="nav-partner-center-badge" class="hidden bg-red-500 text-white text-xs font-bold rounded-full px-2 leading-5"></span>
-                        <i class="fas fa-chevron-down text-xs transition-transform duration-200" id="icon-submenu-partner-center"></i>
+                        <span role="button" tabindex="0" onclick="event.preventDefault(); event.stopPropagation(); toggleSubmenu('submenu-partner-center')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault(); event.stopPropagation(); toggleSubmenu('submenu-partner-center')}" class="nav-caret -mr-1.5 px-2 py-1 rounded hover:bg-slate-700/70" title="하위 메뉴 펼치기 · 접기" aria-label="하위 메뉴 펼치기 · 접기"><i class="fas fa-chevron-down text-xs transition-transform duration-200" id="icon-submenu-partner-center"></i></span>
                     </div>
                 </a>
                 <div id="submenu-partner-center" class="space-y-1">
@@ -2065,9 +2065,9 @@
                     </a>
                 </div>
                 <p id="nav-dept-header" class="px-2 text-xs font-semibold text-gray-400 uppercase tracking-wider mt-6 mb-2">Departments</p>
-                <a href="#" onclick="toggleSubmenu('submenu-sales'); navigate('sales', this)" id="nav-sales" class="nav-item flex justify-between items-center px-3 py-2 rounded-md hover:bg-slate-800/70 transition-colors">
+                <a href="#" onclick="navigate('sales', this)" id="nav-sales" class="nav-item flex justify-between items-center px-3 py-2 rounded-md hover:bg-slate-800/70 transition-colors">
                     <div><i class="fas fa-briefcase w-5 mr-2 text-blue-400"></i><span id="nav-sales-label"> 영업본부 </span></div>
-                    <i class="fas fa-chevron-down text-xs transition-transform duration-200" id="icon-submenu-sales"></i>
+                    <span role="button" tabindex="0" onclick="event.preventDefault(); event.stopPropagation(); toggleSubmenu('submenu-sales')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault(); event.stopPropagation(); toggleSubmenu('submenu-sales')}" class="nav-caret -mr-1.5 px-2 py-1 rounded hover:bg-slate-700/70" title="하위 메뉴 펼치기 · 접기" aria-label="하위 메뉴 펼치기 · 접기"><i class="fas fa-chevron-down text-xs transition-transform duration-200" id="icon-submenu-sales"></i></span>
                 </a>
                 <div id="submenu-sales" class="space-y-1">
                     <a href="#" onclick="navigate('sales-work-center', this)" id="nav-sales-work-center" class="nav-item block px-3 py-2 pl-10 rounded-md hover:bg-slate-800/70 transition-colors text-sm text-gray-300 hidden">
@@ -2088,9 +2088,9 @@
                         <span id="nav-sales-allworks-badge" class="hidden ml-auto bg-amber-500 text-white text-xs font-bold rounded-full px-2 leading-5"></span>
                     </a>
                 </div>
-                <a href="#" onclick="toggleSubmenu('submenu-ops'); navigate('ops', this)" id="nav-ops" class="nav-item flex justify-between items-center px-3 py-2 rounded-md hover:bg-slate-800/70 transition-colors">
+                <a href="#" onclick="navigate('ops', this)" id="nav-ops" class="nav-item flex justify-between items-center px-3 py-2 rounded-md hover:bg-slate-800/70 transition-colors">
                     <div><i class="fas fa-cogs w-5 mr-2 text-green-400"></i><span id="nav-ops-label"> 운영본부 </span></div>
-                    <i class="fas fa-chevron-down text-xs transition-transform duration-200" id="icon-submenu-ops"></i>
+                    <span role="button" tabindex="0" onclick="event.preventDefault(); event.stopPropagation(); toggleSubmenu('submenu-ops')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault(); event.stopPropagation(); toggleSubmenu('submenu-ops')}" class="nav-caret -mr-1.5 px-2 py-1 rounded hover:bg-slate-700/70" title="하위 메뉴 펼치기 · 접기" aria-label="하위 메뉴 펼치기 · 접기"><i class="fas fa-chevron-down text-xs transition-transform duration-200" id="icon-submenu-ops"></i></span>
                 </a>
                 <div id="submenu-ops" class="space-y-1">
                     <a href="#" onclick="navigate('ops-work-center', this)" id="nav-ops-work-center" class="nav-item block px-3 py-2 pl-10 rounded-md hover:bg-slate-800/70 transition-colors text-sm text-gray-300">
@@ -2102,9 +2102,9 @@
                         <span id="nav-ops-allworks-badge" class="hidden ml-auto bg-amber-500 text-white text-xs font-bold rounded-full px-2 leading-5"></span>
                     </a>
                 </div>
-                <a href="#" onclick="toggleSubmenu('submenu-payment'); navigate('payment', this)" id="nav-payment" class="nav-item flex justify-between items-center px-3 py-2 rounded-md hover:bg-slate-800/70 transition-colors">
+                <a href="#" onclick="navigate('payment', this)" id="nav-payment" class="nav-item flex justify-between items-center px-3 py-2 rounded-md hover:bg-slate-800/70 transition-colors">
                     <div><i class="fas fa-credit-card w-5 mr-2 text-yellow-400"></i><span id="nav-payment-label"> 결제본부 </span></div>
-                    <i class="fas fa-chevron-down text-xs transition-transform duration-200" id="icon-submenu-payment"></i>
+                    <span role="button" tabindex="0" onclick="event.preventDefault(); event.stopPropagation(); toggleSubmenu('submenu-payment')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault(); event.stopPropagation(); toggleSubmenu('submenu-payment')}" class="nav-caret -mr-1.5 px-2 py-1 rounded hover:bg-slate-700/70" title="하위 메뉴 펼치기 · 접기" aria-label="하위 메뉴 펼치기 · 접기"><i class="fas fa-chevron-down text-xs transition-transform duration-200" id="icon-submenu-payment"></i></span>
                 </a>
                 <div id="submenu-payment" class="space-y-1">
                     <a href="#" onclick="navigate('payment-work-center', this)" id="nav-payment-work-center" class="nav-item flex items-center justify-between px-3 py-2 pl-10 rounded-md hover:bg-slate-800/70 transition-colors text-sm text-gray-300 hidden">
@@ -2113,9 +2113,9 @@
                     </a>
                 </div>
 
-                <a href="#" onclick="toggleSubmenu('submenu-management'); navigate('management', this)" id="nav-management" class="nav-item flex justify-between items-center px-3 py-2 rounded-md hover:bg-slate-800/70 transition-colors">
+                <a href="#" onclick="navigate('management', this)" id="nav-management" class="nav-item flex justify-between items-center px-3 py-2 rounded-md hover:bg-slate-800/70 transition-colors">
                     <div><i class="fas fa-building-user w-5 mr-2 text-indigo-400"></i><span id="nav-management-label"> 관리본부 </span></div>
-                    <i class="fas fa-chevron-down text-xs transition-transform duration-200" id="icon-submenu-management"></i>
+                    <span role="button" tabindex="0" onclick="event.preventDefault(); event.stopPropagation(); toggleSubmenu('submenu-management')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault(); event.stopPropagation(); toggleSubmenu('submenu-management')}" class="nav-caret -mr-1.5 px-2 py-1 rounded hover:bg-slate-700/70" title="하위 메뉴 펼치기 · 접기" aria-label="하위 메뉴 펼치기 · 접기"><i class="fas fa-chevron-down text-xs transition-transform duration-200" id="icon-submenu-management"></i></span>
                 </a>
                 <div id="submenu-management" class="space-y-1">
                     <a href="#" onclick="navigate('management-work-center', this)" id="nav-management-work-center" class="nav-item flex items-center justify-between px-3 py-2 pl-10 rounded-md hover:bg-slate-800/70 transition-colors text-sm text-gray-300 hidden">
@@ -2125,9 +2125,9 @@
                 </div>
 
                 <!-- IT본부 (2026-10-08 UAT) — 전용 업무 화면 'IT업무센터' : IT 프로젝트 관리 · 개발요청 현황 -->
-                <a href="#" onclick="toggleSubmenu('submenu-it'); navigate('it', this)" id="nav-it" class="nav-item flex justify-between items-center px-3 py-2 rounded-md hover:bg-slate-800/70 transition-colors hidden">
+                <a href="#" onclick="navigate('it', this)" id="nav-it" class="nav-item flex justify-between items-center px-3 py-2 rounded-md hover:bg-slate-800/70 transition-colors hidden">
                     <div><i class="fas fa-laptop-code w-5 mr-2 text-cyan-400"></i><span id="nav-it-label"> IT본부 </span></div>
-                    <i class="fas fa-chevron-down text-xs transition-transform duration-200" id="icon-submenu-it"></i>
+                    <span role="button" tabindex="0" onclick="event.preventDefault(); event.stopPropagation(); toggleSubmenu('submenu-it')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault(); event.stopPropagation(); toggleSubmenu('submenu-it')}" class="nav-caret -mr-1.5 px-2 py-1 rounded hover:bg-slate-700/70" title="하위 메뉴 펼치기 · 접기" aria-label="하위 메뉴 펼치기 · 접기"><i class="fas fa-chevron-down text-xs transition-transform duration-200" id="icon-submenu-it"></i></span>
                 </a>
                 <div id="submenu-it" class="space-y-1">
                     <a href="#" onclick="navigate('it-work-center', this)" id="nav-it-work-center" class="nav-item flex items-center justify-between px-3 py-2 pl-10 rounded-md hover:bg-slate-800/70 transition-colors text-sm text-gray-300 hidden">
@@ -2425,51 +2425,14 @@
 
                 <!-- 운영부 대시보드 섹션 -->
                 <section id="sec-ops" class="content-section hidden">
-                    <h3 class="text-lg font-bold text-gray-800 mb-4">운영본부 현황</h3>
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-                        <div class="bg-white p-6 rounded-lg shadow-sm border-t-4 border-blue-500">
-                            <p class="text-sm font-medium text-gray-500">시스템 정상 가동률</p>
-                            <h3 class="text-3xl font-bold text-gray-800 mt-2">99.9%</h3>
-                        </div>
-                        <div onclick="showOpsDetail('urgent')" class="bg-white p-6 rounded-lg shadow-sm border-t-4 border-red-500 cursor-pointer hover:shadow-md transition-shadow group">
-                            <p class="text-sm font-medium text-gray-500 group-hover:text-red-500 transition-colors">미해결 긴급 요청 <i class="fas fa-chevron-down text-xs ml-1 opacity-0 group-hover:opacity-100"></i></p>
-                            <h3 class="text-3xl font-bold text-red-600 mt-2">2건</h3>
-                        </div>
-                        <div onclick="showOpsDetail('cs')" class="bg-white p-6 rounded-lg shadow-sm border-t-4 border-green-500 cursor-pointer hover:shadow-md transition-shadow group">
-                            <p class="text-sm font-medium text-gray-500 group-hover:text-green-500 transition-colors">CS 평균 처리 시간 <i class="fas fa-chevron-down text-xs ml-1 opacity-0 group-hover:opacity-100"></i></p>
-                            <h3 class="text-3xl font-bold text-gray-800 mt-2">1.2시간</h3>
-                        </div>
-                    </div>
-
-                    <!-- 운영부 대시보드 상세 표시 영역 -->
-                    <div id="ops-detail-container" class="hidden bg-white p-6 rounded-lg shadow-sm border border-gray-200 mb-6 transition-all duration-300">
-                        <div class="flex justify-between items-start mb-4 border-b border-gray-100 pb-3">
-                            <h4 id="ops-detail-title" class="text-lg font-bold text-gray-800">상세 내역</h4>
-                            <button onclick="closeOpsDetail()" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times"></i></button>
-                        </div>
-                        
-                        <!-- 미해결 긴급 요청 뷰 -->
-                        <div id="ops-detail-urgent" class="hidden">
-                            <div class="space-y-3 max-h-[400px] overflow-y-auto pr-2">
-                                <div class="bg-red-50 p-3 rounded-lg border border-red-100 flex justify-between items-center"><div><p class="text-sm font-bold text-red-800">서버 장애로 인한 결제 실패 현상</p><p class="text-xs text-gray-600 mt-1">담당: 시스템팀 | 접수시간: 10:30</p></div><span class="text-xs bg-red-200 text-red-800 px-2 py-1 rounded font-semibold">긴급</span></div>
-                                <div class="bg-red-50 p-3 rounded-lg border border-red-100 flex justify-between items-center"><div><p class="text-sm font-bold text-red-800">사내망 접속 불가 오류</p><p class="text-xs text-gray-600 mt-1">담당: 네트워크팀 | 접수시간: 11:15</p></div><span class="text-xs bg-red-200 text-red-800 px-2 py-1 rounded font-semibold">긴급</span></div>
-                            </div>
-                        </div>
-
-                        <!-- CS 평균 처리 시간 뷰 -->
-                        <div id="ops-detail-cs" class="hidden">
-                            <div class="space-y-3 max-h-[400px] overflow-y-auto pr-2">
-                                <div class="bg-green-50 p-3 rounded-lg border border-green-100 flex justify-between items-center"><div><p class="text-sm font-bold text-green-800">서비스 이용 방법 및 과금 문의</p><p class="text-xs text-gray-600 mt-1">담당: 이운영 | 접수: 13:00 / 완료: 13:45</p></div><span class="text-xs font-semibold text-gray-700">0.75시간</span></div>
-                                <div class="bg-green-50 p-3 rounded-lg border border-green-100 flex justify-between items-center"><div><p class="text-sm font-bold text-green-800">월간 레포트 출력 오류 확인 요청</p><p class="text-xs text-gray-600 mt-1">담당: 최운영 | 접수: 09:00 / 완료: 10:30</p></div><span class="text-xs font-semibold text-gray-700">1.5시간</span></div>
-                            </div>
-                        </div>
-                    </div>
+                    <!-- 운영본부 현황 (2026-11-11) — 예전 예시 숫자 화면을 운영업무센터 실제 업무 기준으로 바꿈. renderOpsDashboard() 가 그립니다 -->
+                    <div id="ops-dash"></div>
                 </section>
 
                 <!-- 결제본부 대시보드 섹션 -->
                 <section id="sec-payment" class="content-section hidden">
-                    <h3 class="text-lg font-bold text-gray-800 mb-4">결제본부 현황</h3>
-                    <!-- 현황 카드 전체 삭제됨 (2026-08-04) — 추후 필요한 카드로 재구성 예정 -->
+                    <!-- 결제본부 현황 (2026-11-11) — 보완서류 요청 실제 자료 기준. renderPaymentDashboard() 가 그립니다 -->
+                    <div id="payment-dash"></div>
                 </section>
 
                 <!-- ============================================================= -->
@@ -10361,13 +10324,13 @@ const QUOTE_TEMPLATES = [
             'exec-center': '경영 현황판 (Executive Overview)',
             'inbound-center': '인바운드 관리 (Inbound Lead Management)',
             'calendar-center': '일정캘린더 (Calendar Center)',
-            'sales': '영업부 현황 (Sales)',
+            'sales': '영업본부 현황 (Sales)',
             'sales-customers': '잠재고객관리 (Customer Management)',
             'sales-work-center': '영업업무센터 (Sales Work Center)',
             'sales-supply': '거래처 관리 (Account Management)',
             'sales-consulting': '상담관리 (Consulting Management)',
             'sales-quote': '견적관리 (Quote Management)',
-            'ops': '운영부 현황 (Operations)',
+            'ops': '운영본부 현황 (Operations)',
             'ops-work-center': '운영업무센터 (Ops Work Center)',
             'payment': '결제본부 현황 (Payment)',
             'payment-work-center': '결제업무센터 (Payment Work Center)',
@@ -13464,6 +13427,8 @@ const QUOTE_TEMPLATES = [
             const wcNavKey = sectionId === 'ops-work-center' ? 'ops' : sectionId === 'sales-work-center' ? 'sales' : '';
             if (wcNavKey && !window.__gwNavSilent && element && typeof wcState !== 'undefined' && wcState[wcNavKey]) {
                 const wantAll = element.id === WC_ALLWORKS_NAV[wcNavKey];
+                // 메뉴로 들어오면 거르기를 비움 — 현황 카드로 들어올 때만 고른 상태를 유지 (2026-11-11)
+                if (wantAll && !window.__wcKeepFilter && typeof wcAllWorksFilter !== 'undefined') { wcAllWorksFilter.status = ''; wcAllWorksFilter.type = ''; }
                 const isAll = wcType(wcNavKey, wcState[wcNavKey].activeType).panel === 'allworks';
                 if (wantAll && !isAll && canSeePage(wcTypePerm(wcNavKey, 'allworks'))) wcTabSwitch = 'allworks';
                 else if (!wantAll && isAll) {
@@ -13526,6 +13491,10 @@ const QUOTE_TEMPLATES = [
                 renderPaymentWorkCenter();   // 활성 탭에 맞춰 렌더
             } else if (sectionId === 'sales') {
                 renderSalesDashboard();
+            } else if (sectionId === 'ops') {
+                renderOpsDashboard();
+            } else if (sectionId === 'payment') {
+                renderPaymentDashboard();
             } else if (sectionId === 'it-work-center') {
                 renderItWorkCenter();
             } else if (sectionId === 'management-work-center') {
@@ -18009,6 +17978,136 @@ const QUOTE_TEMPLATES = [
         }
 
         // ==================== 영업본부 대시보드 (주요 지표 집계) ====================
+        // ---------- 운영본부 · 결제본부 현황 (2026-11-11) ----------
+        // 본부 이름을 누르면 이 화면. 카드 · 줄을 누르면 해당 목록이나 상세로 갑니다.
+        function dashCard(label, n, icon, cls, onclick, sub) {
+            return `<button type="button" onclick="${onclick}" class="bg-white p-4 rounded-lg shadow-sm border-t-4 ${cls} text-left hover:shadow-md transition-shadow">
+                <p class="text-sm font-medium text-gray-500"><i class="fas ${icon} mr-1"></i>${escapeHtml(label)}</p>
+                <p class="text-2xl font-bold text-gray-800 mt-1">${n}<span class="text-sm font-medium text-gray-500 ml-0.5">건</span></p>
+                ${sub ? `<p class="text-xs text-gray-400 mt-0.5">${sub}</p>` : ''}</button>`;
+        }
+        function opsDashGo(status, type) {
+            wcAllWorksFilter.status = status || '';
+            wcAllWorksFilter.type = type || '';
+            wcAllWorksFilter.q = '';
+            window.__wcKeepFilter = true;
+            try { navigate('ops-work-center', document.getElementById('nav-ops-allworks')); } finally { window.__wcKeepFilter = false; }
+            if (wcAllWorksOn('ops')) renderWcAllWorks('ops');
+        }
+        function renderOpsDashboard() {
+            const host = document.getElementById('ops-dash');
+            if (!host) return;
+            const def = wcDef('ops');
+            const works = def.works || [];
+            const today = ymd(new Date());
+            const weekAgo = ymd(new Date(Date.now() - 6 * 86400000));
+            const cnt = (f) => works.filter(f).length;
+            const by = (st) => cnt(w => w.status === st);
+            const isOpen = w => w.status !== 'done';
+            const canAll = canSeePage('ops-wc-allworks');
+            const go = (st, ty) => canAll ? `opsDashGo(${jsArg(st || '')}, ${jsArg(ty || '')})` : `navigate('ops-work-center', document.getElementById('nav-ops-work-center'))`;
+            const sn = def.statusNames || {};
+            const types = def.types.filter(t => t.panel !== 'allworks' && t.panel !== 'transfer');
+            const typeRows = types.map(t => {
+                const tw = works.filter(w => w.type === t.id);
+                const c = st => tw.filter(w => w.status === st).length;
+                const open = tw.filter(isOpen).length;
+                return `<tr onclick="${go('open', t.id)}" class="border-b border-gray-100 hover:bg-green-50 cursor-pointer">
+                    <td class="p-2 font-medium text-gray-800 whitespace-nowrap"><i class="fas ${t.icon} mr-1 text-gray-400"></i>${escapeHtml(t.name)}</td>
+                    ${['received', 'assigned', 'working', 'hold'].map(st => `<td class="p-2 text-right ${c(st) ? 'text-gray-800' : 'text-gray-300'}">${c(st)}</td>`).join('')}
+                    <td class="p-2 text-right font-bold ${open ? 'text-amber-700' : 'text-gray-300'}">${open}</td>
+                    <td class="p-2 text-right text-gray-500">${c('done')}</td></tr>`;
+            }).join('');
+            const owners = {};
+            works.filter(isOpen).forEach(w => { const k = String(w.assignee || '').trim() || '미배정'; owners[k] = (owners[k] || 0) + 1; });
+            const ownerRows = Object.entries(owners).sort((a, b) => (a[0] === '미배정') - (b[0] === '미배정') || b[1] - a[1]).slice(0, 12)
+                .map(([n, c]) => `<div class="flex justify-between py-1.5 border-b border-gray-100 text-sm"><span class="${n === '미배정' ? 'text-amber-700 font-semibold' : 'text-gray-700'}">${escapeHtml(n)}</span><span class="font-semibold text-gray-800">${c}건</span></div>`).join('')
+                || '<p class="text-sm text-gray-400 py-4 text-center">처리 중인 업무가 없습니다.</p>';
+            const recent = works.filter(isOpen).sort((a, b) => (`${b.receivedAt || ''} ${b.receivedTime || ''}`).localeCompare(`${a.receivedAt || ''} ${a.receivedTime || ''}`)).slice(0, 10);
+            const stCls = { received: 'bg-amber-100 text-amber-700', assigned: 'bg-sky-100 text-sky-700', working: 'bg-blue-100 text-blue-700', hold: 'bg-yellow-100 text-yellow-700' };
+            const recentRows = recent.map(w => `<tr onclick="openWorkHistoryDetail('ops', ${jsArg(w.id)})" class="border-b border-gray-100 hover:bg-green-50 cursor-pointer" title="눌러서 상세 보기">
+                    <td class="p-2 text-xs text-gray-500 whitespace-nowrap">${escapeHtml(w.receivedAt || '')}</td>
+                    <td class="p-2 whitespace-nowrap"><span class="px-1.5 py-0.5 rounded text-[11px] bg-gray-100 text-gray-700">${escapeHtml(wcType('ops', w.type).name)}</span></td>
+                    <td class="p-2 font-semibold text-gray-800 whitespace-nowrap">${escapeHtml(w.company || '-')}</td>
+                    <td class="p-2 text-gray-600 max-w-[260px] truncate">${escapeHtml(w.title || w.memo || '-')}</td>
+                    <td class="p-2 text-xs text-gray-600 whitespace-nowrap">${escapeHtml(w.assignee || '미배정')}</td>
+                    <td class="p-2 whitespace-nowrap"><span class="px-1.5 py-0.5 rounded-full text-[11px] font-semibold ${stCls[w.status] || 'bg-gray-100 text-gray-600'}">${escapeHtml(sn[w.status] || w.status || '')}</span></td></tr>`).join('');
+            const xfer = typeof transferredWorksTo === 'function' ? transferredWorksTo('ops').filter(x => !xferClosed(x.w)).length : 0;
+            host.innerHTML = `
+                <div class="flex flex-wrap items-end justify-between gap-2 mb-4">
+                    <div><h3 class="text-lg font-bold text-gray-800">운영본부 현황</h3>
+                    <p class="text-gray-500 text-sm">운영업무센터에 등록된 업무 기준입니다. 카드와 줄을 누르면 해당 업무로 이동합니다.</p></div>
+                    <p class="text-xs text-gray-400">${escapeHtml(today)} 기준 · 전체 ${works.length}건</p>
+                </div>
+                <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 mb-6">
+                    ${dashCard(sn.received || '접수', by('received'), 'fa-inbox text-amber-500', 'border-amber-500', go('received'), '담당 배정 전')}
+                    ${dashCard(sn.assigned || '배정', by('assigned'), 'fa-user-check text-sky-500', 'border-sky-500', go('assigned'))}
+                    ${dashCard(sn.working || '처리중', by('working'), 'fa-screwdriver-wrench text-blue-500', 'border-blue-500', go('working'))}
+                    ${dashCard(sn.hold || '보류', by('hold'), 'fa-pause text-yellow-500', 'border-yellow-500', go('hold'))}
+                    ${dashCard('오늘 접수', cnt(w => w.receivedAt === today), 'fa-calendar-day text-green-500', 'border-green-500', go(''), `최근 7일 ${cnt(w => (w.receivedAt || '') >= weekAgo)}건`)}
+                    ${dashCard('이관 받은 업무', xfer, 'fa-people-arrows text-rose-500', 'border-rose-500', `navigate('ops-work-center', document.getElementById('nav-ops-work-center')); if (wcVisibleTypes('ops').some(t => t.id === 'transfer')) setWorkType('ops', 'transfer')`, '처리 전')}
+                </div>
+                <div class="grid grid-cols-1 xl:grid-cols-3 gap-4 mb-6">
+                    <div class="xl:col-span-2 bg-white p-4 rounded-lg shadow-sm border border-gray-200 overflow-x-auto">
+                        <h4 class="font-bold text-gray-700 mb-2"><i class="fas fa-layer-group text-green-600 mr-1"></i>업무유형별</h4>
+                        <table class="w-full text-sm min-w-[560px]"><thead><tr class="text-xs text-gray-500 border-b bg-gray-50">
+                            <th class="p-2 text-left font-medium">업무유형</th>${['received', 'assigned', 'working', 'hold'].map(st => `<th class="p-2 text-right font-medium">${escapeHtml(sn[st] || st)}</th>`).join('')}
+                            <th class="p-2 text-right font-medium">미완료</th><th class="p-2 text-right font-medium">완료</th></tr></thead>
+                            <tbody>${typeRows}</tbody></table>
+                    </div>
+                    <div class="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+                        <h4 class="font-bold text-gray-700 mb-2"><i class="fas fa-user-gear text-green-600 mr-1"></i>담당자별 미완료</h4>${ownerRows}
+                    </div>
+                </div>
+                <div class="bg-white p-4 rounded-lg shadow-sm border border-gray-200 overflow-x-auto">
+                    <div class="flex items-center justify-between mb-2"><h4 class="font-bold text-gray-700"><i class="fas fa-clock-rotate-left text-green-600 mr-1"></i>최근 미완료 업무</h4>
+                    ${canAll ? `<button type="button" onclick="${go('open')}" class="text-xs text-green-700 hover:underline">미완료 전체 보기 ›</button>` : ''}</div>
+                    <table class="w-full text-sm min-w-[640px]"><tbody>${recentRows || '<tr><td class="p-6 text-center text-gray-400">처리 중인 업무가 없습니다.</td></tr>'}</tbody></table>
+                </div>`;
+        }
+        function renderPaymentDashboard() {
+            const host = document.getElementById('payment-dash');
+            if (!host) return;
+            const reqs = (typeof payDocRequests !== 'undefined' ? payDocRequests : []);
+            const today = ymd(new Date());
+            const by = st => reqs.filter(r => r.status === st).length;
+            const open = reqs.filter(r => PAY_REQ_OPEN.includes(r.status));
+            const late = open.filter(r => r.dueDate && r.dueDate < today).length;
+            const go = (st) => `payDocFilter.status=${jsArg(st)}; navigate('payment-work-center', document.getElementById('nav-payment-work-center'))`;
+            const colors = { requested: ['border-amber-500', 'text-amber-500'], uploading: ['border-blue-500', 'text-blue-500'], submitted: ['border-indigo-500', 'text-indigo-500'], returned: ['border-red-500', 'text-red-500'], completed: ['border-green-500', 'text-green-500'] };
+            const cards = Object.keys(PAY_REQ_STATUS).map(k => dashCard(PAY_REQ_STATUS[k].name, by(k), PAY_REQ_STATUS[k].icon + ' ' + colors[k][1], colors[k][0], go(k))).join('');
+            const who = {};
+            open.forEach(r => { const k = r.claimedBy || (payDocIsGroupTarget(r) ? (r.targetType === 'team' ? '영업팀 전체' : PAY_DOC_OPS_TEAM_NAME) : r.targetName) || '-'; who[k] = (who[k] || 0) + 1; });
+            const whoRows = Object.entries(who).sort((a, b) => b[1] - a[1]).slice(0, 12)
+                .map(([n, c]) => `<div class="flex justify-between py-1.5 border-b border-gray-100 text-sm"><span class="text-gray-700">${escapeHtml(n)}</span><span class="font-semibold text-gray-800">${c}건</span></div>`).join('')
+                || '<p class="text-sm text-gray-400 py-4 text-center">처리 중인 요청이 없습니다.</p>';
+            const recent = open.slice().sort((a, b) => String(b.requestedAt || b.createdAt || '').localeCompare(String(a.requestedAt || a.createdAt || ''))).slice(0, 10);
+            const rows = recent.map(r => { const st = PAY_REQ_STATUS[r.status] || PAY_REQ_STATUS.requested; const dd = r.dueDate && r.dueDate < today;
+                return `<tr onclick="openPayDocDetail(${jsArg(r.id)})" class="border-b border-gray-100 hover:bg-yellow-50 cursor-pointer" title="눌러서 상세 보기">
+                    <td class="p-2 text-xs text-gray-500 whitespace-nowrap">${escapeHtml(String(r.requestedAt || r.createdAt || '').slice(0, 10))}</td>
+                    <td class="p-2 font-semibold text-gray-800 whitespace-nowrap">${escapeHtml(r.merchant || '-')}</td>
+                    <td class="p-2 text-xs text-gray-600 whitespace-nowrap">${escapeHtml(r.claimedBy || r.targetName || '')}</td>
+                    <td class="p-2 text-xs whitespace-nowrap ${dd ? 'text-red-600 font-semibold' : 'text-gray-500'}">${r.dueDate ? '기한 ' + escapeHtml(r.dueDate) : ''}</td>
+                    <td class="p-2 whitespace-nowrap"><span class="px-1.5 py-0.5 rounded-full text-[11px] font-semibold ${st.chip}">${escapeHtml(st.name)}</span></td></tr>`; }).join('');
+            host.innerHTML = `
+                <div class="flex flex-wrap items-end justify-between gap-2 mb-4">
+                    <div><h3 class="text-lg font-bold text-gray-800">결제본부 현황</h3>
+                    <p class="text-gray-500 text-sm">결제업무센터 보완서류 요청 기준입니다. 카드와 줄을 누르면 해당 목록이나 상세로 이동합니다.</p></div>
+                    <p class="text-xs text-gray-400">${escapeHtml(today)} 기준 · 전체 ${reqs.length}건 · 미완료 ${open.length}건${late ? ` · <span class="text-red-600 font-semibold">기한 지남 ${late}건</span>` : ''}</p>
+                </div>
+                <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3 mb-6">${cards}</div>
+                <div class="grid grid-cols-1 xl:grid-cols-3 gap-4">
+                    <div class="xl:col-span-2 bg-white p-4 rounded-lg shadow-sm border border-gray-200 overflow-x-auto">
+                        <div class="flex items-center justify-between mb-2"><h4 class="font-bold text-gray-700"><i class="fas fa-clock-rotate-left text-yellow-500 mr-1"></i>최근 미완료 요청</h4>
+                        <button type="button" onclick="${go('open')}" class="text-xs text-yellow-700 hover:underline">미완료 전체 보기 ›</button></div>
+                        <table class="w-full text-sm min-w-[560px]"><tbody>${rows || '<tr><td class="p-6 text-center text-gray-400">처리 중인 요청이 없습니다.</td></tr>'}</tbody></table>
+                    </div>
+                    <div class="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+                        <h4 class="font-bold text-gray-700 mb-2"><i class="fas fa-user-tie text-yellow-500 mr-1"></i>담당별 미완료</h4>${whoRows}
+                    </div>
+                </div>`;
+        }
+
         function renderSalesDashboard() {
             const set = (id, v) => { const el = document.getElementById(id); if (el) el.innerText = v; };
             const qs = (typeof quotes !== 'undefined' ? quotes : []);
