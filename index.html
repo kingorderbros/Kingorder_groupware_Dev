@@ -10897,7 +10897,7 @@ const QUOTE_TEMPLATES = [
         function orgTeamNamesInUse(deptId) {
             const master = orgTeamNamesOf(deptId);
             const used = (typeof localUsers !== 'undefined' ? localUsers : [])
-                .filter(u => u.dept === deptId).map(u => String(u.team || '').trim()).filter(Boolean);
+                .filter(u => u.dept === deptId && !(typeof isResigned === 'function' && isResigned(u))).map(u => String(u.team || '').trim()).filter(Boolean);
             return Array.from(new Set(master.concat(used)));
         }
 
@@ -10984,9 +10984,10 @@ const QUOTE_TEMPLATES = [
         // - 팀장/본부장: 같은 부서(팀) 전체 (admin/본부장 데모는 전 부서)
         function getVisibleMembers(name, dept, level) {
             const self = localUsers.find(u => u.name === name);
+            const live = activeUsers();   // 퇴사자는 통합현황에 표시하지 않습니다 (2026-11-10)
             // 대표·관리자: 전사 (권한 그룹이 관리자인 겸직 계정 포함 · 2026-09-21)
             if (dept === 'admin' || dept === '' || levelClass(level) === 'admin' || levelClass(level) === 'exec' || isAdminAccount(self)) {
-                return localUsers.slice();
+                return live.slice();
             }
             if (levelClass(level) === 'manager') {
                 return self ? [self] : [{ name, dept, rank: '', level }];
@@ -10994,12 +10995,12 @@ const QUOTE_TEMPLATES = [
             // 팀장/본부장: 일정 조회 범위 설정을 그대로 따름
             //  (본부장 기본값 cross → 전 부서 크로스체크, 팀장 기본값 dept → 자기 부서)
             const scopeInfo = getCalendarScopeFor(name, dept, level);
-            if (scopeInfo.scope === 'all' || scopeInfo.scope === 'cross') return localUsers.slice();
+            if (scopeInfo.scope === 'all' || scopeInfo.scope === 'cross') return live.slice();
             if (scopeInfo.scope === 'custom') {
                 const allowed = new Set([dept, ...(scopeInfo.depts || [])]);
-                return localUsers.filter(u => allowed.has(u.dept));
+                return live.filter(u => allowed.has(u.dept));
             }
-            return localUsers.filter(u => u.dept === dept);
+            return live.filter(u => u.dept === dept);
         }
 
         // 사용자 입력을 innerHTML에 삽입하기 전 HTML 이스케이프 (XSS 방지)
@@ -18725,7 +18726,7 @@ const QUOTE_TEMPLATES = [
         const BIRTHDAY_ID_PREFIX = 'bday:';
         function isBirthdaySchedule(s) { return !!s && s.birthday === true; }
         function birthdaySchedules() {
-            const users = (typeof localUsers !== 'undefined' && Array.isArray(localUsers)) ? localUsers : [];
+            const users = ((typeof localUsers !== 'undefined' && Array.isArray(localUsers)) ? localUsers : []).filter(u => !isResigned(u));   // 퇴사자 생일은 표시 안 함 (2026-11-10)
             const externalDepts = (typeof orgDeptList === 'function' ? orgDepts.filter(d => d.external).map(d => d.id) : []).concat(['vendor']);
             const y0 = new Date().getFullYear();
             const leap = (y) => (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
@@ -24105,7 +24106,7 @@ const QUOTE_TEMPLATES = [
         }
         function wcStaffOf(deptId, extras) {
             const mine = (typeof localUsers !== 'undefined' ? localUsers : [])
-                .filter(u => u.dept === deptId)
+                .filter(u => u.dept === deptId && !isResigned(u))   // 퇴사자 제외 (2026-11-10) — 이미 지정된 값은 extras 로 남음
                 .sort((a, b) => orgRankWeight(a.rank) - orgRankWeight(b.rank) || String(a.name).localeCompare(String(b.name), 'ko'))
                 .map(u => u.name);
             return mine.concat((extras || []).filter(n => mine.indexOf(n) < 0));
@@ -26569,11 +26570,13 @@ const QUOTE_TEMPLATES = [
         // 실제로 일이 걸려 있는 사람을 기준으로 만듭니다 (등록 사용자 + 데이터에만 있는 담당자까지)
         function execStaffList() {
             const map = {};
-            (localUsers || []).filter(u => u.dept !== 'vendor').forEach(u => {
+            // 퇴사자는 현황판 직원 줄에 표시하지 않습니다 (2026-11-10)
+            const gone = new Set((localUsers || []).filter(isResigned).map(u => u.name));
+            (localUsers || []).filter(u => u.dept !== 'vendor' && !isResigned(u)).forEach(u => {
                 map[u.name] = { name: u.name, dept: u.dept, rank: u.rank || '', level: u.level || 'manager', items: [] };
             });
             execItems.forEach(i => {
-                if (!i.owner) return;
+                if (!i.owner || gone.has(i.owner)) return;
                 if (!map[i.owner]) map[i.owner] = { name: i.owner, dept: i.dept, rank: '', level: '', items: [] };
                 map[i.owner].items.push(i);
             });
@@ -38690,7 +38693,8 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             return parts.length ? `${name} (${parts.join(' · ')})` : name;
         }
         function approverMembersOf(featureId) {
-            return (appSettings.approverMembers[featureId] || []).slice();
+            const gone = new Set(allUsersForApprover().filter(isResigned).map(u => u.name));   // 퇴사자 제외 (2026-11-10)
+            return (appSettings.approverMembers[featureId] || []).filter(n => !gone.has(n));
         }
 
         // 선택 가능한 승인권자 목록 — 구성원을 관리하는 기능은 그 구성원만, 아니면 전체 사용자
@@ -38701,7 +38705,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             }
             const seen = new Set();
             const list = [];
-            allUsersForApprover().forEach(u => {
+            allUsersForApprover().filter(u => !isResigned(u)).forEach(u => {
                 const label = `${u.name}${u.rank ? ' (' + u.rank + ')' : ''}`;
                 if (!seen.has(label)) { seen.add(label); list.push({ value: u.name, label }); }
             });
@@ -44947,7 +44951,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             if (!partnerAdminPermDraft) partnerAdminPermDraft = JSON.parse(JSON.stringify(partnerAdminPerm().users || {}));
             const d = partnerAdminPermDraft;
             const isAdm = (u) => userGroupIds(u).indexOf('admin') > -1 || u.dept === 'admin' || u.level === 'admin' || u.isAdmin === true;
-            const staff = (localUsers || []).filter(u => u && u.email && u.dept !== 'vendor')
+            const staff = (localUsers || []).filter(u => u && u.email && u.dept !== 'vendor' && !isResigned(u))
                 .sort((a, b) => (isAdm(b) - isAdm(a)) || String(a.name || '').localeCompare(String(b.name || ''), 'ko'));
             const saved = partnerAdminPerm();
             const cell = (u, key) => {
@@ -51579,7 +51583,8 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
         function ptreeRowsHtml(users, personHtml, opts) {
             const o = opts || {};
             // 관리자 계정 · 사외 계정은 조직원 트리에 넣지 않습니다 (2026-11-07)
-            const groups = orgGrouped(users.filter(u => ORG_HIDDEN_DEPTS.indexOf(u.dept) < 0));
+            // 퇴사자는 트리에서 뺍니다 — 지금 골라져 있는 사람만 남깁니다 (2026-11-10)
+            const groups = orgGrouped(users.filter(u => ORG_HIDDEN_DEPTS.indexOf(u.dept) < 0 && (!isResigned(u) || (o.isOpen && o.isOpen(u)))));
             const node = (label, icon, inner, open, count, extraCls) => `
                 <div data-ptree-node class="${extraCls || ''}">
                     <div class="ptree-hd flex items-center gap-1.5 px-2 py-1.5 bg-gray-50/70 border-b border-gray-100">
@@ -63551,7 +63556,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             let html = partnerIntakeBodyHtml(x, true);
 
             if (canHandle) {
-                const users = (typeof localUsers !== 'undefined' ? localUsers : []).filter(u => partnerIntakeDepts(x).indexOf(u.dept) > -1);
+                const users = (typeof localUsers !== 'undefined' ? localUsers : []).filter(u => partnerIntakeDepts(x).indexOf(u.dept) > -1 && (!isResigned(u) || u.name === x.assignee));   // 퇴사자 제외, 이미 지정된 사람은 표시 (2026-11-10)
                 html += `<div class="bg-teal-50/60 border border-teal-100 rounded p-3 space-y-3">
                     <p class="text-teal-800 font-semibold"><i class="fas fa-wrench mr-1"></i>처리</p>
                     <div>
