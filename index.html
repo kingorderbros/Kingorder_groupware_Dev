@@ -27326,7 +27326,7 @@ const QUOTE_TEMPLATES = [
         // 담당자 · 상담자는 직원 목록에서 고릅니다 (2026-11-09 — 직접 입력하면 같은 사람이 다르게 적혀 조회가 갈렸음).
         // 예전에 적어 둔 이름이 목록에 없으면 그 이름도 그대로 남겨 둡니다.
         function inboundStaffOptionsHtml(dept, cur) {
-            const names = dept ? inboundDeptUsers(dept) : pickableUsers().map(u => u.name).filter(Boolean);
+            const names = dept ? inboundDeptUsers(dept) : inboundPickable().map(u => u.name).filter(Boolean);
             const c = String(cur || '').trim();
             const list = c && names.indexOf(c) < 0 ? [c].concat(names) : names;
             return `<option value="">선택하세요</option>` + list.map(n => `<option value="${escapeHtml(n)}" ${n === c ? 'selected' : ''}>${escapeHtml(n)}</option>`).join('');
@@ -27848,10 +27848,12 @@ const QUOTE_TEMPLATES = [
         function inboundNeedsCheck(r) { return !r.spam && ((r.flags || []).length > 0 || !!r.dupOf); }
         function inboundLive() { return inboundRecords.filter(r => !r.spam); }
 
+        // 인바운드 담당자 후보 — 휴직자 · 퇴사자 제외 (2026-11-03), 기술영업본부 제외 (2026-11-10 다니엘님: 인바운드에서는 뺌)
+        function inboundPickable() { return pickableUsers().filter(u => !String(deptName(u.dept) || '').includes('기술영업')); }
         // 담당자 고르기 — 부서 이름에 영업 · 운영이 들어간 구성원
         function inboundDeptUsers(dept) {
             const word = dept === '운영' ? '운영' : '영업';
-            const all = pickableUsers();   // 휴직자 · 퇴사자 제외 (2026-11-03)
+            const all = inboundPickable();
             const list = all.filter(u => String(deptName(u.dept) || '').includes(word)).map(u => u.name).filter(Boolean);
             return list.length ? list : all.map(u => u.name).filter(Boolean);
         }
