@@ -14,7 +14,7 @@ srv.listen(8864,async()=>{const br=await pp.launch({executablePath:'/Application
  console.log('■ 운영업무센터');await login('운영직원');
  await pg.evaluate(()=>navigate('ops-work-center',document.getElementById('nav-ops-work-center')||null));await wait(300);
  let r=await pg.evaluate(()=>{const tabs=[...wcEl('ops','type-tabs').querySelectorAll('button')].map(b=>b.textContent.trim());const opts=[...wcEl('ops','intake-type').options].map(o=>o.textContent);return{tabs,opts};});
- ok(r.tabs.includes('기타&단순문의'),'1. 기타&단순문의 탭',r.tabs);ok(r.tabs.includes('전체 업무이력'),'2. 전체 업무이력 탭',r.tabs);ok(r.opts.includes('기타&단순문의')&&!r.opts.includes('전체 업무이력'),'1. 접수유형 선택지',r.opts);
+ ok(r.tabs.includes('기타&단순문의'),'1. 기타&단순문의 탭',r.tabs);ok(!r.tabs.includes('전체 업무이력'),'2. 전체 업무이력은 탭 줄이 아니라 왼쪽 메뉴로 (2026-11-10)',r.tabs);ok(r.opts.includes('기타&단순문의')&&!r.opts.includes('전체 업무이력'),'1. 접수유형 선택지',r.opts);
  // 10. 연락처 검색
  r=await pg.evaluate(()=>{const v=(id,x)=>{wcEl('ops',id).value=x;};v('search-phone','010 1111');searchWorkCenterCustomer('ops');const c=wcCustomer('ops',wcState.ops.customerId);return{picked:c&&c.name};});
  ok(r.picked==='가나다식당','10. 휴대폰 번호로 고객 조회',r);

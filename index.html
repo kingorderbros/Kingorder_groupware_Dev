@@ -2091,6 +2091,10 @@
                     <a href="#" onclick="navigate('ops-work-center', this)" id="nav-ops-work-center" class="nav-item block px-3 py-2 pl-10 rounded-md hover:bg-slate-800/70 transition-colors text-sm text-gray-300">
                         <i class="fas fa-clipboard-list w-4 mr-1 text-emerald-400"></i> 운영업무센터
                     </a>
+                    <!-- 전체 업무이력 (2026-11-10) — 운영업무센터 안의 탭이던 것을 메뉴로 뺐습니다. 화면은 운영업무센터의 '전체 업무이력' 그대로, 권한 ops-wc-allworks -->
+                    <a href="#" onclick="navigate('ops-work-center', this)" id="nav-ops-allworks" class="nav-item block px-3 py-2 pl-10 rounded-md hover:bg-slate-800/70 transition-colors text-sm text-gray-300 hidden">
+                        <i class="fas fa-list-ul w-4 mr-1 text-emerald-400"></i> 전체 업무이력
+                    </a>
                 </div>
                 <a href="#" onclick="toggleSubmenu('submenu-payment'); navigate('payment', this)" id="nav-payment" class="nav-item flex justify-between items-center px-3 py-2 rounded-md hover:bg-slate-800/70 transition-colors">
                     <div><i class="fas fa-credit-card w-5 mr-2 text-yellow-400"></i><span id="nav-payment-label"> 결제본부 </span></div>
@@ -11707,6 +11711,7 @@ const QUOTE_TEMPLATES = [
             const seesOps = isAllowed('ops');
             document.getElementById('nav-ops').classList.toggle('hidden', !seesOps);
             document.getElementById('nav-ops-work-center').classList.toggle('hidden', !seesOps || !canUseScreen('ops-work-center'));
+            document.getElementById('nav-ops-allworks').classList.toggle('hidden', !seesOps || !canUseScreen('ops-work-center') || !canSeePage('ops-wc-allworks'));
 
             const seesPayment = isAllowed('payment');
             document.getElementById('nav-payment').classList.toggle('hidden', !seesPayment);
@@ -13347,6 +13352,7 @@ const QUOTE_TEMPLATES = [
         // (예: 관리업무센터 화면에 법인카드만 보이는 사람에게는 '법인카드 사용내역' 으로)
         function pageTitleFor(sectionId) {
             if (sectionId === 'payment-work-center' && payWcViaSalesMenu) return PAY_WC_SALES_ENTRY.name;
+            if (sectionId === 'ops-work-center' && wcOpsAllWorksOn('ops')) return '전체 업무이력';   // 왼쪽 메뉴 '전체 업무이력' (2026-11-10)
             const cm = crossDeptMenuFor(sectionId);
             if (cm) return crossDeptMenuName(cm);
             return pageTitles[sectionId] || '킹오더브라더스 그룹웨어';
@@ -13440,6 +13446,19 @@ const QUOTE_TEMPLATES = [
                 payWcViaSalesMenu = element.id === 'nav-sales-doc-supplement';
             }
 
+            // 운영업무센터는 두 메뉴(운영업무센터 · 전체 업무이력)로 들어옵니다 (2026-11-10).
+            // 전체 업무이력 메뉴면 그 화면을, 운영업무센터 메뉴면 업무 탭(전체 업무이력이 아닌 첫 탭)을 엽니다. 실시간 다시 그리기는 그대로 둡니다.
+            let opsTabSwitch = '';
+            if (sectionId === 'ops-work-center' && !window.__gwNavSilent && element && typeof wcState !== 'undefined' && wcState.ops) {
+                const wantAll = element.id === 'nav-ops-allworks';
+                const isAll = wcType('ops', wcState.ops.activeType).panel === 'allworks';
+                if (wantAll && !isAll && canSeePage(wcTypePerm('ops', 'allworks'))) opsTabSwitch = 'allworks';
+                else if (!wantAll && isAll) {
+                    const first = wcVisibleTypes('ops').find(t => t.panel !== 'allworks');
+                    if (first) opsTabSwitch = first.id;
+                }
+            }
+
             // 모든 콘텐츠 섹션 숨기기
             const sections = document.querySelectorAll('.content-section');
             sections.forEach(sec => sec.classList.add('hidden'));
@@ -13484,6 +13503,7 @@ const QUOTE_TEMPLATES = [
                 renderSettingsCenter();  // 활성 탭(설정 4종)에 맞춰 렌더
             } else if (sectionId === 'ops-work-center') {
                 renderWorkCenter('ops');
+                if (opsTabSwitch) setWorkType('ops', opsTabSwitch);   // 들어온 메뉴에 맞는 탭으로 (고객조회 접기·펼치기 포함)
             } else if (sectionId === 'sales-work-center') {
                 renderWorkCenter('sales');
             } else if (sectionId === 'sales-supply') {
@@ -25127,7 +25147,7 @@ const QUOTE_TEMPLATES = [
                             <!-- 보완사항 2026-10-23 — 신규 등록 · 가맹점 목록 · 전체 업무이력 -->
                             <button onclick="createWorkCenterCustomer(${jsArg(key)})" class="bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 flex-1 sm:flex-none px-3 py-2 rounded text-sm transition-colors whitespace-nowrap"><i class="fas fa-plus mr-1"></i>신규 등록</button>
                             ${key === 'ops' ? `<button onclick="openWcShopList(${jsArg(key)})" class="bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 flex-1 sm:flex-none px-3 py-2 rounded text-sm transition-colors whitespace-nowrap"><i class="fas fa-store mr-1"></i>가맹점 목록</button>
-                            <button onclick="${key === 'ops' ? `setWorkType(${jsArg(key)}, 'allworks')` : `openWcAllWorks(${jsArg(key)})`}" class="bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 flex-1 sm:flex-none px-3 py-2 rounded text-sm transition-colors whitespace-nowrap"><i class="fas fa-list-ul mr-1"></i>전체 업무이력</button>` : ''}
+                            <button onclick="${key === 'ops' ? `navigate('ops-work-center', document.getElementById('nav-ops-allworks'))` : `openWcAllWorks(${jsArg(key)})`}" class="bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 flex-1 sm:flex-none px-3 py-2 rounded text-sm transition-colors whitespace-nowrap"><i class="fas fa-list-ul mr-1"></i>전체 업무이력</button>` : ''}
                         </div>
                         <div id="${wcId(key, 'customer-summary')}" class="mt-2"></div>
                     </div>
@@ -25299,6 +25319,24 @@ const QUOTE_TEMPLATES = [
             renderWorkHistory(key);
             renderWorkIntakeFields(key);
             renderWorkProcess(key);
+            if (key === 'ops') applyOpsAllWorksChrome();
+        }
+
+        // 운영 '전체 업무이력' 은 왼쪽 메뉴로 따로 들어옵니다 (2026-11-10).
+        // 그 화면일 때는 업무 탭 줄 · '고객 미선택' 표시를 숨기고 제목을 '전체 업무이력' 으로 바꿉니다.
+        function wcOpsAllWorksOn(key) {
+            return key === 'ops' && typeof wcState !== 'undefined' && !!wcState.ops && wcType('ops', wcState.ops.activeType).panel === 'allworks';
+        }
+        function applyOpsAllWorksChrome() {
+            const on = wcOpsAllWorksOn('ops');
+            const tabs = wcEl('ops', 'type-tabs');
+            if (tabs) tabs.classList.toggle('hidden', on);
+            const t = document.getElementById('wc-title-ops');
+            if (t) { const cm = crossDeptMenuFor('ops-work-center'); t.textContent = on ? '전체 업무이력' : (cm ? crossDeptMenuName(cm) : wcDef('ops').title); }
+            const sec = document.getElementById('sec-ops-work-center');
+            const pt = document.getElementById('page-title');
+            if (sec && pt && !sec.classList.contains('hidden')) pt.innerText = pageTitleFor('ops-work-center');
+            applyWorkSearchCollapse('ops');
         }
 
         // ---------- ① 고객검색 ----------
@@ -25726,7 +25764,7 @@ const QUOTE_TEMPLATES = [
             if (picked) {
                 const c = wcCustomer(key, wcState[key].customerId);
                 picked.title = c ? '선택한 고객사: ' + c.name + ' (클릭하면 고객조회 영역이 펼쳐집니다)' : '선택한 고객이 없습니다. 클릭하면 고객조회 영역이 펼쳐집니다';
-                picked.className = open ? 'hidden'
+                picked.className = (open || wcOpsAllWorksOn(key)) ? 'hidden'
                     : c ? `cursor-pointer inline-flex items-center gap-1.5 min-w-0 px-3 py-1 rounded-full text-white text-sm md:text-base font-bold shadow-sm ${wcDef(key).accent.btn.split(' ')[0]}`
                         : 'cursor-pointer inline-flex items-center gap-1.5 min-w-0 px-3 py-1 rounded-full text-sm font-semibold bg-amber-50 border border-amber-300 text-amber-700';
                 picked.innerHTML = c
@@ -25878,7 +25916,8 @@ const QUOTE_TEMPLATES = [
         // ---------- ② 업무유형 탭 ----------
         function renderWorkTypeTabs(key) {
             const st = wcState[key];
-            const types = wcVisibleTypes(key);
+            // 운영 '전체 업무이력' 은 왼쪽 메뉴로 옮겼습니다 (2026-11-10) — 탭 줄에는 표시하지 않습니다
+            const types = wcVisibleTypes(key).filter(t => !(key === 'ops' && t.panel === 'allworks'));
             if (!types.length) {
                 wcEl(key, 'type-tabs').innerHTML = '<p class="text-sm text-gray-400 px-2 py-1">접근 권한이 있는 업무유형이 없습니다.</p>';
                 return;
@@ -25924,6 +25963,7 @@ const QUOTE_TEMPLATES = [
             renderWorkHistory(key);
             renderWorkIntakeFields(key);
             renderWorkProcess(key);
+            if (key === 'ops') applyOpsAllWorksChrome();
         }
 
         function renderWorkTypeHeader(key) {
