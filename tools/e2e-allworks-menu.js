@@ -38,6 +38,15 @@ srv.listen(8861,async()=>{const br=await pp.launch({executablePath:'/Application
  const btn=await pg.evaluateHandle(()=>[...document.querySelectorAll('#sec-ops-work-center button')].find(b=>b.textContent.trim()==='전체 업무이력'));
  if(btn&&await btn.evaluate(b=>!!b)){await btn.evaluate(b=>b.click());await new Promise(r=>setTimeout(r,300));s=await st();ok('화면 안 [전체 업무이력] 단추 → 메뉴와 같게',s.active==='allworks'&&s.navOn,s.active);}
  else ok('화면 안 [전체 업무이력] 단추 찾기',false);
+ // 메뉴 숫자 = 접수 + 보류 (2026-11-10)
+ const bd=await pg.evaluate(()=>{const ws=WORK_CENTERS.ops.works;const base={type:'as',company:'숫자시험',receivedAt:ymd(new Date()),title:'시험',customerId:''};
+   ws.splice(0,ws.length);ws.push(Object.assign({id:'B1',status:'received'},base),Object.assign({id:'B2',status:'received'},base),Object.assign({id:'B3',status:'hold'},base),Object.assign({id:'B4',status:'working'},base),Object.assign({id:'B5',status:'done'},base));
+   saveWorks();const el=document.getElementById('nav-ops-allworks-badge');const a={text:el.innerText,shown:!el.classList.contains('hidden'),title:el.title};
+   ws.forEach(w=>w.status='done');saveWorks();a.hiddenWhenZero=el.classList.contains('hidden');
+   ws[0].status='hold';navigate('ops-work-center',document.getElementById('nav-ops-allworks'));a.afterNav=el.innerText;return a;});
+ ok('메뉴 숫자 = 접수 2 + 보류 1 = 3',bd.text==='3'&&bd.shown&&bd.title==='접수 2건 · 보류 1건',bd);
+ ok('없으면 숫자 숨김',bd.hiddenWhenZero,bd);
+ ok('화면 들어갈 때 다시 셈',bd.afterNav==='1',bd);
  // 새로고침하면 전체 업무이력 메뉴·화면으로 돌아옴
  await pg.reload({waitUntil:'networkidle0'});await pg.evaluate(()=>enterApp({email:'daniel@kingorder.co.kr',dept:'admin',name:'정장훈'}));await new Promise(r=>setTimeout(r,500));s=await st();
  ok('새로고침 뒤 전체 업무이력으로 복원',s.secShown&&s.active==='allworks'&&s.navOn,s);

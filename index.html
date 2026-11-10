@@ -2092,8 +2092,9 @@
                         <i class="fas fa-clipboard-list w-4 mr-1 text-emerald-400"></i> 운영업무센터
                     </a>
                     <!-- 전체 업무이력 (2026-11-10) — 운영업무센터 안의 탭이던 것을 메뉴로 뺐습니다. 화면은 운영업무센터의 '전체 업무이력' 그대로, 권한 ops-wc-allworks -->
-                    <a href="#" onclick="navigate('ops-work-center', this)" id="nav-ops-allworks" class="nav-item block px-3 py-2 pl-10 rounded-md hover:bg-slate-800/70 transition-colors text-sm text-gray-300 hidden">
-                        <i class="fas fa-list-ul w-4 mr-1 text-emerald-400"></i> 전체 업무이력
+                    <a href="#" onclick="navigate('ops-work-center', this)" id="nav-ops-allworks" class="nav-item flex items-center justify-between px-3 py-2 pl-10 rounded-md hover:bg-slate-800/70 transition-colors text-sm text-gray-300 hidden">
+                        <div><i class="fas fa-list-ul w-4 mr-1 text-emerald-400"></i> 전체 업무이력</div>
+                        <span id="nav-ops-allworks-badge" class="hidden ml-auto bg-amber-500 text-white text-xs font-bold rounded-full px-2 leading-5"></span>
                     </a>
                 </div>
                 <a href="#" onclick="toggleSubmenu('submenu-payment'); navigate('payment', this)" id="nav-payment" class="nav-item flex justify-between items-center px-3 py-2 rounded-md hover:bg-slate-800/70 transition-colors">
@@ -11899,6 +11900,7 @@ const QUOTE_TEMPLATES = [
             renderPersonalDashboard(userName, role);
             if (canViewTeam(level)) renderTeamOverview();
             updatePayDocBadge();   // 보완서류 미처리 건수 뱃지
+            updateOpsAllWorksBadge();   // 전체 업무이력 접수 · 보류 건수 뱃지
 
             document.getElementById('login-view').classList.add('hidden');
             document.getElementById('app-view').classList.remove('hidden');
@@ -24253,7 +24255,21 @@ const QUOTE_TEMPLATES = [
 
         let workSaved = new Map();
 
+        // 왼쪽 메뉴 '전체 업무이력' 숫자 — 운영업무센터의 접수 · 보류 건 (2026-11-10, 결제업무센터 숫자와 같은 모양)
+        function updateOpsAllWorksBadge() {
+            const el = typeof document !== 'undefined' && document.getElementById('nav-ops-allworks-badge');
+            if (!el || typeof WORK_CENTERS === 'undefined' || !WORK_CENTERS.ops) return;
+            const works = WORK_CENTERS.ops.works || [];
+            const rcv = works.filter(w => w && w.status === 'received').length;
+            const hold = works.filter(w => w && w.status === 'hold').length;
+            const n = rcv + hold;
+            el.innerText = n;
+            el.title = `접수 ${rcv}건 · 보류 ${hold}건`;
+            el.classList.toggle('hidden', n === 0);
+        }
+
         function saveWorks() {
+            updateOpsAllWorksBadge();
             if (!window.kobDb) return;
             const alive = new Set();
             Object.keys(WORK_CENTERS).forEach(key => {
@@ -24297,6 +24313,7 @@ const QUOTE_TEMPLATES = [
                 });
                 if (WORK_CENTERS[k].seq <= max) WORK_CENTERS[k].seq = max + 1;
             });
+            updateOpsAllWorksBadge();
         }
         loadWorksFromDb();
 
@@ -25320,7 +25337,7 @@ const QUOTE_TEMPLATES = [
             renderWorkHistory(key);
             renderWorkIntakeFields(key);
             renderWorkProcess(key);
-            if (key === 'ops') applyOpsAllWorksChrome();
+            if (key === 'ops') { applyOpsAllWorksChrome(); updateOpsAllWorksBadge(); }
         }
 
         // 운영 '전체 업무이력' 은 왼쪽 메뉴로 따로 들어옵니다 (2026-11-10).
