@@ -42620,7 +42620,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                     <div class="px-4 py-3 flex flex-wrap items-end gap-2">
                         <div class="min-w-[220px] flex-1">
                             <label class="block text-xs font-medium text-gray-600 mb-1">검색</label>
-                            <input type="text" value="${escapeHtml(orgFilter.q)}" oninput="setOrgFilter('q', this.value)" placeholder="이름 · 직급 · 팀 · 담당업무 · 연락처" class="w-full ${selCls}" />
+                            <input type="text" value="${escapeHtml(orgFilter.q)}" oninput="setOrgFilter('q', this.value)" placeholder="이름 · 본부 · 직급 · 팀 · 담당업무 · 연락처" class="w-full ${selCls}" />
                         </div>
                         <div>
                             <label class="block text-xs font-medium text-gray-600 mb-1">부서</label>
@@ -42714,7 +42714,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             return orgChartMembers().filter(u => {
                 if (orgManageFilter.dept && u.dept !== orgManageFilter.dept) return false;
                 if (orgManageFilter.team && orgTeamName(u) !== orgManageFilter.team) return false;
-                if (q && !norm([u.name, u.rank, orgTeamName(u), u.duty, u.email, u.phone, u.mobile, u.birthday].join(' ')).includes(q)) return false;
+                if (q && !norm([u.name, u.rank, orgTeamName(u), u.duty, u.email, u.phone, u.mobile, u.birthday, orgDeptName(u.dept)].join(' ')).includes(q)) return false;   // 본부 이름으로도 검색 (2026-11-10, 기술영업본부)
                 return true;
             }).sort((a, b) => {
                 const order = orgDeptOrder();
@@ -43305,7 +43305,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                     <div class="px-4 py-3 flex flex-wrap items-end gap-2">
                         <div class="min-w-[200px] flex-1">
                             <label class="block text-xs font-medium text-gray-600 mb-1">검색</label>
-                            <input type="text" value="${escapeHtml(orgManageFilter.q)}" oninput="setOrgManageFilter('q', this.value)" placeholder="이름 · 직급 · 팀 · 담당업무 · 연락처" class="w-full ${selCls}" />
+                            <input type="text" value="${escapeHtml(orgManageFilter.q)}" oninput="setOrgManageFilter('q', this.value)" placeholder="이름 · 본부 · 직급 · 팀 · 담당업무 · 연락처" class="w-full ${selCls}" />
                         </div>
                         <div><label class="block text-xs font-medium text-gray-600 mb-1">부서</label>
                             <select onchange="setOrgManageFilter('dept', this.value)" class="${selCls}">
