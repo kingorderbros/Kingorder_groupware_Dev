@@ -46,10 +46,12 @@
                 // 첫 그림부터 맞는 화면이 나오게 <html data-mode> 를 지금 답니다 (2026-09-21).
                 // 본체는 자료를 다 받은 뒤에야 도는데, 그동안 파트너센터·운행일지 주소로 들어와도
                 // 그룹웨어 로그인 화면이 먼저 보였다가 바뀌었습니다. 아래 <style> 이 이 속성을 봅니다.
-                document.documentElement.setAttribute('data-mode', m === 'partner' ? 'partner' : m === 'mobile' ? 'mobile' : 'groupware');
+                if (!m && location.hash === '#calendar') m = 'calendar';
+                // 킹오더일정(?mode=calendar · 2026-11-12) — 그룹웨어와 같은 문서 · 같은 로그인으로 일정 화면만 휴대폰에 맞춰 보여 줍니다
+                document.documentElement.setAttribute('data-mode', m === 'partner' ? 'partner' : m === 'mobile' ? 'mobile' : m === 'calendar' ? 'calendar' : 'groupware');
                 // 새로고침 때 로그인 화면이 잠깐 보이지 않게 (2026-09-29) — 이 브라우저에 로그인 기록(supabase-js 의 sb-…-auth-token)이
                 // 남아 있으면 로그인 화면 대신 '여는 중' 을 보여 줍니다. 본체가 들어가거나 로그인이 필요하다고 판단하면 이 표시를 뗍니다.
-                if (!m || m === 'mobile') {                 // 운행일지도 로그인이 남아 있으면 로그인 칸 대신 '여는 중' (2026-09-29 검토)
+                if (!m || m === 'mobile' || m === 'calendar') {                 // 운행일지도 로그인이 남아 있으면 로그인 칸 대신 '여는 중' (2026-09-29 검토)
                     try {
                         for (var i = 0; i < localStorage.length; i++) {
                             if (/^sb-.+-auth-token$/.test(localStorage.key(i) || '')) { document.documentElement.setAttribute('data-auth', 'session'); break; }
@@ -62,6 +64,8 @@
                     ? { f: 'partner.webmanifest',   t: '킹오더브라더스 파트너센터',   s: '파트너센터',   c: '#4338ca' }
                     : m === 'mobile'
                     ? { f: 'mobile.webmanifest',    t: '킹오더브라더스 운행일지',     s: '운행기록',     c: '#4f46e5' }
+                    : m === 'calendar'
+                    ? { f: 'calendar.webmanifest',  t: '킹오더브라더스 일정',         s: '킹오더일정',   c: '#1e293b' }
                     : { f: 'groupware.webmanifest', t: '킹오더브라더스 그룹웨어',     s: '그룹웨어',     c: '#1e293b' };
                 // 개발환경(env: 'dev')은 홈 화면 · 창 이름 앞에 [DEV] 를 붙여 운영과 헷갈리지 않게 합니다 (2026-10-12).
                 // manifest 는 정적 파일이라 dev 전용(dev-*.webmanifest)을 따로 둡니다. prod 는 설정이 'prod' 라 원래 이름 그대로.
@@ -70,6 +74,12 @@
                     // 개발환경 아이콘은 검정 바탕 로고 (2026-11-03) — 홈 화면 · 탭에서 운영과 한눈에 구분
                     var ico = document.querySelector('link[rel="icon"]'); if (ico) ico.href = 'assets/pwa/dev-icon-192.png';
                     var ati = document.querySelector('link[rel="apple-touch-icon"]'); if (ati) ati.href = 'assets/pwa/dev-apple-touch-icon.png';
+                }
+                // 킹오더일정 아이콘 — 그룹웨어 로고에 달력 표시 (2026-11-12)
+                if (m === 'calendar') {
+                    var pre = ((window.KOB_CONFIG || {}).env === 'dev') ? 'dev-' : '';
+                    var ico2 = document.querySelector('link[rel="icon"]'); if (ico2) ico2.href = 'assets/pwa/' + pre + 'calendar-icon-192.png';
+                    var ati2 = document.querySelector('link[rel="apple-touch-icon"]'); if (ati2) ati2.href = 'assets/pwa/' + pre + 'calendar-icon-192.png';
                 }
                 // 인바운드 접수는 2026-09-08 부터 그룹웨어 안(파트너센터 › 영업본부 › 인바운드 관리)으로 들어왔습니다.
                 // 별도 주소(?mode=inbound)와 그 홈 화면 이름은 더 쓰지 않습니다.
@@ -101,6 +111,10 @@
         #boot-splash { display: none; }
         html[data-mode="groupware"][data-auth="session"] #login-view { display: none; }
         html[data-mode="groupware"][data-auth="session"] #boot-splash { display: flex; }
+        html[data-mode="calendar"][data-auth="session"] #login-view { display: none; }
+        html[data-mode="calendar"][data-auth="session"] #boot-splash { display: flex; }
+        /* 킹오더일정(?mode=calendar · 2026-11-12) — 그룹웨어 메뉴 · 머리 줄 없이 일정 화면만 */
+        html[data-mode="calendar"] #sidebar, html[data-mode="calendar"] #app-view header { display: none !important; }
         #m-opening { display: none; }
         html[data-mode="mobile"][data-auth="session"] #m-auth { display: none; }
         html[data-mode="mobile"][data-auth="session"] #m-opening { display: block; }
@@ -1880,7 +1894,7 @@
         <div id="login-card" class="relative z-10 w-full max-w-md p-8 bg-white rounded-xl shadow-lg">
             <div class="text-center mb-8">
                 <img src="image/logo.png" alt="킹오더브라더스 로고" class="h-16 mx-auto mb-3 object-contain" onerror="this.onerror=null;this.outerHTML='&lt;i class=&quot;fas fa-building text-4xl text-blue-600 mb-3&quot;&gt;&lt;/i&gt;'" />
-                <h1 class="text-2xl font-bold text-gray-800">킹오더브라더스 그룹웨어</h1>
+                <h1 class="text-2xl font-bold text-gray-800" id="login-title">킹오더브라더스 그룹웨어</h1>
                 <p class="text-gray-500 text-sm mt-1">사내 시스템 로그인이 필요합니다.</p>
             </div>
             <form onsubmit="handleLogin(event)">
@@ -11879,7 +11893,8 @@ const QUOTE_TEMPLATES = [
             
             // 새로고침이면 보던 화면으로, 아니면 접근 가능한 첫 번째 메뉴로 자동 이동
             const availableMenus = document.querySelectorAll('.nav-item:not(.hidden)');
-            if (restoreLastPage()) { /* 보던 화면 그대로 */ }
+            if (isCalendarMode()) navigate('calendar-center', document.getElementById('nav-calendar-center'));   // 킹오더일정 — 언제나 일정 화면
+            else if (restoreLastPage()) { /* 보던 화면 그대로 */ }
             else if (availableMenus.length > 0) {
                 const firstMenu = availableMenus[0];
                 // onclick에 toggleSubmenu('...')가 함께 있을 수 있으므로 navigate('...') 호출만 추출
@@ -12041,7 +12056,7 @@ const QUOTE_TEMPLATES = [
         // 화면이 뜰 때 — ① 재설정 메일의 링크로 들어왔으면 새 비밀번호 창, ② 로그인이 남아 있으면 바로 들어가기,
         //                ③ 계정이 하나도 없으면 처음 설정 안내
         (async function initAuthScreen() {
-            if (new URLSearchParams(location.search).get('mode') || location.hash === '#partner') return;   // 파트너센터 · 운행일지 화면은 해당 없음
+            if ((new URLSearchParams(location.search).get('mode') && !isCalendarMode()) || location.hash === '#partner') return;   // 파트너센터 · 운행일지 화면은 해당 없음 (킹오더일정은 그룹웨어 로그인 그대로)
             try {
                 if (await kobAuth.recovery()) {
                     endBootSplash();
@@ -13372,6 +13387,8 @@ const QUOTE_TEMPLATES = [
             return !!(sec && !sec.classList.contains('hidden'));
         }
         function navigate(sectionId, element) {
+            // 킹오더일정은 일정 화면에만 머뭅니다 (다른 화면으로 가는 링크 · 알림을 눌러도)
+            if (isCalendarMode() && sectionId !== 'calendar-center') return;
             // 사외 계정(외주업체 등)은 허용된 화면 밖으로 나갈 수 없습니다 (주소 직접 입력·옛 링크 차단)
             if (externalUser && allowedPageIds.length && !allowedPageIds.includes(sectionId)) {
                 alert('접근 권한이 없는 화면입니다.');
@@ -64684,6 +64701,11 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             }
         }
 
+        // 킹오더일정 — 휴대폰 전용 일정 화면 (2026-11-12). 그룹웨어 로그인 · 일정 코드를 그대로 쓰고 일정 화면만 보여 줍니다.
+        function isCalendarMode() {
+            const p = new URLSearchParams(location.search);
+            return p.get('mode') === 'calendar' || location.hash === '#calendar';
+        }
         function isMobileMode() {
             const p = new URLSearchParams(location.search);
             return p.get('mode') === 'mobile' || location.hash === '#mobile';
@@ -65854,6 +65876,10 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             bootMobileView();
         } else if (isPartnerMode()) {
             bootPartnerView();
+        } else if (isCalendarMode()) {
+            // 킹오더일정 — 로그인 화면 제목만 바꾸고, 파트너 · 인바운드 동기화는 돌리지 않습니다 (일정 화면에 없음)
+            const lt = document.getElementById('login-title'); if (lt) lt.textContent = '킹오더일정';
+            initLiveRefresh();         // 직원 · 구분 같은 설정은 다른 사람이 바꾸면 받아 옵니다
         } else {
             // 예전 외주업체 전용 주소(?mode=inbound · #inbound)로 들어오면 그냥 그룹웨어 로그인으로 보냅니다.
             // 인바운드 관리는 2026-09-08 부터 그룹웨어 안(파트너센터 › 영업본부)에 있습니다.
