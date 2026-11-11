@@ -295,6 +295,9 @@ srv.listen(PORT, async () => {
         ok(await gw.evaluate(() => document.documentElement.dataset.mode) === 'groupware', '모드 없음 = groupware');
         await gw.evaluate(u => enterApp(u), ADMIN);
         ok(await gw.evaluate(() => getComputedStyle(document.getElementById('sidebar')).display !== 'none'), '그룹웨어는 왼쪽 메뉴 보임');
+        await gw.evaluate(() => navigate('calendar-center', document.getElementById('nav-calendar-center')));
+        const link = await gw.evaluate(() => { const a = document.getElementById('calm-open-link'); return a ? { href: a.href, vis: a.getBoundingClientRect().width > 0, target: a.target, text: a.innerText } : null; });
+        ok(link && link.vis && /\?mode=calendar$/.test(link.href) && link.target === '_blank' && /킹오더일정/.test(link.text), `일정캘린더에 킹오더일정 링크 (얻음 ${JSON.stringify(link)})`);
         await gw.close();
     } catch (e) {
         fail++; console.log('  ✗ 시험 중 오류', e && e.stack || e);
