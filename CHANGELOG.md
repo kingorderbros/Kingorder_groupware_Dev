@@ -2210,4 +2210,5 @@ test-files 41(주입 경로 거절 · 폴더 겹침 · 로그아웃 · 목록에
 - 새 일정 알림 — `POST /api/push/schedule-new` (서버가 받는 사람을 고르고 40대씩 나눠 보냄), 캘린더별 켬/끔(`prefs.calNew`, 처음엔 팀별만)
   - 구독에 앱 표시(`apps`) — 일정 알림은 킹오더일정 앱으로, 나머지는 그룹웨어 앱으로. 일정 알림을 누르면 `/?mode=calendar&schedule=…`
 - 그룹웨어 일정 › [휴대폰 연동 방법] 창에 킹오더일정 안내 · 주소 복사
-- 검증: `npm run check` 통과 · `node tools/e2e-calendar-mode.js .` 72건 · `PGLITE=… node tools/test-schema-v10.mjs` 11건 · `node tools/e2e-calendar-speed.js .`(처음 10.6초 · 두 번째 1.2초, 느린 4G 흉내)
+- 검토 반영: 새 일정 알림은 그 일정을 볼 수 있는 사람만(화면 조회 규칙 → 서버가 부서/전 직원 기준과 겹쳐 봄) · 주소로 남의 일정 열기 막음 · 알림 주소는 기기별(PC 는 그룹웨어 `/?schedule=`) · 예전 구독은 그룹웨어로 · 구글 일정은 구글의 만든 시각 · 확인 기록은 직원만 · 500건 제한
+- 검증: `npm run check` 통과 · `node tools/e2e-calendar-mode.js .` 77건 · `PGLITE=… node tools/test-schema-v10.mjs` 15건 · `node tools/e2e-calendar-speed.js .`(처음 10.6초 · 두 번째 1.2초, 느린 4G 흉내)
