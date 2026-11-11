@@ -176,6 +176,46 @@ srv.listen(PORT, async () => {
             await m.close();
         }
 
+        // ---------- Task 4: 초대 알림 ----------
+        console.log('[4] 입력창에서 저장하면 새 참석자에게 초대 알림');
+        {
+            const m = await openPage(br, base + '?mode=calendar', 390, 800);
+            await m.evaluate(u => enterApp(u), ADMIN);
+            const r = await m.evaluate(async () => {
+                const n0 = collabNotifications.length;
+                openScheduleModal();
+                document.getElementById('schedule-title').value = '초대 시험';
+                toggleScheduleAttendee('김영업', true);
+                document.getElementById('schedule-form').requestSubmit();
+                await new Promise(r => setTimeout(r, 200));
+                const s = schedules.find(x => x.title === '초대 시험');
+                const inv = collabNotifications.slice(n0).filter(n => n.type === 'schedule-invite');
+                // 다시 열어 저장 — 알림 더 없음
+                const cnt0 = schedules.length;
+                editSchedule(s.id);
+                document.getElementById('schedule-title').value = '초대 시험 (고침)';
+                document.getElementById('schedule-form').requestSubmit();
+                await new Promise(r => setTimeout(r, 200));
+                const inv2 = collabNotifications.slice(n0).filter(n => n.type === 'schedule-invite');
+                // 수정에서 박설치를 더하면 박설치에게만
+                editSchedule(s.id);
+                toggleScheduleAttendee('박설치', true);
+                document.getElementById('schedule-form').requestSubmit();
+                await new Promise(r => setTimeout(r, 200));
+                const inv3 = collabNotifications.slice(n0).filter(n => n.type === 'schedule-invite');
+                return { n: inv.length, to: inv[0] && inv[0].toUser, by: s && s.attendees[0].invitedBy, again: inv2.length, edited: s.title === '초대 시험 (고침)' && schedules.length === cnt0,
+                         third: inv3.length === 2 && inv3[1].toUser === '박설치', text: inv[0] ? notiText(inv[0]) : '' };
+            });
+            ok(r.n === 1 && r.to === '김영업', '새 참석자 김영업에게 초대 알림 1건');
+            ok(r.by === '정장훈', '참석자 정보에 초대한 사람(invitedBy) 정장훈');
+            ok(r.edited, '수정 저장 (새 일정이 생기지 않음)');
+            ok(r.again === 1, '수정해서 다시 저장해도 기존 참석자에게 알림이 더 가지 않음');
+            ok(r.third, '수정에서 박설치를 더하면 박설치에게만 알림');
+            ok(/정장훈<\/b> 님이 .*초대했습니다/.test(r.text), '알림 문구: ○○○ 님이 … 초대했습니다');
+            ok(m.__errs.length === 0, '스크립트 오류 없음 ' + m.__errs.join(' | '));
+            await m.close();
+        }
+
         console.log('[1] 그룹웨어 기본 주소는 그대로');
         const gw = await openPage(br, base, 1400, 900);
         ok(await gw.evaluate(() => document.documentElement.dataset.mode) === 'groupware', '모드 없음 = groupware');

@@ -43,6 +43,7 @@ export function categoryOf(type) {
     if (t === 'notice-new') return 'notice';               // 공지사항 (2026-11-06)
     if (t === 'schedule-reminder') return 'schedule';      // 일정 알림 (2026-10-23) — 'schedule-change' 보다 먼저
     if (t === 'schedule-cancelled' || t === 'schedule-deleted') return 'schedule';   // 일정 취소 · 삭제 (2026-10-30)
+    if (t === 'schedule-invite' || t === 'schedule-new') return 'schedule';          // 일정 초대 · 새 일정 (킹오더일정 2026-11-12)
     if (t.startsWith('work-')) return 'work';
     if (t.startsWith('collab-') || t.startsWith('delay-') || t.startsWith('schedule-change')) return 'collab';
     if (t.startsWith('directive-')) return 'directive';

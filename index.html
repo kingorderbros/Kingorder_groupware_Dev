@@ -6706,7 +6706,7 @@
                 </div>
                 <!-- 내가 초대받은 일정이면 여기서 응답 -->
                 <div id="detail-schedule-respond" class="hidden bg-indigo-50 border border-indigo-200 rounded p-3">
-                    <p class="text-sm font-medium text-indigo-900 mb-2"><i class="fas fa-envelope-open-text mr-1"></i>이 일정에 초대되었습니다. 참석 여부를 선택해 주세요.</p>
+                    <p class="text-sm font-medium text-indigo-900 mb-2"><i class="fas fa-envelope-open-text mr-1"></i><span id="detail-invite-by"></span>이 일정에 초대되었습니다. 참석 여부를 선택해 주세요.</p>
                     <div class="flex flex-wrap gap-2">
                         <button type="button" onclick="respondToSchedule('accepted')" class="px-3 py-1.5 text-sm rounded bg-green-600 text-white hover:bg-green-700 transition-colors"><i class="fas fa-circle-check mr-1"></i>수락</button>
                         <button type="button" onclick="respondToSchedule('tentative')" class="px-3 py-1.5 text-sm rounded bg-amber-500 text-white hover:bg-amber-600 transition-colors"><i class="fas fa-circle-question mr-1"></i>미정</button>
@@ -12188,6 +12188,7 @@ const QUOTE_TEMPLATES = [
             'collab-transferred': { icon: 'fa-share-from-square', color: 'indigo', label: '요청 이관' },
             'collab-comment':     { icon: 'fa-comment-dots',      color: 'indigo', label: '협업 코멘트' },
             'schedule-reminder':  { icon: 'fa-bell',              color: 'amber',  label: '일정 알림' },
+            'schedule-invite':    { icon: 'fa-envelope-open-text', color: 'indigo', label: '일정 초대' },
             'schedule-cancelled': { icon: 'fa-ban',               color: 'red',    label: '일정 취소' },
             'schedule-deleted':   { icon: 'fa-trash-can',         color: 'red',    label: '일정 삭제' },
             'notice-new':         { icon: 'fa-bullhorn',          color: 'amber',  label: '공지사항' },
@@ -12224,6 +12225,7 @@ const QUOTE_TEMPLATES = [
             if (n.type === 'schedule-cancelled') return `<b>${escapeHtml(n.title)}</b> 일정이 <b>취소</b>되었습니다.${n.detail ? `<br><span class="text-xs text-gray-600">${escapeHtml(n.detail)}</span>` : ''}`;
             if (n.type === 'schedule-deleted') return `<b>${escapeHtml(n.title)}</b> 일정이 <b>삭제</b>되었습니다.${n.detail ? `<br><span class="text-xs text-gray-600">${escapeHtml(n.detail)}</span>` : ''}`;
             if (n.type === 'schedule-restored') return `<b>${escapeHtml(n.title)}</b> 취소 · 삭제했던 일정이 <b>다시 진행</b>됩니다.${n.detail ? `<br><span class="text-xs text-gray-600">${escapeHtml(n.detail)}</span>` : ''}`;
+            if (n.type === 'schedule-invite') return `<b>${escapeHtml(n.by || '')}</b> 님이 <b>${escapeHtml(n.title)}</b> 일정에 초대했습니다.${n.detail ? `<br><span class="text-xs text-gray-600">${escapeHtml(n.detail)}</span>` : ''}`;
             if (n.type === 'schedule-reminder') return `<b>${escapeHtml(n.title)}</b> 일정이 곧 시작됩니다.${n.detail ? `<br><span class="text-xs text-gray-600">${escapeHtml(n.detail)}</span>` : ''}`;
             if (n.type === 'collab-taken') return `<b>${escapeHtml(n.title)}</b> 함께 받은 협업 요청이 처리되었습니다.${n.detail ? `<br><span class="text-xs text-gray-600">${escapeHtml(n.detail)}</span>` : ''}`;
             if (n.type === 'collab-comment') return `<b>${escapeHtml(n.title)}</b> 협업 요청에 코멘트가 등록되었습니다.${n.detail ? `<br><span class="text-xs text-gray-600">${escapeHtml(n.detail)}</span>` : ''}`;
@@ -20563,15 +20565,19 @@ const QUOTE_TEMPLATES = [
                 if (before && before.recur && before.recur.offDates && before.date === data.date) recur.offDates = Object.assign({}, before.recur.offDates);
             }
             data.recur = recur;
+            let inviteBefore = null, inviteAfter = null;   // 초대 알림 (2026-11-12)
             if (id) {
                 const schedule = schedules.find(s => s.id === id);
                 if (schedule && !canEditSchedule(schedule)) { alert('이 일정은 수정할 수 없습니다. 다른 사람의 개인 일정은 조회만 가능합니다.'); return; }
-                if (schedule) Object.assign(schedule, data);
+                if (schedule) { inviteBefore = JSON.parse(JSON.stringify(schedule)); Object.assign(schedule, data); inviteAfter = schedule; }
             } else {
-                schedules.push({ id: nextScheduleId(), salesperson: currentUserName || document.getElementById('user-name').innerText,
-                                 createdBy: String(currentUserEmail || '').toLowerCase(), ...data });
+                inviteAfter = { id: nextScheduleId(), salesperson: currentUserName || document.getElementById('user-name').innerText,
+                                 createdBy: String(currentUserEmail || '').toLowerCase(), ...data };
+                schedules.push(inviteAfter);
             }
+            if (inviteAfter) stampScheduleInvites(inviteBefore, inviteAfter);
             saveSchedules();
+            if (inviteAfter) notifyScheduleInvites(inviteBefore, inviteAfter);
             closeScheduleModal();
             renderCalendar();
             if (typeof renderTodaySchedule === 'function') renderTodaySchedule(currentUserName);
@@ -20653,6 +20659,9 @@ const QUOTE_TEMPLATES = [
             const box = document.getElementById('detail-schedule-attendees');
             const summary = document.getElementById('detail-schedule-attendee-summary');
 
+            // 초대한 사람 — 나를 넣은 사람(없으면 주최자) (킹오더일정 · 2026-11-12)
+            const inviteBy = document.getElementById('detail-invite-by');
+            if (inviteBy) { const mine = attendeeOf(schedule, currentUserName); const who = (mine && mine.invitedBy) || scheduleOrganizer(schedule); inviteBy.innerHTML = who ? `<b>${escapeHtml(who)}</b> 님이 ` : ''; }
             row.classList.toggle('hidden', list.length === 0);
             if (list.length) {
                 // 스스로 참가한 사람은 응답 집계에서 빼고 '참가'로 따로 센다
@@ -20672,8 +20681,9 @@ const QUOTE_TEMPLATES = [
                         // 스스로 참가한 사람은 응답 절차가 없으므로 '참가'로만 표시한다
                         const icon = a.self ? 'fa-user-check' : st.icon;
                         const label = a.self ? '참가' : st.name;
+                        const by = (!a.self && a.invitedBy && a.invitedBy !== organizer) ? ` <span class="opacity-60">· ${escapeHtml(a.invitedBy)} 초대</span>` : '';   // 주최자가 아닌 사람이 초대했으면 (2026-11-12)
                         return `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs ${st.chip}${me}">
-                                <i class="fas ${icon}"></i>${escapeHtml(a.name)} <span class="opacity-70">${label}</span>
+                                <i class="fas ${icon}"></i>${escapeHtml(a.name)} <span class="opacity-70">${label}</span>${by}
                             </span>`;
                     }).join('');
             }
@@ -20807,6 +20817,34 @@ const QUOTE_TEMPLATES = [
             }));
             return to.length;
         }
+        // ---------- 일정 초대 알림 시작 (2026-11-12) ----------
+        // 킹오더일정 — 구글 캘린더는 킹오더 계정 하나로 보내서 누가 초대했는지 알 수 없었습니다.
+        // 참석자를 새로 넣은 사람을 참석자 정보(invitedBy · invitedAt)에 남기고, 그 사람 이름으로 초대 알림을 보냅니다.
+        //   · 저장 전후를 견주어 새로 들어온 사람만 (다시 저장해도 기존 참석자에게는 안 감)
+        //   · 스스로 참가(self) · 나 자신 · 취소 · 삭제된 일정은 빼고
+        function newScheduleInvitees(before, after) {
+            const had = new Set((Array.isArray(before && before.attendees) ? before.attendees : []).map(a => a && a.name));
+            return (Array.isArray(after && after.attendees) ? after.attendees : [])
+                .filter(a => a && a.name && !had.has(a.name) && !a.self && a.name !== currentUserName);
+        }
+        function stampScheduleInvites(before, after) {
+            const t = new Date().toISOString();
+            newScheduleInvitees(before, after).forEach(a => { if (!a.invitedBy) { a.invitedBy = currentUserName || ''; a.invitedAt = t; } });
+        }
+        function notifyScheduleInvites(before, after) {
+            if (!after || after.offState) return 0;
+            const list = newScheduleInvitees(before, after);
+            const when = `${after.date || ''} ${scheduleTimeLabel(after)}`.trim();
+            const calName = (scheduleCalendar(after) || {}).short || '';
+            list.forEach(a => pushNotification({
+                id: 'cnoti_' + collabNotiIdCounter++, type: 'schedule-invite', title: after.title || '일정', toUser: a.name, toDept: '', toTeam: '',
+                scheduleId: after.id, by: a.invitedBy || currentUserName || '',
+                detail: `${a.invitedBy || currentUserName || ''} 님이 초대 · ${when}${calName ? ' · ' + calName : ''}`,
+                date: ymd(new Date()), read: false
+            }));
+            return list.length;
+        }
+        // ---------- 일정 초대 알림 끝 ----------
         // 반복 일정이면 '이 날만 / 전체' 를 묻습니다 — 'one' · 'all' · '' (그만둠)
         function askScheduleScope(schedule, day, verb) {
             if (!isRecurring(schedule)) return confirm(`이 일정을 ${verb}하시겠습니까?`) ? 'all' : '';
