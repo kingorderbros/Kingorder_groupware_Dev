@@ -115,6 +115,68 @@
         html[data-mode="calendar"][data-auth="session"] #boot-splash { display: flex; }
         /* 킹오더일정(?mode=calendar · 2026-11-12) — 그룹웨어 메뉴 · 머리 줄 없이 일정 화면만 */
         html[data-mode="calendar"] #sidebar, html[data-mode="calendar"] #app-view header { display: none !important; }
+        .calm-only { display: none; }
+        html[data-mode="calendar"] .calm-hide { display: none !important; }
+        html[data-mode="calendar"] #calm-top { display: block; position: sticky; top: env(safe-area-inset-top, 0px); z-index: 12; background: #1e293b; color: #fff; padding: 10px 14px; padding-top: calc(10px + env(safe-area-inset-top, 0px)); margin-top: calc(-1 * env(safe-area-inset-top, 0px)); }
+        html[data-mode="calendar"] .calm-top-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+        html[data-mode="calendar"] .calm-brand { font-weight: 800; font-size: 17px; letter-spacing: -.01em; }
+        html[data-mode="calendar"] .calm-brand i { color: #f472b6; margin-right: 4px; }
+        html[data-mode="calendar"] .calm-icon-btn { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 8px; font-size: 13px; background: rgba(255,255,255,.12); color: inherit; }
+        html[data-mode="calendar"] #sec-calendar-center.calm-filters-open #calm-filter-btn { background: #f472b6; color: #1e293b; }
+        html[data-mode="calendar"] #main-scroll { padding: 0 0 calc(68px + env(safe-area-inset-bottom, 0px)) 0; }
+        html[data-mode="calendar"] #cal-head { display: none; }
+        html[data-mode="calendar"] #sec-calendar-center.calm-filters-open #cal-head { display: flex; margin: 0; padding: 10px 12px; background: #fff; border-bottom: 1px solid #e5e7eb; }
+        html[data-mode="calendar"] #cal-head select, html[data-mode="calendar"] #cal-head button { font-size: 14px; min-height: 40px; }
+        html[data-mode="calendar"] #calendar-legend { flex-wrap: nowrap; overflow-x: auto; margin: 0; border-radius: 0; border-width: 0 0 1px 0; padding: 8px 12px; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+        html[data-mode="calendar"] #calendar-legend::-webkit-scrollbar { display: none; }
+        html[data-mode="calendar"] #calendar-legend > * { flex-shrink: 0; }
+        html[data-mode="calendar"] #sec-calendar-center > .bg-white.rounded-lg { border-radius: 0; border-width: 0; box-shadow: none; }
+        html[data-mode="calendar"] #calm-bar { display: flex; position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; background: #fff; border-top: 1px solid #e5e7eb; padding: 4px 6px calc(4px + env(safe-area-inset-bottom, 0px)); justify-content: space-around; align-items: center; }
+        html[data-mode="calendar"] #calm-bar button { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 11px; color: #64748b; padding: 6px 0; min-height: 48px; justify-content: center; }
+        html[data-mode="calendar"] #calm-bar button i { font-size: 18px; }
+        html[data-mode="calendar"] #calm-bar button.calm-on { color: #db2777; font-weight: 700; }
+        html[data-mode="calendar"] #calm-bar .calm-add { flex: 0 0 56px; height: 56px; border-radius: 999px; background: #1e293b; color: #fff; margin-top: -22px; box-shadow: 0 6px 16px rgba(15,23,42,.25); }
+        html[data-mode="calendar"] #calm-bar .calm-add i { font-size: 22px; }
+        html[data-mode="calendar"] #kob-store-status { bottom: calc(72px + env(safe-area-inset-bottom, 0px)) !important; z-index: 45 !important; }
+        /* 월 · 주 보기 — 칸이 좁아 제목이 잘리므로 색 막대만 보이고, 날짜를 누르면 그날 요약이 열립니다 */
+        @media (max-width: 640px) {
+            html[data-mode="calendar"] #cal-grid.grid-cols-7 [onclick^="event.stopPropagation(); openScheduleDetailModal"] { font-size: 0; height: 6px; padding: 0; margin-bottom: 3px; pointer-events: none; }
+            html[data-mode="calendar"] #cal-grid.grid-cols-7 > div { min-height: 64px; }
+        }
+        /* 목록 보기 */
+        .calm-day { padding: 10px 12px 2px; font-size: 13px; font-weight: 700; color: #334155; display: flex; gap: 6px; align-items: baseline; position: sticky; top: 0; background: #f8fafc; z-index: 1; }
+        .calm-day.calm-today { color: #db2777; }
+        .calm-day .calm-hol { color: #ef4444; font-weight: 500; font-size: 12px; }
+        .calm-card { display: flex; gap: 10px; align-items: stretch; margin: 6px 12px; padding: 10px 12px; background: #fff; border-radius: 12px; border: 1px solid #e5e7eb; cursor: pointer; }
+        .calm-card:active { background: #f1f5f9; }
+        .calm-card .calm-bar-color { width: 4px; border-radius: 4px; flex-shrink: 0; }
+        .calm-card .calm-time { width: 46px; flex-shrink: 0; font-size: 12px; line-height: 1.35; color: #475569; font-variant-numeric: tabular-nums; }
+        .calm-card .calm-title { font-size: 15px; font-weight: 600; color: #0f172a; line-height: 1.35; word-break: keep-all; overflow-wrap: anywhere; }
+        .calm-card .calm-meta { display: flex; flex-wrap: wrap; gap: 4px 6px; margin-top: 4px; font-size: 12px; color: #64748b; align-items: center; }
+        .calm-card .calm-chip { padding: 1px 7px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+        .calm-card.calm-off .calm-title { text-decoration: line-through; opacity: .55; }
+        .calm-empty { margin: 6px 12px; padding: 10px 12px; font-size: 13px; color: #94a3b8; }
+        /* 설정 창 */
+        .calm-sheet-wrap { position: fixed; inset: 0; z-index: 60; background: rgba(15,23,42,.45); display: flex; align-items: flex-end; }
+        .calm-sheet-wrap.hidden { display: none; }
+        .calm-sheet { width: 100%; max-height: 85vh; overflow-y: auto; background: #fff; border-radius: 16px 16px 0 0; padding-bottom: env(safe-area-inset-bottom, 0px); }
+        .calm-sheet-head { display: flex; justify-content: space-between; align-items: center; padding: 14px 16px; border-bottom: 1px solid #e5e7eb; font-size: 16px; }
+        .calm-sheet-head .calm-icon-btn { background: #f1f5f9; }
+        .calm-sheet-body { padding: 8px 16px 16px; }
+        .calm-me { padding: 8px 0 12px; font-weight: 600; color: #334155; }
+        .calm-row { display: flex; align-items: center; gap: 10px; width: 100%; padding: 14px 4px; border-top: 1px solid #f1f5f9; font-size: 15px; color: #1e293b; text-align: left; }
+        .calm-danger { color: #dc2626; }
+        /* 일정 창 — 휴대폰에서는 전체 화면 · 단추 줄은 아래에 고정 */
+        @media (max-width: 640px) {
+            html[data-mode="calendar"] #schedule-modal, html[data-mode="calendar"] #schedule-detail-modal, html[data-mode="calendar"] #day-summary-modal { padding: 0; align-items: stretch; }
+            html[data-mode="calendar"] #schedule-modal > div, html[data-mode="calendar"] #schedule-detail-modal > div, html[data-mode="calendar"] #day-summary-modal > div { max-width: none; width: 100%; height: 100%; max-height: none; border-radius: 0; padding-top: calc(16px + env(safe-area-inset-top, 0px)); }
+            html[data-mode="calendar"] #schedule-modal > div, html[data-mode="calendar"] #schedule-detail-modal > div { padding-left: 16px; padding-right: 16px; padding-bottom: 0; }
+            html[data-mode="calendar"] #schedule-detail-modal > div { display: flex; flex-direction: column; }
+            html[data-mode="calendar"] #schedule-detail-modal .calm-actions { margin-top: auto; }
+            html[data-mode="calendar"] .calm-actions { position: sticky; bottom: 0; background: #fff; margin: 0 -16px; padding: 10px 16px calc(10px + env(safe-area-inset-bottom, 0px)); border-top: 1px solid #e5e7eb; z-index: 2; }
+            html[data-mode="calendar"] .calm-actions button { min-height: 44px; }
+            html[data-mode="calendar"] #schedule-form input, html[data-mode="calendar"] #schedule-form select, html[data-mode="calendar"] #schedule-form textarea { font-size: 16px; }
+        }
         #m-opening { display: none; }
         html[data-mode="mobile"][data-auth="session"] #m-auth { display: none; }
         html[data-mode="mobile"][data-auth="session"] #m-opening { display: block; }
@@ -3554,13 +3616,43 @@
                 <!-- 통합 일정캘린더 섹션 (부서별 캘린더 3개를 통합) -->
                 <!-- ============================================================= -->
                 <section id="sec-calendar-center" class="content-section hidden">
-                    <div class="mb-4 flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-3 sm:space-y-0">
-                        <div>
+                    <!-- 킹오더일정 아래 줄 — 보기 전환 · 새 일정 · 설정 -->
+                    <nav id="calm-bar" class="calm-only" aria-label="킹오더일정 메뉴">
+                        <button type="button" data-view="list" onclick="calmSetView('list')"><i class="fas fa-list-ul"></i><span>목록</span></button>
+                        <button type="button" data-view="month" onclick="calmSetView('month')"><i class="fas fa-calendar"></i><span>월</span></button>
+                        <button type="button" class="calm-add" onclick="openScheduleModal()" title="새 일정"><i class="fas fa-plus"></i></button>
+                        <button type="button" data-view="week" onclick="calmSetView('week')"><i class="fas fa-calendar-week"></i><span>주</span></button>
+                        <button type="button" data-view="day" onclick="calmSetView('day')"><i class="fas fa-calendar-day"></i><span>일</span></button>
+                    </nav>
+                    <!-- 킹오더일정 설정 창 -->
+                    <div id="calm-settings" class="hidden calm-sheet-wrap" onclick="if(event.target===this)calmCloseSettings()">
+                        <div class="calm-sheet">
+                            <div class="calm-sheet-head"><b>설정</b><button type="button" onclick="calmCloseSettings()" class="calm-icon-btn" title="닫기"><i class="fas fa-xmark"></i></button></div>
+                            <div class="calm-sheet-body">
+                                <p class="calm-me"><i class="fas fa-user-circle"></i> <span id="calm-me-name"></span></p>
+                                <div id="calm-noti"></div>
+                                <a id="calm-open-gw" class="calm-row" href="./"><i class="fas fa-up-right-from-square"></i> 그룹웨어 열기</a>
+                                <button type="button" class="calm-row calm-danger" onclick="calmCloseSettings(); handleLogout()"><i class="fas fa-right-from-bracket"></i> 로그아웃</button>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- 킹오더일정(?mode=calendar) 위 줄 — 휴대폰 전용 (2026-11-12) -->
+                    <div id="calm-top" class="calm-only">
+                        <div class="calm-top-row">
+                            <div class="calm-brand"><i class="fas fa-calendar-days"></i> 킹오더일정</div>
+                            <div class="flex items-center gap-2">
+                                <button type="button" id="calm-filter-btn" onclick="calmToggleFilters()" class="calm-icon-btn" title="거르기"><i class="fas fa-filter"></i><span>거르기</span></button>
+                                <button type="button" id="calm-settings-btn" onclick="calmOpenSettings()" class="calm-icon-btn" title="설정"><i class="fas fa-gear"></i><span id="calm-settings-dot" class="hidden"></span></button>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="cal-head" class="mb-4 flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-3 sm:space-y-0">
+                        <div class="calm-hide">
                             <h3 class="text-lg font-bold text-gray-800">일정캘린더</h3>
                             <p class="text-gray-500 text-sm">개인, 팀별, 공유 캘린더를 통합 조회합니다. <span id="calendar-scope-label" class="text-sky-600 font-medium"></span></p>
                         </div>
                         <div class="flex items-center flex-wrap gap-2">
-                            <button onclick="openPhoneSyncHelp()" class="bg-white border border-emerald-300 text-emerald-700 hover:bg-emerald-50 px-3 py-1.5 rounded text-sm transition-colors whitespace-nowrap">
+                            <button onclick="openPhoneSyncHelp()" class="calm-hide bg-white border border-emerald-300 text-emerald-700 hover:bg-emerald-50 px-3 py-1.5 rounded text-sm transition-colors whitespace-nowrap">
                                 <i class="fas fa-mobile-screen-button mr-1"></i>휴대폰 연동 방법
                             </button>
                             <select id="calendar-filter-cal" onchange="renderCalendar()" class="py-1.5 px-3 text-sm border border-gray-300 rounded text-gray-700 bg-gray-50 cursor-pointer">
@@ -3570,7 +3662,7 @@
                             <select id="calendar-filter-dept" onchange="renderCalendar()" class="py-1.5 px-3 text-sm border border-gray-300 rounded text-gray-700 bg-gray-50 cursor-pointer">
                                 <option value="">전체 부서</option>
                             </select>
-                            <select id="calendar-view-select" onchange="setCalendarView(this.value)" class="py-1.5 px-3 text-sm border border-gray-300 rounded text-gray-700 bg-white cursor-pointer">
+                            <select id="calendar-view-select" onchange="setCalendarView(this.value)" class="calm-hide py-1.5 px-3 text-sm border border-gray-300 rounded text-gray-700 bg-white cursor-pointer">
                                 <option value="day">일간 보기</option>
                                 <option value="week">주간 보기</option>
                                 <option value="month" selected>월간 보기</option>
@@ -3579,7 +3671,7 @@
                             <button id="calendar-type-manage-btn" onclick="openScheduleTypeModal(document.getElementById('calendar-filter-dept').value)" class="hidden bg-gray-500 hover:bg-gray-600 text-white px-3 py-1.5 rounded text-sm transition-colors whitespace-nowrap">
                                 <i class="fas fa-sliders mr-1"></i>구분 관리
                             </button>
-                            <button onclick="openScheduleModal()" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded text-sm transition-colors">+ 일정 등록</button>
+                            <button onclick="openScheduleModal()" class="calm-hide bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded text-sm transition-colors">+ 일정 등록</button>
                         </div>
                     </div>
                     <!-- 캘린더 범례 (클릭하면 해당 캘린더만 보기) -->
@@ -6552,7 +6644,7 @@
                     <label class="block text-sm font-medium text-gray-700 mb-1">상세 내용</label>
                     <textarea id="schedule-description" rows="3" class="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="일정 상세 내용을 입력하세요"></textarea>
                 </div>
-                <div class="flex justify-end space-x-2">
+                <div class="calm-actions flex justify-end space-x-2">
                     <button type="button" onclick="closeScheduleModal()" class="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition-colors">닫기</button>
                     <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors">등록하기</button>
                 </div>
@@ -6627,7 +6719,7 @@
             <p id="detail-schedule-readonly" class="hidden text-xs text-gray-500 bg-gray-50 border border-gray-200 rounded px-3 py-2 mb-3">
                 <i class="fas fa-eye mr-1"></i><span id="detail-schedule-readonly-text"></span>
             </p>
-            <div class="flex flex-wrap justify-end gap-2">
+            <div class="calm-actions flex flex-wrap justify-end gap-2">
                 <button id="btn-restore-schedule" class="hidden px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition-colors"><i class="fas fa-rotate-left mr-1"></i>되살리기</button>
                 <button id="btn-purge-schedule" class="hidden px-4 py-2 bg-red-800 text-white rounded hover:bg-red-900 transition-colors" title="관리자 — 캘린더에서 완전히 지웁니다">완전 삭제</button>
                 <button id="btn-edit-schedule" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors">수정</button>
@@ -11893,7 +11985,7 @@ const QUOTE_TEMPLATES = [
             
             // 새로고침이면 보던 화면으로, 아니면 접근 가능한 첫 번째 메뉴로 자동 이동
             const availableMenus = document.querySelectorAll('.nav-item:not(.hidden)');
-            if (isCalendarMode()) navigate('calendar-center', document.getElementById('nav-calendar-center'));   // 킹오더일정 — 언제나 일정 화면
+            if (isCalendarMode()) { navigate('calendar-center', document.getElementById('nav-calendar-center')); calmSyncBar(); scrollCalendarToToday(); }   // 킹오더일정 — 언제나 일정 화면
             else if (restoreLastPage()) { /* 보던 화면 그대로 */ }
             else if (availableMenus.length > 0) {
                 const firstMenu = availableMenus[0];
@@ -18228,7 +18320,7 @@ const QUOTE_TEMPLATES = [
 
         // ==================== 일정 캘린더 로직 ====================
         let currentDate = new Date();
-        let currentCalendarView = 'month'; // 'day', 'week', 'month'
+        let currentCalendarView = (typeof isCalendarMode === 'function' && isCalendarMode()) ? 'list' : 'month';   // 킹오더일정은 목록부터 (2026-11-12) // 'day', 'week', 'month'
         
         // 오늘, 어제, 내일 날짜 계산 (일간/주간 보기에 표시될 샘플)
         const getFormattedDate = (dateObj) => {
@@ -18749,6 +18841,7 @@ const QUOTE_TEMPLATES = [
         function setCalendarView(view) {
             currentCalendarView = view;
             renderCalendar();
+            if (typeof calmSyncBar === 'function') calmSyncBar();
         }
 
         // ==================== 일정 조회 권한 (협업 조회 권한과 동일 구조) ====================
@@ -19671,7 +19764,9 @@ const QUOTE_TEMPLATES = [
                 `;
             }
 
-            if (currentCalendarView === 'month') {
+            if (currentCalendarView === 'list') {
+                renderCalendarMobileList(grid, dayHeader, monthYearText, deptSchedules, year, month);
+            } else if (currentCalendarView === 'month') {
                 monthYearText.innerText = `${year}년 ${month + 1}월`;
                 grid.className = 'grid grid-cols-7 auto-rows-fr bg-gray-200 gap-px';
                 if (dayHeader) dayHeader.style.display = '';
@@ -19782,6 +19877,63 @@ const QUOTE_TEMPLATES = [
         }
 
         // 오늘이 있는 주를 화면 가운데로 (2026-10-20) — 캘린더에 들어올 때 · [오늘] 을 누를 때만 (자료가 새로 와서 다시 그릴 때는 움직이지 않음)
+        // ==================== 킹오더일정 — 목록 보기 · 아래 줄 · 설정 (2026-11-12) ====================
+        // 휴대폰에서는 달력 칸에 제목이 잘려 보여서, 그 달 일정을 날짜별 카드로 늘어놓은 '목록' 을 첫 보기로 씁니다.
+        // 그리는 자료는 renderCalendar 가 거른 그대로(권한 · 부서 · 캘린더 거르기)라 다른 보기와 같은 일정만 나옵니다.
+        function scheduleOwnerLabel(s) { return isBirthdaySchedule(s) ? '' : '등록 ' + (scheduleOrganizer(s) || '미지정'); }
+        function calmCardHtml(s) {
+            const cal = scheduleCalendar(s);
+            const look = scheduleChipLook(s, cal);
+            const off = scheduleOffState(s);
+            const my = myAttendeeStatus(s);
+            const time = isAllDaySchedule(s) ? '종일' : `${escapeHtml(s.startTime || '')}${s.endTime ? '<br>' + escapeHtml(s.endTime) : ''}`;
+            const owner = scheduleOwnerLabel(s);
+            const myChip = my ? `<span class="calm-chip ${attendeeStatusMeta(my).chip}">${isSelfJoined(s) ? '참가' : '초대 ' + attendeeStatusMeta(my).name}</span>` : '';
+            return `<div data-sid="${escapeHtml(s.id)}" class="calm-card${off || my === 'declined' ? ' calm-off' : ''}" onclick="openScheduleDetailModal(${jsArg(s.id)})">
+                <span class="calm-bar-color ${cal.swatch}"></span>
+                <div class="calm-time">${time}</div>
+                <div class="flex-1 min-w-0">
+                    <div class="calm-title">${scheduleOffBadge(s)}${isRecurring(s) ? '<i class="fas fa-repeat text-[10px] opacity-60 mr-1" title="반복 일정"></i>' : ''}${escapeHtml(s.title || '(제목 없음)')}</div>
+                    <div class="calm-meta"><span class="calm-chip ${cal.chip}"><i class="fas ${cal.icon} mr-1"></i>${escapeHtml(cal.short)}</span>${owner ? `<span>${escapeHtml(owner)}</span>` : ''}${myChip}</div>
+                </div>
+            </div>`;
+        }
+        function renderCalendarMobileList(grid, dayHeader, monthYearText, list, year, month) {
+            monthYearText.innerText = `${year}년 ${month + 1}월`;
+            grid.className = 'bg-slate-50 pb-4';
+            if (dayHeader) dayHeader.style.display = 'none';
+            const today = ymd(new Date());
+            const last = new Date(year, month + 1, 0).getDate();
+            const WD = ['일', '월', '화', '수', '목', '금', '토'];
+            let html = '';
+            for (let d = 1; d <= last; d++) {
+                const ds = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+                const day = list.filter(s => s.date === ds).sort(compareScheduleTime);
+                const isToday = ds === today;
+                if (!day.length && !isToday) continue;
+                const hol = gwHolidayName(ds);
+                html += `<div class="calm-day${isToday ? ' calm-today' : ''}"${isToday ? ' data-today="1"' : ''}>${month + 1}월 ${d}일 (${WD[new Date(year, month, d).getDay()]})${isToday ? ' · 오늘' : ''}${hol ? ` <span class="calm-hol">${escapeHtml(hol)}</span>` : ''}</div>`;
+                html += day.length ? day.map(calmCardHtml).join('') : '<div class="calm-empty">오늘 일정이 없습니다.</div>';
+            }
+            grid.innerHTML = html || '<div class="calm-empty">이 달에 등록된 일정이 없습니다.</div>';
+        }
+        function calmSyncBar() {
+            document.querySelectorAll('#calm-bar [data-view]').forEach(b => b.classList.toggle('calm-on', b.dataset.view === currentCalendarView));
+        }
+        function calmSetView(view) {
+            setCalendarView(view);
+            const sel = document.getElementById('calendar-view-select');
+            if (sel && Array.from(sel.options).some(o => o.value === view)) sel.value = view;
+            if (view === 'list' || view === 'month') scrollCalendarToToday();
+        }
+        function calmToggleFilters() { document.getElementById('sec-calendar-center').classList.toggle('calm-filters-open'); }
+        function calmOpenSettings() {
+            const n = document.getElementById('calm-me-name'); if (n) n.textContent = `${currentUserName || ''}`;
+            document.getElementById('calm-settings').classList.remove('hidden');
+            if (typeof calmRenderNotiSettings === 'function') calmRenderNotiSettings();
+        }
+        function calmCloseSettings() { document.getElementById('calm-settings').classList.add('hidden'); }
+
         function scrollCalendarToToday() {
             requestAnimationFrame(() => {
                 const cell = document.querySelector('#cal-grid [data-today="1"]');
@@ -19794,7 +19946,7 @@ const QUOTE_TEMPLATES = [
             scrollCalendarToToday();
         }
         function changeDate(delta) { 
-            if (currentCalendarView === 'month') {
+            if (currentCalendarView === 'month' || currentCalendarView === 'list') {
                 currentDate.setMonth(currentDate.getMonth() + delta); 
             } else if (currentCalendarView === 'week') {
                 currentDate.setDate(currentDate.getDate() + (delta * 7));
