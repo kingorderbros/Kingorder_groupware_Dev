@@ -12276,15 +12276,41 @@ const QUOTE_TEMPLATES = [
             list.sort((a, b) => (b.online - a.online) || String(b.lastSeen || '').localeCompare(String(a.lastSeen || '')) || String(a.u.name).localeCompare(String(b.u.name), 'ko'));
             const onCnt = list.filter(x => x.online).length;
             const cnt = document.getElementById('presence-panel-count'); if (cnt) cnt.textContent = `${onCnt}명 접속 · 전체 ${list.length}명`;
-            box.innerHTML = list.map(x => `
-                <div class="flex items-center gap-2.5 px-4 py-2">
+            const chat = gwChatUrl();
+            const myEmail = String(currentUserEmail || '').toLowerCase();
+            box.innerHTML = list.map(x => {
+                const id = String(x.u.id);
+                const canTalk = !!chat && !(myEmail && String(x.u.email || '').toLowerCase() === myEmail);
+                const picked = canTalk && presencePickedId === id;
+                return `
+                <div ${canTalk ? `role="button" tabindex="0" data-presence-person="${escapeHtml(id)}" onclick="pickPresencePerson(${jsArg(id)}, event)" onkeydown="if(event.key==='Enter')pickPresencePerson(${jsArg(id)}, event)" title="눌러서 대화하기"` : ''} class="flex items-center gap-2.5 px-4 py-2 ${canTalk ? 'cursor-pointer hover:bg-gray-50' : ''} ${picked ? 'bg-rose-50/60' : ''}">
                     ${orgAvatarHtml(x.u)}
                     <div class="min-w-0 flex-1">
                         <p class="text-sm font-medium text-gray-800 truncate">${escapeHtml(x.u.name || '')} <span class="text-[11px] font-normal text-gray-400">${escapeHtml(x.u.rank || '')}</span></p>
                         <p class="text-[11px] text-gray-400 truncate">${escapeHtml(typeof orgDeptName === 'function' ? orgDeptName(x.u.dept) : (x.u.dept || ''))}${x.u.team ? ' · ' + escapeHtml(x.u.team) : ''}</p>
                     </div>
                     <span class="shrink-0 text-[11px] ${x.online ? 'text-green-600 font-semibold' : 'text-gray-400'}">${x.online ? '접속 중' : (x.lastSeen ? escapeHtml(presenceWhen(x.lastSeen)) : '기록 없음')}</span>
-                </div>`).join('') || '<p class="px-4 py-8 text-center text-sm text-gray-400">구성원이 없습니다.</p>';
+                </div>${picked ? `
+                <div class="px-4 pb-2.5 pt-0.5 bg-rose-50/60 flex justify-end">
+                    <button type="button" data-presence-talk="${escapeHtml(id)}" onclick="openChatWith(${jsArg(id)}, event)" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-rose-600 hover:bg-rose-700 text-white text-xs font-medium"><i class="fas fa-comment-dots"></i>대화하기</button>
+                </div>` : ''}`;
+            }).join('') || '<p class="px-4 py-8 text-center text-sm text-gray-400">구성원이 없습니다.</p>';
+        }
+        // 접속 상태 목록에서 사람을 누르면 [대화하기] 단추 → 킹오더챗에서 그 사람과의 1:1 대화방을 엽니다 (2026-11-11)
+        // 킹오더챗은 ?dm=직원번호 로 들어오면 대화방을 찾아 열고, 없으면 새로 만듭니다. 나 자신 · 챗 주소가 없는 환경은 단추 없음
+        let presencePickedId = '';
+        function pickPresencePerson(id, ev) {
+            if (ev && ev.stopPropagation) ev.stopPropagation();
+            presencePickedId = presencePickedId === String(id) ? '' : String(id);
+            renderPresencePanel();
+        }
+        function openChatWith(id, ev) {
+            if (ev && ev.stopPropagation) ev.stopPropagation();
+            const chat = gwChatUrl();
+            if (!chat || !id) return;
+            window.open(chat.replace(/\/$/, '') + '/?dm=' + encodeURIComponent(String(id)), 'kingorder-chat');
+            presencePickedId = '';
+            togglePresencePanel(false);
         }
         function togglePresencePanel(force) {
             const panel = document.getElementById('presence-panel');
