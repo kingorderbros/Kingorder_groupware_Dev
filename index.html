@@ -6447,7 +6447,7 @@
                         <option value="">반복 안 함</option>
                         <option value="daily">매일</option>
                         <option value="weekdays">평일마다 (월~금)</option>
-                        <option value="weekly">매주</option>
+                        <option value="weekly">요일 지정 (매주 월·수·금 등)</option>
                         <option value="monthly">매월</option>
                         <option value="yearly">매년</option>
                     </select>
@@ -6458,15 +6458,15 @@
                             <span id="schedule-recur-unit">일</span><span>마다</span>
                         </div>
                         <div id="schedule-recur-days-row" class="hidden">
-                            <p class="text-xs text-gray-500 mb-1">요일</p>
+                            <p class="text-xs text-gray-500 mb-1">요일 <span class="text-gray-400">· 누르면 고른 요일마다 반복합니다</span></p>
                             <div id="schedule-recur-days" class="flex gap-1">
-                                <label class="cursor-pointer"><input type="checkbox" value="0" onchange="updateScheduleRecurSummary()" class="peer sr-only" /><span class="inline-flex w-8 h-8 items-center justify-center rounded-full border border-gray-300 bg-white text-sm text-red-500 peer-checked:bg-indigo-600 peer-checked:text-white peer-checked:border-indigo-600">일</span></label>
-                                <label class="cursor-pointer"><input type="checkbox" value="1" onchange="updateScheduleRecurSummary()" class="peer sr-only" /><span class="inline-flex w-8 h-8 items-center justify-center rounded-full border border-gray-300 bg-white text-sm text-gray-700 peer-checked:bg-indigo-600 peer-checked:text-white peer-checked:border-indigo-600">월</span></label>
-                                <label class="cursor-pointer"><input type="checkbox" value="2" onchange="updateScheduleRecurSummary()" class="peer sr-only" /><span class="inline-flex w-8 h-8 items-center justify-center rounded-full border border-gray-300 bg-white text-sm text-gray-700 peer-checked:bg-indigo-600 peer-checked:text-white peer-checked:border-indigo-600">화</span></label>
-                                <label class="cursor-pointer"><input type="checkbox" value="3" onchange="updateScheduleRecurSummary()" class="peer sr-only" /><span class="inline-flex w-8 h-8 items-center justify-center rounded-full border border-gray-300 bg-white text-sm text-gray-700 peer-checked:bg-indigo-600 peer-checked:text-white peer-checked:border-indigo-600">수</span></label>
-                                <label class="cursor-pointer"><input type="checkbox" value="4" onchange="updateScheduleRecurSummary()" class="peer sr-only" /><span class="inline-flex w-8 h-8 items-center justify-center rounded-full border border-gray-300 bg-white text-sm text-gray-700 peer-checked:bg-indigo-600 peer-checked:text-white peer-checked:border-indigo-600">목</span></label>
-                                <label class="cursor-pointer"><input type="checkbox" value="5" onchange="updateScheduleRecurSummary()" class="peer sr-only" /><span class="inline-flex w-8 h-8 items-center justify-center rounded-full border border-gray-300 bg-white text-sm text-gray-700 peer-checked:bg-indigo-600 peer-checked:text-white peer-checked:border-indigo-600">금</span></label>
-                                <label class="cursor-pointer"><input type="checkbox" value="6" onchange="updateScheduleRecurSummary()" class="peer sr-only" /><span class="inline-flex w-8 h-8 items-center justify-center rounded-full border border-gray-300 bg-white text-sm text-blue-500 peer-checked:bg-indigo-600 peer-checked:text-white peer-checked:border-indigo-600">토</span></label>
+                                <label class="cursor-pointer"><input type="checkbox" value="0" onchange="onScheduleRecurDayToggle()" class="peer sr-only" /><span class="inline-flex w-8 h-8 items-center justify-center rounded-full border border-gray-300 bg-white text-sm text-red-500 peer-checked:bg-indigo-600 peer-checked:text-white peer-checked:border-indigo-600">일</span></label>
+                                <label class="cursor-pointer"><input type="checkbox" value="1" onchange="onScheduleRecurDayToggle()" class="peer sr-only" /><span class="inline-flex w-8 h-8 items-center justify-center rounded-full border border-gray-300 bg-white text-sm text-gray-700 peer-checked:bg-indigo-600 peer-checked:text-white peer-checked:border-indigo-600">월</span></label>
+                                <label class="cursor-pointer"><input type="checkbox" value="2" onchange="onScheduleRecurDayToggle()" class="peer sr-only" /><span class="inline-flex w-8 h-8 items-center justify-center rounded-full border border-gray-300 bg-white text-sm text-gray-700 peer-checked:bg-indigo-600 peer-checked:text-white peer-checked:border-indigo-600">화</span></label>
+                                <label class="cursor-pointer"><input type="checkbox" value="3" onchange="onScheduleRecurDayToggle()" class="peer sr-only" /><span class="inline-flex w-8 h-8 items-center justify-center rounded-full border border-gray-300 bg-white text-sm text-gray-700 peer-checked:bg-indigo-600 peer-checked:text-white peer-checked:border-indigo-600">수</span></label>
+                                <label class="cursor-pointer"><input type="checkbox" value="4" onchange="onScheduleRecurDayToggle()" class="peer sr-only" /><span class="inline-flex w-8 h-8 items-center justify-center rounded-full border border-gray-300 bg-white text-sm text-gray-700 peer-checked:bg-indigo-600 peer-checked:text-white peer-checked:border-indigo-600">목</span></label>
+                                <label class="cursor-pointer"><input type="checkbox" value="5" onchange="onScheduleRecurDayToggle()" class="peer sr-only" /><span class="inline-flex w-8 h-8 items-center justify-center rounded-full border border-gray-300 bg-white text-sm text-gray-700 peer-checked:bg-indigo-600 peer-checked:text-white peer-checked:border-indigo-600">금</span></label>
+                                <label class="cursor-pointer"><input type="checkbox" value="6" onchange="onScheduleRecurDayToggle()" class="peer sr-only" /><span class="inline-flex w-8 h-8 items-center justify-center rounded-full border border-gray-300 bg-white text-sm text-blue-500 peer-checked:bg-indigo-600 peer-checked:text-white peer-checked:border-indigo-600">토</span></label>
                             </div>
                         </div>
                         <div class="text-sm text-gray-700">
@@ -20152,12 +20152,25 @@ const QUOTE_TEMPLATES = [
             const f = document.getElementById('schedule-recur').value;
             document.getElementById('schedule-recur-opts').classList.toggle('hidden', !f);
             document.getElementById('schedule-recur-interval-row').classList.toggle('hidden', f === 'weekdays');
-            document.getElementById('schedule-recur-days-row').classList.toggle('hidden', f !== 'weekly');
+            // 요일 단추는 매일 · 평일 · 요일 지정에서 보입니다 (2026-11-11) — 매일은 7일, 평일은 월~금이 켜져 보이고, 요일을 바꾸면 '요일 지정'으로 바뀝니다
+            document.getElementById('schedule-recur-days-row').classList.toggle('hidden', !(f === 'weekly' || f === 'daily' || f === 'weekdays'));
+            if (f === 'daily' || f === 'weekdays') document.querySelectorAll('#schedule-recur-days input').forEach(x => { x.checked = f === 'daily' || (Number(x.value) >= 1 && Number(x.value) <= 5); });
             document.getElementById('schedule-recur-unit').textContent = { daily: '일', weekly: '주', monthly: '개월', yearly: '년' }[f] || '';
             // 매주를 처음 고르면 시작일의 요일을 켜 둡니다
             if (f === 'weekly' && !document.querySelector('#schedule-recur-days input:checked')) {
                 const d = document.getElementById('schedule-date').value;
                 if (d) { const [y, m, dd] = d.split('-').map(Number); const box = document.querySelector(`#schedule-recur-days input[value="${new Date(y, m - 1, dd).getDay()}"]`); if (box) box.checked = true; }
+            }
+            updateScheduleRecurSummary();
+        }
+        // 매일 · 평일에서 요일을 누르면 '요일 지정(매주)' 으로 바꾸고 고른 요일을 그대로 둡니다
+        function onScheduleRecurDayToggle() {
+            const sel = document.getElementById('schedule-recur');
+            if (sel.value === 'daily' || sel.value === 'weekdays') {
+                sel.value = 'weekly';
+                document.getElementById('schedule-recur-interval').value = 1;
+                onScheduleRecurChange();
+                return;
             }
             updateScheduleRecurSummary();
         }
