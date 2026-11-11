@@ -69,6 +69,12 @@ const fakeStore = { storeValue: async () => USERS, calendars: async () => CALS }
     const fromPhone = G.fromGoogleEvent({ id: 'ev6', summary: '전체 미팅', description: meet.description, start: { dateTime: '2026-10-01T14:00:00+09:00' }, end: { dateTime: '2026-10-01T15:00:00+09:00' } },
         CALS[0], { id: 's6', calendar: 'company', salesperson: '서해융' }, ctx);
     eq('받아 올 때는 붙인 부분을 뗀다 (그룹웨어 설명 그대로)', fromPhone.description, '안건 공유');
+    // 킹오더일정 새 일정 숫자 (2026-11-12) — 폰에서 새로 만든 일정에도 등록 시각, 기존 일정의 시간이 바뀌면 변경 시각
+    const phoneNew = G.fromGoogleEvent({ id: 'ev9', summary: '폰 일정', start: { dateTime: '2026-10-02T09:00:00+09:00' }, end: { dateTime: '2026-10-02T10:00:00+09:00' } }, CALS[0], null, ctx);
+    ok('폰에서 새로 만든 일정에 createdAt', /^\d{4}-\d\d-\d\dT/.test(phoneNew.createdAt || ''));
+    ok('같은 내용으로 다시 받으면 changedAt 없음', !G.fromGoogleEvent({ id: 'ev9', summary: '폰 일정', start: { dateTime: '2026-10-02T09:00:00+09:00' }, end: { dateTime: '2026-10-02T10:00:00+09:00' } }, CALS[0], phoneNew, ctx).changedAt);
+    const phoneMoved = G.fromGoogleEvent({ id: 'ev9', summary: '폰 일정', start: { dateTime: '2026-10-02T11:00:00+09:00' }, end: { dateTime: '2026-10-02T12:00:00+09:00' } }, CALS[0], phoneNew, ctx);
+    ok('폰에서 시간을 바꾸면 changedAt', /^\d{4}-/.test(phoneMoved.changedAt || '') && phoneMoved.createdAt === phoneNew.createdAt);
     const onlyFoot = G.fromGoogleEvent({ id: 'ev7', summary: 'x', description: G.toGoogleEvent({ id: 's7', title: 'x', date: '2026-10-01', calendar: 'company', salesperson: '서해융', attendees: [{ name: '송기진', status: 'pending' }] }, ctx).description, start: { date: '2026-10-01' } },
         CALS[0], { id: 's7', calendar: 'company', salesperson: '서해융' }, ctx);
     eq('설명이 비어 있던 일정은 다시 빈 설명으로', onlyFoot.description, '');

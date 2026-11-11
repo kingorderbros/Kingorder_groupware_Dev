@@ -155,6 +155,9 @@
         .calm-card .calm-meta { display: flex; flex-wrap: wrap; gap: 4px 6px; margin-top: 4px; font-size: 12px; color: #64748b; align-items: center; }
         .calm-card .calm-chip { padding: 1px 7px; border-radius: 999px; font-size: 11px; font-weight: 600; }
         .calm-card.calm-off .calm-title { text-decoration: line-through; opacity: .55; }
+        .calm-card .calm-rc { color: #94a3b8; font-size: 11px; }
+        .calm-freshbar { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin: 8px 12px 0; padding: 8px 12px; border-radius: 10px; background: #fff1f2; color: #9f1239; font-size: 13px; }
+        .calm-freshbar button { padding: 6px 12px; border-radius: 8px; background: #e11d48; color: #fff; font-weight: 600; font-size: 13px; }
         .calm-empty { margin: 6px 12px; padding: 10px 12px; font-size: 13px; color: #94a3b8; }
         /* 설정 창 */
         .calm-sheet-wrap { position: fixed; inset: 0; z-index: 60; background: rgba(15,23,42,.45); display: flex; align-items: flex-end; }
@@ -6711,6 +6714,7 @@
                         <span id="detail-schedule-my-status" class="self-center text-xs text-indigo-700"></span>
                     </div>
                 </div>
+                <div id="detail-schedule-reads" class="hidden"></div>
                 <div>
                     <p class="text-sm font-medium text-gray-500">상세 내용</p>
                     <p id="detail-schedule-description" class="text-base text-gray-800 whitespace-pre-line"></p>
@@ -10380,6 +10384,7 @@ const QUOTE_TEMPLATES = [
     <script src="js/kob-files.js"></script>
     <script src="js/kob-presence.js"></script>
     <script src="js/kob-push.js"></script>
+    <script src="js/kob-reads.js"></script>
     <script type="text/x-kob-main" id="kob-main">
         // ==================== 운행내역 백엔드 API 설정 ====================
         // 같은 서버(server.js)에서 HTML을 서빙하면 상대경로로 동작.
@@ -12003,6 +12008,7 @@ const QUOTE_TEMPLATES = [
             }
             renderPresenceUi();
             setTimeout(() => maybeAskPush(), 2500);        // 폰 · PC 알림 켜기 안내 (2026-09-29)
+            if (window.kobReads) { kobReads.setMe({ email: currentUserEmail, name: currentUserName }); kobReads.load().catch(() => { }); }   // 일정 확인 기록 (2026-11-12)
             try {
                 const q = new URLSearchParams(location.search);
                 if (q.has('noti')) { q.delete('noti'); history.replaceState(null, '', location.pathname + (q.toString() ? '?' + q : '') + location.hash); setTimeout(openNotiFromPush, 300); }
@@ -18778,8 +18784,10 @@ const QUOTE_TEMPLATES = [
             schedules.forEach(s => {
                 if (!s || !s.id) return;
                 alive.add(s.id);
-                const now = JSON.stringify(s);
-                if (scheduleSaved.get(s.id) === now) return;          // 안 바뀐 것은 보내지 않습니다
+                let now = JSON.stringify(s);
+                const prev = scheduleSaved.get(s.id);
+                if (prev === now) return;          // 안 바뀐 것은 보내지 않습니다
+                if (stampScheduleTimes(s, prev)) now = JSON.stringify(s);   // 등록 · 변경 시각 (킹오더일정 · 2026-11-12)
                 scheduleSaved.set(s.id, now);
                 kobDb.save('schedules', s).catch(e => console.error('[일정] 저장 실패', e));
             });
@@ -18789,6 +18797,66 @@ const QUOTE_TEMPLATES = [
                 kobDb.remove('schedules', id).catch(e => console.error('[일정] 삭제 실패', e));
             });
             gcalPushSoon();                                       // 구글 캘린더로 바로 보냅니다 (2026-09-23)
+        }
+
+        // ---------- 킹오더일정 — 등록 · 변경 시각, 확인 기록, 새 일정 숫자 (2026-11-12) ----------
+        // 새 일정 숫자 = 내가 볼 수 있고 · 남이 등록했고 · 아직 열어 보지 않은 일정 + 내가 연 뒤 남이 바꾼 일정
+        //   · 기능을 켠 날(CAL_NEW_SINCE) 전에 등록한 일정은 세지 않습니다 (처음부터 수백 건이 뜨지 않게)
+        //   · '바꿈' 은 날짜 · 시간 · 제목 · 참석자(이름)만 봅니다. 참석 응답 · 진행상황 · 색은 바꿈으로 치지 않습니다
+        //   · 확인 기록은 일정 줄이 아니라 schedule_reads 표에 둡니다 (js/kob-reads.js · supabase/schema-v10.sql)
+        const CAL_NEW_SINCE = '2026-11-12';
+        function scheduleChangeSig(s) {
+            const names = (Array.isArray(s && s.attendees) ? s.attendees : []).map(a => a && a.name).filter(Boolean).sort();
+            return JSON.stringify([s.date || '', s.endDate || '', s.allDay === true, s.startTime || '', s.endTime || '', s.title || '', names]);
+        }
+        // 저장 직전에 부릅니다. 시각을 찍었으면 true.
+        function stampScheduleTimes(s, prevJson) {
+            const nowIso = new Date().toISOString();
+            const me = (typeof currentUserName !== 'undefined' && currentUserName) || '';
+            if (!prevJson) { if (s.createdAt) return false; s.createdAt = nowIso; return true; }
+            let before = null; try { before = JSON.parse(prevJson); } catch (e) { return false; }
+            if (scheduleChangeSig(before) === scheduleChangeSig(s)) return false;
+            s.changedAt = nowIso; s.changedBy = me;
+            return true;
+        }
+        function myScheduleRead(s) {
+            const m = window.kobReads && kobReads.mine ? kobReads.mine() : null;
+            return m ? (m.get(scheduleMasterId(s.id)) || null) : null;
+        }
+        function scheduleMineAsOwner(s) {
+            const me = (typeof currentUserName !== 'undefined' && currentUserName) || '';
+            const myEmail = String((typeof currentUserEmail !== 'undefined' && currentUserEmail) || '').toLowerCase();
+            return (!!me && scheduleOrganizer(s) === me) || (!!myEmail && String(s.createdBy || '').toLowerCase() === myEmail);
+        }
+        function scheduleIsNewForMe(s) {
+            if (!s || isBirthdaySchedule(s) || isScheduleOff(s)) return false;
+            if (!canViewSchedule(s)) return false;
+            if (scheduleMineAsOwner(s)) return false;
+            // 등록 시각은 UTC(ISO) 로 남으므로 한국 시간 자정 기준으로 견줍니다
+            const at = Date.parse(s.createdAt || '');
+            if (!at || at < Date.parse(CAL_NEW_SINCE + 'T00:00:00+09:00')) return false;
+            return !myScheduleRead(s);
+        }
+        function scheduleIsChangedForMe(s) {
+            if (!s || isBirthdaySchedule(s) || isScheduleOff(s) || !s.changedAt) return false;
+            if (!canViewSchedule(s)) return false;
+            const me = (typeof currentUserName !== 'undefined' && currentUserName) || '';
+            if (s.changedBy && s.changedBy === me) return false;
+            const r = myScheduleRead(s);
+            return !!r && String(s.changedAt) > String(r.last || '');
+        }
+        // 캘린더별 숫자 { team: 2, 'sales-share': 1, ... } — 반복 일정은 회차가 여러 개여도 한 건
+        function calNewCounts(list) {
+            const out = {}, seen = new Set();
+            (list || []).forEach(s => {
+                const mid = scheduleMasterId(s.id);
+                if (seen.has(mid)) return;
+                if (!scheduleIsNewForMe(s) && !scheduleIsChangedForMe(s)) return;
+                seen.add(mid);
+                const c = scheduleCalendarId(s);
+                out[c] = (out[c] || 0) + 1;
+            });
+            return out;
         }
 
         // 저장한 일정을 구글로 보내라고 서버에 알립니다. 잇달아 고칠 때를 대비해 2초 모아서 한 번만 부릅니다.
@@ -19144,13 +19212,15 @@ const QUOTE_TEMPLATES = [
             const el = document.getElementById('calendar-legend');
             if (!el) return;
             const inMonth = visibleSchedules.filter(s => String(s.date || '').slice(0, 7) === ym);
+            const fresh = calNewCounts(visibleSchedules);   // 새 일정 · 변경됨 숫자 (킹오더일정 · 2026-11-12)
+            const newBadge = (id) => `<span data-cal-new="${id}" class="${fresh[id] ? '' : 'hidden '}bg-rose-600 text-white rounded-full px-1.5 font-bold" title="확인하지 않은 새 일정 · 변경된 일정">${fresh[id] || 0}</span>`;
             const chips = CALENDARS.map(c => {
                 const count = inMonth.filter(s => scheduleCalendarId(s) === c.id).length;
                 const on = activeId === c.id;
                 const ring = on ? 'ring-2 ring-offset-1 ring-gray-400' : 'opacity-90 hover:opacity-100';
                 return `<button type="button" onclick="filterCalendarBy(${jsArg(c.id)})" title="${escapeHtml(c.desc)}" class="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition-all ${c.chip} ${ring}">
                             <i class="fas ${c.icon}"></i>${escapeHtml(c.name)}
-                            <span class="bg-white/70 text-gray-700 rounded-full px-1.5">${count}</span>
+                            <span class="bg-white/70 text-gray-700 rounded-full px-1.5">${count}</span>${newBadge(c.id)}
                         </button>`;
             }).join('');
             // '전체 보기' — 맨 왼쪽에 항상 둡니다. 어느 캘린더를 골랐든 누르면 전체 캘린더로 (UAT 2026-10-08)
@@ -19878,6 +19948,12 @@ const QUOTE_TEMPLATES = [
 
         // 오늘이 있는 주를 화면 가운데로 (2026-10-20) — 캘린더에 들어올 때 · [오늘] 을 누를 때만 (자료가 새로 와서 다시 그릴 때는 움직이지 않음)
         // ==================== 킹오더일정 — 목록 보기 · 아래 줄 · 설정 (2026-11-12) ====================
+        // 확인 기록이 바뀌면(내가 열었거나 다른 기기에서) 숫자 · 표시를 다시 그립니다
+        window.addEventListener('kob-reads-change', () => {
+            const sec = document.getElementById('sec-calendar-center');
+            if (sec && !sec.classList.contains('hidden') && typeof renderCalendar === 'function') renderCalendar();
+            calmUpdateAppBadge();
+        });
         // 휴대폰에서는 달력 칸에 제목이 잘려 보여서, 그 달 일정을 날짜별 카드로 늘어놓은 '목록' 을 첫 보기로 씁니다.
         // 그리는 자료는 renderCalendar 가 거른 그대로(권한 · 부서 · 캘린더 거르기)라 다른 보기와 같은 일정만 나옵니다.
         function scheduleOwnerLabel(s) { return isBirthdaySchedule(s) ? '' : '등록 ' + (scheduleOrganizer(s) || '미지정'); }
@@ -19889,12 +19965,15 @@ const QUOTE_TEMPLATES = [
             const time = isAllDaySchedule(s) ? '종일' : `${escapeHtml(s.startTime || '')}${s.endTime ? '<br>' + escapeHtml(s.endTime) : ''}`;
             const owner = scheduleOwnerLabel(s);
             const myChip = my ? `<span class="calm-chip ${attendeeStatusMeta(my).chip}">${isSelfJoined(s) ? '참가' : '초대 ' + attendeeStatusMeta(my).name}</span>` : '';
+            const fresh = scheduleIsNewForMe(s) ? '<span class="calm-chip calm-new bg-rose-600 text-white">새 일정</span>'
+                : scheduleIsChangedForMe(s) ? '<span class="calm-chip calm-new bg-amber-500 text-white">변경됨</span>' : '';
+            const rc = isBirthdaySchedule(s) ? '' : `<span class="calm-rc" data-rc="${escapeHtml(scheduleMasterId(s.id))}"></span>`;
             return `<div data-sid="${escapeHtml(s.id)}" class="calm-card${off || my === 'declined' ? ' calm-off' : ''}" onclick="openScheduleDetailModal(${jsArg(s.id)})">
                 <span class="calm-bar-color ${cal.swatch}"></span>
                 <div class="calm-time">${time}</div>
                 <div class="flex-1 min-w-0">
                     <div class="calm-title">${scheduleOffBadge(s)}${isRecurring(s) ? '<i class="fas fa-repeat text-[10px] opacity-60 mr-1" title="반복 일정"></i>' : ''}${escapeHtml(s.title || '(제목 없음)')}</div>
-                    <div class="calm-meta"><span class="calm-chip ${cal.chip}"><i class="fas ${cal.icon} mr-1"></i>${escapeHtml(cal.short)}</span>${owner ? `<span>${escapeHtml(owner)}</span>` : ''}${myChip}</div>
+                    <div class="calm-meta">${fresh}<span class="calm-chip ${cal.chip}"><i class="fas ${cal.icon} mr-1"></i>${escapeHtml(cal.short)}</span>${owner ? `<span>${escapeHtml(owner)}</span>` : ''}${myChip}${rc}</div>
                 </div>
             </div>`;
         }
@@ -19915,7 +19994,69 @@ const QUOTE_TEMPLATES = [
                 html += `<div class="calm-day${isToday ? ' calm-today' : ''}"${isToday ? ' data-today="1"' : ''}>${month + 1}월 ${d}일 (${WD[new Date(year, month, d).getDay()]})${isToday ? ' · 오늘' : ''}${hol ? ` <span class="calm-hol">${escapeHtml(hol)}</span>` : ''}</div>`;
                 html += day.length ? day.map(calmCardHtml).join('') : '<div class="calm-empty">오늘 일정이 없습니다.</div>';
             }
-            grid.innerHTML = html || '<div class="calm-empty">이 달에 등록된 일정이 없습니다.</div>';
+            const freshN = calmFreshList().length;
+            const top = freshN ? `<div class="calm-freshbar"><span><i class="fas fa-bell mr-1"></i>확인하지 않은 일정 <b>${freshN}</b>건</span><button type="button" onclick="calmMarkAllSeen()">모두 확인</button></div>` : '';
+            grid.innerHTML = top + (html || '<div class="calm-empty">이 달에 등록된 일정이 없습니다.</div>');
+            calmFillReadCounts(grid);
+        }
+        // 지금 거르기(부서 · 캘린더)에 맞는 확인하지 않은 일정 (회차가 여러 개인 반복 일정은 하나로)
+        function calmFreshList() {
+            const scopeInfo = getCalendarScopeFor(currentUserName, currentUserDept, currentUserLevel);
+            const deptFilter = (document.getElementById('calendar-filter-dept') || {}).value || '';
+            const calFilter = (document.getElementById('calendar-filter-cal') || {}).value || '';
+            const seen = new Set();
+            return getVisibleSchedules(scopeInfo)
+                .filter(s => (!deptFilter || (s.dept || 'sales') === deptFilter) && (!calFilter || scheduleCalendarId(s) === calFilter))
+                .filter(s => scheduleIsNewForMe(s) || scheduleIsChangedForMe(s))
+                .filter(s => { const m = scheduleMasterId(s.id); if (seen.has(m)) return false; seen.add(m); return true; });
+        }
+        function calmMarkAllSeen() {
+            const ids = calmFreshList().map(s => scheduleMasterId(s.id));
+            if (window.kobReads && ids.length) kobReads.markAllSeen(ids);
+        }
+        // 카드의 '확인 N' — 서버에서 숫자만 받아 채웁니다
+        function calmFillReadCounts(root) {
+            if (!window.kobReads) return;
+            const els = Array.from((root || document).querySelectorAll('[data-rc]'));
+            if (!els.length) return;
+            kobReads.counts(els.map(e => e.dataset.rc)).then(m => {
+                els.forEach(e => { const n = m.get(e.dataset.rc) || 0; e.textContent = n ? `확인 ${n}` : ''; });
+            }).catch(() => { });
+        }
+        // 홈 화면 아이콘 숫자 (안드로이드 · 아이폰 홈 화면 앱 — 지원하는 기기만)
+        function calmUpdateAppBadge() {
+            if (!isCalendarMode() || !navigator.setAppBadge) return;
+            const scopeInfo = getCalendarScopeFor(currentUserName, currentUserDept, currentUserLevel);
+            const n = Object.values(calNewCounts(getVisibleSchedules(scopeInfo))).reduce((a, b) => a + b, 0);
+            try { (n ? navigator.setAppBadge(n) : navigator.clearAppBadge()).catch(() => { }); } catch (e) { /* 지원 안 함 */ }
+        }
+
+        // ---------- 일정 상세의 '확인' 칸 (킹오더일정 · 2026-11-12) ----------
+        // 상세를 열면 내 확인을 남기고, 등록자 · 참석자에게는 확인한 사람 이름 · 시각을, 그 외에는 인원 수만 보여 줍니다.
+        function scheduleReadWhen(t) {
+            const d = new Date(t); if (isNaN(d)) return '';
+            const p = n => String(n).padStart(2, '0');
+            return `${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+        }
+        function renderScheduleReads(schedule) {
+            const box = document.getElementById('detail-schedule-reads');
+            if (!box) return;
+            if (!window.kobReads || !schedule || isBirthdaySchedule(schedule)) { box.classList.add('hidden'); return; }
+            const sid = scheduleMasterId(schedule.id);
+            const canList = scheduleMineAsOwner(schedule) || !!attendeeOf(schedule, currentUserName);
+            box.className = 'rounded-lg border border-gray-200 bg-gray-50 px-3 py-2';
+            box.innerHTML = '<p class="text-sm font-medium text-gray-500"><i class="fas fa-eye mr-1"></i>확인</p><p class="text-sm text-gray-400">불러오는 중…</p>';
+            kobReads.markSeen(sid).catch(() => { }).then(() => canList ? kobReads.readers(sid) : kobReads.counts([sid])).then(res => {
+                if (document.getElementById('schedule-detail-modal').classList.contains('hidden')) return;
+                if (canList) {
+                    const list = res || [];
+                    box.innerHTML = `<p class="text-sm font-medium text-gray-500"><i class="fas fa-eye mr-1"></i>확인 <b class="text-gray-800">${list.length}</b>명</p>`
+                        + (list.length ? `<div class="flex flex-wrap gap-1.5 mt-1">${list.map(r => `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white border border-gray-200 text-xs text-gray-700">${escapeHtml(r.name || '')}<span class="text-gray-400 tabular-nums">${escapeHtml(scheduleReadWhen(r.first))}</span></span>`).join('')}</div>` : '');
+                } else {
+                    const n = (res && res.get(sid)) || 0;
+                    box.innerHTML = `<p class="text-sm font-medium text-gray-500"><i class="fas fa-eye mr-1"></i>확인 <b class="text-gray-800">${n}</b>명</p><p class="text-xs text-gray-400 mt-0.5">확인한 사람 목록은 등록자와 참석자만 볼 수 있습니다.</p>`;
+                }
+            }).catch(() => { box.classList.add('hidden'); });
         }
         function calmSyncBar() {
             document.querySelectorAll('#calm-bar [data-view]').forEach(b => b.classList.toggle('calm-on', b.dataset.view === currentCalendarView));
@@ -20500,6 +20641,7 @@ const QUOTE_TEMPLATES = [
 
             renderScheduleAttendeeDetail(schedule);
             document.getElementById('schedule-detail-modal').classList.remove('hidden');
+            renderScheduleReads(schedule);   // 확인 기록 남기기 · 확인한 사람 (킹오더일정 · 2026-11-12)
         }
 
         // 상세 모달의 참석자 목록 + 내 응답 영역

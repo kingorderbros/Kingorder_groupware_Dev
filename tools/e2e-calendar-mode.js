@@ -19,8 +19,8 @@ const ADMIN = { email: 'daniel@kingorder.co.kr', dept: 'admin', name: '정장훈
 function seedSchedules() {
     const t = ymd(new Date()); const d2 = new Date(); d2.setDate(d2.getDate() + 1); const t2 = ymd(d2);
     schedules.push({ id: 'e2e-a', title: '팀 주간회의', date: t, startTime: '09:30', endTime: '10:00', calendar: 'team', dept: 'admin', salesperson: '정장훈', createdBy: 'daniel@kingorder.co.kr', attendees: [] });
-    schedules.push({ id: 'e2e-b', title: '영업 미팅 — 강남 고객사', date: t, startTime: '10:00', endTime: '11:00', calendar: 'sales-share', dept: 'sales', salesperson: '김영업', createdBy: 'kim@kingorder.co.kr', attendees: [{ name: '정장훈', status: 'pending' }] });
-    schedules.push({ id: 'e2e-c', title: '키오스크 설치', date: t2, startTime: '14:00', endTime: '16:00', calendar: 'install-as', dept: 'ops', salesperson: '박설치', createdBy: 'park@kingorder.co.kr', attendees: [] });
+    schedules.push({ id: 'e2e-b', title: '영업 미팅 — 강남 고객사', date: t, startTime: '10:00', endTime: '11:00', calendar: 'sales-share', dept: 'sales', salesperson: '김영업', createdBy: 'kim@kingorder.co.kr', createdAt: new Date().toISOString(), attendees: [{ name: '정장훈', status: 'pending' }] });
+    schedules.push({ id: 'e2e-c', title: '키오스크 설치', date: t2, startTime: '14:00', endTime: '16:00', calendar: 'install-as', dept: 'ops', salesperson: '박설치', createdBy: 'park@kingorder.co.kr', createdAt: new Date().toISOString(), attendees: [] });
     renderCalendar();
 }
 
@@ -136,6 +136,42 @@ srv.listen(PORT, async () => {
                 await m.evaluate(() => { setCalendarView('list'); openScheduleModal(); }); await m.screenshot({ path: `${SHOTS}/new-${W}.png` });
                 await m.evaluate(() => { closeScheduleModal(); openScheduleDetailModal('e2e-b'); }); await m.screenshot({ path: `${SHOTS}/detail-${W}.png` });
             }
+            ok(m.__errs.length === 0, '스크립트 오류 없음 ' + m.__errs.join(' | '));
+            await m.close();
+        }
+
+        // ---------- Task 3: 확인 기록 · 새 일정 숫자 ----------
+        console.log('[3] 확인한 사람 · 새 일정 숫자');
+        {
+            const m = await openPage(br, base + '?mode=calendar', 390, 800);
+            await m.evaluate(u => { try { localStorage.removeItem('kobReads.v1'); } catch (e) { } enterApp(u); }, ADMIN);
+            await m.evaluate(seedSchedules);
+            const badge = (cal) => m.evaluate(c => { const b = document.querySelector(`#calendar-legend [data-cal-new="${c}"]`); return b && !b.classList.contains('hidden') ? b.textContent.trim() : ''; }, cal);
+            ok(await badge('sales-share') === '1', '영업/진행 공유 새 일정 숫자 1');
+            ok(await badge('install-as') === '1', '설치/AS 공유 새 일정 숫자 1');
+            ok(await badge('team') === '', '내가 등록한 팀별 일정은 숫자 없음');
+            ok(await m.evaluate(() => !!document.querySelector('#cal-grid [data-sid="e2e-b"] .calm-new')), '목록 카드에 새 일정 표시');
+            const saved = await m.evaluate(async () => {
+                let n = 0; const orig = kobDb.save; kobDb.save = function (t) { if (t === 'schedules') n++; return orig.apply(this, arguments); };
+                openScheduleDetailModal('e2e-b');
+                await new Promise(r => setTimeout(r, 300));
+                kobDb.save = orig;
+                return n;
+            });
+            ok(saved === 0, '상세를 열어도 kobDb.save(\'schedules\') 가 불리지 않는다');
+            const box = await m.evaluate(() => (document.getElementById('detail-schedule-reads') || {}).innerText || '');
+            ok(/확인/.test(box) && /정장훈/.test(box), `상세에 확인한 사람 (참석자라 이름이 보임) — ${box.replace(/\n/g, ' ')}`);
+            await m.evaluate(() => closeScheduleDetailModal());
+            await new Promise(r => setTimeout(r, 200));
+            ok(await badge('sales-share') === '', '상세를 열면 그 캘린더 숫자가 줄어듦');
+            ok(await m.evaluate(() => !document.querySelector('#cal-grid [data-sid="e2e-b"] .calm-new')), '확인한 카드는 새 일정 표시 없음');
+            // 모두 확인
+            await m.evaluate(() => calmMarkAllSeen());
+            await new Promise(r => setTimeout(r, 200));
+            ok(await badge('install-as') === '', '모두 확인 → 숫자 없음');
+            // 확인 뒤 남이 시간을 바꾸면 변경됨
+            await m.evaluate(() => { const s = schedules.find(x => x.id === 'e2e-c'); s.startTime = '15:00'; s.changedAt = new Date(Date.now() + 1000).toISOString(); s.changedBy = '박설치'; renderCalendar(); });
+            ok(await badge('install-as') === '1' && await m.evaluate(() => /변경됨/.test(document.querySelector('#cal-grid [data-sid="e2e-c"]').innerText)), '확인 뒤 남이 바꾸면 변경됨 · 숫자 1');
             ok(m.__errs.length === 0, '스크립트 오류 없음 ' + m.__errs.join(' | '));
             await m.close();
         }
