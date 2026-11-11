@@ -5,7 +5,7 @@
 
 ```
 개발환경/
-├─ index.html                 화면 전체 (그룹웨어 · 파트너센터 ?mode=partner · 운행일지 ?mode=mobile)
+├─ index.html                 화면 전체 (그룹웨어 · 파트너센터 ?mode=partner · 운행일지 ?mode=mobile · 킹오더일정 ?mode=calendar)
 ├─ config/
 │   ├─ app-config.js          실행 환경 설정 — dev 값. Supabase URL · anon 키 · API 주소 (값이 갈리는 곳은 여기뿐)
 │   └─ app-config.prod.example.js   prod 본보기 (배포 때 GitHub Secrets 로 채워짐)
@@ -121,7 +121,7 @@ cp .dev.vars.example .dev.vars    # SUPABASE_URL · SUPABASE_SERVICE_ROLE_KEY �
 # config/app-config.js 에 dev 의 supabaseUrl · supabaseAnonKey 를 넣습니다 (비우면 로컬 저장소 모드)
 npm run dev                       # http://localhost:8788  (wrangler dev — /api/* 도 함께 동작)
 ```
-- 그룹웨어 `http://localhost:8788/` · 파트너센터 `/?mode=partner` · 운행일지 `/?mode=mobile`
+- 그룹웨어 `http://localhost:8788/` · 파트너센터 `/?mode=partner` · 운행일지 `/?mode=mobile` · 킹오더일정 `/?mode=calendar`
 - 첫 로그인: 로그인 화면의 **[처음 설정 — 관리자 임시 비밀번호 만들기]** (4절). 로그인 뒤 **사용자/권한관리** 에서 실제 담당자를 등록합니다.
 - 화면 왼쪽 아래 작은 표시가 `Supabase · dev` 인지 `로컬 저장소` 인지 알려 줍니다. 파트너센터 로그인 화면 아래 판 번호에도 환경 이름이 붙습니다.
 - Supabase 모드에서 계정 만들기 · 비밀번호 초기화는 `/api/auth/*`(functions) 를 거치므로 **`.dev.vars` 가 있어야** 로컬에서도 됩니다.

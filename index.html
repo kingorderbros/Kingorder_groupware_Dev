@@ -6385,6 +6385,20 @@
             </div>
 
             <div class="p-5">
+                <!-- 킹오더일정 안내 (2026-11-12) — 구글 캘린더는 개인 일정과 섞이고 초대한 사람이 보이지 않아, 회사 일정 전용 화면을 따로 둡니다 -->
+                <div class="mb-5 rounded-lg border border-pink-200 bg-pink-50 p-4">
+                    <h4 class="font-semibold text-gray-800 mb-1"><i class="fas fa-calendar-days mr-1 text-pink-600"></i>휴대폰 전용 일정 화면 — 킹오더일정</h4>
+                    <p class="text-sm text-gray-700">회사 일정만 따로 보고, 초대한 사람 · 확인한 사람 · 새 일정 숫자를 확인할 수 있습니다. 그룹웨어 일정과 같은 자료입니다.</p>
+                    <ol class="list-decimal list-inside text-sm text-gray-700 mt-2 space-y-1">
+                        <li>휴대폰에서 아래 주소를 엽니다.</li>
+                        <li>아이폰: 사파리 [공유 › 홈 화면에 추가] · 안드로이드: 크롬 [⋮ › 홈 화면에 추가]</li>
+                        <li>홈 화면의 <b>킹오더일정</b> 아이콘으로 열고, 설정(톱니)에서 [이 기기에서 알림 받기]를 누릅니다.</li>
+                    </ol>
+                    <div class="mt-2 flex items-center gap-2">
+                        <code id="calm-url" class="flex-1 min-w-0 truncate text-xs bg-white border border-pink-200 rounded px-2 py-1.5"></code>
+                        <button type="button" onclick="copyCalendarModeUrl()" class="shrink-0 text-xs px-3 py-1.5 rounded bg-gray-800 text-white">주소 복사</button>
+                    </div>
+                </div>
                 <!-- 먼저 할 일 -->
                 <div class="mb-5">
                     <h4 class="font-semibold text-gray-800 mb-2"><span class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-gray-800 text-white text-xs mr-1.5">1</span>사전 준비 (안드로이드·아이폰 공통)</h4>
@@ -6706,7 +6720,7 @@
                 </div>
                 <!-- 내가 초대받은 일정이면 여기서 응답 -->
                 <div id="detail-schedule-respond" class="hidden bg-indigo-50 border border-indigo-200 rounded p-3">
-                    <p class="text-sm font-medium text-indigo-900 mb-2"><i class="fas fa-envelope-open-text mr-1"></i><span id="detail-invite-by"></span>이 일정에 초대되었습니다. 참석 여부를 선택해 주세요.</p>
+                    <p class="text-sm font-medium text-indigo-900 mb-2"><i class="fas fa-envelope-open-text mr-1"></i><span id="detail-invite-by">이 일정에 초대되었습니다.</span> 참석 여부를 선택해 주세요.</p>
                     <div class="flex flex-wrap gap-2">
                         <button type="button" onclick="respondToSchedule('accepted')" class="px-3 py-1.5 text-sm rounded bg-green-600 text-white hover:bg-green-700 transition-colors"><i class="fas fa-circle-check mr-1"></i>수락</button>
                         <button type="button" onclick="respondToSchedule('tentative')" class="px-3 py-1.5 text-sm rounded bg-amber-500 text-white hover:bg-amber-600 transition-colors"><i class="fas fa-circle-question mr-1"></i>미정</button>
@@ -20175,7 +20189,16 @@ const QUOTE_TEMPLATES = [
             if (ba) ba.classList.toggle('hidden', isIos);
             if (bi) bi.classList.toggle('hidden', !isIos);
         }
+        // 킹오더일정 주소 (2026-11-12)
+        function calendarModeUrl() { return `${location.origin}${location.pathname}?mode=calendar`; }
+        function copyCalendarModeUrl() {
+            const url = calendarModeUrl();
+            const done = () => alert('킹오더일정 주소를 복사했습니다.');
+            if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(done).catch(() => prompt('아래 주소를 복사해 주세요.', url));
+            else prompt('아래 주소를 복사해 주세요.', url);
+        }
         function openPhoneSyncHelp() {
+            const cu = document.getElementById('calm-url'); if (cu) cu.textContent = calendarModeUrl();
             setPhoneSyncOs(phoneSyncGuessOs());
             const m = document.getElementById('phone-sync-modal');
             if (m) m.classList.remove('hidden');
@@ -20717,7 +20740,7 @@ const QUOTE_TEMPLATES = [
 
             // 초대한 사람 — 나를 넣은 사람(없으면 주최자) (킹오더일정 · 2026-11-12)
             const inviteBy = document.getElementById('detail-invite-by');
-            if (inviteBy) { const mine = attendeeOf(schedule, currentUserName); const who = (mine && mine.invitedBy) || scheduleOrganizer(schedule); inviteBy.innerHTML = who ? `<b>${escapeHtml(who)}</b> 님이 ` : ''; }
+            if (inviteBy) { const mine = attendeeOf(schedule, currentUserName); const who = (mine && mine.invitedBy) || scheduleOrganizer(schedule); inviteBy.innerHTML = who ? `<b>${escapeHtml(who)}</b> 님이 이 일정에 초대했습니다.` : '이 일정에 초대되었습니다.'; }
             row.classList.toggle('hidden', list.length === 0);
             if (list.length) {
                 // 스스로 참가한 사람은 응답 집계에서 빼고 '참가'로 따로 센다
