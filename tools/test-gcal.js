@@ -72,6 +72,8 @@ const fakeStore = { storeValue: async () => USERS, calendars: async () => CALS }
     // 킹오더일정 새 일정 숫자 (2026-11-12) — 폰에서 새로 만든 일정에도 등록 시각, 기존 일정의 시간이 바뀌면 변경 시각
     const phoneNew = G.fromGoogleEvent({ id: 'ev9', summary: '폰 일정', start: { dateTime: '2026-10-02T09:00:00+09:00' }, end: { dateTime: '2026-10-02T10:00:00+09:00' } }, CALS[0], null, ctx);
     ok('폰에서 새로 만든 일정에 createdAt', /^\d{4}-\d\d-\d\dT/.test(phoneNew.createdAt || ''));
+    const oldEv = G.fromGoogleEvent({ id: 'ev10', created: '2025-03-01T02:00:00.000Z', summary: '예전 일정', start: { date: '2025-03-05' } }, CALS[0], null, ctx);
+    ok('구글 캘린더를 처음 연결해도 예전 일정은 구글의 만든 시각(created)으로 — 새 일정으로 쏟아지지 않음', oldEv.createdAt === '2025-03-01T02:00:00.000Z');
     ok('같은 내용으로 다시 받으면 changedAt 없음', !G.fromGoogleEvent({ id: 'ev9', summary: '폰 일정', start: { dateTime: '2026-10-02T09:00:00+09:00' }, end: { dateTime: '2026-10-02T10:00:00+09:00' } }, CALS[0], phoneNew, ctx).changedAt);
     const phoneMoved = G.fromGoogleEvent({ id: 'ev9', summary: '폰 일정', start: { dateTime: '2026-10-02T11:00:00+09:00' }, end: { dateTime: '2026-10-02T12:00:00+09:00' } }, CALS[0], phoneNew, ctx);
     ok('폰에서 시간을 바꾸면 changedAt', /^\d{4}-/.test(phoneMoved.changedAt || '') && phoneMoved.createdAt === phoneNew.createdAt);

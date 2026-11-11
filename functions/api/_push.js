@@ -87,7 +87,8 @@ export const APPS = ['groupware', 'calendar'];
 export function addSub(rec, sub, device, now, app) {
     const r = normRec(rec);
     const old = r.subs.find(x => x.endpoint === sub.endpoint);
-    const apps = arr(old && old.apps).filter(a => APPS.includes(a));
+    // 예전 구독(표시 없음)은 그룹웨어에서 켠 것 — 킹오더일정이 다시 켜도 그룹웨어 알림이 끊기지 않게 남깁니다
+    const apps = old ? appsOf(old).slice() : [];
     if (APPS.includes(app) && !apps.includes(app)) apps.push(app);
     const entry = { endpoint: sub.endpoint, keys: { p256dh: sub.keys.p256dh, auth: sub.keys.auth }, device: s(device).slice(0, 80), at: now || new Date().toISOString() };
     if (apps.length) entry.apps = apps;
@@ -96,10 +97,12 @@ export function addSub(rec, sub, device, now, app) {
 }
 // 알림 종류에 맞는 기기 — 일정 알림은 킹오더일정 앱으로, 나머지는 그룹웨어 앱으로.
 // 그 앱 표시가 있는 구독이 하나도 없으면(예전 구독 · 한쪽 앱만 켬) 전부로. endpoint 기준 중복 없음.
+// 앱 표시 — 없으면(예전 구독) 그룹웨어
+export function appsOf(sub) { const a = arr(sub && sub.apps).filter(x => APPS.includes(x)); return a.length ? a : ['groupware']; }
 export function pickSubsFor(rec, category) {
     const subs = normRec(rec).subs;
     const want = category === 'schedule' ? 'calendar' : 'groupware';
-    const tagged = subs.filter(x => arr(x.apps).includes(want));
+    const tagged = subs.filter(x => appsOf(x).includes(want));
     const list = tagged.length ? tagged : subs;
     const seen = new Set();
     return list.filter(x => { if (!x || seen.has(x.endpoint)) return false; seen.add(x.endpoint); return true; });
@@ -131,13 +134,19 @@ export function calNewWanted(rec, calId) {
     const v = p.calNew && p.calNew[calId];
     return typeof v === 'boolean' ? v : calId === 'team';                         // 처음에는 팀별만
 }
-export function scheduleNewRecipients(users, sch, senderEmail) {
+// viewers: 화면이 그 일정을 볼 수 있다고 판단한 직원 번호(화면의 canViewSchedule — 직급별 조회 범위 · 사외 계정 제외).
+//   서버는 이 명단을 믿되 아래 기준(공유 = 전 직원 · 팀별 = 같은 부서)을 넘어서지는 못하게 겹쳐 봅니다.
+//   명단이 없으면 아무에게도 보내지 않습니다 (볼 수 없는 사람에게 제목이 가지 않게 · 2026-11-12 검토)
+export function scheduleNewRecipients(users, sch, senderEmail, viewers) {
     const me = s(senderEmail).toLowerCase();
     const cal = s(sch && sch.calendar);
     if (!CAL_NEW_IDS.includes(cal)) return [];
+    const allow = new Set(arr(viewers).map(v => s(v)));
     return arr(users).filter(u => {
         if (!u || !u.id || u.resigned === true) return false;
         if (s(u.email).toLowerCase() === me) return false;
+        if (!allow.has(s(u.id))) return false;
+        if (s(u.dept) === 'vendor') return false;                                 // 외주업체는 언제나 제외
         if (CAL_ALL.includes(cal)) return true;
         return s(u.dept) !== '' && s(u.dept) === s(sch.dept);                     // 팀별
     });
@@ -149,8 +158,16 @@ export function scheduleNewPayload(sch) {
         title: `[새 일정${cal ? ' · ' + cal : ''}] ${s(sch.title) || '일정'}`.slice(0, 130),
         body: `${s(sch.salesperson) || '등록자 미지정'} · ${when}`.slice(0, 140),
         tag: 'kob-schnew-' + s(sch.id),
-        url: '/?mode=calendar&schedule=' + encodeURIComponent(s(sch.id))
+        url: '/?schedule=' + encodeURIComponent(s(sch.id)),
+        calUrl: '/?mode=calendar&schedule=' + encodeURIComponent(s(sch.id))
     };
+}
+// 받는 기기에 맞춘 내용 — 킹오더일정 기기는 일정 화면 주소로, 그 밖(그룹웨어 · 예전 PC 구독)은 그룹웨어 주소로
+export function forSub(payload, sub) {
+    const p = Object.assign({}, payload);
+    const cal = p.calUrl; delete p.calUrl;
+    if (cal && appsOf(sub).includes('calendar')) p.url = cal;
+    return p;
 }
 export function validSubscription(sub) {
     try {
@@ -169,10 +186,9 @@ export function payloadOf(n, labels) {
         title: label ? `[${label}] ${title}` : title,
         body: detail || '그룹웨어에서 확인해 주세요.',
         tag: 'kob-' + s(n.id || Date.now()),
-        // 일정 알림은 킹오더일정에서 그 일정을 엽니다 (2026-11-12)
-        url: (/^schedule-/.test(s(n.type)) && s(n.scheduleId) && categoryOf(n.type) === 'schedule')
-            ? '/?mode=calendar&schedule=' + encodeURIComponent(s(n.scheduleId))
-            : '/?noti=' + encodeURIComponent(s(n.id))
+        url: '/?noti=' + encodeURIComponent(s(n.id)),
+        // 일정 알림은 킹오더일정 기기에서 그 일정을 엽니다 — forSub() 가 기기마다 고릅니다 (2026-11-12)
+        calUrl: (s(n.scheduleId) && categoryOf(n.type) === 'schedule') ? '/?mode=calendar&schedule=' + encodeURIComponent(s(n.scheduleId)) : undefined
     };
 }
 

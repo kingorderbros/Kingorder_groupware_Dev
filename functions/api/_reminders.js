@@ -216,7 +216,7 @@ export async function runScheduleReminders(env, nowArg) {
     let pushed = 0;
     await Promise.all(targets.slice(0, MAX_PUSH_PER_RUN).map(async ({ n, sub }) => {
         try {
-            const q = await push.buildRequest(sub, push.payloadOf(n, { 'schedule-reminder': '일정 알림' }), env);
+            const q = await push.buildRequest(sub, push.forSub(push.payloadOf(n, { 'schedule-reminder': '일정 알림' }), sub), env);
             const res = await fetch(q.url, q.init);
             if (res.ok) pushed++;
         } catch (e) { console.warn('[일정 알림] 푸시 오류', e && e.message); }

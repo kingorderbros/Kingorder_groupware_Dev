@@ -174,8 +174,14 @@ async function decrypt(b, body) {
     const rn = (s) => P.scheduleNewRecipients(U, s, 'me@k.co').map(u => u.name).join();
     ok(rn({ calendar: 'personal', dept: 'sales' }) === '', '개인 캘린더는 받는 사람 0명');
     ok(rn({ calendar: 'birthday', dept: 'company' }) === '', '생일은 받는 사람 0명');
-    ok(rn({ calendar: 'team', dept: 'sales' }) === '김영업,이영업,최영업', '팀별은 같은 부서만 (보낸 사람 · 퇴사자 빼고)');
-    ok(rn({ calendar: 'sales-share', dept: 'sales' }) === '김영업,이영업,박운영,최영업', '공유는 보낸 사람 빼고 전원 · 퇴사자 제외');
+    const rv = (sch, viewers) => P.scheduleNewRecipients(U, sch, 'me@k.co', viewers).map(u => u.name).join();
+    ok(rv({ calendar: 'team', dept: 'sales' }, ['u2', 'u3', 'u5']) === '김영업,이영업,최영업', '팀별은 같은 부서만 (보낸 사람 · 퇴사자 빼고)');
+    ok(rv({ calendar: 'team', dept: 'sales' }, ['u2']) === '김영업', '팀별은 화면이 볼 수 있다고 한 사람만 (직급 조회 범위)');
+    ok(rv({ calendar: 'team', dept: 'sales' }, ['u2', 'u4']) === '김영업', '화면이 넘긴 명단에 다른 부서 사람이 있어도 서버 기준(같은 부서)을 넘지 못함');
+    ok(rn({ calendar: 'team', dept: 'sales' }) === '', '팀별인데 볼 수 있는 사람 명단이 없으면 아무에게도 안 보냄');
+    ok(rv({ calendar: 'sales-share', dept: 'sales' }, ['u2', 'u3', 'u4', 'u5']) === '김영업,이영업,박운영,최영업', '공유는 보낸 사람 빼고 전원 · 퇴사자 제외');
+    ok(rv({ calendar: 'sales-share', dept: 'sales' }, ['u2']) === '김영업', '공유도 화면이 넘긴 명단(사외 계정 제외)으로 좁힘');
+    ok(P.scheduleNewRecipients(U.concat([{ id: 'u9', name: '외주', dept: 'vendor', email: 'v@x.co' }]), { calendar: 'company' }, 'me@k.co', ['u9']).length === 0, '외주업체(vendor) 부서는 언제나 제외');
     ok(rn({ calendar: '알수없음', dept: 'sales' }) === '', '모르는 캘린더는 0명');
     ok(P.calNewWanted({}, 'team') === true && P.calNewWanted({}, 'sales-share') === false && P.calNewWanted({}, 'company') === false && P.calNewWanted({}, 'install-as') === false, 'calNewWanted 기본값: 팀별만 켜짐');
     ok(P.calNewWanted({ prefs: { calNew: { 'sales-share': true, team: false } } }, 'sales-share') === true && P.calNewWanted({ prefs: { calNew: { team: false } } }, 'team') === false, '켠 값 · 끈 값 존중');
@@ -193,17 +199,26 @@ async function decrypt(b, body) {
     ok(P.pickSubsFor(both, 'schedule').length === 1 && P.pickSubsFor(both, 'work').length === 1, '같은 endpoint 두 번이면 한 번');
     const legacy = P.addSub(P.addSub(null, sub1, '예전'), sub2, '예전2');
     ok(P.pickSubsFor(legacy, 'schedule').length === 2 && P.pickSubsFor(legacy, 'work').length === 2, '표시 없는 옛 구독만 있으면 전부');
-    ok(P.payloadOf({ id: 'n1', type: 'schedule-invite', title: 't', scheduleId: 's 1' }, {}).url === '/?mode=calendar&schedule=s%201', '일정 알림 payload url 이 /?mode=calendar&schedule= 로 시작');
+    const pInv = P.payloadOf({ id: 'n1', type: 'schedule-invite', title: 't', scheduleId: 's 1' }, {});
+    ok(P.forSub(pInv, { apps: ['calendar'] }).url === '/?mode=calendar&schedule=s%201', '킹오더일정 기기로 가는 일정 알림 url 은 /?mode=calendar&schedule=');
+    ok(P.forSub(pInv, { apps: ['groupware'] }).url === '/?noti=n1' && P.forSub(pInv, {}).url === '/?noti=n1', '그룹웨어 · 예전 기기(PC)로 가는 일정 알림은 그룹웨어 주소 그대로');
+    ok(!('calUrl' in P.forSub(pInv, { apps: ['calendar'] })), '보내는 내용에 안쪽 칸(calUrl)은 넣지 않음');
     ok(P.payloadOf({ id: 'n2', type: 'work-received', title: 't' }, {}).url === '/?noti=n2', '다른 알림 주소는 그대로');
     const pl = P.scheduleNewPayload({ id: 'S1', title: '미팅', date: '2026-11-20', startTime: '10:00', calendar: 'install-as', salesperson: '보낸이' });
-    ok(pl.title === '[새 일정 · 설치/AS 공유] 미팅' && pl.body.includes('보낸이') && pl.body.includes('2026-11-20 10:00') && pl.url === '/?mode=calendar&schedule=S1', '새 일정 알림 내용 · 주소');
+    ok(pl.title === '[새 일정 · 설치/AS 공유] 미팅' && pl.body.includes('보낸이') && pl.body.includes('2026-11-20 10:00') && P.forSub(pl, { apps: ['calendar'] }).url === '/?mode=calendar&schedule=S1' && P.forSub(pl, {}).url === '/?schedule=S1', '새 일정 알림 내용 · 앱별 주소');
+    // 예전 구독(앱 표시 없음)은 그룹웨어로 봅니다
+    const oldThenCal = P.addSub(P.addSub(null, sub1, '안드로이드'), sub1, '안드로이드', null, 'calendar');
+    ok(oldThenCal.subs[0].apps.slice().sort().join() === 'calendar,groupware', '예전(표시 없음) 구독을 킹오더일정이 다시 켜면 groupware 도 남김');
+    const iosMix = { subs: [{ endpoint: sub1.endpoint, keys: sub1.keys }, { endpoint: sub2.endpoint, keys: sub2.keys, apps: ['calendar'] }] };
+    ok(P.pickSubsFor(iosMix, 'work').map(x => x.endpoint).join() === sub1.endpoint, '아이폰 — 업무 알림은 예전(그룹웨어) 구독으로만, 킹오더일정 앱으로 안 감');
+    ok(P.pickSubsFor(iosMix, 'schedule').map(x => x.endpoint).join() === sub2.endpoint, '아이폰 — 일정 알림은 킹오더일정 앱으로만');
     // 서버 흐름 — /api/push/schedule-new
     pushed.length = 0;
     for (const k of Object.keys(store)) if (k.startsWith('gwPushSubs.v1/')) delete store[k];
     store['gwPushSubs.v1/u2'] = P.addSub(null, sub1, '폰', null, 'calendar');                   // 김영업 — 팀별 기본 켜짐
     store['gwPushSubs.v1/u3'] = P.setPrefs(P.addSub(null, sub2, '폰', null, 'calendar'), { calNew: { team: false } });   // 이영업 — 껐음
     scheds['S1'] = { data: { title: '팀 회의', date: '2026-11-20', calendar: 'team', dept: 'sales', salesperson: '보낸이' }, rev: 1, updated_by: 'me@k.co', updated_at: now() };
-    let rs = await call('me@k.co', 'POST', '/api/push/schedule-new', { id: 'S1' });
+    let rs = await call('me@k.co', 'POST', '/api/push/schedule-new', { id: 'S1', viewers: ['u2', 'u3'] });
     ok(rs.status === 200 && rs.j.sent === 1 && pushed.length === 1, `팀별 새 일정 → 켠 사람(김영업)에게만 (얻음 ${JSON.stringify(rs.j)})`);
     rs = await call('kim@k.co', 'POST', '/api/push/schedule-new', { id: 'S1' });
     ok(rs.status === 403, '남이 만든 일정으로는 보낼 수 없음');
@@ -216,11 +231,11 @@ async function decrypt(b, body) {
     store['gwPushSubs.v1/u4'] = many;
     scheds['S3'] = { data: { title: '공유', date: '2026-11-21', calendar: 'sales-share', dept: 'sales', salesperson: '보낸이' }, rev: 1, updated_by: 'me@k.co', updated_at: now() };
     pushed.length = 0;
-    rs = await call('me@k.co', 'POST', '/api/push/schedule-new', { id: 'S3' });
+    rs = await call('me@k.co', 'POST', '/api/push/schedule-new', { id: 'S3', viewers: ['u4'] });
     ok(rs.j.sent === 40 && rs.j.next === 40 && rs.j.total === 45, `기기 45대일 때 첫 호출 40대 · next === 40 (얻음 ${JSON.stringify(rs.j)})`);
     const stx = await call('lee@k.co', 'GET', '/api/push/status');
     ok(stx.j.calNew && stx.j.calNew.team === true && stx.j.calNew['sales-share'] === false && stx.j.calNames.team === '팀별', '상태 조회에 캘린더별 새 일정 켬/끔');
-    rs = await call('me@k.co', 'POST', '/api/push/schedule-new', { id: 'S3', offset: 40 });
+    rs = await call('me@k.co', 'POST', '/api/push/schedule-new', { id: 'S3', offset: 40, viewers: ['u4'] });
     ok(rs.j.sent === 5 && rs.j.next === undefined, '이어서 나머지 5대 · 끝');
 
     console.log(`\n=========== 통과 ${pass} · 실패 ${fail} ===========`);

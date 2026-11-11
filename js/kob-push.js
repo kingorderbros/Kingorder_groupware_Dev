@@ -105,11 +105,11 @@
         return true;
     }
     // 새 일정 알림 — 받는 사람은 서버가 고릅니다. 기기가 많으면 서버가 next 를 주고 여기서 이어 부릅니다.
-    async function scheduleNew(id) {
+    async function scheduleNew(id, viewers) {
         if (!remote || !id) return 0;
         let offset = 0, sent = 0;
         for (let i = 0; i < 20; i++) {
-            const j = await api('POST', '/api/push/schedule-new', { id, offset });
+            const j = await api('POST', '/api/push/schedule-new', { id, offset, viewers: viewers || [] });
             sent += j.sent || 0;
             if (j.next === undefined || j.next === null) break;
             offset = j.next;

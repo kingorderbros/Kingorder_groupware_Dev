@@ -8,7 +8,9 @@
 --   · 표에서 읽을 수 있는 것은 내 확인 기록뿐입니다 (새 일정 숫자 계산용).
 --   · 확인 인원 수는 누구나, 확인한 사람 목록(이름 · 시각)은 그 일정의 등록자 · 참석자만 봅니다.
 --
--- 실행: Supabase 대시보드 › SQL Editor 에 붙여 넣고 Run. 여러 번 돌려도 괜찮습니다.
+--   · 직원 확인(kob_is_staff — schema-v8)을 거칩니다: 퇴사자 · 사외 계정은 쓰지도 읽지도 못합니다.
+--
+-- 실행: Supabase 대시보드 › SQL Editor 에 붙여 넣고 Run. schema-v8 뒤에. 여러 번 돌려도 괜찮습니다.
 --       개발에서 먼저 돌려 확인한 뒤 운영에 돌립니다.
 -- 되돌리기: drop table public.schedule_reads; 와 아래 함수 4개 drop (일정 자료는 바뀌지 않습니다)
 -- ============================================================================
@@ -50,7 +52,8 @@ create or replace function public.schedule_mark_seen(ids text[]) returns void
 language plpgsql security definer set search_path = public as $$
 declare me text := public.kob_me_email(); nm text := public.kob_me_name();
 begin
-    if me = '' then raise exception 'KOB_AUTH 로그인이 필요합니다'; end if;
+    if me = '' or not public.kob_is_staff() then raise exception 'KOB_AUTH 직원 계정으로 로그인해야 합니다'; end if;
+    if coalesce(array_length(ids, 1), 0) > 500 then raise exception 'KOB_LIMIT 한 번에 500건까지 남길 수 있습니다'; end if;
     insert into public.schedule_reads (schedule_id, user_email, user_name, first_seen, last_seen)
     select distinct x, me, nm, now(), now() from unnest(coalesce(ids, '{}'::text[])) x where coalesce(x, '') <> ''
     on conflict (schedule_id, user_email) do update set last_seen = now(), user_name = excluded.user_name;
@@ -61,7 +64,7 @@ create or replace function public.schedule_read_counts(ids text[]) returns table
 language sql stable security definer set search_path = public as $$
     select r.schedule_id, count(*)::int
       from public.schedule_reads r
-     where public.kob_me_email() <> '' and r.schedule_id = any (coalesce(ids, '{}'::text[]))
+     where public.kob_me_email() <> '' and public.kob_is_staff() and r.schedule_id = any (coalesce(ids, '{}'::text[]))
      group by r.schedule_id
 $$;
 
@@ -72,7 +75,7 @@ language sql stable security definer set search_path = public as $$
       from public.schedule_reads r
       join public.schedules s on s.id = r.schedule_id
      where r.schedule_id = sid
-       and public.kob_me_email() <> ''
+       and public.kob_me_email() <> '' and public.kob_is_staff()
        and (
             lower(coalesce(s.data ->> 'createdBy', '')) = public.kob_me_email()
          or (public.kob_me_name() <> '' and coalesce(s.data ->> 'salesperson', '') = public.kob_me_name())

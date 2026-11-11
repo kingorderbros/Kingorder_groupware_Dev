@@ -26,8 +26,14 @@ await db.query(`insert into app_store values ('gwUsers.v1', $1)`, [JSON.stringif
     { id: 'u1', name: '김영업', email: 'kim@k.co' },
     { id: 'u2', name: '정장훈', email: 'daniel@k.co' },
     { id: 'u3', name: '박설치', email: 'park@k.co' },
-    { id: 'u4', name: '이직원', email: 'lee@k.co' }
+    { id: 'u4', name: '이직원', email: 'lee@k.co' },
+    { id: 'u5', name: '퇴사자', email: 'gone@k.co', resigned: true }
 ])]);
+// schema-v8 의 직원 확인 함수 (실제 운영 DB 에는 이미 있음)
+await db.exec(`create or replace function public.kob_is_staff() returns boolean language sql stable security definer set search_path = public as $$
+    select coalesce((select exists (select 1 from public.app_store s, jsonb_array_elements(case when jsonb_typeof(s.value) = 'array' then s.value else '[]'::jsonb end) u
+     where s.key = 'gwUsers.v1' and coalesce(auth.jwt() ->> 'email', '') <> '' and lower(u ->> 'email') = lower(auth.jwt() ->> 'email') and coalesce(u ->> 'resigned', 'false') <> 'true')), false) $$;
+  grant execute on function public.kob_is_staff() to authenticated;`);
 await db.query(`insert into schedules values ('s1', $1)`, [JSON.stringify({ title: '미팅', salesperson: '김영업', createdBy: 'kim@k.co', attendees: [{ name: '정장훈', status: 'pending' }] })]);
 await db.query(`insert into schedules values ('s2', $1)`, [JSON.stringify({ title: '설치', salesperson: '박설치', createdBy: 'park@k.co', attendees: [] })]);
 
@@ -76,6 +82,17 @@ const byOther = await as('lee@k.co', () => q(`select user_name from public.sched
 ok(Array.isArray(byOther) && byOther.length === 0, '등록자 · 참석자가 아니면 빈 목록');
 const bySalesName = await as('park@k.co', () => q(`select user_name from public.schedule_readers('s2')`));
 ok(Array.isArray(bySalesName) && bySalesName.length === 1, '담당자 이름(salesperson)으로도 등록자 판단');
+
+// 퇴사자 · 직원 명단에 없는 계정
+const gone = await as('gone@k.co', () => q(`select public.schedule_mark_seen(array['s1'])`));
+ok(String(gone).startsWith('error:'), '퇴사자는 확인 남기기 불가');
+const stranger = await as('partner@x.co', () => q(`select n from public.schedule_read_counts(array['s1'])`));
+ok(String(stranger).startsWith('error:') || (Array.isArray(stranger) && stranger.length === 0), '직원 명단에 없는 계정은 인원 수도 못 봄');
+const strangerList = await as('partner@x.co', () => q(`select user_name from public.schedule_readers('s1')`));
+ok(String(strangerList).startsWith('error:') || (Array.isArray(strangerList) && strangerList.length === 0), '직원 명단에 없는 계정은 확인 목록도 못 봄');
+const many = Array.from({ length: 501 }, (_, k) => `'x${k}'`).join(',');
+const tooMany = await as('lee@k.co', () => q(`select public.schedule_mark_seen(array[${many}])`));
+ok(String(tooMany).startsWith('error:'), '한 번에 500개 넘게 남기기 불가');
 
 // 로그인 안 한 사람
 await db.exec(`set role anon;`);

@@ -537,7 +537,7 @@ export async function onRequest(context) {
                 let sent = 0; const gone = [];
                 await Promise.all(targets.map(async ({ key, sub }) => {
                     try {
-                        const q = await push.buildRequest(sub, payload, env);
+                        const q = await push.buildRequest(sub, push.forSub(payload, sub), env);
                         const res = await fetch(q.url, q.init);
                         if (res.status === 404 || res.status === 410) gone.push({ key, ep: sub.endpoint });   // 브라우저가 구독을 버림
                         else if (res.ok) sent++;
@@ -567,7 +567,7 @@ export async function onRequest(context) {
                 const sch = Object.assign({}, row.data || {}, { id: row.id });
                 if (sch.offState) return json(200, { ok: true, sent: 0, total: 0 });
                 const users = (await store.storeValue('gwUsers.v1')) || [];
-                const recips = push.scheduleNewRecipients(users, sch, st.me.email);
+                const recips = push.scheduleNewRecipients(users, sch, st.me.email, input.viewers);
                 const recs = recips.length ? await store.storeValues(recips.map(u => push.keyOf(u.id))) : {};
                 const all = recips.map(u => ({ key: push.keyOf(u.id), rec: push.normRec(recs[push.keyOf(u.id)]) }))
                     .filter(x => push.calNewWanted(x.rec, str(sch.calendar)))
@@ -578,7 +578,7 @@ export async function onRequest(context) {
                 let sent = 0; const gone = [];
                 await Promise.all(batch.map(async ({ key, sub }) => {
                     try {
-                        const q = await push.buildRequest(sub, payload, env);
+                        const q = await push.buildRequest(sub, push.forSub(payload, sub), env);
                         const res = await fetch(q.url, q.init);
                         if (res.status === 404 || res.status === 410) gone.push({ key, ep: sub.endpoint });
                         else if (res.ok) sent++;

@@ -247,6 +247,49 @@ srv.listen(PORT, async () => {
             await m2.close();
         }
 
+        // ---------- 검토 C1: 볼 수 없는 사람에게 알림 · 상세가 가지 않게 ----------
+        console.log('[C1] 새 일정 알림 받는 사람 = 그 일정을 볼 수 있는 사람만');
+        {
+            const m = await openPage(br, base + '?mode=calendar', 390, 800);
+            await m.evaluate(u => enterApp(u), ADMIN);
+            const r = await m.evaluate(() => {
+                calendarLevelScope.manager = 'self'; calendarLevelScope.leader = 'dept';
+                localUsers.push({ id: 'tu1', name: '시험매니저', dept: 'sales', level: 'manager', email: 'tu1@k.co', groupId: 'sales' });
+                localUsers.push({ id: 'tu2', name: '시험팀장', dept: 'sales', level: 'leader', email: 'tu2@k.co', groupId: 'sales' });
+                localUsers.push({ id: 'tu3', name: '시험운영', dept: 'ops', level: 'leader', email: 'tu3@k.co', groupId: 'ops' });
+                localUsers.push({ id: 'tu4', name: '시험외주', dept: 'vendor', level: 'manager', email: 'tu4@x.co', groupId: 'vendor' });
+                localUsers.push({ id: 'tu5', name: '시험퇴사', dept: 'sales', level: 'leader', email: 'tu5@k.co', groupId: 'sales', resigned: true });
+                const team = { id: 'c1-t', title: '팀', date: ymd(new Date()), calendar: 'team', dept: 'sales', salesperson: '정장훈', attendees: [{ name: '시험매니저', status: 'pending' }] };
+                const share = { id: 'c1-s', title: '공유', date: ymd(new Date()), calendar: 'sales-share', dept: 'sales', salesperson: '정장훈', attendees: [] };
+                const v = (s) => scheduleNewViewers(s).filter(id => /^tu/.test(id)).sort().join();
+                return { team: v(team), share: v(share), teamNoInvite: v(Object.assign({}, team, { attendees: [] })) };
+            });
+            ok(r.teamNoInvite === 'tu2', `팀별: 조회 범위가 '본인만' 인 매니저 · 다른 부서 · 외주 · 퇴사자 제외 (얻음 ${r.teamNoInvite})`);
+            ok(r.team === 'tu1,tu2', `팀별: 초대받은 매니저는 볼 수 있으니 포함 (얻음 ${r.team})`);
+            ok(r.share === 'tu1,tu2,tu3', `공유: 외주 · 퇴사자만 제외 (얻음 ${r.share})`);
+            await m.close();
+            // 볼 수 없는 일정 번호로 들어와도 상세가 열리지 않음
+            const m2 = await openPage(br, base + '?mode=calendar&schedule=c1-p', 390, 800);
+            const r2 = await m2.evaluate(async () => {
+                schedules.push({ id: 'c1-p', title: '남의 개인 일정', date: ymd(new Date()), calendar: 'personal', dept: 'sales', salesperson: '다른사람', attendees: [] });
+                enterApp({ email: 'staff@kingorder.co.kr', dept: 'sales', name: '시험직원' });
+                await new Promise(r => setTimeout(r, 900));
+                return !document.getElementById('schedule-detail-modal').classList.contains('hidden');
+            });
+            ok(!r2, '?schedule=<남의 개인 일정> 으로 들어와도 상세가 열리지 않음');
+            await m2.close();
+            // 그룹웨어(PC) 주소 /?schedule= 로 들어오면 그룹웨어 일정 화면에서 상세
+            const g = await openPage(br, base + '?schedule=c1-g', 1400, 900);
+            const r3 = await g.evaluate(async (u) => {
+                schedules.push({ id: 'c1-g', title: 'PC에서 연 일정', date: ymd(new Date()), calendar: 'team', dept: 'admin', salesperson: '김영업', attendees: [] });
+                enterApp(u);
+                await new Promise(r => setTimeout(r, 900));
+                return { open: !document.getElementById('schedule-detail-modal').classList.contains('hidden'), mode: document.documentElement.dataset.mode, q: location.search };
+            }, ADMIN);
+            ok(r3.open && r3.mode === 'groupware' && r3.q === '', '그룹웨어 /?schedule=<id> → 그룹웨어 화면에서 상세 (휴대폰 화면 아님)');
+            await g.close();
+        }
+
         console.log('[1] 그룹웨어 기본 주소는 그대로');
         const gw = await openPage(br, base, 1400, 900);
         ok(await gw.evaluate(() => document.documentElement.dataset.mode) === 'groupware', '모드 없음 = groupware');

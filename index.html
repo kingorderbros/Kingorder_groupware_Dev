@@ -12035,6 +12035,7 @@ const QUOTE_TEMPLATES = [
                 const q = new URLSearchParams(location.search);
                 if (q.has('noti')) { q.delete('noti'); history.replaceState(null, '', location.pathname + (q.toString() ? '?' + q : '') + location.hash); setTimeout(openNotiFromPush, 300); }
                 // 킹오더챗 대화방 공지 칸에서 누르고 들어온 경우 — ?notice=공지번호 → 공지 상세 창 (2026-11-02)
+                if (q.has('schedule') && !isCalendarMode()) { const sid = q.get('schedule'); q.delete('schedule'); history.replaceState(null, '', location.pathname + (q.toString() ? '?' + q : '') + location.hash); setTimeout(() => openScheduleFromNotice(sid), 400); }   // 새 일정 알림(그룹웨어 기기) (2026-11-12)
                 if (q.has('notice')) { const nid = q.get('notice'); q.delete('notice'); history.replaceState(null, '', location.pathname + (q.toString() ? '?' + q : '') + location.hash); setTimeout(() => openNoticeView(nid), 400); }
             } catch (e) { /* 주소를 손대지 못하면 그냥 둡니다 */ }
         }
@@ -18980,8 +18981,9 @@ const QUOTE_TEMPLATES = [
         }
 
         // 부서 조회 범위 규칙 하나만 판정 (팀별 캘린더에 적용)
-        function matchesCalendarScope(s, scopeInfo) {
-            const name = currentUserName, dept = currentUserDept;
+        // who: { name, dept } — 없으면 로그인한 사람. 킹오더일정 새 일정 알림이 다른 직원 기준으로도 같은 규칙을 씁니다 (2026-11-12)
+        function matchesCalendarScope(s, scopeInfo, who) {
+            const name = who ? who.name : currentUserName, dept = who ? who.dept : currentUserDept;
             const scope = scopeInfo.scope;
             // cross(본부장 크로스체크)는 조회 범위상 전사와 동일 — 편집은 등록한 사람 · 관리자 · 대리 수정자만(canEditSchedule)
             if (scope === 'all' || scope === 'cross' || dept === 'admin') return true;
@@ -19000,12 +19002,26 @@ const QUOTE_TEMPLATES = [
         //   팀별   : 기존 부서 조회 권한 규칙 그대로
         //   공유   : 로그인한 전 직원
         function canViewSchedule(s, scopeInfo) {
+            return canUserViewSchedule(s, null, scopeInfo);
+        }
+        // 그 직원(u: { name, dept, level })이 이 일정을 볼 수 있는지 — 없으면 로그인한 사람. 규칙은 하나입니다.
+        function canUserViewSchedule(s, u, scopeInfo) {
+            const name = u ? u.name : currentUserName, dept = u ? u.dept : currentUserDept, level = u ? u.level : currentUserLevel;
             // 초대받은 사람은 캘린더 종류·부서와 무관하게 그 일정을 본다 (내 일정에 표시되어야 하므로)
-            if (isInvited(s, currentUserName)) return true;
+            if (isInvited(s, name)) return true;
             const share = scheduleCalendar(s).share;
-            if (share === 'self') return (s.salesperson || '') === currentUserName;
+            if (share === 'self') return (s.salesperson || '') === name;
             if (share === 'all') return true;
-            return matchesCalendarScope(s, scopeInfo || getCalendarScopeFor(currentUserName, currentUserDept, currentUserLevel));
+            return matchesCalendarScope(s, scopeInfo || getCalendarScopeFor(name, dept, level), u ? { name, dept } : null);
+        }
+        // 새 일정 알림을 받을 수 있는 직원 번호 — 그 일정을 볼 수 있고, 퇴사 · 사외(외주) 계정이 아니며, 내가 아닌 사람
+        function scheduleNewViewers(s) {
+            const ext = new Set((typeof orgDepts !== 'undefined' ? orgDepts : []).filter(d => d.external).map(d => d.id).concat(['vendor']));
+            const extGroup = (u) => (typeof userGroupIds === 'function' ? userGroupIds(u) : [u.groupId]).some(id => ((typeof permissionGroups !== 'undefined' ? permissionGroups : []).find(g => g.id === id) || {}).external);
+            return (typeof localUsers !== 'undefined' ? localUsers : [])
+                .filter(u => u && u.id && !isResigned(u) && !ext.has(u.dept) && !extGroup(u) && u.name !== currentUserName)
+                .filter(u => canUserViewSchedule(s, u))
+                .map(u => String(u.id));
         }
 
         // 일정 수정/삭제 권한 — **등록한 사람과 관리자만** (2026-09-28 사용자 요청)
@@ -20655,7 +20671,8 @@ const QUOTE_TEMPLATES = [
             // 새 일정 알림 — 받는 사람(캘린더 · 부서 · 각자 켬/끔)은 서버가 고릅니다. 저장이 서버에 닿을 시간을 두고 부릅니다.
             if (!inviteBefore && inviteAfter && window.kobPush && kobPush.scheduleNew && CAL_NEW_PUSH_IDS.includes(scheduleCalendarId(inviteAfter))) {
                 const nid = inviteAfter.id;
-                setTimeout(() => kobPush.scheduleNew(nid).catch(e => console.warn('[새 일정 알림] 보내지 못했습니다', e && e.message)), 1500);
+                const viewers = scheduleNewViewers(inviteAfter);   // 볼 수 있는 사람만 (서버가 부서 · 전 직원 기준과 한 번 더 겹쳐 봄)
+                setTimeout(() => kobPush.scheduleNew(nid, viewers).catch(e => console.warn('[새 일정 알림] 보내지 못했습니다', e && e.message)), 1500);
             }
             closeScheduleModal();
             renderCalendar();
@@ -20664,7 +20681,9 @@ const QUOTE_TEMPLATES = [
         // 일정 알림을 누르면 — 일정캘린더로 가서 그 일정을 엽니다 (2026-10-23)
         function openScheduleFromNotice(id) {
             try { navigate('calendar-center', document.getElementById('nav-calendar-center')); } catch (e) { /* 화면 권한이 없으면 상세만 */ }
-            if (!findScheduleForView(id)) { alert('일정을 찾을 수 없습니다. 삭제되었거나 변경되었을 수 있습니다.'); return; }
+            const found = findScheduleForView(id);
+            if (!found) { alert('일정을 찾을 수 없습니다. 삭제되었거나 변경되었을 수 있습니다.'); return; }
+            if (!isBirthdaySchedule(found) && !canViewSchedule(found)) { alert('조회 권한이 없는 일정입니다.'); return; }   // 주소 · 알림으로 남의 일정을 열지 않게 (2026-11-12 검토)
             openScheduleDetailModal(id);
         }
         function openScheduleDetailModal(id) {
