@@ -52,6 +52,8 @@
         if (!r) throw new Error('알림 서비스(서비스 워커)가 준비되지 않았습니다. 새로고침 후 다시 시도해 주세요.');
         return r;
     }
+    // 어느 홈 화면 앱인지 — 킹오더일정(?mode=calendar)이면 일정 알림을 이 기기로 받습니다 (2026-11-12)
+    const appName = () => { try { const q = new URLSearchParams(location.search); return (q.get('mode') === 'calendar' || location.hash === '#calendar') ? 'calendar' : 'groupware'; } catch (e) { return 'groupware'; } };
     const isPartnerPage = () => { try { const q = new URLSearchParams(location.search); return q.get('mode') === 'partner' || location.hash === '#partner'; } catch (e) { return false; } };
     async function currentSub() {
         if (!supported()) return null;
@@ -89,8 +91,30 @@
         const r = await reg();
         let sub = await r.pushManager.getSubscription();
         if (!sub) sub = await r.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ToBytes(k) });
-        await api('POST', '/api/push/subscribe', { subscription: sub.toJSON(), device: deviceName() });
+        await api('POST', '/api/push/subscribe', { subscription: sub.toJSON(), device: deviceName(), app: appName() });
         return true;
+    }
+    // 이미 켜 둔 기기에서 다른 앱(그룹웨어 ↔ 킹오더일정)으로 열었을 때 — 묻지 않고 이 앱 표시만 더합니다
+    async function touchApp() {
+        if (!supported() || !('Notification' in window) || Notification.permission !== 'granted') return false;
+        const sub = await currentSub();
+        if (!sub) return false;
+        try { const st = await api('GET', '/api/push/status?endpoint=' + encodeURIComponent(sub.endpoint)); if (!st.thisDevice || (st.thisApps || []).includes(appName())) return false; }
+        catch (e) { return false; }
+        await api('POST', '/api/push/subscribe', { subscription: sub.toJSON(), device: deviceName(), app: appName() });
+        return true;
+    }
+    // 새 일정 알림 — 받는 사람은 서버가 고릅니다. 기기가 많으면 서버가 next 를 주고 여기서 이어 부릅니다.
+    async function scheduleNew(id) {
+        if (!remote || !id) return 0;
+        let offset = 0, sent = 0;
+        for (let i = 0; i < 20; i++) {
+            const j = await api('POST', '/api/push/schedule-new', { id, offset });
+            sent += j.sent || 0;
+            if (j.next === undefined || j.next === null) break;
+            offset = j.next;
+        }
+        return sent;
     }
     async function disable() {
         const sub = await currentSub();
@@ -111,5 +135,5 @@
             .catch(e => console.warn('[푸시] 보내지 못했습니다', e && e.message));
     }
 
-    window.kobPush = { remote, supported, isIos, standalone, state, enable, disable, status, setPrefs, send };
+    window.kobPush = { remote, supported, isIos, standalone, state, enable, disable, status, setPrefs, send, scheduleNew, touchApp, appName };
 })();

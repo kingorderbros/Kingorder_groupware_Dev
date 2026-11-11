@@ -211,7 +211,7 @@ export async function runScheduleReminders(env, nowArg) {
         const u = byName.get(n.toUser); if (!u) return;
         const rec = recs[push.keyOf(u.id)];
         if (!rec || !push.wants(rec, cat)) return;
-        rec.subs.filter(push.validSubscription).forEach(sub => targets.push({ n, sub }));   // 알려진 푸시 서버만 (2026-10-28)
+        push.pickSubsFor(rec, cat).filter(push.validSubscription).forEach(sub => targets.push({ n, sub }));   // 알려진 푸시 서버만 (2026-10-28) · 킹오더일정 앱이 있으면 그쪽으로 (2026-11-12)
     });
     let pushed = 0;
     await Promise.all(targets.slice(0, MAX_PUSH_PER_RUN).map(async ({ n, sub }) => {

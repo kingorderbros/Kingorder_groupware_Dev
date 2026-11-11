@@ -216,6 +216,37 @@ srv.listen(PORT, async () => {
             await m.close();
         }
 
+        // ---------- Task 5: 설정 화면 · 알림에서 일정 열기 ----------
+        console.log('[5] 설정 — 캘린더별 새 일정 알림 · 주소의 schedule 로 일정 열기');
+        {
+            const m = await openPage(br, base + '?mode=calendar', 390, 800);
+            await m.evaluate(u => enterApp(u), ADMIN);
+            await m.evaluate(() => calmOpenSettings());
+            await new Promise(r => setTimeout(r, 300));
+            const st = await m.evaluate(() => {
+                const box = document.getElementById('calm-noti');
+                const t = Array.from(box.querySelectorAll('input[type="checkbox"][data-cal]')).map(x => [x.dataset.cal, x.checked]);
+                return { t, text: box.innerText };
+            });
+            ok(st.t.length === 4 && st.t.map(x => x[0]).join() === 'team,sales-share,install-as,company', `캘린더별 켬/끔 4개 (얻음 ${JSON.stringify(st.t)})`);
+            ok(st.t.filter(x => x[1]).map(x => x[0]).join() === 'team', '처음 상태 팀별만 켜짐');
+            ok(/홈 화면에 추가한 킹오더일정 아이콘으로 열어야 알림을 받을 수 있습니다/.test(st.text) && /iOS 16\.4/.test(st.text), '아이폰 안내 문구');
+            await m.evaluate(() => calmCloseSettings());
+            await m.close();
+            // 알림을 누르고 들어온 주소
+            const m2 = await openPage(br, base + '?mode=calendar&schedule=e2e-z', 390, 800);
+            const r2 = await m2.evaluate(async (u) => {
+                schedules.push({ id: 'e2e-z', title: '알림으로 연 일정', date: ymd(new Date()), startTime: '11:00', calendar: 'team', dept: 'admin', salesperson: '김영업', attendees: [] });
+                enterApp(u);
+                await new Promise(r => setTimeout(r, 900));
+                return { open: !document.getElementById('schedule-detail-modal').classList.contains('hidden'), title: document.getElementById('detail-schedule-title').innerText, q: location.search };
+            }, ADMIN);
+            ok(r2.open && r2.title === '알림으로 연 일정', '?mode=calendar&schedule=<id> 로 열면 로그인 뒤 그 일정 상세가 열림');
+            ok(r2.q === '?mode=calendar', '주소에서 schedule 은 지우고 mode=calendar 는 남김');
+            ok(m2.__errs.length === 0, '스크립트 오류 없음 ' + m2.__errs.join(' | '));
+            await m2.close();
+        }
+
         console.log('[1] 그룹웨어 기본 주소는 그대로');
         const gw = await openPage(br, base, 1400, 900);
         ok(await gw.evaluate(() => document.documentElement.dataset.mode) === 'groupware', '모드 없음 = groupware');

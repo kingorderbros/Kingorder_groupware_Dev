@@ -81,12 +81,28 @@ export function wants(rec, category) {
 
 // ---------- 구독 기록 (한 사람 것) ----------
 export function normRec(v) { return { subs: arr(v && v.subs), prefs: (v && v.prefs && typeof v.prefs === 'object') ? v.prefs : {} }; }
-export function addSub(rec, sub, device, now) {
+// app: 'groupware' | 'calendar' (킹오더일정 · 2026-11-12) — 어느 홈 화면 앱에서 켰는지.
+//   안드로이드는 두 앱이 구독 하나를 같이 쓰므로, 같은 endpoint 를 다른 앱이 다시 켜면 apps 에 합칩니다.
+export const APPS = ['groupware', 'calendar'];
+export function addSub(rec, sub, device, now, app) {
     const r = normRec(rec);
-    r.subs = r.subs.filter(x => x.endpoint !== sub.endpoint)
-        .concat([{ endpoint: sub.endpoint, keys: { p256dh: sub.keys.p256dh, auth: sub.keys.auth }, device: s(device).slice(0, 80), at: now || new Date().toISOString() }])
-        .slice(-MAX_SUBS);
+    const old = r.subs.find(x => x.endpoint === sub.endpoint);
+    const apps = arr(old && old.apps).filter(a => APPS.includes(a));
+    if (APPS.includes(app) && !apps.includes(app)) apps.push(app);
+    const entry = { endpoint: sub.endpoint, keys: { p256dh: sub.keys.p256dh, auth: sub.keys.auth }, device: s(device).slice(0, 80), at: now || new Date().toISOString() };
+    if (apps.length) entry.apps = apps;
+    r.subs = r.subs.filter(x => x.endpoint !== sub.endpoint).concat([entry]).slice(-MAX_SUBS);
     return r;
+}
+// 알림 종류에 맞는 기기 — 일정 알림은 킹오더일정 앱으로, 나머지는 그룹웨어 앱으로.
+// 그 앱 표시가 있는 구독이 하나도 없으면(예전 구독 · 한쪽 앱만 켬) 전부로. endpoint 기준 중복 없음.
+export function pickSubsFor(rec, category) {
+    const subs = normRec(rec).subs;
+    const want = category === 'schedule' ? 'calendar' : 'groupware';
+    const tagged = subs.filter(x => arr(x.apps).includes(want));
+    const list = tagged.length ? tagged : subs;
+    const seen = new Set();
+    return list.filter(x => { if (!x || seen.has(x.endpoint)) return false; seen.add(x.endpoint); return true; });
 }
 export function removeSub(rec, endpoint) { const r = normRec(rec); r.subs = r.subs.filter(x => x.endpoint !== endpoint); return r; }
 export function hasSub(rec, endpoint) { return normRec(rec).subs.some(x => x.endpoint === endpoint); }
@@ -94,8 +110,47 @@ export function setPrefs(rec, prefs) {
     const r = normRec(rec);
     const clean = {};
     CATEGORIES.forEach(c => { if (prefs && typeof prefs[c.id] === 'boolean') clean[c.id] = prefs[c.id]; });
+    // 새 일정 알림 — 캘린더별 켬/끔 (킹오더일정 · 2026-11-12)
+    if (prefs && prefs.calNew && typeof prefs.calNew === 'object') {
+        const cn = Object.assign({}, (r.prefs && r.prefs.calNew) || {});
+        CAL_NEW_IDS.forEach(id => { if (typeof prefs.calNew[id] === 'boolean') cn[id] = prefs.calNew[id]; });
+        clean.calNew = cn;
+    }
     r.prefs = Object.assign({}, r.prefs, clean);
     return r;
+}
+
+// ---------- 새 일정 알림 (킹오더일정 · 2026-11-12) ----------
+// 받는 범위는 화면 CALENDARS 의 share 와 같게: 공유 · 전사 = 전 직원, 팀별 = 같은 부서, 개인 · 생일 = 없음
+export const CAL_NEW_IDS = ['team', 'sales-share', 'install-as', 'company'];
+export const CAL_SHORT = { team: '팀별', 'sales-share': '영업/진행 공유', 'install-as': '설치/AS 공유', company: '전사' };
+const CAL_ALL = ['sales-share', 'install-as', 'company'];
+export function calNewWanted(rec, calId) {
+    const p = (rec && rec.prefs) || {};
+    if (p.schedule === false) return false;                                       // 일정 알림 전체를 끔
+    const v = p.calNew && p.calNew[calId];
+    return typeof v === 'boolean' ? v : calId === 'team';                         // 처음에는 팀별만
+}
+export function scheduleNewRecipients(users, sch, senderEmail) {
+    const me = s(senderEmail).toLowerCase();
+    const cal = s(sch && sch.calendar);
+    if (!CAL_NEW_IDS.includes(cal)) return [];
+    return arr(users).filter(u => {
+        if (!u || !u.id || u.resigned === true) return false;
+        if (s(u.email).toLowerCase() === me) return false;
+        if (CAL_ALL.includes(cal)) return true;
+        return s(u.dept) !== '' && s(u.dept) === s(sch.dept);                     // 팀별
+    });
+}
+export function scheduleNewPayload(sch) {
+    const cal = CAL_SHORT[s(sch.calendar)] || '';
+    const when = `${s(sch.date)} ${s(sch.startTime) || '종일'}`.trim();
+    return {
+        title: `[새 일정${cal ? ' · ' + cal : ''}] ${s(sch.title) || '일정'}`.slice(0, 130),
+        body: `${s(sch.salesperson) || '등록자 미지정'} · ${when}`.slice(0, 140),
+        tag: 'kob-schnew-' + s(sch.id),
+        url: '/?mode=calendar&schedule=' + encodeURIComponent(s(sch.id))
+    };
 }
 export function validSubscription(sub) {
     try {
@@ -114,7 +169,10 @@ export function payloadOf(n, labels) {
         title: label ? `[${label}] ${title}` : title,
         body: detail || '그룹웨어에서 확인해 주세요.',
         tag: 'kob-' + s(n.id || Date.now()),
-        url: '/?noti=' + encodeURIComponent(s(n.id))
+        // 일정 알림은 킹오더일정에서 그 일정을 엽니다 (2026-11-12)
+        url: (/^schedule-/.test(s(n.type)) && s(n.scheduleId) && categoryOf(n.type) === 'schedule')
+            ? '/?mode=calendar&schedule=' + encodeURIComponent(s(n.scheduleId))
+            : '/?noti=' + encodeURIComponent(s(n.id))
     };
 }
 

@@ -12009,6 +12009,14 @@ const QUOTE_TEMPLATES = [
             renderPresenceUi();
             setTimeout(() => maybeAskPush(), 2500);        // 폰 · PC 알림 켜기 안내 (2026-09-29)
             if (window.kobReads) { kobReads.setMe({ email: currentUserEmail, name: currentUserName }); kobReads.load().catch(() => { }); }   // 일정 확인 기록 (2026-11-12)
+            if (isCalendarMode()) {
+                // 일정 알림을 누르고 들어왔으면(?schedule=일정번호) 그 일정 상세를 엽니다 · 이 기기 알림에 킹오더일정 표시
+                try {
+                    const q = new URLSearchParams(location.search);
+                    if (q.has('schedule')) { const sid = q.get('schedule'); q.delete('schedule'); history.replaceState(null, '', location.pathname + (q.toString() ? '?' + q : '') + location.hash); setTimeout(() => openScheduleFromNotice(sid), 400); }
+                } catch (e) { /* 주소를 손대지 못하면 그냥 둡니다 */ }
+                if (window.kobPush && kobPush.touchApp) kobPush.touchApp().catch(() => { });
+            }
             try {
                 const q = new URLSearchParams(location.search);
                 if (q.has('noti')) { q.delete('noti'); history.replaceState(null, '', location.pathname + (q.toString() ? '?' + q : '') + location.hash); setTimeout(openNotiFromPush, 300); }
@@ -12730,6 +12738,7 @@ const QUOTE_TEMPLATES = [
         }
         if (typeof navigator !== 'undefined' && navigator.serviceWorker && navigator.serviceWorker.addEventListener) {
             navigator.serviceWorker.addEventListener('message', (e) => { if (e.data && e.data.type === 'kob-open-noti') openNotiFromPush(); });
+            navigator.serviceWorker.addEventListener('message', (e) => { if (e.data && e.data.type === 'kob-open-schedule' && e.data.id) openScheduleFromNotice(e.data.id); });   // 킹오더일정 (2026-11-12)
         }
 
         async function onMyPhotoPicked(input) {
@@ -20076,6 +20085,48 @@ const QUOTE_TEMPLATES = [
             if (typeof calmRenderNotiSettings === 'function') calmRenderNotiSettings();
         }
         function calmCloseSettings() { document.getElementById('calm-settings').classList.add('hidden'); }
+        // 설정 › 알림 — 이 기기에서 받기 + 캘린더별 새 일정 알림 켬/끔 (처음엔 팀별만). 초대 · 취소 · 시작 전 알림은 따로 늘 옵니다.
+        const CAL_NEW_PUSH_IDS = ['team', 'sales-share', 'install-as', 'company'];
+        async function calmRenderNotiSettings() {
+            const box = document.getElementById('calm-noti');
+            if (!box) return;
+            let st = { supported: false, subscribed: false, ios: false, standalone: false, ready: false };
+            let calNew = { team: true, 'sales-share': false, 'install-as': false, company: false };
+            const remote = !!(window.kobPush && kobPush.remote);
+            if (remote) {
+                try { st = await kobPush.state(); } catch (e) { /* 그대로 */ }
+                try { const j = await kobPush.status(); if (j && j.calNew) calNew = Object.assign(calNew, j.calNew); } catch (e) { /* 기본값 */ }
+            }
+            const on = remote && st.subscribed;
+            const head = !remote ? '<p class="text-xs text-gray-500">알림은 서버에 연결된 환경에서 사용할 수 있습니다.</p>'
+                : on ? '<p class="text-sm text-emerald-700"><i class="fas fa-circle-check mr-1"></i>이 기기에서 알림을 받고 있습니다.</p>'
+                : `<button type="button" class="w-full py-3 rounded-lg bg-gray-800 text-white font-semibold" onclick="calmEnablePush()"><i class="fas fa-bell mr-1"></i>이 기기에서 알림 받기</button><p id="calm-noti-msg" class="text-xs text-red-600 mt-1"></p>`;
+            const rows = CAL_NEW_PUSH_IDS.map(id => {
+                const cal = getCalendar(id);
+                return `<label class="flex items-center justify-between py-2.5 border-t border-gray-100 text-[15px]">
+                    <span><i class="fas ${cal.icon} mr-2 ${cal.text}"></i>${escapeHtml(cal.short)}</span>
+                    <input type="checkbox" data-cal="${id}" ${calNew[id] ? 'checked' : ''} ${on ? '' : 'disabled'} onchange="calmSetCalNew(this)" class="w-5 h-5">
+                </label>`;
+            }).join('');
+            box.innerHTML = `<div class="py-2">
+                <p class="font-semibold text-gray-800 mb-2"><i class="fas fa-bell mr-1"></i>알림</p>
+                ${head}
+                <p class="text-sm text-gray-600 mt-3 mb-1">새 일정 알림 받을 캘린더</p>
+                ${rows}
+                <p class="text-xs text-gray-500 mt-2">초대 · 일정 취소 · 시작 전 알림은 캘린더 설정과 관계없이 받습니다.</p>
+                <p class="text-xs text-gray-500 mt-1"><i class="fab fa-apple mr-1"></i>아이폰: 사파리에서 [공유 › 홈 화면에 추가] 후, 홈 화면에 추가한 킹오더일정 아이콘으로 열어야 알림을 받을 수 있습니다. (iOS 16.4 이상)</p>
+            </div>`;
+        }
+        async function calmEnablePush() {
+            const msg = document.getElementById('calm-noti-msg');
+            try { await kobPush.enable(); } catch (e) { if (msg) msg.textContent = String(e && e.message || e); return; }
+            calmRenderNotiSettings();
+        }
+        async function calmSetCalNew(el) {
+            const id = el.dataset.cal, v = el.checked;
+            try { await kobPush.setPrefs({ calNew: { [id]: v } }); }
+            catch (e) { el.checked = !v; alert('알림 설정을 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.'); }
+        }
 
         function scrollCalendarToToday() {
             requestAnimationFrame(() => {
@@ -20578,6 +20629,11 @@ const QUOTE_TEMPLATES = [
             if (inviteAfter) stampScheduleInvites(inviteBefore, inviteAfter);
             saveSchedules();
             if (inviteAfter) notifyScheduleInvites(inviteBefore, inviteAfter);
+            // 새 일정 알림 — 받는 사람(캘린더 · 부서 · 각자 켬/끔)은 서버가 고릅니다. 저장이 서버에 닿을 시간을 두고 부릅니다.
+            if (!inviteBefore && inviteAfter && window.kobPush && kobPush.scheduleNew && CAL_NEW_PUSH_IDS.includes(scheduleCalendarId(inviteAfter))) {
+                const nid = inviteAfter.id;
+                setTimeout(() => kobPush.scheduleNew(nid).catch(e => console.warn('[새 일정 알림] 보내지 못했습니다', e && e.message)), 1500);
+            }
             closeScheduleModal();
             renderCalendar();
             if (typeof renderTodaySchedule === 'function') renderTodaySchedule(currentUserName);

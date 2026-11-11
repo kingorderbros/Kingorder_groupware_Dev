@@ -98,7 +98,14 @@ self.addEventListener('notificationclick', (e) => {
     e.waitUntil((async () => {
         const list = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
         // 이미 열린 그룹웨어 창이 있으면 그 창으로 (파트너센터 · 운행일지 창은 빼고)
-        const hit = list.find(c => c.url.startsWith(self.location.origin) && !/[?&]mode=(partner|mobile)/.test(c.url));
+        // 일정 알림(?mode=calendar&schedule=…)은 열린 킹오더일정 창에서 그 일정을 엽니다 (2026-11-12)
+        const sid = new URL(url).searchParams.get('schedule');
+        if (/[?&]mode=calendar/.test(url)) {
+            const cal = list.find(c => c.url.startsWith(self.location.origin) && /[?&]mode=calendar/.test(c.url));
+            if (cal) { cal.postMessage({ type: 'kob-open-schedule', id: sid }); return cal.focus(); }
+            return self.clients.openWindow(url);
+        }
+        const hit = list.find(c => c.url.startsWith(self.location.origin) && !/[?&]mode=(partner|mobile|calendar)/.test(c.url));
         if (hit) { hit.postMessage({ type: 'kob-open-noti' }); return hit.focus(); }
         return self.clients.openWindow(url);
     })());

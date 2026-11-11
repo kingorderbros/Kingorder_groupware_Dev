@@ -487,7 +487,9 @@ export async function onRequest(context) {
                 const ep = url.searchParams.get('endpoint');
                 return json(200, { ok: true, ready: push.keysReady(env), thisDevice: ep ? push.hasSub(rec, ep) : undefined,
                                    devices: rec.subs.map(x => ({ device: x.device, at: x.at, endpointTail: String(x.endpoint).slice(-12) })),
-                                   prefs: Object.fromEntries(push.CATEGORIES.map(c => [c.id, push.wants(rec, c.id)])), categories: push.CATEGORIES });
+                                   prefs: Object.fromEntries(push.CATEGORIES.map(c => [c.id, push.wants(rec, c.id)])), categories: push.CATEGORIES,
+                                   calNew: Object.fromEntries(push.CAL_NEW_IDS.map(id => [id, push.calNewWanted(rec, id)])), calNames: push.CAL_SHORT,
+                                   thisApps: ep ? ((rec.subs.find(x => x.endpoint === ep) || {}).apps || []) : undefined });
             }
             if (path === '/api/push/subscribe' && method === 'POST') {
                 if (!push.validSubscription(input.subscription)) return bad('알림 구독 정보가 올바르지 않습니다.');
@@ -496,7 +498,7 @@ export async function onRequest(context) {
                 for (const r of await store.storeLike(push.PREFIX)) {
                     if (r.key !== myKey && push.hasSub(r.value, ep)) await store.setStore(r.key, push.removeSub(r.value, ep));
                 }
-                await store.setStore(myKey, push.addSub(await loadMine(), input.subscription, input.device));
+                await store.setStore(myKey, push.addSub(await loadMine(), input.subscription, input.device, null, str(input.app)));
                 return json(200, { ok: true });
             }
             if (path === '/api/push/unsubscribe' && method === 'POST') {
@@ -529,7 +531,7 @@ export async function onRequest(context) {
                 const recips = push.recipientsOf(users, n, st.me.email);
                 const recs = recips.length ? await store.storeValues(recips.map(u => push.keyOf(u.id))) : {};
                 let targets = recips.map(u => ({ key: push.keyOf(u.id), rec: push.normRec(recs[push.keyOf(u.id)]) }))
-                    .filter(x => push.wants(x.rec, cat)).flatMap(x => x.rec.subs.filter(push.validSubscription).map(sub => ({ key: x.key, sub })));   // 저장된 주소도 알려진 푸시 서버인지 다시 확인 (2026-10-28)
+                    .filter(x => push.wants(x.rec, cat)).flatMap(x => push.pickSubsFor(x.rec, cat).filter(push.validSubscription).map(sub => ({ key: x.key, sub })));   // 저장된 주소도 알려진 푸시 서버인지 다시 확인 (2026-10-28) · 일정 알림은 킹오더일정 앱으로 (2026-11-12)
                 const total = targets.length;
                 targets = targets.slice(0, push.MAX_TARGETS);
                 let sent = 0; const gone = [];
@@ -544,6 +546,48 @@ export async function onRequest(context) {
                 }));
                 for (const g of gone) await store.setStore(g.key, push.removeSub(recs[g.key], g.ep));
                 return json(200, { ok: true, sent, targets: total, skipped: total - targets.length, removed: gone.length });
+            }
+            // 새 일정 알림 (킹오더일정 · 2026-11-12) — 받는 사람은 서버가 캘린더 · 부서 · 각자 켬/끔으로 고릅니다.
+            //   요청 본문을 믿지 않고 저장된 일정을 다시 읽어, 내가 방금(10분 안) 새로 만든 일정(rev 1)일 때만 보냅니다.
+            //   한 번에 MAX_TARGETS 대씩 — 남으면 next 를 돌려주고 화면이 이어서 부릅니다.
+            if (path === '/api/push/schedule-new' && method === 'POST') {
+                const sid = str(input.id);
+                if (!sid) return bad('일정이 없습니다.');
+                if (!push.keysReady(env)) return json(200, { ok: true, sent: 0, total: 0, skipped: 'VAPID 키가 설정되지 않았습니다.' });
+                let row = null;
+                for (let i = 0; i < 5 && !row; i++) {
+                    row = await store.rowRaw('schedules', sid);
+                    if (!row) await new Promise(r => setTimeout(r, 600));
+                }
+                if (!row) return json(404, { ok: false, error: '일정을 찾을 수 없습니다.' });
+                const age = Date.now() - new Date(row.updated_at).getTime();
+                if (row.rev !== 1 || str(row.updated_by).toLowerCase() !== str(st.me.email).toLowerCase() || !(age < 10 * 60 * 1000)) {
+                    return json(403, { ok: false, error: '본인이 방금 등록한 일정만 알릴 수 있습니다.' });
+                }
+                const sch = Object.assign({}, row.data || {}, { id: row.id });
+                if (sch.offState) return json(200, { ok: true, sent: 0, total: 0 });
+                const users = (await store.storeValue('gwUsers.v1')) || [];
+                const recips = push.scheduleNewRecipients(users, sch, st.me.email);
+                const recs = recips.length ? await store.storeValues(recips.map(u => push.keyOf(u.id))) : {};
+                const all = recips.map(u => ({ key: push.keyOf(u.id), rec: push.normRec(recs[push.keyOf(u.id)]) }))
+                    .filter(x => push.calNewWanted(x.rec, str(sch.calendar)))
+                    .flatMap(x => push.pickSubsFor(x.rec, 'schedule').filter(push.validSubscription).map(sub => ({ key: x.key, sub })));
+                const offset = Math.max(0, Math.floor(Number(input.offset) || 0));
+                const batch = all.slice(offset, offset + push.MAX_TARGETS);
+                const payload = push.scheduleNewPayload(sch);
+                let sent = 0; const gone = [];
+                await Promise.all(batch.map(async ({ key, sub }) => {
+                    try {
+                        const q = await push.buildRequest(sub, payload, env);
+                        const res = await fetch(q.url, q.init);
+                        if (res.status === 404 || res.status === 410) gone.push({ key, ep: sub.endpoint });
+                        else if (res.ok) sent++;
+                        else console.warn('[push] 새 일정 보내기 실패', res.status, (await res.text()).slice(0, 200));
+                    } catch (e) { console.warn('[push] 새 일정 보내기 오류', e && e.message); }
+                }));
+                for (const g of gone) await store.setStore(g.key, push.removeSub(recs[g.key], g.ep));
+                const next = offset + batch.length < all.length ? offset + batch.length : undefined;
+                return json(200, { ok: true, sent, total: all.length, next, removed: gone.length });
             }
             return json(404, { ok: false, error: '존재하지 않는 경로입니다: ' + path });
         }
