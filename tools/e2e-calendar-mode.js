@@ -253,6 +253,8 @@ srv.listen(PORT, async () => {
                 const cell = document.querySelector(`#cal-grid [data-day3-cell="${d(1)}|14"]`);
                 out.chip = !!cell && /키오스크/.test(cell.innerText);
                 out.fits = document.getElementById('cal-grid').scrollWidth <= innerWidth + 1;
+                const tl = document.getElementById('cal-day-timeline'); const nh = new Date().getHours();
+                out.scrolled = !!tl && tl.scrollHeight > tl.clientHeight + 10 && (nh < 2 || tl.scrollTop > 0);
                 const before = ymd(currentDate); changeDate(1); out.step = ymd(currentDate) === (() => { const x = new Date(before + 'T00:00:00'); x.setDate(x.getDate() + 3); return ymd(x); })(); changeDate(-1);
                 // 1일 · 주간 · 월간 · 리스트
                 const pick = (v) => { calmOpenSettings(); Array.from(document.querySelectorAll('#calm-view-opts input[name="calm-view"]')).find(o => o.value === v).click(); return currentCalendarView; };
@@ -269,6 +271,7 @@ srv.listen(PORT, async () => {
             ok(r.cols, '시간 단위(3일) = 오늘부터 3일');
             ok(r.chip, '내일 14시 일정이 내일 칸 14시 줄에');
             ok(r.fits, '3일 보기 가로 넘침 없음');
+            ok(r.scrolled, '3일 시간표는 안에서 넘겨 보고, 지금 시각 쪽으로 내려가 있음');
             ok(r.step, '3일 보기에서 다음 = 3일 뒤');
             ok(r.others === 'day,week,month,list', `다른 방법도 고른 대로 (얻음 ${r.others})`);
             ok(r.schedBtn, '[일정] 단추는 고른 방법으로 보여 줌');

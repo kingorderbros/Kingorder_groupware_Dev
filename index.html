@@ -207,6 +207,7 @@
         .calm-d3 .calm-d3-c { min-height: 44px; padding: 2px; }
         .calm-d3 .calm-d3-c > div { margin-bottom: 2px; }
         .calm-d3 .calm-d3-c.now { background: #eff6ff; }
+        #cal-day-timeline.calm-d3 { max-height: 60vh; overflow-y: auto; }
         .calm-row { display: flex; align-items: center; gap: 10px; width: 100%; padding: 14px 4px; border-top: 1px solid #f1f5f9; font-size: 15px; color: #1e293b; text-align: left; }
         .calm-danger { color: #dc2626; }
         /* 일정 창 — 휴대폰에서는 전체 화면 · 단추 줄은 아래에 고정 */
@@ -20201,7 +20202,7 @@ const QUOTE_TEMPLATES = [
                 return `<div data-day3="${ds[i]}" class="calm-d3-h${ds[i] === today ? ' today' : ''}"${ds[i] === today ? '' : col} onclick="openDaySummaryModal(${jsArg(ds[i])})">${d.getDate()} (${WD[wd]})${hol ? `<div class="text-[10px] font-normal truncate">${escapeHtml(hol)}</div>` : ''}</div>`;
             }).join('');
             html += '<div class="calm-d3-t">종일</div>' + ds.map(d => `<div class="calm-d3-c" data-day3-cell="${d}|allday">${on(d).filter(isAllDaySchedule).map(s => scheduleChipHtml(s)).join('')}</div>`).join('');
-            html += '</div><div id="cal-day-timeline" class="calm-d3 max-h-[62vh] overflow-y-auto">';
+            html += '</div><div id="cal-day-timeline" class="calm-d3 max-h-[60vh] overflow-y-auto">';
             for (let h = 0; h < 24; h++) {
                 html += `<div class="calm-d3-t">${String(h).padStart(2, '0')}:00</div>` + ds.map(d => {
                     const inH = on(d).filter(s => !isAllDaySchedule(s) && Math.floor(scheduleStartMinutes(s) / 60) === h);
