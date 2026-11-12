@@ -377,6 +377,85 @@ srv.listen(PORT, async () => {
             await m2.close();
         }
 
+        // ---------- 실험실 › 음성으로 일정 만들기 (11/12 다니엘님) ----------
+        console.log('[A] 실험실 — 음성으로 일정 만들기');
+        {
+            const m = await openPage(br, base + '?mode=calendar', 390, 800);
+            await m.evaluate(u => { try { localStorage.removeItem('kobCalmLab.v1'); } catch (e) { } localUsers.push({ id: 'vu1', name: '김영업', dept: 'sales', level: 'leader', email: 'k@k.co' }); enterApp(u); }, ADMIN);
+            const r = await m.evaluate(async () => {
+                const vis = el => !!el && !el.classList.contains('hidden') && getComputedStyle(el).display !== 'none' && el.getBoundingClientRect().width > 0;
+                const out = {};
+                out.offFab = !vis(document.getElementById('calm-voice-fab'));
+                calmOpenSettings();
+                const sw = document.getElementById('calm-lab-voice');
+                out.labText = /실험실/.test(document.getElementById('calm-settings').innerText) && !!sw && !sw.checked;
+                sw.checked = true; sw.dispatchEvent(new Event('change'));
+                calmCloseSettings();
+                out.onFab = vis(document.getElementById('calm-voice-fab'));
+                out.saved = (JSON.parse(localStorage.getItem('kobCalmLab.v1') || '{}')).voice === true;
+                document.getElementById('calm-voice-fab').click();
+                await new Promise(r => setTimeout(r, 100));
+                out.sheet = vis(document.getElementById('calm-voice-sheet'));
+                const ta = document.getElementById('calm-voice-text');
+                ta.value = '내일 오후 3시 강남 고객사 미팅 김영업 초대'; ta.dispatchEvent(new Event('input'));
+                document.getElementById('calm-voice-make').click();
+                await new Promise(r => setTimeout(r, 200));
+                const t = new Date(); t.setDate(t.getDate() + 1);
+                out.modal = vis(document.getElementById('schedule-modal')) && !vis(document.getElementById('calm-voice-sheet'));
+                out.title = document.getElementById('schedule-title').value;
+                out.date = document.getElementById('schedule-date').value === ymd(t);
+                out.time = document.getElementById('schedule-start-time').value + '~' + document.getElementById('schedule-end-time').value;
+                out.att = scheduleDraftAttendees.map(a => a.name).join();
+                out.notSaved = !schedules.some(s => s.title === '강남 고객사 미팅');
+                closeScheduleModal();
+                // 끄면 단추 사라짐
+                calmOpenSettings(); const sw2 = document.getElementById('calm-lab-voice'); sw2.checked = false; sw2.dispatchEvent(new Event('change')); calmCloseSettings();
+                out.offAgain = !vis(document.getElementById('calm-voice-fab'));
+                return out;
+            });
+            ok(await m.evaluate(() => { const a = document.getElementById('calm-open-gw'); return a.target === '_blank' && /\/$/.test(a.href) && !/mode=calendar/.test(a.href); }), '설정 [그룹웨어 열기] 는 새 창 (킹오더일정은 그대로 남음)');
+            ok(r.offFab, '처음에는 꺼져 있어 🎤 단추 없음');
+            ok(r.labText, '설정에 실험실 · 음성으로 일정 만들기 (꺼짐)');
+            ok(r.onFab && r.saved, '켜면 🎤 단추 · 이 기기에 저장');
+            ok(r.sheet, '🎤 를 누르면 듣기 창');
+            ok(r.modal && r.notSaved, '[일정 만들기] → 일정 입력창을 채워 열고, 저장은 하지 않음');
+            ok(r.title === '강남 고객사 미팅', `제목 채움 (${r.title})`);
+            ok(r.date, '날짜 채움 (내일)');
+            ok(r.time === '15:00~16:00', `시간 채움 (${r.time})`);
+            ok(r.att === '김영업', `참석자 채움 (${r.att})`);
+            ok(r.offAgain, '끄면 🎤 단추 사라짐');
+            ok(m.__errs.length === 0, '스크립트 오류 없음 ' + m.__errs.join(' | '));
+            await m.close();
+        }
+
+        // ---------- [오늘] = 날짜별 목록을 오늘 위치로 (11/12 다니엘님) ----------
+        console.log('[T] 아래 줄 [오늘] → 날짜별 목록 · 오늘');
+        {
+            const m = await openPage(br, base + '?mode=calendar', 390, 800);
+            await m.evaluate(u => { try { localStorage.setItem('kobCalmView.v1', 'day3'); } catch (e) { } enterApp(u); }, ADMIN);
+            await m.evaluate(seedSchedules);
+            const r = await m.evaluate(async () => {
+                const out = {};
+                calmSetView('day3');
+                changeDate(5);
+                document.querySelector('#calm-bar [data-view="today"]').click();
+                await new Promise(r => setTimeout(r, 300));
+                out.view = currentCalendarView;
+                out.today = ymd(currentDate) === ymd(new Date());
+                out.cards = document.querySelectorAll('#cal-grid [data-sid]').length >= 2 && !!document.querySelector('#cal-grid [data-today="1"]');
+                out.on = document.querySelector('#calm-bar [data-view="today"]').classList.contains('calm-on');
+                out.pref = localStorage.getItem('kobCalmView.v1');
+                document.querySelector('#calm-bar [data-view="sched"]').click();
+                out.back = currentCalendarView === 'day3';
+                return out;
+            });
+            ok(r.view === 'list' && r.today && r.cards, `[오늘] → 날짜별 목록 · 오늘 (${JSON.stringify(r)})`);
+            ok(r.on, '[오늘] 단추 켜짐 표시');
+            ok(r.pref === 'day3' && r.back, '설정의 표시 방법은 그대로 · [일정] 은 고른 방법으로');
+            await m.evaluate(() => { try { localStorage.removeItem('kobCalmView.v1'); } catch (e) { } });
+            await m.close();
+        }
+
         // ---------- 위 줄 고정 — 페이지 전체가 시계 뒤로 밀려 올라가지 않게 (11/12 다니엘님) ----------
         console.log('[S] 위 제목 줄 고정 · 아래 내용만 넘김');
         {
