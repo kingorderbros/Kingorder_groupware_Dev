@@ -181,6 +181,55 @@ srv.listen(PORT, async () => {
             await m.close();
         }
 
+        // ---------- 캘린더 리스트 (11/12 다니엘님 샘플) ----------
+        console.log('[L] 캘린더 리스트 — 캘린더별 · New 표시 · 누르면 그 캘린더 일정');
+        {
+            const m = await openPage(br, base + '?mode=calendar', 390, 800);
+            await m.evaluate(u => { try { localStorage.removeItem('kobReads.v1'); } catch (e) { } enterApp(u); }, ADMIN);
+            await m.evaluate(seedSchedules);
+            const r = await m.evaluate(() => {
+                const out = {};
+                const vis = el => !!el && !el.classList.contains('hidden') && getComputedStyle(el).display !== 'none' && el.getBoundingClientRect().width > 0;
+                out.dot = vis(document.querySelector('#calm-bar [data-view="callist"] .calm-dot'));
+                calmOpenCalList();
+                const box = document.getElementById('calm-callist');
+                out.shown = vis(box) && !vis(document.getElementById('cal-grid'));
+                const items = (tab) => { calmCalListTab(tab); return Array.from(box.querySelectorAll('[data-cal-item]')).map(x => x.dataset.calItem); };
+                out.all = items('all').join();
+                out.share = items('share').join();
+                out.mine = items('mine').join();
+                calmCalListTab('all');
+                const item = (id) => box.querySelector(`[data-cal-item="${id}"]`);
+                out.newSales = /New/.test(item('sales-share').innerText) && /New/.test(item('install-as').innerText) && !/New/.test(item('team').innerText);
+                out.names = /킹오더 영업일정 및 진행상황 공유/.test(item('sales-share').innerText) && /설치 및 A\/S 일정 공유/.test(item('install-as').innerText);
+                out.members = item('sales-share').querySelectorAll('[data-member]').length > 0;
+                out.fits = box.scrollWidth <= innerWidth + 1;
+                item('sales-share').click();
+                const chips = Array.from(document.querySelectorAll('#cal-grid [onclick^="event.stopPropagation(); openScheduleDetailModal"]')).map(c => c.getAttribute('onclick'));
+                out.after = !vis(box) && (document.getElementById('calendar-filter-cal') || {}).value === 'sales-share' && currentCalendarView === 'month'
+                    && chips.length === 1 && chips[0].includes('e2e-b');
+                out.curName = (document.getElementById('calm-cur-cal') || {}).innerText || '';
+                calmShowAll();
+                out.backAll = (document.getElementById('calendar-filter-cal') || {}).value === '' && /전체/.test((document.getElementById('calm-cur-cal') || {}).innerText || '');
+                return out;
+            });
+            ok(r.dot, '아래 줄 [리스트] 에 새 일정 빨간 점');
+            ok(r.shown, '캘린더 리스트 화면이 열림 (일정 칸은 숨김)');
+            ok(r.all === 'sales-share,install-as,company,team,personal,birthday', `전체 탭 = 캘린더 6개 (얻음 ${r.all})`);
+            ok(r.share === 'sales-share,install-as,company,birthday', `공유 탭 = 전 직원 공유 캘린더 (얻음 ${r.share})`);
+            ok(r.mine === 'team,personal', `내 캘린더 탭 = 개인 · 팀별 (얻음 ${r.mine})`);
+            ok(r.names, '캘린더 전체 이름 표시');
+            ok(r.newSales, '새 일정이 있는 캘린더만 New');
+            ok(r.members, '캘린더를 보는 사람 얼굴(첫 글자) 표시');
+            ok(r.fits, '리스트 화면 가로 넘침 없음');
+            ok(r.after, '캘린더를 누르면 그 캘린더 일정만 월 보기로');
+            ok(/킹오더 영업일정 및 진행상황 공유/.test(r.curName), `위 줄에 고른 캘린더 이름 (얻음 ${r.curName})`);
+            ok(r.backAll, '전체 캘린더로 돌아가기');
+            if (SHOTS) { await m.evaluate(() => calmOpenCalList()); await m.screenshot({ path: `${SHOTS}/callist-390.png` }); }
+            ok(m.__errs.length === 0, '스크립트 오류 없음 ' + m.__errs.join(' | '));
+            await m.close();
+        }
+
         // ---------- Task 4: 초대 알림 ----------
         console.log('[4] 입력창에서 저장하면 새 참석자에게 초대 알림');
         {

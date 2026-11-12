@@ -135,17 +135,38 @@
         html[data-mode="calendar"] #calm-bar button { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 11px; color: #64748b; padding: 6px 0; min-height: 48px; justify-content: center; }
         html[data-mode="calendar"] #calm-bar button i { font-size: 18px; }
         html[data-mode="calendar"] #calm-bar button.calm-on { color: #db2777; font-weight: 700; }
+        html[data-mode="calendar"] #calm-bar button { position: relative; }
+        html[data-mode="calendar"] #calm-bar .calm-dot { position: absolute; top: 6px; left: calc(50% + 8px); width: 7px; height: 7px; border-radius: 999px; background: #ef4444; }
+        html[data-mode="calendar"] .calm-cur-cal { font-size: 12px; color: #cbd5e1; margin-top: 1px; max-width: 62vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; text-align: left; }
+        html[data-mode="calendar"] #sec-calendar-center.calm-list-open #calendar-legend,
+        html[data-mode="calendar"] #sec-calendar-center.calm-list-open > .bg-white.rounded-lg,
+        html[data-mode="calendar"] #sec-calendar-center.calm-list-open #cal-head { display: none !important; }
+        #calm-callist { background: #fff; min-height: 60vh; }
+        .calm-cl-tabs { display: flex; justify-content: center; gap: 28px; border-bottom: 1px solid #e5e7eb; }
+        .calm-cl-tabs button { padding: 12px 2px 10px; font-size: 15px; color: #94a3b8; border-bottom: 3px solid transparent; }
+        .calm-cl-tabs button.on { color: #0f172a; font-weight: 700; border-color: #db2777; }
+        .calm-cl-head { padding: 12px 16px 4px; font-size: 13px; color: #64748b; }
+        .calm-cl-item { display: flex; align-items: center; gap: 12px; width: 100%; padding: 10px 16px; text-align: left; }
+        .calm-cl-item:active { background: #f8fafc; }
+        .calm-cl-tile { width: 60px; height: 60px; border-radius: 14px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 24px; overflow: hidden; }
+        .calm-cl-tile img { width: 100%; height: 100%; object-fit: contain; background: #fff; }
+        .calm-cl-name { font-size: 15px; font-weight: 700; color: #0f172a; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .calm-cl-desc { font-size: 12px; color: #64748b; margin-top: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .calm-cl-members { display: flex; align-items: center; margin-top: 5px; }
+        .calm-cl-av { width: 22px; height: 22px; border-radius: 999px; border: 2px solid #fff; margin-left: -5px; font-size: 10px; font-weight: 700; color: #fff; display: inline-flex; align-items: center; justify-content: center; object-fit: cover; background: #94a3b8; }
+        .calm-cl-av:first-child { margin-left: 0; }
+        .calm-cl-more { font-size: 11px; color: #64748b; margin-left: 4px; }
+        .calm-cl-new { background: #ef4444; color: #fff; font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 999px; flex-shrink: 0; }
         html[data-mode="calendar"] #calm-bar .calm-add { flex: 0 0 56px; height: 56px; border-radius: 999px; background: #1e293b; color: #fff; margin-top: -22px; box-shadow: 0 6px 16px rgba(15,23,42,.25); }
         html[data-mode="calendar"] #calm-bar .calm-add i { font-size: 22px; }
         html[data-mode="calendar"] #kob-store-status { bottom: calc(72px + env(safe-area-inset-bottom, 0px)) !important; z-index: 45 !important; }
-        /* 월 · 주 보기 — 칸이 좁아서 시간 · 등록자는 빼고 제목만 작은 글씨로 두 줄까지 (2026-11-12 다니엘님: 글씨가 보이게).
+        /* 월 · 주 보기 — 칸이 좁아서 시간 · 등록자는 빼고 제목만 작은 글씨 한 줄 (2026-11-12 다니엘님: 글씨가 보이게 · 샘플).
            일정을 누르면 상세, 빈 곳 · 날짜를 누르면 그날 요약이 열립니다 */
         @media (max-width: 640px) {
             html[data-mode="calendar"] #cal-grid.grid-cols-7 > div { min-height: 72px; padding: 2px; }
             html[data-mode="calendar"] #cal-grid.grid-cols-7 [onclick^="event.stopPropagation(); openScheduleDetailModal"] {
                 font-size: 10px; line-height: 1.25; padding: 1px 3px; margin-bottom: 2px; letter-spacing: -.02em;
-                white-space: normal; word-break: break-all; overflow: hidden; text-overflow: clip;
-                display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+                white-space: nowrap; overflow: hidden; text-overflow: clip; }
             html[data-mode="calendar"] #cal-grid.grid-cols-7 [onclick^="event.stopPropagation(); openScheduleDetailModal"] > span.tabular-nums,
             html[data-mode="calendar"] #cal-grid.grid-cols-7 [onclick^="event.stopPropagation(); openScheduleDetailModal"] > span.opacity-70,
             html[data-mode="calendar"] #cal-grid.grid-cols-7 [onclick^="event.stopPropagation(); openScheduleDetailModal"] > i { display: none; }
@@ -3632,7 +3653,7 @@
                         <button type="button" data-view="month" onclick="calmSetView('month')"><i class="fas fa-calendar"></i><span>월</span></button>
                         <button type="button" class="calm-add" onclick="openScheduleModal()" title="새 일정"><i class="fas fa-plus"></i></button>
                         <button type="button" data-view="week" onclick="calmSetView('week')"><i class="fas fa-calendar-week"></i><span>주</span></button>
-                        <button type="button" data-view="day" onclick="calmSetView('day')"><i class="fas fa-calendar-day"></i><span>일</span></button>
+                        <button type="button" data-view="callist" onclick="calmOpenCalList()"><i class="fas fa-layer-group"></i><span>리스트</span><span class="calm-dot hidden"></span></button>
                     </nav>
                     <!-- 킹오더일정 설정 창 -->
                     <div id="calm-settings" class="hidden calm-sheet-wrap" onclick="if(event.target===this)calmCloseSettings()">
@@ -3649,9 +3670,12 @@
                     <!-- 킹오더일정(?mode=calendar) 위 줄 — 휴대폰 전용 (2026-11-12) -->
                     <div id="calm-top" class="calm-only">
                         <div class="calm-top-row">
-                            <div class="calm-brand"><i class="fas fa-calendar-days"></i> 킹오더일정</div>
+                            <div class="min-w-0">
+                                <div class="calm-brand"><i class="fas fa-calendar-days"></i> 킹오더일정</div>
+                                <button type="button" id="calm-cur-cal" onclick="calmOpenCalList()" class="calm-cur-cal">전체 캘린더 <i class="fas fa-caret-down"></i></button>
+                            </div>
                             <div class="flex items-center gap-2">
-                                <button type="button" id="calm-filter-btn" onclick="calmToggleFilters()" class="calm-icon-btn" title="거르기"><i class="fas fa-filter"></i><span>거르기</span></button>
+                                <button type="button" id="calm-filter-btn" onclick="calmToggleFilters()" class="calm-icon-btn" title="필터"><i class="fas fa-filter"></i><span>필터</span></button>
                                 <button type="button" id="calm-settings-btn" onclick="calmOpenSettings()" class="calm-icon-btn" title="설정"><i class="fas fa-gear"></i><span id="calm-settings-dot" class="hidden"></span></button>
                             </div>
                         </div>
@@ -3689,6 +3713,8 @@
                             <button onclick="openScheduleModal()" class="calm-hide bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded text-sm transition-colors">+ 일정 등록</button>
                         </div>
                     </div>
+                    <!-- 킹오더일정 — 캘린더 리스트 (2026-11-12 다니엘님 샘플) -->
+                    <div id="calm-callist" class="hidden"></div>
                     <!-- 캘린더 범례 (클릭하면 해당 캘린더만 보기) -->
                     <div id="calendar-legend" class="mb-3 flex flex-wrap items-center gap-2 bg-white border border-gray-200 rounded-lg p-3">
                         <!-- JS 동적 렌더링 -->
@@ -19285,6 +19311,7 @@ const QUOTE_TEMPLATES = [
                             <span class="${activeId ? 'bg-gray-100 text-gray-700' : 'bg-white/25 text-white'} rounded-full px-1.5">${total}</span>
                         </button>`;
             el.innerHTML = `<span class="text-xs font-semibold text-gray-500 mr-1">캘린더 <span class="font-normal text-gray-400">· ${Number(ym.slice(5))}월</span></span>${all}${chips}`;
+            if (typeof calmRenderCalList === 'function' && isCalendarMode()) { calmRenderCalList(fresh); calmSyncCurCal(); }   // 킹오더일정 캘린더 리스트 · 빨간 점 (2026-11-12)
         }
 
         // 범례 클릭 → 필터 셀렉트와 동기화
@@ -20112,14 +20139,95 @@ const QUOTE_TEMPLATES = [
             }).catch(() => { box.classList.add('hidden'); });
         }
         function calmSyncBar() {
-            document.querySelectorAll('#calm-bar [data-view]').forEach(b => b.classList.toggle('calm-on', b.dataset.view === currentCalendarView));
+            const listOpen = !!document.querySelector('#sec-calendar-center.calm-list-open');
+            document.querySelectorAll('#calm-bar [data-view]').forEach(b => b.classList.toggle('calm-on', listOpen ? b.dataset.view === 'callist' : b.dataset.view === currentCalendarView));
+            calmSyncCurCal();
         }
         function calmSetView(view) {
+            calmCloseCalList();
             setCalendarView(view);
             const sel = document.getElementById('calendar-view-select');
             if (sel && Array.from(sel.options).some(o => o.value === view)) sel.value = view;
             if (view === 'list' || view === 'month') scrollCalendarToToday();
         }
+        // ---------- 캘린더 리스트 (2026-11-12 다니엘님 샘플) ----------
+        // 캘린더마다 이름 · 보는 사람 · 새 일정(New)을 보여 주고, 누르면 그 캘린더 일정만 월 보기로 엽니다.
+        let calmListTab = 'all';
+        const CALM_LIST_TABS = [['all', '전체'], ['share', '공유'], ['mine', '내 캘린더']];
+        function calmStaffUsers() {
+            const ext = new Set((typeof orgDepts !== 'undefined' ? orgDepts : []).filter(d => d.external).map(d => d.id).concat(['vendor']));
+            const extGroup = (u) => (typeof userGroupIds === 'function' ? userGroupIds(u) : [u.groupId]).some(id => ((typeof permissionGroups !== 'undefined' ? permissionGroups : []).find(g => g.id === id) || {}).external);
+            return (typeof localUsers !== 'undefined' ? localUsers : []).filter(u => u && u.id && !isResigned(u) && !ext.has(u.dept) && !extGroup(u));
+        }
+        // 그 캘린더를 함께 보는 사람 — 공유 = 전 직원, 팀별 = 우리 부서, 개인 = 나
+        function calmCalMembers(cal) {
+            const staff = calmStaffUsers();
+            if (cal.share === 'self') return staff.filter(u => u.name === currentUserName);
+            if (cal.share === 'dept') return staff.filter(u => u.dept === currentUserDept);
+            return staff;
+        }
+        function calmAvatarHtml(u) {
+            const photo = (u && u.photo) || '';
+            const st = (typeof orgDeptStyle === 'function') ? orgDeptStyle(u.dept) : { avatar: 'bg-slate-400' };
+            return photo ? `<img data-member src="${escapeHtml(photo)}" alt="${escapeHtml(u.name || '')}" class="calm-cl-av">`
+                : `<span data-member class="calm-cl-av ${st.avatar}">${escapeHtml(String(u.name || '?').charAt(0))}</span>`;
+        }
+        function calmCalTile(cal) {
+            if (cal.id === 'sales-share' || cal.id === 'company') return `<span class="calm-cl-tile border border-gray-200"><img src="image/logo.png" alt=""></span>`;
+            return `<span class="calm-cl-tile ${cal.swatch}"><i class="fas ${cal.icon}"></i></span>`;
+        }
+        function calmRenderCalList(fresh) {
+            if (!isCalendarMode()) return;
+            const scopeInfo = getCalendarScopeFor(currentUserName, currentUserDept, currentUserLevel);
+            const counts = fresh || calNewCounts(getVisibleSchedules(scopeInfo));
+            const anyNew = Object.values(counts).some(n => n > 0);
+            const dot = document.querySelector('#calm-bar [data-view="callist"] .calm-dot');
+            if (dot) dot.classList.toggle('hidden', !anyNew);
+            const box = document.getElementById('calm-callist');
+            if (!box) return;
+            const ORDER = ['sales-share', 'install-as', 'company', 'team', 'personal', 'birthday'];   // 공유 캘린더 먼저 (샘플)
+            const list = CALENDARS.slice().sort((a, b) => ORDER.indexOf(a.id) - ORDER.indexOf(b.id))
+                .filter(c => calmListTab === 'all' || (calmListTab === 'share' ? c.share === 'all' : c.share !== 'all'));
+            const items = list.map(c => {
+                const mem = calmCalMembers(c);
+                const faces = mem.slice(0, 7).map(calmAvatarHtml).join('') + (mem.length > 7 ? `<span class="calm-cl-more">+${mem.length - 7}</span>` : '');
+                const sub = c.auto ? `<div class="calm-cl-desc">${escapeHtml(c.desc)}</div>` : `<div class="calm-cl-members">${faces}</div>`;
+                const n = counts[c.id] || 0;
+                return `<button type="button" data-cal-item="${c.id}" class="calm-cl-item" onclick="calmPickCalendar(${jsArg(c.id)})">
+                    ${calmCalTile(c)}
+                    <span class="flex-1 min-w-0"><div class="calm-cl-name">${escapeHtml(c.name)}</div>${sub}</span>
+                    ${n ? `<span class="calm-cl-new" title="확인하지 않은 일정 ${n}건">New</span>` : ''}
+                    <i class="fas fa-chevron-right text-gray-300"></i>
+                </button>`;
+            }).join('');
+            box.innerHTML = `<div class="calm-cl-tabs">${CALM_LIST_TABS.map(([id, nm]) => `<button type="button" class="${calmListTab === id ? 'on' : ''}" onclick="calmCalListTab(${jsArg(id)})">${nm}</button>`).join('')}</div>
+                <div class="calm-cl-head">캘린더 (${list.length})</div>${items}`;
+        }
+        function calmCalListTab(tab) { calmListTab = tab; calmRenderCalList(); }
+        function calmOpenCalList() {
+            document.getElementById('sec-calendar-center').classList.add('calm-list-open');
+            document.getElementById('calm-callist').classList.remove('hidden');
+            calmRenderCalList();
+            document.querySelectorAll('#calm-bar [data-view]').forEach(b => b.classList.toggle('calm-on', b.dataset.view === 'callist'));
+            const ms = document.getElementById('main-scroll'); if (ms) ms.scrollTop = 0;
+        }
+        function calmCloseCalList() {
+            document.getElementById('sec-calendar-center').classList.remove('calm-list-open');
+            document.getElementById('calm-callist').classList.add('hidden');
+        }
+        function calmSyncCurCal() {
+            const el = document.getElementById('calm-cur-cal'); if (!el) return;
+            const id = (document.getElementById('calendar-filter-cal') || {}).value || '';
+            el.innerHTML = `${escapeHtml(id ? getCalendar(id).name : '전체 캘린더')} <i class="fas fa-caret-down"></i>`;
+        }
+        // 캘린더를 고르면 그 캘린더 일정만 월 보기로
+        function calmPickCalendar(id) {
+            const sel = document.getElementById('calendar-filter-cal');
+            if (sel) { if (!Array.from(sel.options).some(o => o.value === id)) fillCalendarFilterSelect(); sel.value = id; }
+            calmCloseCalList();
+            calmSetView('month');
+        }
+        function calmShowAll() { const sel = document.getElementById('calendar-filter-cal'); if (sel) sel.value = ''; calmCloseCalList(); renderCalendar(); }
         function calmToggleFilters() { document.getElementById('sec-calendar-center').classList.toggle('calm-filters-open'); }
         function calmOpenSettings() {
             const n = document.getElementById('calm-me-name'); if (n) n.textContent = `${currentUserName || ''}`;
