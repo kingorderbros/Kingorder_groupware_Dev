@@ -230,6 +230,59 @@ srv.listen(PORT, async () => {
             await m.close();
         }
 
+        // ---------- 설정 › 일정 표시 방법 (11/12 다니엘님) ----------
+        console.log('[V] 설정 › 일정 표시 방법 — 월간 · 시간 단위(1일) · 시간 단위(3일) · 리스트 · 주간');
+        {
+            const m = await openPage(br, base + '?mode=calendar', 390, 800);
+            await m.evaluate(u => { try { localStorage.removeItem('kobCalmView.v1'); } catch (e) { } enterApp(u); }, ADMIN);
+            await m.evaluate(seedSchedules);
+            const r = await m.evaluate(() => {
+                const out = {};
+                out.bar = Array.from(document.querySelectorAll('#calm-bar > button')).map(b => b.innerText.trim()).join(',');
+                calmOpenSettings();
+                const opts = Array.from(document.querySelectorAll('#calm-view-opts input[name="calm-view"]'));
+                out.opts = opts.map(o => o.value + ':' + o.closest('label').innerText.trim()).join('|');
+                out.checked = (opts.find(o => o.checked) || {}).value;
+                opts.find(o => o.value === 'day3').click();
+                out.view = currentCalendarView;
+                out.saved = localStorage.getItem('kobCalmView.v1');
+                out.closed = document.getElementById('calm-settings').classList.contains('hidden');
+                const cols = Array.from(document.querySelectorAll('#cal-grid [data-day3]')).map(x => x.dataset.day3);
+                const t = new Date(); const d = (k) => { const x = new Date(t); x.setDate(t.getDate() + k); return ymd(x); };
+                out.cols = cols.join() === [d(0), d(1), d(2)].join();
+                const cell = document.querySelector(`#cal-grid [data-day3-cell="${d(1)}|14"]`);
+                out.chip = !!cell && /키오스크/.test(cell.innerText);
+                out.fits = document.getElementById('cal-grid').scrollWidth <= innerWidth + 1;
+                const before = ymd(currentDate); changeDate(1); out.step = ymd(currentDate) === (() => { const x = new Date(before + 'T00:00:00'); x.setDate(x.getDate() + 3); return ymd(x); })(); changeDate(-1);
+                // 1일 · 주간 · 월간 · 리스트
+                const pick = (v) => { calmOpenSettings(); Array.from(document.querySelectorAll('#calm-view-opts input[name="calm-view"]')).find(o => o.value === v).click(); return currentCalendarView; };
+                out.others = ['day', 'week', 'month', 'list'].map(pick).join();
+                pick('day3');
+                // [일정] 단추는 고른 방법으로
+                calmOpenCalList(); document.querySelector('#calm-bar [data-view="sched"]').click(); out.schedBtn = currentCalendarView === 'day3' && !document.getElementById('sec-calendar-center').classList.contains('calm-list-open');
+                return out;
+            });
+            ok(r.bar === '일정,캘린더,,오늘,설정', `아래 줄 = 일정 · 캘린더 · + · 오늘 · 설정 (얻음 ${r.bar})`);
+            ok(r.opts === 'month:월간|day:시간 단위(1일)|day3:시간 단위(3일)|list:리스트|week:주간', `표시 방법 5가지 (얻음 ${r.opts})`);
+            ok(r.checked === 'list', '처음은 리스트');
+            ok(r.view === 'day3' && r.saved === 'day3' && r.closed, '고르면 바로 그 방법으로 · 이 기기에 저장 · 설정 창 닫힘');
+            ok(r.cols, '시간 단위(3일) = 오늘부터 3일');
+            ok(r.chip, '내일 14시 일정이 내일 칸 14시 줄에');
+            ok(r.fits, '3일 보기 가로 넘침 없음');
+            ok(r.step, '3일 보기에서 다음 = 3일 뒤');
+            ok(r.others === 'day,week,month,list', `다른 방법도 고른 대로 (얻음 ${r.others})`);
+            ok(r.schedBtn, '[일정] 단추는 고른 방법으로 보여 줌');
+            if (SHOTS) { await m.screenshot({ path: `${SHOTS}/day3-390.png` }); }
+            ok(m.__errs.length === 0, '스크립트 오류 없음 ' + m.__errs.join(' | '));
+            await m.close();
+            // 다시 열면 고른 방법으로 시작
+            const m2 = await openPage(br, base + '?mode=calendar', 390, 800);
+            await m2.evaluate(u => enterApp(u), ADMIN);
+            ok(await m2.evaluate(() => currentCalendarView) === 'day3', '다시 열어도 고른 방법(3일)으로 시작');
+            await m2.evaluate(() => { try { localStorage.removeItem('kobCalmView.v1'); } catch (e) { } });
+            await m2.close();
+        }
+
         // ---------- Task 4: 초대 알림 ----------
         console.log('[4] 입력창에서 저장하면 새 참석자에게 초대 알림');
         {
