@@ -129,6 +129,22 @@
         html[data-mode="calendar"] #cal-head select, html[data-mode="calendar"] #cal-head button { font-size: 14px; min-height: 40px; }
         html[data-mode="calendar"] #calendar-legend { flex-wrap: nowrap; overflow-x: auto; margin: 0; border-radius: 0; border-width: 0 0 1px 0; padding: 8px 12px; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
         html[data-mode="calendar"] #calendar-legend::-webkit-scrollbar { display: none; }
+        html[data-mode="calendar"] #calendar-legend.calm-legend-open { flex-wrap: wrap; overflow-x: hidden; overflow-y: auto; max-height: calc(var(--calm-rows, 4) * 34px + 16px); }
+        html[data-mode="calendar"] #calendar-legend.calm-legend-open .calm-legend-more i { transform: rotate(180deg); }
+        .calm-legend-more { position: sticky; right: 0; background: #fff; padding: 4px 8px; border-radius: 999px; color: #64748b; border: 1px solid #e5e7eb; }
+        .calm-switch { position: relative; width: 46px; height: 26px; flex-shrink: 0; }
+        .calm-switch input { opacity: 0; width: 0; height: 0; position: absolute; }
+        .calm-switch span { position: absolute; inset: 0; border-radius: 999px; background: #cbd5e1; transition: background .15s; }
+        .calm-switch span::after { content: ''; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 999px; background: #fff; transition: transform .15s; box-shadow: 0 1px 2px rgba(0,0,0,.2); }
+        .calm-switch input:checked + span { background: #10b981; }
+        .calm-switch input:checked + span::after { transform: translateX(20px); }
+        .calm-fs-group { margin: 6px 16px 2px; font-size: 13px; color: #64748b; }
+        .calm-fs-card { margin: 4px 12px 10px; background: #fff; border-radius: 14px; border: 1px solid #eef2f7; }
+        .calm-fs-row { display: flex; align-items: center; gap: 10px; padding: 11px 14px; border-top: 1px solid #f1f5f9; font-size: 15px; color: #1e293b; width: 100%; text-align: left; }
+        .calm-fs-row:first-child { border-top: 0; }
+        .calm-fs-ico { width: 30px; height: 30px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; color: #fff; font-size: 14px; overflow: hidden; flex-shrink: 0; }
+        .calm-fs-ico img { width: 100%; height: 100%; object-fit: contain; background: #fff; }
+        .calm-fs-note { margin: 0 16px 10px; font-size: 12px; color: #94a3b8; }
         html[data-mode="calendar"] #calendar-legend > * { flex-shrink: 0; }
         html[data-mode="calendar"] #sec-calendar-center > .bg-white.rounded-lg { border-radius: 0; border-width: 0; box-shadow: none; }
         html[data-mode="calendar"] #calm-bar { display: flex; position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; background: #fff; border-top: 1px solid #e5e7eb; padding: 4px 6px calc(4px + env(safe-area-inset-bottom, 0px)); justify-content: space-around; align-items: center; }
@@ -3682,10 +3698,18 @@
                                     <label class="calm-radio"><input type="radio" name="calm-view" value="list" onchange="calmChooseView(this.value)"> 리스트</label>
                                     <label class="calm-radio"><input type="radio" name="calm-view" value="week" onchange="calmChooseView(this.value)"> 주간</label>
                                 </div>
+                                <button type="button" id="calm-open-filter" class="calm-row" onclick="calmCloseSettings(); calmOpenFilterSheet()"><i class="fas fa-filter"></i> 필터 설정 <i class="fas fa-chevron-right ml-auto text-gray-300"></i></button>
                                 <div id="calm-noti"></div>
                                 <a id="calm-open-gw" class="calm-row" href="./"><i class="fas fa-up-right-from-square"></i> 그룹웨어 열기</a>
                                 <button type="button" class="calm-row calm-danger" onclick="calmCloseSettings(); handleLogout()"><i class="fas fa-right-from-bracket"></i> 로그아웃</button>
                             </div>
+                        </div>
+                    </div>
+                    <!-- 킹오더일정 필터 설정 (2026-11-12 다니엘님 샘플) -->
+                    <div id="calm-filter-sheet" class="hidden calm-sheet-wrap" onclick="if(event.target===this)calmCloseFilterSheet()">
+                        <div class="calm-sheet bg-slate-50" style="max-height:92vh">
+                            <div class="calm-sheet-head bg-white"><button type="button" id="calm-filter-back" onclick="calmFilterBack()" class="calm-icon-btn" title="닫기"><i class="fas fa-xmark"></i></button><b id="calm-filter-title">필터 설정</b><span style="width:36px"></span></div>
+                            <div id="calm-filter-body"></div>
                         </div>
                     </div>
                     <!-- 킹오더일정(?mode=calendar) 위 줄 — 휴대폰 전용 (2026-11-12) -->
@@ -19313,12 +19337,13 @@ const QUOTE_TEMPLATES = [
             const inMonth = visibleSchedules.filter(s => String(s.date || '').slice(0, 7) === ym);
             const fresh = calNewCounts(visibleSchedules);   // 새 일정 · 변경됨 숫자 (킹오더일정 · 2026-11-12)
             const newBadge = (id) => `<span data-cal-new="${id}" class="${fresh[id] ? '' : 'hidden '}bg-rose-600 text-white rounded-full px-1.5 font-bold" title="확인하지 않은 새 일정 · 변경된 일정">${fresh[id] || 0}</span>`;
-            const chips = CALENDARS.map(c => {
+            const calmNames = !isCalendarMode() || calmFilterPrefs().names !== false;
+            const chips = CALENDARS.filter(c => !isCalendarMode() || calmCalShown(c.id)).map(c => {
                 const count = inMonth.filter(s => scheduleCalendarId(s) === c.id).length;
                 const on = activeId === c.id;
                 const ring = on ? 'ring-2 ring-offset-1 ring-gray-400' : 'opacity-90 hover:opacity-100';
                 return `<button type="button" onclick="filterCalendarBy(${jsArg(c.id)})" title="${escapeHtml(c.desc)}" class="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition-all ${c.chip} ${ring}">
-                            <i class="fas ${c.icon}"></i>${escapeHtml(c.name)}
+                            <i class="fas ${c.icon}"></i>${calmNames ? escapeHtml(c.name) : ''}
                             <span class="bg-white/70 text-gray-700 rounded-full px-1.5">${count}</span>${newBadge(c.id)}
                         </button>`;
             }).join('');
@@ -19330,7 +19355,8 @@ const QUOTE_TEMPLATES = [
                             <i class="fas fa-layer-group"></i>전체 보기
                             <span class="${activeId ? 'bg-gray-100 text-gray-700' : 'bg-white/25 text-white'} rounded-full px-1.5">${total}</span>
                         </button>`;
-            el.innerHTML = `<span class="text-xs font-semibold text-gray-500 mr-1">캘린더 <span class="font-normal text-gray-400">· ${Number(ym.slice(5))}월</span></span>${all}${chips}`;
+            const more = isCalendarMode() ? `<button type="button" class="calm-legend-more" onclick="calmToggleLegend()" title="필터 영역 펼치기 · 접기"><i class="fas fa-chevron-down"></i></button>` : '';
+            el.innerHTML = `<span class="text-xs font-semibold text-gray-500 mr-1">캘린더 <span class="font-normal text-gray-400">· ${Number(ym.slice(5))}월</span></span>${all}${chips}${more}`;
             if (typeof calmRenderCalList === 'function' && isCalendarMode()) { calmRenderCalList(fresh); calmSyncCurCal(); }   // 킹오더일정 캘린더 리스트 · 빨간 점 (2026-11-12)
         }
 
@@ -19839,7 +19865,10 @@ const QUOTE_TEMPLATES = [
             if (gwHolidayFetched && String(gwHolidayFetched.updatedAt || '') > String(gwHolidayCache.updatedAt || '')) return gwHolidayFetched.days || {};
             return gwHolidayCache.days;
         }
-        function gwHolidayName(ds) { return gwHolidayDays()[ds] || ''; }
+        function gwHolidayName(ds) {
+            if (typeof isCalendarMode === 'function' && isCalendarMode() && typeof calmFilterPrefs === 'function' && calmFilterPrefs().holiday === false) return '';   // 킹오더일정 필터 설정 (2026-11-12)
+            return gwHolidayDays()[ds] || '';
+        }
         let gwHolidayAsked = false;
         function refreshHolidays() {
             if (gwHolidayAsked || typeof fetch === 'undefined' || !(window.kobStorage && kobStorage.mode === 'supabase')) return;
@@ -19880,7 +19909,8 @@ const QUOTE_TEMPLATES = [
             fillCalendarFilterSelect();
             const deptFilter = (document.getElementById('calendar-filter-dept') || {}).value || '';
             const calFilter = (document.getElementById('calendar-filter-cal') || {}).value || '';
-            const visible = getVisibleSchedules(scopeInfo).filter(s => !deptFilter || (s.dept || 'sales') === deptFilter);
+            const visible = getVisibleSchedules(scopeInfo).filter(s => !deptFilter || (s.dept || 'sales') === deptFilter)
+                .filter(s => !isCalendarMode() || calmCalShown(scheduleCalendarId(s)));   // 킹오더일정 — 필터 설정에서 끈 캘린더는 빼고 (2026-11-12)
             const deptSchedules = visible.filter(s => !calFilter || scheduleCalendarId(s) === calFilter);
             // 범례 건수는 부서 필터까지 반영한 값 (캘린더 필터는 제외 — 클릭 전환용) · 보고 있는 달의 일정만 (2026-10-14)
             renderCalendarLegend(visible, calFilter, `${year}-${String(month + 1).padStart(2, '0')}`);
@@ -20216,6 +20246,70 @@ const QUOTE_TEMPLATES = [
                 const focus = ds.includes(today) ? nowH : (firsts.length ? Math.min(...firsts) : 8);
                 tl.scrollTop = Math.max(0, (focus - 1) * 45);
             }
+        }
+
+        // ---------- 필터 설정 (2026-11-12 다니엘님 샘플) — 이 기기에 기억합니다 ----------
+        //   show: { 캘린더 id: false } 끈 캘린더 · holiday: 공휴일 표시 · names: 필터 이름 표시 · rows: 펼칠 때 줄 수
+        const CALM_FILTER_KEY = 'kobCalmFilter.v1';
+        const CALM_FILTER_ORDER = ['sales-share', 'install-as', 'company', 'team', 'personal', 'birthday'];
+        function calmFilterPrefs() {
+            let p = null; try { p = JSON.parse(localStorage.getItem('kobCalmFilter.v1') || 'null'); } catch (e) { p = null; }
+            p = (p && typeof p === 'object') ? p : {};
+            return { show: (p.show && typeof p.show === 'object') ? p.show : {}, holiday: p.holiday !== false, names: p.names !== false, rows: Math.min(6, Math.max(1, Number(p.rows) || 4)) };
+        }
+        function calmSaveFilterPrefs(p) { try { localStorage.setItem(CALM_FILTER_KEY, JSON.stringify(p)); } catch (e) { /* 이번만 */ } calmApplyLegendRows(); renderCalendar(); }
+        function calmCalShown(id) { return calmFilterPrefs().show[id] !== false; }
+        function calmApplyLegendRows() { const lg = document.getElementById('calendar-legend'); if (lg) lg.style.setProperty('--calm-rows', calmFilterPrefs().rows); }
+        function calmToggleLegend() { calmApplyLegendRows(); const lg = document.getElementById('calendar-legend'); if (lg) lg.classList.toggle('calm-legend-open'); }
+        function calmFilterIcon(id) {
+            if (id === 'holiday') return '<span class="calm-fs-ico bg-red-500"><i class="fas fa-flag"></i></span>';
+            const c = getCalendar(id);
+            if (id === 'sales-share' || id === 'company') return '<span class="calm-fs-ico border border-gray-200"><img src="image/logo.png" alt=""></span>';
+            return `<span class="calm-fs-ico ${c.swatch}"><i class="fas ${c.icon}"></i></span>`;
+        }
+        let calmFilterPage = 'main';
+        function calmOpenFilterSheet() { calmFilterPage = 'main'; calmRenderFilterSheet(); document.getElementById('calm-filter-sheet').classList.remove('hidden'); }
+        function calmCloseFilterSheet() { document.getElementById('calm-filter-sheet').classList.add('hidden'); }
+        function calmFilterBack() { if (calmFilterPage === 'pick') { calmFilterPage = 'main'; calmRenderFilterSheet(); } else calmCloseFilterSheet(); }
+        function calmRenderFilterSheet() {
+            const p = calmFilterPrefs();
+            const body = document.getElementById('calm-filter-body'); if (!body) return;
+            const back = document.getElementById('calm-filter-back');
+            if (back) back.innerHTML = calmFilterPage === 'pick' ? '<i class="fas fa-arrow-left"></i>' : '<i class="fas fa-xmark"></i>';
+            document.getElementById('calm-filter-title').textContent = calmFilterPage === 'pick' ? '표시할 필터를 선택' : '필터 설정';
+            const nameOf = (id) => id === 'holiday' ? '대한민국 공휴일' : getCalendar(id).name;
+            if (calmFilterPage === 'main') {
+                const shown = CALM_FILTER_ORDER.filter(id => p.show[id] !== false).concat(p.holiday ? ['holiday'] : []);
+                body.innerHTML = `<div class="calm-fs-group">표시 설정</div>
+                    <div class="calm-fs-card">
+                        <label class="calm-fs-row">필터 이름 표시<span class="ml-auto calm-switch"><input type="checkbox" id="calm-filter-names" ${p.names ? 'checked' : ''} onchange="calmSetFilterOpt('names', this.checked)"><span></span></span></label>
+                        <label class="calm-fs-row">필터 영역 확대 시 표시할 줄 수
+                            <select id="calm-filter-rows" class="ml-auto bg-transparent text-gray-500 text-[15px]" onchange="calmSetFilterOpt('rows', Number(this.value))">${[1, 2, 3, 4, 5, 6].map(n => `<option value="${n}" ${p.rows === n ? 'selected' : ''}>${n}줄</option>`).join('')}</select></label>
+                    </div>
+                    <div class="calm-fs-group">필터 리스트</div>
+                    <div class="calm-fs-card">${shown.length ? shown.map(id => `<div class="calm-fs-row" data-filter-row="${id}">${calmFilterIcon(id)}<span class="truncate">${escapeHtml(nameOf(id))}</span></div>`).join('') : '<div class="calm-fs-row text-gray-400">표시할 필터가 없습니다</div>'}</div>
+                    <p class="calm-fs-note">'표시할 필터를 선택'을 눌러 필터를 추가하거나 뺄 수 있습니다. 켠 캘린더의 일정만 화면에 표시됩니다.</p>
+                    <div class="calm-fs-card"><button type="button" id="calm-filter-pick-btn" class="calm-fs-row" onclick="calmFilterPage='pick'; calmRenderFilterSheet()">표시할 필터를 선택<i class="fas fa-chevron-right ml-auto text-gray-300"></i></button></div>`;
+            } else {
+                const tog = (id, on) => `<label class="calm-fs-row">${calmFilterIcon(id)}<span class="flex-1 min-w-0 truncate">${escapeHtml(nameOf(id))}</span><span class="calm-switch"><input type="checkbox" data-filter-cal="${id}" ${on ? 'checked' : ''}><span></span></span></label>`;
+                body.innerHTML = `<div class="calm-fs-group">킹오더 캘린더</div>
+                    <div class="calm-fs-card">${CALM_FILTER_ORDER.map(id => tog(id, p.show[id] !== false)).join('')}</div>
+                    <div class="calm-fs-group">조회</div>
+                    <div class="calm-fs-card">${tog('holiday', p.holiday)}</div>
+                    <div class="px-3 pb-3 pt-1" style="padding-bottom:calc(12px + env(safe-area-inset-bottom, 0px))"><button type="button" id="calm-filter-save" onclick="calmSaveFilterPick()" class="w-full py-3.5 rounded-xl bg-gray-900 text-white font-semibold">저장</button></div>`;
+            }
+        }
+        function calmSetFilterOpt(k, v) { const p = calmFilterPrefs(); p[k] = v; calmSaveFilterPrefs(p); }
+        function calmSaveFilterPick() {
+            const p = calmFilterPrefs();
+            document.querySelectorAll('#calm-filter-body input[data-filter-cal]').forEach(t => {
+                if (t.dataset.filterCal === 'holiday') p.holiday = t.checked;
+                else if (t.checked) delete p.show[t.dataset.filterCal]; else p.show[t.dataset.filterCal] = false;
+            });
+            // 지금 고른 캘린더(위 줄)를 껐으면 전체로
+            const sel = document.getElementById('calendar-filter-cal'); if (sel && sel.value && p.show[sel.value] === false) sel.value = '';
+            calmSaveFilterPrefs(p);
+            calmFilterPage = 'main'; calmRenderFilterSheet();
         }
 
         // ---------- 캘린더 리스트 (2026-11-12 다니엘님 샘플) ----------

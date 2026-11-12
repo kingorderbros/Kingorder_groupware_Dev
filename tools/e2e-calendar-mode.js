@@ -286,6 +286,61 @@ srv.listen(PORT, async () => {
             await m2.close();
         }
 
+        // ---------- 설정 › 필터 설정 (11/12 다니엘님 샘플) ----------
+        console.log('[F] 필터 설정 — 표시할 캘린더 · 공휴일 · 이름 표시 · 펼칠 때 줄 수');
+        {
+            const m = await openPage(br, base + '?mode=calendar', 390, 800);
+            await m.evaluate(u => { try { localStorage.removeItem('kobCalmFilter.v1'); localStorage.setItem('kobCalmView.v1', 'list'); } catch (e) { } enterApp(u); }, ADMIN);
+            await m.evaluate(seedSchedules);
+            const r = await m.evaluate(() => {
+                const out = {};
+                const vis = el => !!el && !el.classList.contains('hidden') && getComputedStyle(el).display !== 'none' && el.getBoundingClientRect().width > 0;
+                calmOpenSettings();
+                document.getElementById('calm-open-filter').click();
+                const sheet = document.getElementById('calm-filter-sheet');
+                out.open = vis(sheet) && /필터 설정/.test(sheet.innerText) && /필터 이름 표시/.test(sheet.innerText) && /표시할 줄 수/.test(sheet.innerText);
+                out.listAll = Array.from(sheet.querySelectorAll('[data-filter-row]')).map(x => x.dataset.filterRow).join();
+                document.getElementById('calm-filter-pick-btn').click();
+                const toggles = Array.from(sheet.querySelectorAll('input[data-filter-cal]'));
+                out.toggles = toggles.map(t => t.dataset.filterCal + (t.checked ? '+' : '-')).join();
+                toggles.find(t => t.dataset.filterCal === 'install-as').checked = false;
+                toggles.find(t => t.dataset.filterCal === 'holiday').checked = false;
+                document.getElementById('calm-filter-save').click();
+                out.listAfter = Array.from(sheet.querySelectorAll('[data-filter-row]')).map(x => x.dataset.filterRow).join();
+                calmCloseFilterSheet();
+                const sids = Array.from(document.querySelectorAll('#cal-grid [data-sid]')).map(c => c.dataset.sid).sort().join();
+                out.hidden = sids === 'e2e-a,e2e-b';
+                out.legend = !document.querySelector('#calendar-legend [onclick="filterCalendarBy(&quot;install-as&quot;)"], #calendar-legend [onclick*="install-as"]');
+                out.holidayOff = gwHolidayName('2026-12-25') === '';
+                out.saved = JSON.parse(localStorage.getItem('kobCalmFilter.v1') || '{}');
+                // 이름 표시 끄기 · 줄 수
+                calmOpenFilterSheet();
+                const nm = document.getElementById('calm-filter-names'); nm.checked = false; nm.dispatchEvent(new Event('change'));
+                const rows = document.getElementById('calm-filter-rows'); rows.value = '3'; rows.dispatchEvent(new Event('change'));
+                calmCloseFilterSheet();
+                const chip = document.querySelector('#calendar-legend [onclick*="sales-share"]');
+                out.noNames = !!chip && !/영업/.test(chip.innerText);
+                calmToggleLegend();
+                const lg = document.getElementById('calendar-legend');
+                out.expanded = lg.classList.contains('calm-legend-open') && getComputedStyle(lg).flexWrap === 'wrap' && parseInt(getComputedStyle(lg).maxHeight) >= 3 * 30;
+                return out;
+            });
+            ok(r.open, '설정 › 필터 설정 창 (필터 이름 표시 · 표시할 줄 수)');
+            ok(r.listAll === 'sales-share,install-as,company,team,personal,birthday,holiday', `처음 필터 리스트 = 캘린더 6개 + 공휴일 (얻음 ${r.listAll})`);
+            ok(r.toggles === 'sales-share+,install-as+,company+,team+,personal+,birthday+,holiday+', `표시할 필터를 선택 — 처음엔 모두 켜짐 (얻음 ${r.toggles})`);
+            ok(r.listAfter === 'sales-share,company,team,personal,birthday', `저장하면 필터 리스트에 켠 것만 (얻음 ${r.listAfter})`);
+            ok(r.hidden, '끈 캘린더(설치/AS) 일정은 목록에서 빠짐');
+            ok(r.legend, '끈 캘린더는 필터 줄에서도 빠짐');
+            ok(r.holidayOff, '공휴일을 끄면 공휴일 표시 없음');
+            ok(r.saved && r.saved.show && r.saved.show['install-as'] === false && r.saved.holiday === false, '이 기기에 저장');
+            ok(r.noNames, '필터 이름 표시를 끄면 아이콘만');
+            ok(r.expanded, '필터 영역을 펼치면 고른 줄 수(3줄)까지');
+            if (SHOTS) { await m.evaluate(() => calmOpenFilterSheet()); await m.screenshot({ path: `${SHOTS}/filter-390.png` }); await m.evaluate(() => { document.getElementById('calm-filter-pick-btn').click(); }); await m.screenshot({ path: `${SHOTS}/filter-pick-390.png` }); }
+            ok(m.__errs.length === 0, '스크립트 오류 없음 ' + m.__errs.join(' | '));
+            await m.evaluate(() => { try { localStorage.removeItem('kobCalmFilter.v1'); } catch (e) { } });
+            await m.close();
+        }
+
         // ---------- Task 4: 초대 알림 ----------
         console.log('[4] 입력창에서 저장하면 새 참석자에게 초대 알림');
         {
