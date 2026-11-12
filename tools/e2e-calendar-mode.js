@@ -264,7 +264,7 @@ srv.listen(PORT, async () => {
                 calmOpenCalList(); document.querySelector('#calm-bar [data-view="sched"]').click(); out.schedBtn = currentCalendarView === 'day3' && !document.getElementById('sec-calendar-center').classList.contains('calm-list-open');
                 return out;
             });
-            ok(r.bar === '일정,캘린더,,오늘,설정', `아래 줄 = 일정 · 캘린더 · + · 오늘 · 설정 (얻음 ${r.bar})`);
+            ok(r.bar === '캘린더,일정,,오늘,설정', `아래 줄 = 캘린더 · 일정 · + · 오늘 · 설정 (얻음 ${r.bar})`);
             ok(r.opts === 'month:월간|day:시간 단위(1일)|day3:시간 단위(3일)|list:리스트|week:주간', `표시 방법 5가지 (얻음 ${r.opts})`);
             ok(r.checked === 'list', '처음은 리스트');
             ok(r.view === 'day3' && r.saved === 'day3' && r.closed, '고르면 바로 그 방법으로 · 이 기기에 저장 · 설정 창 닫힘');
