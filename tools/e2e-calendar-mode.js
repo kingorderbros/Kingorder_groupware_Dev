@@ -341,6 +341,42 @@ srv.listen(PORT, async () => {
             await m.close();
         }
 
+        // ---------- 위쪽 [필터] = 필터 설정 창 (11/12 다니엘님: 하나로 합치기) ----------
+        console.log('[F2] 위쪽 필터 단추 → 필터 설정 · 부서 고르기');
+        {
+            const m = await openPage(br, base + '?mode=calendar', 390, 800);
+            await m.evaluate(u => { try { localStorage.removeItem('kobCalmFilter.v1'); localStorage.setItem('kobCalmView.v1', 'list'); } catch (e) { } enterApp(u); }, ADMIN);
+            await m.evaluate(seedSchedules);
+            await m.tap('#calm-filter-btn');
+            const r = await m.evaluate(() => {
+                const vis = el => !!el && !el.classList.contains('hidden') && getComputedStyle(el).display !== 'none' && el.getBoundingClientRect().width > 0;
+                const out = {};
+                out.sheet = vis(document.getElementById('calm-filter-sheet'));
+                out.headHidden = !vis(document.getElementById('cal-head'));
+                out.btnOff = !document.getElementById('calm-filter-btn').classList.contains('calm-filter-on');
+                const dept = document.getElementById('calm-filter-dept');
+                out.deptOpts = dept ? Array.from(dept.options).map(o => o.value).includes('sales') : false;
+                dept.value = 'sales'; dept.dispatchEvent(new Event('change'));
+                calmCloseFilterSheet();
+                out.applied = (document.getElementById('calendar-filter-dept') || {}).value === 'sales'
+                    && Array.from(document.querySelectorAll('#cal-grid [data-sid]')).map(c => c.dataset.sid).join() === 'e2e-b';
+                out.btnOn = document.getElementById('calm-filter-btn').classList.contains('calm-filter-on');
+                out.saved = (JSON.parse(localStorage.getItem('kobCalmFilter.v1') || '{}')).dept === 'sales';
+                return out;
+            });
+            ok(r.sheet && r.headHidden, '위쪽 [필터] → 필터 설정 창 (예전 고르는 칸은 안 펼침)');
+            ok(r.deptOpts, '필터 설정에 부서 고르기');
+            ok(r.applied, '부서를 고르면 그 부서 일정만');
+            ok(r.btnOff && r.btnOn, '필터가 걸리면 [필터] 단추 강조');
+            ok(r.saved, '고른 부서는 이 기기에 저장');
+            await m.close();
+            const m2 = await openPage(br, base + '?mode=calendar', 390, 800);
+            await m2.evaluate(u => enterApp(u), ADMIN);
+            ok(await m2.evaluate(() => (document.getElementById('calendar-filter-dept') || {}).value) === 'sales', '다시 열어도 고른 부서 유지');
+            await m2.evaluate(() => { try { localStorage.removeItem('kobCalmFilter.v1'); localStorage.removeItem('kobCalmView.v1'); } catch (e) { } });
+            await m2.close();
+        }
+
         // ---------- 위 줄 고정 — 페이지 전체가 시계 뒤로 밀려 올라가지 않게 (11/12 다니엘님) ----------
         console.log('[S] 위 제목 줄 고정 · 아래 내용만 넘김');
         {

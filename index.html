@@ -128,7 +128,7 @@
         html[data-mode="calendar"] .calm-brand { font-weight: 800; font-size: 17px; letter-spacing: -.01em; }
         html[data-mode="calendar"] .calm-brand i { color: #f472b6; margin-right: 4px; }
         html[data-mode="calendar"] .calm-icon-btn { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 8px; font-size: 13px; background: rgba(255,255,255,.12); color: inherit; }
-        html[data-mode="calendar"] #sec-calendar-center.calm-filters-open #calm-filter-btn { background: #f472b6; color: #1e293b; }
+        html[data-mode="calendar"] #calm-filter-btn.calm-filter-on { background: #f472b6; color: #1e293b; }
         html[data-mode="calendar"] #main-scroll { padding: 0 0 calc(68px + env(safe-area-inset-bottom, 0px)) 0; }
         html[data-mode="calendar"] #cal-head { display: none; }
         html[data-mode="calendar"] #sec-calendar-center.calm-filters-open #cal-head { display: flex; margin: 0; padding: 10px 12px; background: #fff; border-bottom: 1px solid #e5e7eb; }
@@ -3726,7 +3726,7 @@
                                 <button type="button" id="calm-cur-cal" onclick="calmOpenCalList()" class="calm-cur-cal">전체 캘린더 <i class="fas fa-caret-down"></i></button>
                             </div>
                             <div class="flex items-center gap-2">
-                                <button type="button" id="calm-filter-btn" onclick="calmToggleFilters()" class="calm-icon-btn" title="필터"><i class="fas fa-filter"></i><span>필터</span></button>
+                                <button type="button" id="calm-filter-btn" onclick="calmOpenFilterSheet()" class="calm-icon-btn" title="필터"><i class="fas fa-filter"></i><span>필터</span></button>
                             </div>
                         </div>
                     </div>
@@ -12092,7 +12092,7 @@ const QUOTE_TEMPLATES = [
             
             // 새로고침이면 보던 화면으로, 아니면 접근 가능한 첫 번째 메뉴로 자동 이동
             const availableMenus = document.querySelectorAll('.nav-item:not(.hidden)');
-            if (isCalendarMode()) { navigate('calendar-center', document.getElementById('nav-calendar-center')); calmSyncBar(); scrollCalendarToToday(); }   // 킹오더일정 — 언제나 일정 화면
+            if (isCalendarMode()) { navigate('calendar-center', document.getElementById('nav-calendar-center')); calmApplyFilterPrefs(); calmSyncBar(); scrollCalendarToToday(); }   // 킹오더일정 — 언제나 일정 화면
             else if (restoreLastPage()) { /* 보던 화면 그대로 */ }
             else if (availableMenus.length > 0) {
                 const firstMenu = availableMenus[0];
@@ -20261,9 +20261,24 @@ const QUOTE_TEMPLATES = [
         function calmFilterPrefs() {
             let p = null; try { p = JSON.parse(localStorage.getItem('kobCalmFilter.v1') || 'null'); } catch (e) { p = null; }
             p = (p && typeof p === 'object') ? p : {};
-            return { show: (p.show && typeof p.show === 'object') ? p.show : {}, holiday: p.holiday !== false, names: p.names !== false, rows: Math.min(6, Math.max(1, Number(p.rows) || 4)) };
+            return { show: (p.show && typeof p.show === 'object') ? p.show : {}, holiday: p.holiday !== false, names: p.names !== false, rows: Math.min(6, Math.max(1, Number(p.rows) || 4)), dept: typeof p.dept === 'string' ? p.dept : '' };
         }
-        function calmSaveFilterPrefs(p) { try { localStorage.setItem(CALM_FILTER_KEY, JSON.stringify(p)); } catch (e) { /* 이번만 */ } calmApplyLegendRows(); renderCalendar(); }
+        function calmSaveFilterPrefs(p) { try { localStorage.setItem(CALM_FILTER_KEY, JSON.stringify(p)); } catch (e) { /* 이번만 */ } calmApplyFilterPrefs(); }
+        // 저장한 부서 · 줄 수를 화면에 얹고 다시 그립니다 · [필터] 단추 강조 (꺼 둔 캘린더 · 공휴일 · 부서가 있으면)
+        function calmApplyFilterPrefs() {
+            const p = calmFilterPrefs();
+            const ds = document.getElementById('calendar-filter-dept');
+            if (ds) { if (p.dept && !Array.from(ds.options).some(o => o.value === p.dept)) { /* 없는 부서면 전체 */ } else ds.value = p.dept; }
+            calmApplyLegendRows();
+            const on = !!p.dept || !p.holiday || Object.values(p.show).some(v => v === false);
+            const btn = document.getElementById('calm-filter-btn'); if (btn) btn.classList.toggle('calm-filter-on', on);
+            renderCalendar();
+        }
+        function calmDeptOptionsHtml(cur) {
+            const ds = document.getElementById('calendar-filter-dept');
+            const opts = ds ? Array.from(ds.options).map(o => [o.value, o.textContent]) : [['', '전체 부서']];
+            return opts.map(([v, t]) => `<option value="${escapeHtml(v)}" ${v === (cur || '') ? 'selected' : ''}>${escapeHtml(t)}</option>`).join('');
+        }
         function calmCalShown(id) { return calmFilterPrefs().show[id] !== false; }
         function calmApplyLegendRows() { const lg = document.getElementById('calendar-legend'); if (lg) lg.style.setProperty('--calm-rows', calmFilterPrefs().rows); }
         function calmToggleLegend() { calmApplyLegendRows(); const lg = document.getElementById('calendar-legend'); if (lg) lg.classList.toggle('calm-legend-open'); }
@@ -20291,6 +20306,12 @@ const QUOTE_TEMPLATES = [
                         <label class="calm-fs-row">필터 이름 표시<span class="ml-auto calm-switch"><input type="checkbox" id="calm-filter-names" ${p.names ? 'checked' : ''} onchange="calmSetFilterOpt('names', this.checked)"><span></span></span></label>
                         <label class="calm-fs-row">필터 영역 확대 시 표시할 줄 수
                             <select id="calm-filter-rows" class="ml-auto bg-transparent text-gray-500 text-[15px]" onchange="calmSetFilterOpt('rows', Number(this.value))">${[1, 2, 3, 4, 5, 6].map(n => `<option value="${n}" ${p.rows === n ? 'selected' : ''}>${n}줄</option>`).join('')}</select></label>
+                    </div>
+                    <div class="calm-fs-group">부서</div>
+                    <div class="calm-fs-card">
+                        <label class="calm-fs-row">표시할 부서
+                            <select id="calm-filter-dept" class="ml-auto bg-transparent text-gray-600 text-[15px] max-w-[55%]" onchange="calmSetFilterOpt('dept', this.value)">${calmDeptOptionsHtml(p.dept)}</select></label>
+                        ${manageableScheduleDepts().length ? `<button type="button" class="calm-fs-row" onclick="calmCloseFilterSheet(); openScheduleTypeModal(document.getElementById('calendar-filter-dept').value)"><i class="fas fa-sliders text-gray-500"></i>구분 관리<i class="fas fa-chevron-right ml-auto text-gray-300"></i></button>` : ''}
                     </div>
                     <div class="calm-fs-group">필터 리스트</div>
                     <div class="calm-fs-card">${shown.length ? shown.map(id => `<div class="calm-fs-row" data-filter-row="${id}">${calmFilterIcon(id)}<span class="truncate">${escapeHtml(nameOf(id))}</span></div>`).join('') : '<div class="calm-fs-row text-gray-400">표시할 필터가 없습니다</div>'}</div>
