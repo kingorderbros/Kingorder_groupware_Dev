@@ -13,7 +13,7 @@ const i = html.indexOf(START), j = html.indexOf(END, i);
 if (i < 0 || j < 0) { console.error('index.html 에서 음성 일정 해석 부분을 찾지 못했습니다.'); process.exit(1); }
 const ctx = { Date, JSON, Math, String, Number, Array, Object, RegExp, Set };
 vm.createContext(ctx);
-vm.runInContext(html.slice(i, j) + ';globalThis.__p = parseVoiceSchedule; globalThis.__yn = parseVoiceYesNo; globalThis.__step = voiceDialogStep; globalThis.__sum = voiceSummary;', ctx);
+vm.runInContext(html.slice(i, j) + ';globalThis.__p = parseVoiceSchedule; globalThis.__yn = parseVoiceYesNo; globalThis.__step = voiceDialogStep; globalThis.__sum = voiceSummary; globalThis.__fa = findVoiceAttendees;', ctx);
 const NOW = new Date(2026, 10, 12, 9, 0);          // 2026-11-12 (목) 09:00
 const NAMES = ['김영업', '박설치', '이팀장', '정장훈', '최영'];
 const P = (t) => ctx.__p(t, { now: NOW, names: NAMES, me: '정장훈' });
@@ -140,6 +140,33 @@ ok(u.state.step === 'detail?' && /네 또는 아니요/.test(u.say), '네 · 아
 // 그만
 ok(ctx.__step(a.state, '취소', O).action === 'end', '취소 → 마침');
 ok(/종일/.test(ctx.__sum({ date: '2026-11-14', allDay: true, title: '워크숍', attendees: [] })), '종일 일정 읽기');
+
+console.log('[참석자 — 이름만 말하기 · 덧붙인 말 (11/12 아이폰 시험 반영)]');
+const N2 = ['김영업', '이수지', '박수지', '박민수', '최지원', '정장훈'];
+const FA = (t) => ctx.__fa(t, N2, '정장훈');
+['김영업 추가해 줘', '김영업 초대해줘', '참석자로 김영업', '김영업 등록해 주세요', '네 김영업 님이요', '김영업 넣어 주세요',
+ '김영업 참석자로 추가해 주세요', '김영업도 넣어줘', '김영업 씨 불러 줘', '김영업이랑 같이 가요', '김영업 님 참석이요', '김영업 한 명이요', '김영업 추가할게요'
+].forEach(t => { const r = FA(t); ok(r.found.join() === '김영업' && !r.missing.length && !(r.ambiguous || []).length, `'${t}' → 김영업 추가만, 찾지 못했다는 말 없음 (${show(r)})`); });
+['민수', '민수야', '민수는', '민수 씨랑', '민수한테', '민수에게', '민수 님이요', '민수도', '민수 추가해 줘'].forEach(t => { const r = FA(t); ok(r.found.join() === '박민수' && !r.missing.length, `이름만 '${t}' → 박민수 (${show(r)})`); });
+var r2 = FA('수지');
+ok(!r2.found.length && !r2.missing.length && (r2.ambiguous || []).length === 1 && r2.ambiguous[0].names.join() === '이수지,박수지', `같은 이름 두 명 → 찾지 못함이 아니라 '여러 명' (${show(r2)})`);
+ok(FA('홍길동').missing.join() === '홍길동', '명단에 없는 이름은 찾지 못함');
+ok(FA('민수하고 홍길동').found.join() === '박민수' && FA('민수하고 홍길동').missing.join() === '홍길동', '있는 이름 + 없는 이름은 둘 다 알려 줌');
+const O2 = { now: NOW, names: N2, me: '정장훈' };
+let q1 = ctx.__step(ctx.__step(ctx.__step(null, null, O2).state, '내일 오후 3시 미팅', O2).state, '네', O2);
+let q2 = ctx.__step(q1.state, '수지', O2);
+ok(/수지 님이 여러 명입니다/.test(q2.say) && /이수지, 박수지/.test(q2.say) && !/찾지 못했습니다/.test(q2.say) && q2.state.step === 'att', `여러 명이면 성까지 다시 물음 (${q2.say})`);
+let q3 = ctx.__step(q2.state, '이수지', O2);
+ok(q3.state.draft.attendees.join() === '이수지' && /이수지 님을 참석자로 추가했습니다/.test(q3.say), '성까지 말하면 추가');
+let q4 = ctx.__step(q1.state, '김영업 추가해 줘', O2);
+ok(/김영업 님을 참석자로 추가했습니다/.test(q4.say) && !/찾지 못했습니다/.test(q4.say), `추가와 찾지 못함이 함께 나오지 않음 (${q4.say})`);
+const P2 = (t) => ctx.__p(t, O2);
+var v1 = P2('내일 오후 3시 미팅 민수 초대');
+ok(v1.attendees.join() === '박민수' && v1.title === '미팅', `처음 말에서도 이름만으로 참석자 (${show(v1)})`);
+var v2 = P2('내일 3시 민수랑 미팅');
+ok(v2.attendees.join() === '박민수' && v2.title === '미팅', `'민수랑' → 참석자 (${show(v2)})`);
+var v3 = P2('내일 3시 설치 지원');
+ok(!v3.attendees.length && v3.title === '설치 지원', `보통 낱말(지원)은 '초대 · 랑' 없이는 사람으로 보지 않음 (${show(v3)})`);
 
 console.log(`\n=========== 통과 ${pass} · 실패 ${fail} ===========`);
 process.exit(fail ? 1 : 0);

@@ -20348,6 +20348,16 @@ const QUOTE_TEMPLATES = [
                 const re = new RegExp(n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*(님|씨)?\\s*(이랑|랑|과|와|하고|이)?(?=\\s|$)', 'g');
                 if (re.test(t)) { t = t.replace(re, ' '); if (n !== o.me) found.add(n); }
             });
+            // 성 없이 이름만 — '민수랑 · 민수 님' 처럼 붙인 말이 있거나 '초대 · 참석 · 같이 · 함께' 를 말했을 때만 (보통 낱말과 헷갈리지 않게)
+            const given = {};
+            names.forEach(n => { if (n === o.me || n.length < 3) return; [n.slice(1), n.length === 4 ? n.slice(2) : null].filter(Boolean).forEach(g => { (given[g] = given[g] || []).push(n); }); });
+            const askWord = /(초대|참석|같이|함께)/.test(t);
+            t = t.split(' ').map(w => {
+                const m = w.match(/^([가-힣]{2,3}?)(님|씨)?(이랑|랑|하고|과|와|도)?$/);
+                if (!m || !given[m[1]] || given[m[1]].length !== 1) return w;
+                if (!(m[2] || m[3] || askWord)) return w;
+                found.add(given[m[1]][0]); return '';
+            }).join(' ');
             const attendees = names.filter(n => found.has(n));
             // 5) 제목 — 남은 말에서 부탁하는 말 · 초대 같은 낱말을 뺍니다
             t = t.replace(/\s(일정\s*)?(을|를)?\s*(등록|추가|생성|만들어|잡아|넣어)\s*(해)?\s*(줘요|줘|주세요|줄래)?(?=\s|$)/g, ' ')
@@ -20367,21 +20377,42 @@ const QUOTE_TEMPLATES = [
             if (/^((네|넵|예|응|웅|어|엉)(?=\s|$|요)|그래|그렇게|좋아|좋습니다|맞아|맞습니다|오케이|ok(?=\s|$)|yes(?=\s|$)|등록|해\s*줘|해\s*주세요)/i.test(t)) return 'yes';
             return null;
         }
-        // 참석자 이름 찾기 — 직원 명단(조직도)에서. 성 없이 이름만 말해도 한 사람이면 찾습니다. → { found:[이름], missing:[말한 이름] }
+        // 참석자 이름 찾기 — 직원 명단(조직도)에서. 성 없이 이름만 말해도 한 사람이면 찾습니다.
+        //   → { found:[이름], missing:[명단에 없는 이름], ambiguous:[{ tok, names }] (같은 이름이 여러 명) }
+        //   "추가해 줘 · 참석자로 · 님이요" 같은 덧붙인 말은 이름으로 보지 않습니다 (11/12 '찾지 못했습니다'가 함께 나오던 오류).
+        const VOICE_JOSA = ['이랑', '랑', '하고', '한테', '에게', '께', '과', '와', '이요', '이에요', '예요', '이야', '야', '은', '는', '이', '가', '도', '을', '를', '요', '만'];
+        const VOICE_NOT_NAME_WORD = /^(그리고|그럼|그냥|이렇게|저렇게|그분|그|저|나|제가|저도|분|사람|명|한|두|세|네|넵|예|응|어|엉|해|줘|님|씨|도|요|만|또|더|다|모두|전부|일단|우선|아|음|그래|맞아|좋아|오케이|참석자|참석|추가|초대|등록|같이|함께|부탁)$/;
+        const VOICE_NOT_NAME_HEAD = /^(참석|추가|초대|등록|넣|빼|불러|같이|함께|그리고|부탁|주세|해줘|해주)/;
+        const VOICE_VERB_TAIL = /(해|해요|해줘|줘|줘요|주세요|주세|합니다|할게|할게요|할래|하자|하겠|시켜|불러|넣어|가요|가자|있어|없어|입니다)$/;
+        function voiceNameCandidates(w) {
+            const out = [w];
+            const strip = (x) => VOICE_JOSA.filter(j => x.length > j.length && x.endsWith(j)).map(j => x.slice(0, -j.length));
+            strip(w).forEach(x => out.push(x));
+            out.slice().forEach(x => { if (/(님|씨)$/.test(x) && x.length > 1) out.push(x.slice(0, -1)); });
+            return [...new Set(out)].filter(x => /^[가-힣]{2,4}$/.test(x));
+        }
         function findVoiceAttendees(text, names, me) {
             const list = (names || []).filter(Boolean);
             let t = ' ' + String(text || '').replace(/[.,!?·]/g, ' ').replace(/\s+/g, ' ') + ' ';
-            const found = [], missing = [];
+            const found = [], missing = [], ambiguous = [];
             const add = (n) => { if (n !== me && !found.includes(n)) found.push(n); };
             list.slice().sort((a, b) => b.length - a.length).forEach(n => { if (t.includes(n)) { add(n); t = t.split(n).join(' '); } });
-            const STOP = /^(그리고|참석자|참석|추가|초대|같이|함께|그럼|그냥|그|저|나|제가|그분|분|사람|명|해줘|해주세요|하고|이랑|랑|님|씨|도|요|넣어줘|넣어|해|줘|주세요)$/;
-            t.split(' ').forEach(w => {
-                let tok = w.replace(/(님|씨)?(이랑|랑|하고|과|와|이|도|을|를|요)?$/, '').replace(/(님|씨)$/, '');
-                if (!/^[가-힣]{2,4}$/.test(tok) || STOP.test(tok) || STOP.test(w)) return;
-                const hit = list.filter(n => n.length > tok.length && n.endsWith(tok));
-                if (hit.length === 1) add(hit[0]); else if (!missing.includes(tok)) missing.push(tok);
+            t.split(' ').filter(Boolean).forEach(w => {
+                if (VOICE_NOT_NAME_WORD.test(w) || VOICE_NOT_NAME_HEAD.test(w)) return;
+                const cands = voiceNameCandidates(w).filter(c => !VOICE_NOT_NAME_WORD.test(c));
+                for (const c of cands) {
+                    const hit = list.filter(n => n !== me && n.length > c.length && n.endsWith(c));
+                    if (hit.length === 1) { add(hit[0]); return; }
+                    if (hit.length > 1) { if (!ambiguous.some(x => x.tok === c)) ambiguous.push({ tok: c, names: hit }); return; }
+                }
+                if (VOICE_VERB_TAIL.test(w) || VOICE_JOSA.includes(w)) return;
+                let core = w.replace(/^(님|씨)/, '');      // '님이요 · 씨랑 · 명이요' 처럼 붙인 말만 남은 조각은 건너뜀
+                for (let k = 0; k < 3; k++) { const j = VOICE_JOSA.find(x => core.length > x.length && core.endsWith(x)); if (!j) break; core = core.slice(0, -j.length); }
+                if (core.length < 2 || VOICE_JOSA.includes(core) || VOICE_NOT_NAME_WORD.test(core)) return;
+                const tok = cands[cands.length - 1];          // 덧붙인 말을 뗀 가장 짧은 꼴
+                if (tok && !missing.includes(tok) && !list.includes(tok) && tok !== me) missing.push(tok);
             });
-            return { found, missing };
+            return { found, missing, ambiguous };
         }
         // 일정 읽어 주기 — "11월 13일 오후 3시, 강남 고객사 미팅. 참석자 김영업."
         function voiceSummary(d) {
@@ -20451,19 +20482,22 @@ const QUOTE_TEMPLATES = [
                     if (yn === 'no') { s.attDone = true; return next(); }
                     if (yn === 'yes') return ask('att');
                     const f = findVoiceAttendees(txt, o.names, o.me);   // "김영업" 처럼 이름을 바로 말하면 바로 찾기
-                    if (!f.found.length && !f.missing.length) return reaskYN();
+                    if (!f.found.length && !f.missing.length && !f.ambiguous.length) return reaskYN();
                     s.step = 'att';
                     return voiceDialogStep(s, txt, o);
                 }
                 case 'att': {
                     const f = findVoiceAttendees(txt, o.names, o.me);
-                    if (!f.found.length && !f.missing.length) return { state: s, say: '이름을 알아듣지 못했습니다. ' + Q.att, listen: true, action: null };
+                    if (!f.found.length && !f.missing.length && !f.ambiguous.length) return { state: s, say: '이름을 알아듣지 못했습니다. ' + Q.att, listen: true, action: null };
                     const added = f.found.filter(n => !s.draft.attendees.includes(n));
                     added.forEach(n => s.draft.attendees.push(n));
                     const msg = [];
                     if (added.length) msg.push(`${added.join(', ')} 님을 참석자로 추가했습니다.`);
                     f.missing.forEach(n => { const c = n.charCodeAt(n.length - 1) - 0xAC00; msg.push(`참석자 ${n}${c >= 0 && c < 11172 && c % 28 ? '을' : '를'} 그룹웨어에서 찾지 못했습니다.`); });
-                    s.step = 'att?'; s.silent = 0;
+                    f.ambiguous.forEach(x => msg.push(`${x.tok} 님이 여러 명입니다. ${x.names.join(', ')} 중에서 성까지 말씀해 주세요.`));
+                    s.silent = 0;
+                    if (f.ambiguous.length) { s.step = 'att'; return { state: s, say: msg.join(' '), listen: true, action: null, added, missing: f.missing }; }
+                    s.step = 'att?';
                     return { state: s, say: msg.join(' ') + ' 참석자를 더 지정하시겠어요?', listen: true, action: null, added, missing: f.missing };
                 }
                 case 'detail?':
