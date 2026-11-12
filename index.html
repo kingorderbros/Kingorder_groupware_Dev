@@ -20658,7 +20658,7 @@ const QUOTE_TEMPLATES = [
                 const go = () => {
                     try {
                         const u = new SpeechSynthesisUtterance(text); u.lang = 'ko-KR'; u.rate = 1.0; u.volume = 1;
-                        try { const v = (ss.getVoices() || []).find(x => /^ko/i.test(x.lang)); if (v) u.voice = v; } catch (e) { }
+                        // 목소리는 고르지 않음 — 휴대폰 기본 한국어 목소리(첫 질문 목소리). 목록 첫 한국어 목소리는 Eddy 같은 기계음일 수 있음 (11/12 다니엘님)
                         u.onstart = () => { started = true; };
                         u.onend = end; u.onerror = end;
                         try { ss.resume(); } catch (e) { }
