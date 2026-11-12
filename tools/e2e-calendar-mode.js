@@ -428,6 +428,72 @@ srv.listen(PORT, async () => {
             await m.close();
         }
 
+        // ---------- 받아쓰기가 멈춰 끝나지 않을 때 (11/12 다니엘님 "멈춰서 안 움직임") ----------
+        console.log('[A2] 음성 — 받아쓰기가 끝나지 않으면 멈추지 않고 키보드 받아쓰기로');
+        {
+            const m = await openPage(br, base + '?mode=calendar', 390, 800);
+            await m.evaluate(u => { try { localStorage.setItem('kobCalmLab.v1', '{"voice":true}'); } catch (e) { } enterApp(u); }, ADMIN);
+            const r = await m.evaluate(async () => {
+                const vis = el => !!el && !el.classList.contains('hidden') && getComputedStyle(el).display !== 'none' && el.getBoundingClientRect().width > 0;
+                const out = {};
+                // 아이폰 홈 화면 앱처럼: start() 는 되지만 아무 소식도 오지 않음 (onresult · onend 없음)
+                let started = 0, aborted = 0;
+                class Hang { start() { started++; } stop() { } abort() { aborted++; } }
+                window.SpeechRecognition = Hang; window.webkitSpeechRecognition = Hang;
+                window.CALM_VOICE_WAIT_MS = 300;
+                document.getElementById('calm-voice-fab').click();
+                await new Promise(r => setTimeout(r, 80));
+                out.listening = /듣고 있습니다/.test(document.getElementById('calm-voice-status').textContent);
+                out.stopBtn = /멈추기/.test(document.getElementById('calm-voice-listen').textContent);
+                await new Promise(r => setTimeout(r, 600));
+                out.started = started; out.aborted = aborted;
+                out.fallback = /키보드/.test(document.getElementById('calm-voice-status').textContent);
+                out.noPulse = !document.getElementById('calm-voice-fab').classList.contains('listening');
+                out.retryBtn = /다시 듣기/.test(document.getElementById('calm-voice-listen').textContent);
+                out.remember = (JSON.parse(localStorage.getItem('kobCalmLab.v1') || '{}')).voiceNative === false;
+                // 직접 입력 후 [일정 만들기] 는 그대로 됨
+                const ta = document.getElementById('calm-voice-text');
+                ta.value = '내일 오후 3시 미팅'; ta.dispatchEvent(new Event('input'));
+                document.getElementById('calm-voice-make').click();
+                await new Promise(r => setTimeout(r, 200));
+                out.modal = vis(document.getElementById('schedule-modal')) && document.getElementById('schedule-title').value === '미팅';
+                closeScheduleModal();
+                // 다음에 열 때는 바로 키보드 안내 (기다리지 않음) · [다시 듣기] 로 다시 시도 가능
+                started = 0;
+                document.getElementById('calm-voice-fab').click();
+                await new Promise(r => setTimeout(r, 80));
+                out.second = started === 0 && /키보드/.test(document.getElementById('calm-voice-status').textContent) && vis(document.getElementById('calm-voice-listen'));
+                calmCloseVoice();
+                // [멈추기] 를 누르면 바로 멈춤
+                const p = calmLabPrefs(); delete p.voiceNative; localStorage.setItem('kobCalmLab.v1', JSON.stringify(p));
+                window.CALM_VOICE_WAIT_MS = 60000;
+                document.getElementById('calm-voice-fab').click();
+                await new Promise(r => setTimeout(r, 80));
+                document.getElementById('calm-voice-listen').click();
+                await new Promise(r => setTimeout(r, 80));
+                out.stopped = !document.getElementById('calm-voice-fab').classList.contains('listening') && !/듣고 있습니다/.test(document.getElementById('calm-voice-status').textContent);
+                calmCloseVoice();
+                // 정상 받아쓰기: 말이 끝나면 내용이 채워짐
+                class Good { start() { setTimeout(() => { this.onresult && this.onresult({ results: [[{ transcript: '모레 오전 10시 교육' }]] }); setTimeout(() => this.onend && this.onend(), 30); }, 50); } stop() { } abort() { } }
+                window.SpeechRecognition = Good; window.webkitSpeechRecognition = Good; window.CALM_VOICE_WAIT_MS = 300;
+                document.getElementById('calm-voice-fab').click();
+                await new Promise(r => setTimeout(r, 500));
+                out.good = document.getElementById('calm-voice-text').value === '모레 오전 10시 교육' && /일정 만들기/.test(document.getElementById('calm-voice-status').textContent) && /교육/.test(document.getElementById('calm-voice-preview').textContent);
+                out.goodRemember = (JSON.parse(localStorage.getItem('kobCalmLab.v1') || '{}')).voiceNative !== false;
+                calmCloseVoice();
+                return out;
+            });
+            ok(r.listening && r.stopBtn, `듣는 동안 '듣고 있습니다' · 단추는 [멈추기] (${JSON.stringify(r)})`);
+            ok(r.started === 1 && r.aborted >= 1 && r.fallback && r.noPulse && r.retryBtn, '소식이 없으면 스스로 멈추고 키보드 받아쓰기 안내 · [다시 듣기]');
+            ok(r.remember, '이 기기에서 안 되는 것을 기억');
+            ok(r.modal, '직접 입력해도 [일정 만들기] 됨');
+            ok(r.second, '다음부터는 기다리지 않고 바로 키보드 안내 ([다시 듣기] 로 다시 시도 가능)');
+            ok(r.stopped, '[멈추기] 를 누르면 바로 멈춤');
+            ok(r.good && r.goodRemember, '정상 받아쓰기는 그대로 채워짐');
+            ok(m.__errs.length === 0, '스크립트 오류 없음 ' + m.__errs.join(' | '));
+            await m.close();
+        }
+
         // ---------- [오늘] = 날짜별 목록을 오늘 위치로 (11/12 다니엘님) ----------
         console.log('[T] 아래 줄 [오늘] → 날짜별 목록 · 오늘');
         {

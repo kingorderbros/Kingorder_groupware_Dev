@@ -20332,34 +20332,78 @@ const QUOTE_TEMPLATES = [
 
         // ---------- 실험실 (2026-11-12) — 시험 중인 기능 켬/끔, 이 기기에 기억 ----------
         function calmLabPrefs() { try { const p = JSON.parse(localStorage.getItem('kobCalmLab.v1') || '{}'); return (p && typeof p === 'object') ? p : {}; } catch (e) { return {}; } }
-        function calmSetLab(k, v) { const p = calmLabPrefs(); p[k] = !!v; try { localStorage.setItem('kobCalmLab.v1', JSON.stringify(p)); } catch (e) { } calmApplyLab(); }
+        function calmSetLabValue(k, v) { const p = calmLabPrefs(); p[k] = v; try { localStorage.setItem('kobCalmLab.v1', JSON.stringify(p)); } catch (e) { } }
+        function calmSetLab(k, v) { calmSetLabValue(k, !!v); calmApplyLab(); }
         function calmApplyLab() {
             const on = isCalendarMode() && calmLabPrefs().voice === true;
             const fab = document.getElementById('calm-voice-fab'); if (fab) fab.classList.toggle('hidden', !on);
             const sw = document.getElementById('calm-lab-voice'); if (sw) sw.checked = calmLabPrefs().voice === true;
         }
         // 음성 받아쓰기 — 되는 브라우저(안드로이드 크롬 · 사파리)는 🎤 로 바로, 안 되면(아이폰 홈 화면 앱 등) 키보드의 🎤 받아쓰기로
-        let calmRec = null;
+        // 11/12 다니엘님 "멈춰서 안 움직임": 아이폰 홈 화면 앱 등에서 받아쓰기가 시작만 되고 아무 소식이 없음
+        //   → 정해진 시간 안에 말이 안 들어오면 스스로 멈추고 키보드 받아쓰기 안내 · 이 기기에서 안 되는 것을 기억(voiceNative:false)
+        let calmRec = null, calmRecTimer = 0;
         function calmSpeechCtor() { return window.SpeechRecognition || window.webkitSpeechRecognition || null; }
+        function calmVoiceWaitMs() { return Number(window.CALM_VOICE_WAIT_MS) || 7000; }
+        function calmVoiceKeyboardHint(msg) {
+            const st = document.getElementById('calm-voice-status'), ta = document.getElementById('calm-voice-text');
+            st.innerHTML = (msg ? escapeHtml(msg) + '<br>' : '') + '아래 칸을 누르고 <b>키보드의 🎤(받아쓰기)</b> 로 말해 주세요.';
+            setTimeout(() => { try { ta.focus(); } catch (e) { } }, 100);
+        }
+        function calmVoiceSetListening(on) {
+            document.getElementById('calm-voice-fab').classList.toggle('listening', on);
+            const b = document.getElementById('calm-voice-listen');
+            b.innerHTML = on ? '<i class="fas fa-stop mr-1"></i>멈추기' : '<i class="fas fa-microphone mr-1"></i>다시 듣기';
+        }
+        // 듣기를 끝냄 — 브라우저가 onend 를 안 보내도 화면은 반드시 풀립니다
+        function calmVoiceStop(reason) {
+            clearTimeout(calmRecTimer); calmRecTimer = 0;
+            const rec = calmRec; calmRec = null;
+            if (rec) { rec.onresult = rec.onerror = rec.onend = null; try { rec.abort(); } catch (e) { } }
+            const el = document.getElementById('calm-voice-fab'); if (!el) return;
+            calmVoiceSetListening(false);
+            const ta = document.getElementById('calm-voice-text'), st = document.getElementById('calm-voice-status');
+            if (reason === 'silent') { calmSetLabValue('voiceNative', false); calmVoiceKeyboardHint('이 화면에서는 바로 받아쓰기가 되지 않습니다.'); }
+            else if (reason === 'error') { /* 안내는 onerror 가 씀 */ }
+            else if (ta.value.trim()) st.textContent = '아래 내용이 맞는지 확인하고 [일정 만들기] 를 누르세요. 고칠 곳은 칸에서 바로 고칠 수 있습니다.';
+            else st.textContent = '멈췄습니다. [다시 듣기] 를 누르거나 직접 입력해 주세요.';
+        }
         function calmOpenVoice() {
             const ta = document.getElementById('calm-voice-text'); ta.value = ''; calmVoicePreview();
             document.getElementById('calm-voice-sheet').classList.remove('hidden');
-            if (calmSpeechCtor()) calmVoiceListen();
-            else { document.getElementById('calm-voice-status').innerHTML = '이 화면에서는 바로 받아쓰기를 쓸 수 없습니다. 아래 칸을 누르고 <b>키보드의 🎤(받아쓰기)</b> 로 말해 주세요.'; document.getElementById('calm-voice-listen').classList.add('hidden'); setTimeout(() => ta.focus(), 100); }
+            const lb = document.getElementById('calm-voice-listen');
+            lb.classList.toggle('hidden', !calmSpeechCtor()); calmVoiceSetListening(false);
+            if (calmSpeechCtor() && calmLabPrefs().voiceNative !== false) calmVoiceListen();
+            else calmVoiceKeyboardHint(calmSpeechCtor() ? '이 기기에서는 바로 받아쓰기가 잘 되지 않았습니다. [다시 듣기] 로 다시 시도할 수 있습니다.' : '이 화면에서는 바로 받아쓰기를 쓸 수 없습니다.');
         }
-        function calmCloseVoice() { try { if (calmRec) calmRec.abort(); } catch (e) { } calmRec = null; document.getElementById('calm-voice-fab').classList.remove('listening'); document.getElementById('calm-voice-sheet').classList.add('hidden'); }
+        function calmCloseVoice() { calmVoiceStop('close'); document.getElementById('calm-voice-sheet').classList.add('hidden'); }
         function calmVoiceListen() {
+            if (calmRec) { calmVoiceStop('user'); return; }        // 듣는 중에 누르면 [멈추기]
             const C = calmSpeechCtor(); const st = document.getElementById('calm-voice-status'); const ta = document.getElementById('calm-voice-text');
             if (!C) return;
-            try { if (calmRec) calmRec.abort(); } catch (e) { }
-            const rec = new C(); calmRec = rec;
+            let rec; try { rec = new C(); } catch (e) { calmVoiceKeyboardHint('받아쓰기를 시작하지 못했습니다.'); return; }
+            calmRec = rec; let heard = false;
             rec.lang = 'ko-KR'; rec.interimResults = true; rec.continuous = false;
             st.innerHTML = '<i class="fas fa-circle text-red-500 animate-pulse mr-1"></i>듣고 있습니다… 일정을 말해 주세요.';
-            document.getElementById('calm-voice-fab').classList.add('listening');
-            rec.onresult = (e) => { ta.value = Array.from(e.results).map(r => r[0].transcript).join(' '); calmVoicePreview(); };
-            rec.onerror = (e) => { st.textContent = e.error === 'not-allowed' ? '마이크 사용이 허용되지 않았습니다. 휴대폰 설정에서 마이크를 허용하거나, 키보드의 🎤 로 말해 주세요.' : '잘 듣지 못했습니다. [다시 듣기] 를 누르거나 직접 입력해 주세요.'; };
-            rec.onend = () => { document.getElementById('calm-voice-fab').classList.remove('listening'); if (calmRec === rec) { calmRec = null; if (ta.value.trim()) st.textContent = '아래 내용이 맞는지 확인하고 [일정 만들기] 를 누르세요. 고칠 곳은 칸에서 바로 고칠 수 있습니다.'; } };
-            try { rec.start(); } catch (e) { st.textContent = '받아쓰기를 시작하지 못했습니다. 키보드의 🎤 로 말해 주세요.'; }
+            calmVoiceSetListening(true);
+            const arm = (ms, why) => { clearTimeout(calmRecTimer); calmRecTimer = setTimeout(() => { if (calmRec === rec) calmVoiceStop(why); }, ms); };
+            arm(calmVoiceWaitMs(), 'silent');                      // 말이 하나도 안 들어오면 → 키보드 받아쓰기로
+            rec.onresult = (e) => {
+                if (calmRec !== rec) return;
+                ta.value = Array.from(e.results).map(r => r[0].transcript).join(' '); calmVoicePreview();
+                if (!heard) { heard = true; calmSetLabValue('voiceNative', true); }
+                arm(4000, 'done');                                  // 말이 멈추고 4초 지나도 안 끝나면 여기서 마침
+            };
+            rec.onerror = (e) => {
+                if (calmRec !== rec) return;
+                const err = e && e.error;
+                if (err === 'no-speech' || err === 'aborted') { calmVoiceStop(heard ? 'done' : 'user'); return; }
+                calmVoiceStop('error');
+                if (err === 'not-allowed' || err === 'service-not-allowed') { calmSetLabValue('voiceNative', false); calmVoiceKeyboardHint('마이크 사용이 허용되지 않았습니다. 휴대폰 설정에서 마이크를 허용하거나,'); }
+                else st.textContent = '잘 듣지 못했습니다. [다시 듣기] 를 누르거나 직접 입력해 주세요.';
+            };
+            rec.onend = () => { if (calmRec === rec) calmVoiceStop('done'); };
+            try { rec.start(); } catch (e) { calmVoiceStop('error'); calmVoiceKeyboardHint('받아쓰기를 시작하지 못했습니다.'); }
         }
         function calmVoiceParse() {
             return parseVoiceSchedule(document.getElementById('calm-voice-text').value, { now: new Date(), names: pickableUsers().map(u => u.name), me: currentUserName });
