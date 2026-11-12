@@ -341,6 +341,35 @@ srv.listen(PORT, async () => {
             await m.close();
         }
 
+        // ---------- 위 줄 고정 — 페이지 전체가 시계 뒤로 밀려 올라가지 않게 (11/12 다니엘님) ----------
+        console.log('[S] 위 제목 줄 고정 · 아래 내용만 넘김');
+        {
+            const m = await openPage(br, base + '?mode=calendar', 390, 700);
+            await m.evaluate(u => { try { localStorage.setItem('kobCalmView.v1', 'list'); } catch (e) { } enterApp(u); }, ADMIN);
+            await m.evaluate(() => { const d = new Date(); d.setDate(1); for (let k = 0; k < 25; k++) { const x = new Date(d); x.setDate(1 + k); schedules.push({ id: 'sc-' + k, title: '넘김 시험 ' + k, date: ymd(x), startTime: '10:00', calendar: 'team', dept: 'admin', salesperson: '정장훈', attendees: [] }); } renderCalendar(); });
+            const r = await m.evaluate(async () => {
+                const ms = document.getElementById('main-scroll');
+                const out = {};
+                out.docFits = document.documentElement.scrollHeight <= innerHeight + 1 && document.body.scrollHeight <= innerHeight + 1;
+                window.scrollTo(0, 500); document.scrollingElement.scrollTop = 500;
+                out.docStays = (document.scrollingElement.scrollTop || 0) === 0;
+                out.bodyLocked = getComputedStyle(document.body).overflow === 'hidden';
+                ms.scrollTop = 400; await new Promise(r => setTimeout(r, 50));
+                out.inner = ms.scrollTop > 0;
+                const top = document.getElementById('calm-top').getBoundingClientRect();
+                out.topFixed = Math.abs(top.top) <= 1 && top.height > 30;
+                const bar = document.getElementById('calm-bar').getBoundingClientRect();
+                out.barBottom = Math.abs(bar.bottom - innerHeight) <= 1;
+                return out;
+            });
+            ok(r.docFits && r.bodyLocked && r.docStays, `페이지 전체는 움직이지 않음 (${JSON.stringify(r)})`);
+            ok(r.inner, '일정 내용 칸만 넘겨짐');
+            ok(r.topFixed, '내용을 넘겨도 위 제목 줄은 맨 위에 고정');
+            ok(r.barBottom, '아래 줄은 맨 아래에 고정');
+            await m.evaluate(() => { try { localStorage.removeItem('kobCalmView.v1'); } catch (e) { } });
+            await m.close();
+        }
+
         // ---------- Task 4: 초대 알림 ----------
         console.log('[4] 입력창에서 저장하면 새 참석자에게 초대 알림');
         {

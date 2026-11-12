@@ -117,7 +117,13 @@
         html[data-mode="calendar"] #sidebar, html[data-mode="calendar"] #app-view header { display: none !important; }
         .calm-only { display: none; }
         html[data-mode="calendar"] .calm-hide { display: none !important; }
-        html[data-mode="calendar"] #calm-top { display: block; position: sticky; top: env(safe-area-inset-top, 0px); z-index: 12; background: #1e293b; color: #fff; padding: 10px 14px; padding-top: calc(10px + env(safe-area-inset-top, 0px)); margin-top: calc(-1 * env(safe-area-inset-top, 0px)); }
+        /* 페이지 전체는 고정하고 일정 칸(#main-scroll)만 넘깁니다 — 아이폰 사파리에서 100vh 가 보이는 높이보다 커서
+           페이지째 시계(상태 표시줄) 뒤로 밀려 올라가던 문제 (2026-11-12 다니엘님). 로그인 화면은 키보드 때문에 그대로 둡니다. */
+        html[data-mode="calendar"]:has(#app-view:not(.hidden)), html[data-mode="calendar"]:has(#app-view:not(.hidden)) body { height: 100%; overflow: hidden; overscroll-behavior: none; }
+        html[data-mode="calendar"] #app-view { height: 100vh; height: 100dvh; }
+        html[data-mode="calendar"] #app-view > main { height: 100%; }
+        html[data-mode="calendar"] #main-scroll { overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+        html[data-mode="calendar"] #calm-top { display: block; position: sticky; top: 0; z-index: 12; background: #1e293b; color: #fff; padding: 10px 14px; padding-top: calc(10px + env(safe-area-inset-top, 0px)); }
         html[data-mode="calendar"] .calm-top-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
         html[data-mode="calendar"] .calm-brand { font-weight: 800; font-size: 17px; letter-spacing: -.01em; }
         html[data-mode="calendar"] .calm-brand i { color: #f472b6; margin-right: 4px; }
