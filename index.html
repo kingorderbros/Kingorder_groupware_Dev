@@ -14448,7 +14448,7 @@ const QUOTE_TEMPLATES = [
             document.getElementById('arc-view-body').innerHTML = `
                 ${x.body ? `<p class="text-sm text-gray-700 whitespace-pre-line mb-4">${escapeHtml(x.body)}</p>` : ''}
                 ${files.length ? `
-                <p class="text-xs font-semibold text-gray-500 mb-2"><i class="fas fa-paperclip mr-1"></i>첨부파일 ${files.length}개</p>
+                <p class="text-xs font-semibold text-gray-500 mb-2"><i class="fas fa-paperclip mr-1"></i>첨부파일 ${files.length}개${gwZipBtnHtml(files.map(f => ({ name: f.name, url: kobFiles.src(f, { download: true }) })), x.title || '자료실')}</p>
                 <div class="space-y-2">
                     ${files.map(f => archiveIsImage(f)
                         ? `<div class="rounded border border-gray-200 overflow-hidden">
@@ -16672,7 +16672,7 @@ const QUOTE_TEMPLATES = [
             }).join('');
 
             return `<div class="pt-1">
-                <p class="text-gray-500 font-medium mb-1"><i class="fas fa-paperclip mr-1 text-blue-500"></i>첨부자료 ${files.length ? `(${files.length}건)` : ''}</p>
+                <p class="text-gray-500 font-medium mb-1"><i class="fas fa-paperclip mr-1 text-blue-500"></i>첨부자료 ${files.length ? `(${files.length}건)` : ''}${gwZipBtnHtml(files.map(f => ({ name: f.name, url: f.url })), `${req.title || '협업'}_완료자료`, { after: () => collabZipAfter(req.id, 'complete') })}</p>
                 ${files.length ? `<ul class="space-y-1">${rows}</ul>` : '<p class="text-xs text-gray-400 bg-white border border-blue-100 rounded px-2 py-2">첨부된 자료가 없습니다.</p>'}
                 ${canAdd ? `<button type="button" onclick="event.stopPropagation(); pickCollabCompleteFiles(${jsArg(req.id)})" class="mt-1.5 px-2.5 py-1 bg-white border border-blue-200 text-blue-700 hover:bg-blue-50 rounded text-xs font-semibold"><i class="fas fa-plus mr-1"></i>자료 추가 첨부</button>` : ''}
             </div>`;
@@ -16709,7 +16709,7 @@ const QUOTE_TEMPLATES = [
             }).join('');
 
             return `<div class="bg-indigo-50 border border-indigo-100 rounded p-3">
-                <p class="text-indigo-700 font-semibold mb-1"><i class="fas fa-paperclip mr-1"></i>요청 첨부자료 ${files.length ? `(${files.length}건)` : ''}</p>
+                <p class="text-indigo-700 font-semibold mb-1"><i class="fas fa-paperclip mr-1"></i>요청 첨부자료 ${files.length ? `(${files.length}건)` : ''}${gwZipBtnHtml(files.map(f => ({ name: f.name, url: f.url })), `${req.title || '협업'}_요청자료`, { after: () => collabZipAfter(req.id, 'request') })}</p>
                 ${files.length ? `<ul class="space-y-1">${rows}</ul>` : '<p class="text-xs text-gray-400 bg-white border border-indigo-100 rounded px-2 py-2">첨부된 자료가 없습니다.</p>'}
                 ${canAdd ? `<button type="button" onclick="event.stopPropagation(); pickCollabRequestFiles(${jsArg(req.id)})" class="mt-1.5 px-2.5 py-1 bg-white border border-indigo-200 text-indigo-700 hover:bg-indigo-50 rounded text-xs font-semibold"><i class="fas fa-plus mr-1"></i>자료 추가 첨부</button>` : ''}
             </div>`;
@@ -24353,6 +24353,7 @@ const QUOTE_TEMPLATES = [
                 </div>
                 <div class="flex gap-3"><span class="w-20 shrink-0 text-gray-500 font-medium">산출물명</span><span class="flex-1 text-gray-800 min-w-0">${w.deliverable ? escapeHtml(w.deliverable) : '<span class="text-gray-400">-</span>'}</span></div>
                 <div class="flex gap-3"><span class="w-20 shrink-0 text-gray-500 font-medium">포맷</span><span class="flex-1 min-w-0">${fmt || '<span class="text-gray-400">지정 없음 (모든 형식 업로드 가능)</span>'}</span></div>
+                ${files.length > 1 ? `<div class="flex justify-end">${gwZipBtnHtml(files.map(f => ({ name: f.name, url: f.url })), `${p.name || '프로젝트'}_${w.name || '산출물'}`, { cls: '' })}</div>` : ''}
                 ${files.length ? `<ul class="space-y-1">${files.map(f => wbsFileRowHtml(p, w, f, canEdit)).join('')}</ul>` : ''}
                 ${wbsDeliverableLinks(w).length ? `<ul class="space-y-1">${wbsDeliverableLinks(w).map(l => wbsLinkRowHtml(p, w, l, canEdit)).join('')}</ul>` : ''}
                 ${(files.length || wbsDeliverableLinks(w).length) ? '' : `<p class="text-xs ${st.key === 'missing' ? 'text-red-600 font-semibold' : 'text-gray-400'} bg-gray-50 border border-dashed border-gray-200 rounded p-3 text-center">${st.key === 'missing' ? '등록된 결과물이 없습니다. 완료 처리하려면 파일을 업로드하거나 링크를 등록해야 합니다.' : '등록된 결과물 파일 · 링크가 없습니다.'}</p>`}
@@ -24583,6 +24584,7 @@ const QUOTE_TEMPLATES = [
                                 <button type="button" onclick="openWbsLinkModal(${jsArg(p.id)},${jsArg(w.id)})" class="px-2.5 py-1.5 bg-white border border-blue-300 text-blue-700 hover:bg-blue-50 rounded text-xs font-semibold"><i class="fas fa-link mr-1"></i>링크</button>
                             </span>` : ''}
                         </div>
+                        ${files.length > 1 ? `<div class="flex justify-end mt-2">${gwZipBtnHtml(files.map(f => ({ name: f.name, url: f.url })), `${p.name || '프로젝트'}_${w.name || '산출물'}`, { cls: '' })}</div>` : ''}
                         ${files.length ? `<ul class="space-y-1 mt-2">${files.map(f => wbsFileRowHtml(p, w, f, canEdit)).join('')}</ul>` : ''}
                         ${wbsDeliverableLinks(w).length ? `<ul class="space-y-1 mt-2">${wbsDeliverableLinks(w).map(l => wbsLinkRowHtml(p, w, l, canEdit)).join('')}</ul>` : ''}
                     </div>`;
@@ -55064,7 +55066,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                             </p>
                             <div class="rounded-lg border ${tone} px-3 py-2">
                                 <p class="text-sm text-gray-800 whitespace-pre-wrap break-words">${escapeHtml(m.text)}</p>
-                                ${(m.files || []).length ? `<div class="flex flex-wrap gap-1.5 mt-2">${m.files.map(f => devFileChipHtml(f, '')).join('')}</div>` : ''}
+                                ${(m.files || []).length ? `<div class="flex flex-wrap gap-1.5 mt-2">${m.files.map(f => devFileChipHtml(f, '')).join('')}${gwZipBtnHtml(m.files.map(f => ({ name: f.name, url: f.dataUrl })), `${x.title || '개발요청'}_${m.at || ''}`, { cls: '' })}</div>` : ''}
                             </div>
                         </div>
                     </div>`;
@@ -55180,7 +55182,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
 
                 ${(x.docs || []).length ? `
                 <div class="mt-3 rounded border border-cyan-200 bg-cyan-50/60 p-3">
-                    <p class="text-sm font-bold text-cyan-900 mb-2"><i class="fas fa-paperclip mr-1"></i>의뢰서 문서 ${(x.docs || []).length}건</p>
+                    <p class="text-sm font-bold text-cyan-900 mb-2"><i class="fas fa-paperclip mr-1"></i>의뢰서 문서 ${(x.docs || []).length}건${gwZipBtnHtml(x.docs.map(f => ({ name: f.name, url: f.dataUrl })), `${x.title || '개발요청'}_의뢰서`)}</p>
                     <div class="flex flex-wrap gap-1.5">${x.docs.map(f => devFileChipHtml(f, '')).join('')}</div>
                 </div>` : ''}
 
@@ -55482,7 +55484,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
 
                     ${(x.docs || []).length ? `
                     <div class="mt-3 rounded border border-indigo-200 bg-indigo-50/60 p-3">
-                        <p class="text-sm font-bold text-indigo-900 mb-2"><i class="fas fa-paperclip mr-1"></i>의뢰서 문서 ${(x.docs || []).length}건</p>
+                        <p class="text-sm font-bold text-indigo-900 mb-2"><i class="fas fa-paperclip mr-1"></i>의뢰서 문서 ${(x.docs || []).length}건${gwZipBtnHtml(x.docs.map(f => ({ name: f.name, url: f.dataUrl })), `${x.title || '개발요청'}_의뢰서`)}</p>
                         <div class="flex flex-wrap gap-1.5">${x.docs.map(f => devFileChipHtml(f, '')).join('')}</div>
                     </div>` : ''}
 
@@ -60974,6 +60976,59 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                 sc.onerror = () => no(new Error('JSZip'));
                 document.head.appendChild(sc);
             });
+        }
+        // ---------- 첨부 일괄 다운로드 (2026-11-12) ----------
+        // 파일이 2개 이상인 첨부 목록에 [일괄 다운로드] 단추를 붙입니다 — 압축 파일(zip) 한 개로 받습니다.
+        // 그릴 때 목록을 담아 두고 번호로 부릅니다. 압축 도구를 못 불러오거나 파일 하나라도 못 받으면 하나씩 내려받습니다.
+        //   files: [{ name, url }]  ·  zipName: 압축 파일 이름(.zip 빼고)  ·  opts.after: 받은 뒤 할 일
+        const gwZipSets = new Map();
+        let gwZipSeq = 0;
+        function gwZipBtnHtml(files, zipName, opts) {
+            const list = (files || []).filter(f => f && safeFileUrl(f.url));
+            if (list.length < 2) return '';
+            const key = 'z' + (++gwZipSeq);
+            gwZipSets.set(key, { list, zipName: zipName || '첨부', after: opts && opts.after });
+            if (gwZipSets.size > 300) gwZipSets.delete(gwZipSets.keys().next().value);
+            return `<button type="button" data-zip-all="${list.length}" onclick="event.stopPropagation(); gwZipDownload('${key}', this)" class="${(opts && opts.cls) || 'ml-2'} inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-medium rounded border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 align-middle whitespace-nowrap" title="첨부 ${list.length}개를 압축 파일 하나로 받습니다"><i class="fas fa-file-zipper"></i>일괄 다운로드 (${list.length}개)</button>`;
+        }
+        async function gwZipDownload(key, btn) {
+            const set = gwZipSets.get(key);
+            if (!set) { alert('목록이 바뀌었습니다. 창을 다시 열어 주세요.'); return; }
+            const safe = (n) => String(n || 'file').replace(/[\\/:*?"<>|]+/g, '_').slice(0, 120);
+            const label = btn ? btn.innerHTML : '';
+            if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>압축 중…'; }
+            try {
+                const JSZip = await loadJsZip();
+                const zip = new JSZip();
+                const used = {};
+                for (const it of set.list) {
+                    let nm = safe(it.name);
+                    if (used[nm]) nm = nm.replace(/(\.[^.]*)?$/, `_${++used[nm]}$1`); else used[nm] = 1;
+                    const res = await fetch(safeFileUrl(it.url), { credentials: 'same-origin' });
+                    if (!res.ok) throw new Error('file ' + res.status);
+                    zip.file(nm, await res.blob());
+                }
+                downloadBlobAs(await zip.generateAsync({ type: 'blob' }), `${safe(set.zipName).slice(0, 60)}_첨부.zip`);
+            } catch (e) {
+                set.list.forEach((it, i) => setTimeout(() => {
+                    const a = document.createElement('a');
+                    a.href = safeFileUrl(it.url); a.download = safe(it.name);
+                    document.body.appendChild(a); a.click(); a.remove();
+                }, i * 400));
+            } finally {
+                if (btn && btn.isConnected) { btn.disabled = false; btn.innerHTML = label; }
+            }
+            if (typeof set.after === 'function') { try { set.after(); } catch (e) { /* 무시 */ } }
+        }
+        // 협업 첨부를 일괄로 받으면 하나씩 열어 본 것과 같이 '확인함' 으로 남깁니다
+        function collabZipAfter(reqId, kind) {
+            const req = collabRequests.find(r => r.id === reqId);
+            if (!req) return;
+            const viewerSide = kind === 'request' ? isCollabHandlerSide(req) : isCollabRequesterSide(req);
+            if (!viewerSide) return;
+            let changed = false;
+            (kind === 'request' ? req.requestFiles : req.completeFiles || []).forEach(f => { if (!f.viewedAt) { f.viewedBy = currentUserName || ''; f.viewedAt = ymd(new Date()); changed = true; } });
+            if (changed && !document.getElementById('collab-detail-modal').classList.contains('hidden')) openCollabDetailModal(reqId);
         }
         async function downloadPartnerIntakeFiles(id) {
             const x = partnerIntakeById(id);
