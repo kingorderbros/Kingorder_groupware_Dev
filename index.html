@@ -3747,7 +3747,7 @@
                     <!-- 킹오더일정 실험실 — 음성 안내로 묻고 답하기 (2026-11-12 다니엘님) -->
                     <div id="calm-talk-sheet" class="hidden calm-sheet-wrap" onclick="if(event.target===this)calmCloseTalk()">
                         <div class="calm-sheet">
-                            <div class="calm-sheet-head"><b><i class="fas fa-comments mr-1 text-pink-600"></i>음성 안내로 일정 만들기</b><button type="button" onclick="calmCloseTalk()" class="calm-icon-btn" title="닫기"><i class="fas fa-xmark"></i></button></div>
+                            <div class="calm-sheet-head"><b><i class="fas fa-comments mr-1 text-pink-600"></i>음성 안내로 일정 만들기</b><span class="flex gap-2"><button type="button" id="calm-talk-replay" onclick="calmTalkReplay()" class="calm-icon-btn" title="다시 듣기"><i class="fas fa-volume-high"></i></button><button type="button" onclick="calmCloseTalk()" class="calm-icon-btn" title="닫기"><i class="fas fa-xmark"></i></button></span></div>
                             <div class="calm-sheet-body">
                                 <div id="calm-talk-log" class="calm-talk-log"></div>
                                 <p id="calm-talk-hint" class="text-xs text-gray-500 py-1"></p>
@@ -20607,20 +20607,34 @@ const QUOTE_TEMPLATES = [
             el.textContent = msg; el.classList.remove('hidden'); clearTimeout(el._t); el._t = setTimeout(() => el.classList.add('hidden'), 3000);
         }
         // 소리로 읽기 — 끝나면 다음으로. 브라우저가 끝을 안 알려도 글자 수만큼 기다린 뒤 넘어갑니다.
-        function calmSay(text) {
+        //   11/12 "음성으로는 안내가 안 돼?": 아이폰 사파리는 cancel() 바로 뒤의 speak() 를 버리는 일이 있어, 읽는 중일 때만 멈추고 잠깐 뒤 읽습니다.
+        //   읽기가 시작(onstart)되지 않으면 무음 모드 · 음량 안내를 띄웁니다. 목소리 고르기에서 오류가 나도 읽기는 계속합니다.
+        let calmSayLast = '';
+        function calmSay(text, onSilent) {
+            calmSayLast = text;
             return new Promise(res => {
                 const ss = window.speechSynthesis;
                 if (!ss || !window.SpeechSynthesisUtterance || window.CALM_TTS_OFF) return res();
-                let fin = false; const end = () => { if (!fin) { fin = true; clearTimeout(tm); res(); } };
-                const tm = setTimeout(end, 1500 + String(text).length * 180);
-                try {
-                    ss.cancel();
-                    const u = new SpeechSynthesisUtterance(text); u.lang = 'ko-KR'; u.rate = 1.05;
-                    const v = (ss.getVoices() || []).find(x => /^ko/i.test(x.lang)); if (v) u.voice = v;
-                    u.onend = end; u.onerror = end; ss.speak(u);
-                } catch (e) { end(); }
+                let fin = false, started = false;
+                const end = () => { if (!fin) { fin = true; clearTimeout(tm); clearTimeout(chk); res(); } };
+                const tm = setTimeout(end, 2500 + String(text).length * 200);
+                const chk = setTimeout(() => { if (!started && onSilent) onSilent(); }, 2000);
+                const go = () => {
+                    try {
+                        const u = new SpeechSynthesisUtterance(text); u.lang = 'ko-KR'; u.rate = 1.0; u.volume = 1;
+                        try { const v = (ss.getVoices() || []).find(x => /^ko/i.test(x.lang)); if (v) u.voice = v; } catch (e) { }
+                        u.onstart = () => { started = true; };
+                        u.onend = end; u.onerror = end;
+                        try { ss.resume(); } catch (e) { }
+                        ss.speak(u);
+                    } catch (e) { end(); }
+                };
+                if (ss.speaking || ss.pending) { try { ss.cancel(); } catch (e) { } setTimeout(go, 150); }
+                else go();                                           // 누른 그 순간 바로 (아이폰은 손가락으로 누른 때만 첫 소리를 냄)
             });
         }
+        function calmTalkReplay() { if (!calmSayLast) return; calmSay(calmSayLast, calmTalkMuteHint); }
+        function calmTalkMuteHint() { calmTalkHint('소리가 나지 않으면 휴대폰 무음(진동) 모드를 끄고 음량을 올린 뒤 🔊 를 눌러 주세요.'); }
         function calmTalkLog(kind, text) {
             const box = document.getElementById('calm-talk-log'); if (!box || !text) return;
             const p = document.createElement('div'); p.className = kind === 'a' ? 'calm-talk-a' : 'calm-talk-q'; p.textContent = text;
@@ -20652,7 +20666,7 @@ const QUOTE_TEMPLATES = [
             calmTalk.state = res.state; const my = ++calmTalk.seq;
             calmTalkLog('q', res.say);
             calmTalkHint(res.action === 'wait' ? '마이크 단추를 누르고 말하거나, 아래 칸에 입력해 [보내기] 를 눌러 주세요.' : '');
-            calmSay(res.say).then(() => {
+            calmSay(res.say, () => { if (calmTalk && calmTalk.seq === my) calmTalkMuteHint(); }).then(() => {
                 if (!calmTalk || calmTalk.seq !== my) return;
                 if (res.action === 'save') return calmTalkSave(false);
                 if (res.action === 'edit') return calmTalkSave(true);
@@ -20692,7 +20706,6 @@ const QUOTE_TEMPLATES = [
         function calmTalkAnswer(text, fromVoice) {
             if (!calmTalk) return;
             calmTalkStopRec();
-            try { if (!fromVoice && window.speechSynthesis) speechSynthesis.cancel(); } catch (e) { }
             const v = String(text || '').trim();
             document.getElementById('calm-talk-input').value = '';
             calmTalkLog('a', v);

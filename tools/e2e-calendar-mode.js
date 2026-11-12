@@ -577,6 +577,52 @@ srv.listen(PORT, async () => {
             await m.close();
         }
 
+        // ---------- 음성 안내 소리 (11/12 다니엘님 "음성으로는 안내가 안 돼?") ----------
+        console.log('[A4] 음성 안내 — 소리로 읽기');
+        {
+            const m = await openPage(br, base + '?mode=calendar', 390, 800);
+            await m.evaluate(u => { try { localStorage.setItem('kobCalmLab.v1', '{"voice":true,"talk":true}'); } catch (e) { } enterApp(u); }, ADMIN);
+            const r = await m.evaluate(async () => {
+                const sleep = ms => new Promise(r => setTimeout(r, ms));
+                const out = {}; const calls = [];
+                // 가짜 읽기 — 아이폰처럼: 멈추기(cancel) 바로 뒤에 낸 소리는 버려짐 · 무음이면 시작(onstart)이 안 옴
+                let mute = false, lastCancel = -1;
+                const fake = { speaking: false, pending: false, getVoices: () => [{ lang: 'ko-KR', name: 'Yuna' }], resume() { calls.push('resume'); },
+                    cancel() { calls.push('cancel'); lastCancel = calls.length; this.speaking = false; },
+                    speak(u) { const dropped = lastCancel === calls.length; calls.push('speak:' + u.text.slice(0, 8) + (dropped ? '(버려짐)' : '')); if (dropped || mute) return; this.speaking = true; setTimeout(() => { u.onstart && u.onstart(); setTimeout(() => { this.speaking = false; u.onend && u.onend(); }, 30); }, 10); } };
+                Object.defineProperty(window, 'speechSynthesis', { value: fake, configurable: true });
+                window.SpeechRecognition = undefined; window.webkitSpeechRecognition = undefined;
+                document.getElementById('calm-voice-fab').click();
+                out.syncSpeak = calls.some(c => c.startsWith('speak:'));                     // 누른 그 순간 읽기 시작 (아이폰 조건)
+                await sleep(100);
+                out.notDropped = calls.filter(c => c.startsWith('speak:')).every(c => !c.includes('버려짐'));
+                // [네] 를 눌러 다음 질문 — 버려지지 않아야 함
+                document.getElementById('calm-talk-input').value = '내일 오후 3시 미팅'; document.getElementById('calm-talk-send').click();
+                await sleep(300);
+                out.calls = calls.slice();
+                out.second = calls.filter(c => c.startsWith('speak:') && !c.includes('버려짐')).length >= 2;
+                // 다시 듣기 단추
+                const n = calls.length;
+                const rb = document.getElementById('calm-talk-replay');
+                out.replayBtn = !!rb;
+                if (rb) { rb.click(); await sleep(100); }
+                out.replay = calls.slice(n).some(c => c.startsWith('speak:참석자') && !c.includes('버려짐'));
+                // 무음 — 소리가 시작되지 않으면 안내
+                mute = true;
+                document.getElementById('calm-talk-no').click();
+                await sleep(2600);
+                out.muteHint = /무음/.test(document.getElementById('calm-talk-hint').textContent);
+                calmCloseTalk();
+                return out;
+            });
+            ok(r.syncSpeak, '🎤 를 누른 그 순간 읽기 시작 (아이폰은 누른 때만 소리를 냄)');
+            ok(r.notDropped && r.second, `멈추기 바로 뒤에 읽어 버려지는 일 없음 (${JSON.stringify(r.calls)})`);
+            ok(r.replayBtn && r.replay, '[🔊 다시 듣기] 로 마지막 질문을 다시 읽음');
+            ok(r.muteHint, '소리가 시작되지 않으면 무음 모드 · 음량 안내');
+            ok(m.__errs.length === 0, '스크립트 오류 없음 ' + m.__errs.join(' | '));
+            await m.close();
+        }
+
         // ---------- [오늘] = 날짜별 목록을 오늘 위치로 (11/12 다니엘님) ----------
         console.log('[T] 아래 줄 [오늘] → 날짜별 목록 · 오늘');
         {
