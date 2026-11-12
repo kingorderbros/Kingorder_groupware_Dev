@@ -52539,6 +52539,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                     <p class="text-sm font-semibold text-gray-700"><i class="fas fa-list-check text-yellow-500 mr-1"></i>보완 서류 (${p.total}건)</p>
                     <div class="flex items-center gap-2">
                         <p class="text-xs text-gray-500">확인 ${p.accepted} / 확인대기 ${p.uploaded}${payDocCanReview() && p.unseen ? ` <span class="text-amber-600 font-semibold">(미열람 ${p.unseen})</span>` : ''} / 반려 ${p.rejected} / 미제출 ${p.pending}</p>
+${gwZipBtnHtml(r.items.filter(it => it.fileUrl).map(it => ({ name: `${it.name || '서류'}_${it.fileName || 'file'}`, url: it.fileUrl })), `${r.merchant || r.name || r.id}_보완서류`, { cls: '' })}
                         ${canEditItems ? `<button onclick="payDocAddItem(${jsArg(r.id)})" class="text-xs bg-yellow-600 hover:bg-yellow-700 text-white px-2 py-1 rounded whitespace-nowrap"><i class="fas fa-plus mr-1"></i>서류 항목 추가</button>` : ''}
                     </div>
                 </div>

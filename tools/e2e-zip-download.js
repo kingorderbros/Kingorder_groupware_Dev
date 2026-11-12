@@ -30,6 +30,9 @@ srv.listen(8872,async()=>{const br=await pp.launch({executablePath:'/Application
   const old=kobFiles.src;kobFiles.src=(f)=>blobUrl(f.name);
   window.archivePosts=window.archivePosts||[];try{archivePosts.push(Object.assign(arc,{dept:'it',cat:'etc',by:'정장훈',at:'2026-11-12'}));openArchiveView('a1');out.arc=!!document.querySelector('#arc-view-body [data-zip-all="2"]');}catch(e){out.arcErr=String(e);}
   kobFiles.src=old;
+  // 결제본부 보완서류 상세 — 파일 있는 서류 2건 → 단추
+  try{payDocRequests.push({id:'PD-T1',merchant:'시험가맹점',status:'submitted',regType:'pg',priority:'normal',history:[],items:[payDocItem('biz','',{name:'사업자등록증',status:'uploaded',fileName:'a.pdf',fileUrl:blobUrl('a')}),payDocItem('id','',{name:'신분증',status:'uploaded',fileName:'b.pdf',fileUrl:blobUrl('b')}),payDocItem('bank','',{name:'통장사본'})]});
+    openPayDocDetail('PD-T1');const pb=document.querySelector('#paydoc-detail-body [data-zip-all]');out.pay=pb&&pb.getAttribute('data-zip-all');}catch(e){out.payErr=String(e).slice(0,200);}
   // 파일 하나를 못 받으면 나머지만 담고 알림 (오류 내용을 파일로 저장하지 않음)
   got.length=0;const dd=document.createElement('div');dd.innerHTML=gwZipBtnHtml([{name:'있음.txt',url:blobUrl('ok')},{name:'없음.txt',url:'/api/files/missing'}],'일부');
   await gwZipDownload(dd.firstElementChild.getAttribute('onclick').match(/'(z\d+)'/)[1],null);
@@ -45,4 +48,5 @@ srv.listen(8872,async()=>{const br=await pp.launch({executablePath:'/Application
  ok(r.devThread,'개발요청 메시지 첨부 2개 → 단추',r.devThread);
  ok(r.arc,'자료실 글 첨부 2개 → 단추',r);
  ok(JSON.stringify(r.partial)==='["있음.txt"]'&&dlg.some(m=>m.includes('없음.txt')&&m.includes('1개는 압축')),'못 받은 파일은 빼고 이름 알림',{p:r.partial,dlg});
+ ok(r.pay==='2','결제본부 보완서류 상세 파일 2건 → 단추',r);
  ok(errs.length===0,'페이지 오류 없음',errs);console.log(`통과 ${pass} · 실패 ${fail}`);await br.close();srv.close();process.exit(fail?1:0);});
