@@ -494,6 +494,89 @@ srv.listen(PORT, async () => {
             await m.close();
         }
 
+        // ---------- 음성 안내로 묻고 답하기 (11/12 다니엘님 — 시리처럼) ----------
+        console.log('[A3] 음성 안내 — 묻고 답해서 바로 등록');
+        {
+            const m = await openPage(br, base + '?mode=calendar', 390, 800);
+            await m.evaluate(u => {
+                try { localStorage.setItem('kobCalmLab.v1', '{"voice":true}'); } catch (e) { }
+                localUsers.push({ id: 'vu2', name: '박설치', dept: 'ops', level: 'staff', email: 'p@k.co' });
+                enterApp(u);
+            }, ADMIN);
+            const r = await m.evaluate(async () => {
+                const vis = el => !!el && !el.classList.contains('hidden') && getComputedStyle(el).display !== 'none' && el.getBoundingClientRect().width > 0;
+                const sleep = ms => new Promise(r => setTimeout(r, ms));
+                const out = {};
+                window.CALM_TTS_OFF = true;
+                calmOpenSettings();
+                const sw = document.getElementById('calm-lab-talk');
+                out.switch = !!sw && !sw.checked;
+                sw.checked = true; sw.dispatchEvent(new Event('change')); calmCloseSettings();
+                // 차례대로 대답하는 가짜 받아쓰기
+                const answers = ['내일 오후 2시', '청주 매장 키오스크 설치', '네', '박설치랑 홍길동', '아니요', '아니요'];
+                class Fake { start() { const a = answers.shift(); setTimeout(() => { if (a == null) return; this.onresult && this.onresult({ results: [[{ transcript: a }]] }); setTimeout(() => this.onend && this.onend(), 20); }, 30); } stop() { } abort() { } }
+                window.SpeechRecognition = Fake; window.webkitSpeechRecognition = Fake;
+                const before = schedules.length;
+                document.getElementById('calm-voice-fab').click();
+                await sleep(50);
+                out.sheet = vis(document.getElementById('calm-talk-sheet')) && !vis(document.getElementById('calm-voice-sheet'));
+                for (let k = 0; k < 60 && schedules.length === before; k++) await sleep(50);
+                const log = document.getElementById('calm-talk-log').innerText;
+                out.log = Array.from(document.querySelectorAll('#calm-talk-log > div')).map(x => x.textContent);
+                const s = schedules[schedules.length - 1];
+                const t = new Date(); t.setDate(t.getDate() + 1);
+                out.saved = schedules.length === before + 1 && s.title === '청주 매장 키오스크 설치' && s.date === ymd(t) && s.startTime === '14:00';
+                out.att = (s.attendees || []).map(a => a.name).join();
+                out.cal = s.calendar;
+                out.closed = !vis(document.getElementById('calm-talk-sheet')) && !vis(document.getElementById('schedule-modal'));
+                out.toast = /일정을 등록했습니다/.test((document.getElementById('calm-toast') || {}).textContent || '');
+                // 받아쓰기 없는 기기 — [네] · [아니요] · 입력칸으로
+                window.SpeechRecognition = undefined; window.webkitSpeechRecognition = undefined;
+                const b2 = schedules.length;
+                document.getElementById('calm-voice-fab').click();
+                await sleep(50);
+                out.hint = /키보드/.test(document.getElementById('calm-talk-hint').textContent);
+                const send = async (v) => { document.getElementById('calm-talk-input').value = v; document.getElementById('calm-talk-send').click(); await sleep(40); };
+                await send('모레 오전 10시 강남 고객사 미팅');
+                document.getElementById('calm-talk-no').click(); await sleep(40);        // 참석자 아니요
+                document.getElementById('calm-talk-yes').click(); await sleep(40);       // 세부내용 네
+                await send('견적서 챙기기');
+                out.confirmQ = /이대로 일정을 등록할까요/.test(document.getElementById('calm-talk-log').innerText);
+                document.getElementById('calm-talk-yes').click();
+                for (let k = 0; k < 40 && schedules.length === b2; k++) await sleep(50);
+                const s2 = schedules[schedules.length - 1];
+                out.saved2 = schedules.length === b2 + 1 && s2.title === '강남 고객사 미팅' && s2.startTime === '10:00' && s2.description === '견적서 챙기기';
+                // '아니' → 입력창만 열고 저장 안 함 · 취소 → 닫힘
+                const b3 = schedules.length;
+                document.getElementById('calm-voice-fab').click(); await sleep(40);
+                await send('내일 3시 회의'); document.getElementById('calm-talk-no').click(); await sleep(40);
+                document.getElementById('calm-talk-yes').click(); await sleep(40); await send('자료 준비');
+                document.getElementById('calm-talk-no').click();
+                await sleep(600);
+                out.edit = vis(document.getElementById('schedule-modal')) && schedules.length === b3 && document.getElementById('schedule-title').value === '회의';
+                closeScheduleModal();
+                document.getElementById('calm-voice-fab').click(); await sleep(40);
+                await send('취소'); await sleep(700);
+                out.cancel = !vis(document.getElementById('calm-talk-sheet'));
+                return out;
+            });
+            ok(r.switch, '설정 › 실험실에 음성 안내로 묻고 답하기 (꺼짐)');
+            ok(r.sheet, '켜면 🎤 → 묻고 답하기 창');
+            ok(r.log.some(x => /어떤 내용으로 일정을 잡을까요/.test(x)), '제목을 안 말하면 → 어떤 내용으로 일정을 잡을까요?');
+            ok(r.log.some(x => /참석자를 지정하시겠어요/.test(x)), '참석자를 지정하시겠어요?');
+            ok(r.log.some(x => /박설치 님을 참석자로 추가했습니다/.test(x) && /참석자 홍길동을 그룹웨어에서 찾지 못했습니다/.test(x)), '찾으면 바로 추가 · 없으면 그룹웨어에서 찾지 못했습니다');
+            ok(r.log.some(x => /바로 이 일정으로 등록하겠습니다/.test(x)), '세부내용 아니요 → 바로 이 일정으로 등록하겠습니다');
+            ok(r.saved && r.closed && r.toast, `실제로 등록됨 · 창 닫힘 · 알림 (${JSON.stringify(r.log)})`);
+            ok(r.att === '박설치', `참석자 저장 (${r.att})`);
+            ok(r.cal === 'install-as', `'설치' → 설치/AS 캘린더 (${r.cal})`);
+            ok(r.hint, '받아쓰기가 없는 기기는 [네] · [아니요] · 키보드 🎤 안내');
+            ok(r.confirmQ && r.saved2, '세부내용 → 이대로 일정을 등록할까요? → 네 → 등록 (입력 · 단추로)');
+            ok(r.edit, '이대로 등록할까요? → 아니요 → 입력창만 열고 저장 안 함');
+            ok(r.cancel, "'취소' → 닫힘");
+            ok(m.__errs.length === 0, '스크립트 오류 없음 ' + m.__errs.join(' | '));
+            await m.close();
+        }
+
         // ---------- [오늘] = 날짜별 목록을 오늘 위치로 (11/12 다니엘님) ----------
         console.log('[T] 아래 줄 [오늘] → 날짜별 목록 · 오늘');
         {

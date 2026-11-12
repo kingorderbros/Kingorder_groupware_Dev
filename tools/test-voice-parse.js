@@ -13,7 +13,7 @@ const i = html.indexOf(START), j = html.indexOf(END, i);
 if (i < 0 || j < 0) { console.error('index.html 에서 음성 일정 해석 부분을 찾지 못했습니다.'); process.exit(1); }
 const ctx = { Date, JSON, Math, String, Number, Array, Object, RegExp, Set };
 vm.createContext(ctx);
-vm.runInContext(html.slice(i, j) + ';globalThis.__p = parseVoiceSchedule;', ctx);
+vm.runInContext(html.slice(i, j) + ';globalThis.__p = parseVoiceSchedule; globalThis.__yn = parseVoiceYesNo; globalThis.__step = voiceDialogStep; globalThis.__sum = voiceSummary;', ctx);
 const NOW = new Date(2026, 10, 12, 9, 0);          // 2026-11-12 (목) 09:00
 const NAMES = ['김영업', '박설치', '이팀장', '정장훈', '최영'];
 const P = (t) => ctx.__p(t, { now: NOW, names: NAMES, me: '정장훈' });
@@ -67,6 +67,79 @@ ok(P('내일 오후 3시 정장훈 회의').attendees.length === 0, '나 자신�
 ok(P('내일 최영 김영업 회의').attendees.join() === '김영업,최영', '이름이 겹쳐도(최영) 긴 이름부터 정확히');
 ok(P('내일 오후 3시 일정 등록해 줘').title === '새 일정', "제목이 남지 않으면 '새 일정'");
 ok(P('내일 오후 3시에 미팅 잡아줘').title === '미팅', "'잡아줘' 같은 말은 뺌");
+
+console.log('[날짜 · 시간을 말했는지]');
+r = P('강남 고객사 미팅');
+ok(!r.hasDate && !r.hasTime, `날짜 · 시간 말 없음 (${show(r)})`);
+ok(P('내일 미팅').hasDate && !P('내일 미팅').hasTime, '날짜만');
+ok(!P('오후 3시 미팅').hasDate && P('오후 3시 미팅').hasTime, '시간만');
+ok(P('모레 종일 워크숍').hasTime, "'종일' 도 시간을 말한 것");
+ok(!P('내일 오후 3시').hasTitle && P('내일 오후 3시 미팅').hasTitle, '제목을 말했는지 (hasTitle)');
+
+console.log('[네 · 아니요]');
+['네', '예', '응', '어', '그래', '좋아', '네 등록해 줘', '맞아요', '오케이', '응 그렇게 해'].forEach(t => ok(ctx.__yn(t) === 'yes', `'${t}' → 네`));
+['아니요', '아니', '아뇨', '노', '없어', '괜찮아요', '됐어', '안 할래', '필요 없어'].forEach(t => ok(ctx.__yn(t) === 'no', `'${t}' → 아니요`));
+['취소', '그만', '그만할래'].forEach(t => ok(ctx.__yn(t) === 'cancel', `'${t}' → 그만`));
+ok(ctx.__yn('내일 오후 3시') === null && ctx.__yn('') === null, '그 밖의 말은 모름(null)');
+
+console.log('[묻고 답하기 순서]');
+const O = { now: NOW, names: NAMES, me: '정장훈' };
+let st = ctx.__step(null, null, O);
+ok(st.state.step === 'what' && /어떤 일정/.test(st.say) && st.listen, `처음: 어떤 일정을 잡을까요? (${st.say})`);
+// 제목 · 시간 모두 말함 → 세부내용 물음
+var a = ctx.__step(st.state, '내일 오후 3시 강남 고객사 미팅 김영업 초대', O);
+ok(a.state.step === 'att?' && /참석자 김영업 님\. 참석자를 더 지정하시겠어요/.test(a.say), `다 말하면 → 참석자를 더 지정하시겠어요? (${a.say})`);
+ok(a.state.draft.title === '강남 고객사 미팅' && a.state.draft.startTime === '15:00' && a.state.draft.attendees.join() === '김영업', '받은 내용 기억');
+console.log('[참석자]');
+let p0 = ctx.__step(ctx.__step(st.state, '내일 오후 3시 미팅', O).state, '', O);
+ok(/^잘 듣지 못했습니다\. 참석자를 지정하시겠어요/.test(p0.say), '참석자를 아직 안 말했으면 → 참석자를 지정하시겠어요?');
+let p1 = ctx.__step(a.state, '네', O);
+ok(p1.state.step === 'att' && /참석자 이름을 말씀해/.test(p1.say), '네 → 참석자 이름을 말씀해 주세요');
+let p2 = ctx.__step(p1.state, '박설치랑 홍길동', O);
+ok(p2.state.draft.attendees.join() === '김영업,박설치' && /박설치 님을 참석자로 추가했습니다/.test(p2.say) && /참석자 홍길동을 그룹웨어에서 찾지 못했습니다/.test(p2.say), `찾으면 바로 추가 · 없으면 찾지 못했습니다 (${p2.say})`);
+ok(p2.state.step === 'att?' && /참석자를 더 지정하시겠어요/.test(p2.say), '이어서 → 참석자를 더 지정하시겠어요?');
+ok(/참석자 이수지를 그룹웨어/.test(ctx.__step(p1.state, '이수지', O).say), "받침 없는 이름은 '를' (이수지를)");
+let p3 = ctx.__step(p1.state, '팀장님', O);
+ok(p3.state.draft.attendees.includes('이팀장'), `성 없이 이름만 말해도 찾음 (${p3.say})`);
+let p4 = ctx.__step(a.state, '최영 추가해 줘', O);
+ok(p4.state.draft.attendees.includes('최영') && /최영 님을 참석자로 추가/.test(p4.say), '묻는 때 이름을 바로 말해도 추가');
+ok(ctx.__step(p1.state, '정장훈', O).state.draft.attendees.join() === '김영업', '나 자신은 참석자에 넣지 않음');
+a = ctx.__step(a.state, '아니요', O);
+ok(a.state.step === 'detail?' && /세부내용을 등록하시겠어요/.test(a.say), `참석자 아니요 → 세부내용을 등록하시겠어요? (${a.say})`);
+// 세부내용 아니요 → 바로 등록
+let b = ctx.__step(a.state, '아니요', O);
+ok(b.action === 'save' && /바로 이 일정으로 등록하겠습니다/.test(b.say) && !b.listen, `아니요 → 바로 이 일정으로 등록하겠습니다 (${b.say})`);
+// 세부내용 네 → 받기 → 이대로 등록할까요? → 응 → 등록
+let c = ctx.__step(a.state, '네', O);
+ok(c.state.step === 'detail' && /세부내용을 말씀해/.test(c.say) && c.listen, '네 → 세부내용을 말씀해 주세요');
+let d = ctx.__step(c.state, '견적서 두 부 챙겨 가기', O);
+ok(d.state.step === 'confirm' && d.state.draft.description === '견적서 두 부 챙겨 가기' && /이대로 일정을 등록할까요/.test(d.say), `세부내용 기록 → 이대로 일정을 등록할까요? (${d.say})`);
+ok(/11월 13일/.test(d.say) && /오후 3시/.test(d.say) && /강남 고객사 미팅/.test(d.say), '확인 때 날짜 · 시간 · 제목을 읽어 줌');
+let e = ctx.__step(d.state, '응', O);
+ok(e.action === 'save' && /등록/.test(e.say), '응 → 등록');
+let f = ctx.__step(d.state, '아니', O);
+ok(f.action === 'edit', '이대로 등록할까요? → 아니 → 입력창에서 고치기');
+// 제목을 안 말함 → 어떤 내용으로 일정을 잡을까요?
+let g = ctx.__step(st.state, '내일 오후 2시', O);
+ok(g.state.step === 'title' && /어떤 내용으로 일정을 잡을까요/.test(g.say), `제목 없으면 → 어떤 내용으로 일정을 잡을까요? (${g.say})`);
+let h = ctx.__step(g.state, '청주 매장 키오스크 설치', O);
+ok(h.state.draft.title === '청주 매장 키오스크 설치' && h.state.draft.startTime === '14:00' && h.state.step === 'att?', `제목 기록 후 참석자 물음 (${show(h.state.draft)})`);
+// 날짜 · 시간을 안 말함 → 언제로 잡을까요?
+let w = ctx.__step(st.state, '강남 고객사 미팅', O);
+ok(w.state.step === 'when' && /언제/.test(w.say), `날짜 · 시간 없으면 → 언제로 잡을까요? (${w.say})`);
+let w2 = ctx.__step(w.state, '다음 주 화요일 오전 10시', O);
+ok(w2.state.draft.date === '2026-11-17' && w2.state.draft.startTime === '10:00' && w2.state.draft.title === '강남 고객사 미팅' && w2.state.step === 'att?', '시간 받은 뒤 제목은 그대로');
+// 아무것도 안 말함
+let n1 = ctx.__step(st.state, '', O);
+ok(n1.state.step === 'what' && n1.listen && n1.state.silent === 1, '말이 없으면 한 번 더 물음');
+let n2 = ctx.__step(n1.state, '', O);
+ok(!n2.listen && n2.action === 'wait', '두 번째도 없으면 듣기를 멈추고 기다림 (🎤 · 입력으로 이어 감)');
+// 못 알아들은 네 · 아니요
+let u = ctx.__step(a.state, '음 글쎄', O);
+ok(u.state.step === 'detail?' && /네 또는 아니요/.test(u.say), '네 · 아니요가 아니면 다시 물음');
+// 그만
+ok(ctx.__step(a.state, '취소', O).action === 'end', '취소 → 마침');
+ok(/종일/.test(ctx.__sum({ date: '2026-11-14', allDay: true, title: '워크숍', attendees: [] })), '종일 일정 읽기');
 
 console.log(`\n=========== 통과 ${pass} · 실패 ${fail} ===========`);
 process.exit(fail ? 1 : 0);
