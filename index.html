@@ -13789,9 +13789,11 @@ const QUOTE_TEMPLATES = [
             } else if (sectionId === 'ops-work-center') {
                 renderWorkCenter('ops');
                 if (wcTabSwitch) setWorkType('ops', wcTabSwitch);   // 들어온 메뉴에 맞는 탭으로 (고객조회 접기·펼치기 포함)
+                if (element && !window.__gwNavSilent) wcScrollTop('ops');   // 메뉴로 들어오면 맨 위부터 (2026-11-12)
             } else if (sectionId === 'sales-work-center') {
                 renderWorkCenter('sales');
                 if (wcTabSwitch) setWorkType('sales', wcTabSwitch);
+                if (element && !window.__gwNavSilent) wcScrollTop('sales');
             } else if (sectionId === 'sales-supply') {
                 renderSupplyCenter();
             } else if (sectionId === 'payment-work-center') {
@@ -27453,8 +27455,16 @@ const QUOTE_TEMPLATES = [
             }).join('');
         }
 
+        // 업무센터 아래 칸(업무이력 · 작성칸)을 맨 위로 (2026-11-12) — 탭 · 메뉴를 옮기거나 작성을 마치면 위에서부터 보이게
+        function wcScrollTop(key) {
+            const box = wcEl(key, 'scroll');
+            if (box) box.scrollTop = 0;
+            const ms = document.getElementById('main-scroll');
+            if (ms) ms.scrollTop = 0;
+        }
         function setWorkType(key, typeId) {
             if (!canSeePage(wcTypePerm(key, typeId))) return;   // 권한 없는 탭으로의 우회 호출 차단
+            if (wcState[key].activeType !== typeId) wcScrollTop(key);
             const wasAll = wcType(key, wcState[key].activeType).panel === 'allworks';
             const toAll = wcType(key, typeId).panel === 'allworks';
             wcState[key].activeType = typeId;
@@ -33388,6 +33398,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             renderWorkCustomerSummary(key);
             saveWorks();
             wcClearAfterIntake(key);
+            wcScrollTop(key);                     // 작성을 마치면 맨 위로 (2026-11-12)
         }
         // 운영업무센터 — 업무를 등록하면 고객 조회를 비워 다음 건을 바로 조회합니다 (보완사항 2026-11-06)
         function wcClearAfterIntake(key) { if (key === 'ops') resetWorkCenterSearch(key); }
