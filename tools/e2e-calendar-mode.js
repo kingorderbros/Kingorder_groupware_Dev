@@ -106,6 +106,10 @@ srv.listen(PORT, async () => {
                 setCalendarView('month');
                 const g = document.getElementById('cal-grid');
                 out.monthNoOverflow = g.scrollWidth <= g.clientWidth + 1 && inView(g);
+                // 월 보기에서 일정 제목이 글씨로 보여야 함 (색 막대만 X)
+                const chip = Array.from(g.querySelectorAll('[onclick^="event.stopPropagation(); openScheduleDetailModal"]')).find(c => c.getAttribute('onclick').includes('e2e-a'));
+                const cs = chip ? getComputedStyle(chip) : null;
+                out.monthText = !!chip && parseFloat(cs.fontSize) >= 10 && chip.getBoundingClientRect().height >= 12 && /팀/.test(chip.innerText) && cs.pointerEvents !== 'none';
                 setCalendarView('list');
                 // 일정 입력창 — 칸이 모두 화면 폭 안에, 저장 단추가 화면 안에
                 openScheduleModal();
@@ -127,6 +131,7 @@ srv.listen(PORT, async () => {
             ok(r.top && r.bar, '위 줄 · 아래 줄 보임');
             ok(r.pageNoOverflow, '화면 가로 넘침 없음');
             ok(r.monthNoOverflow, '월 보기 폭 안에');
+            ok(r.monthText, '월 보기에서 일정 제목이 글씨로 보이고 누를 수 있음');
             ok(r.fieldsOut.length === 0, '입력창 칸 전부 폭 안에 있음 ' + r.fieldsOut.join(','));
             ok(r.saveInView, '저장 단추가 화면 안에');
             ok(r.full, '입력창 전체 화면');
