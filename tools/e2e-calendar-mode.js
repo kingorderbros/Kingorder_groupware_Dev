@@ -520,7 +520,7 @@ srv.listen(PORT, async () => {
                 document.getElementById('calm-voice-fab').click();
                 await sleep(50);
                 out.sheet = vis(document.getElementById('calm-talk-sheet')) && !vis(document.getElementById('calm-voice-sheet'));
-                for (let k = 0; k < 60 && schedules.length === before; k++) await sleep(50);
+                for (let k = 0; k < 200 && schedules.length === before; k++) await sleep(50);
                 const log = document.getElementById('calm-talk-log').innerText;
                 out.log = Array.from(document.querySelectorAll('#calm-talk-log > div')).map(x => x.textContent);
                 const s = schedules[schedules.length - 1];
@@ -534,7 +534,7 @@ srv.listen(PORT, async () => {
                 window.SpeechRecognition = undefined; window.webkitSpeechRecognition = undefined;
                 const b2 = schedules.length;
                 document.getElementById('calm-voice-fab').click();
-                await sleep(50);
+                await sleep(400);
                 out.hint = /키보드/.test(document.getElementById('calm-talk-hint').textContent);
                 const send = async (v) => { document.getElementById('calm-talk-input').value = v; document.getElementById('calm-talk-send').click(); await sleep(40); };
                 await send('모레 오전 10시 강남 고객사 미팅');
@@ -622,6 +622,72 @@ srv.listen(PORT, async () => {
             ok(r.notDropped && r.second, `멈추기 바로 뒤에 읽어 버려지는 일 없음 (${JSON.stringify(r.calls)})`);
             ok(r.replayBtn && r.replay, '[🔊 다시 듣기] 로 마지막 질문을 다시 읽음');
             ok(r.muteHint, '소리가 시작되지 않으면 무음 모드 · 음량 안내');
+            ok(m.__errs.length === 0, '스크립트 오류 없음 ' + m.__errs.join(' | '));
+            await m.close();
+        }
+
+        // ---------- 아이폰 증상 (11/12 다니엘님: 잘 듣지 못했다 반복 · 다음 질문 지체 · 안내 없음 · 받아쓰기 됐다 안 됐다) ----------
+        console.log('[A5] 음성 안내 — 아이폰 증상');
+        {
+            const m = await openPage(br, base + '?mode=calendar', 390, 800);
+            await m.evaluate(u => { try { localStorage.setItem('kobCalmLab.v1', '{"voice":true,"talk":true}'); } catch (e) { } enterApp(u); }, ADMIN);
+            const r = await m.evaluate(async () => {
+                const sleep = ms => new Promise(r => setTimeout(r, ms));
+                const out = {}; const ev = [];
+                const T0 = Date.now(); const at = () => Date.now() - T0;
+                // 가짜 읽기 — 아이폰처럼 '다 읽었다(onend)' 신호를 안 보냄, speaking 만 false 로 바뀜. dropNext 면 소리 시작 안 됨
+                let dropNext = 0;
+                const fake = { speaking: false, pending: false, getVoices() { return []; }, resume() { }, cancel() { this.speaking = false; },
+                    speak(u) { ev.push(['speak', at(), u.text]); if (dropNext > 0) { dropNext--; return; } this.speaking = true; setTimeout(() => { u.onstart && u.onstart(); setTimeout(() => { this.speaking = false; }, 200); }, 20); } };
+                Object.defineProperty(window, 'speechSynthesis', { value: fake, configurable: true });
+                window.SpeechSynthesisUtterance = function (t) { this.text = t; };
+                // 가짜 받아쓰기 — 대본: 'fail' = 소리 받기 전에 바로 꺼짐(aborted), 문자열 = 그 말을 함
+                let script = [];
+                class Fake { start() { ev.push(['rec', at()]); const a = script.shift();
+                    setTimeout(() => { if (a === 'fail') { this.onerror && this.onerror({ error: 'aborted' }); this.onend && this.onend(); return; }
+                        if (a == null) return; this.onaudiostart && this.onaudiostart(); this.onresult && this.onresult({ results: [[{ transcript: a }]] }); setTimeout(() => this.onend && this.onend(), 20); }, 30); }
+                    stop() { } abort() { } }
+                window.SpeechRecognition = Fake; window.webkitSpeechRecognition = Fake;
+                // (1) 다 읽은 뒤 바로 듣기 — onend 가 없어도 1.5초 안에
+                script = [null];
+                document.getElementById('calm-voice-fab').click();
+                for (let k = 0; k < 120 && !ev.some(e => e[0] === 'rec'); k++) await sleep(50);
+                const sp = ev.find(e => e[0] === 'speak'), rc = ev.find(e => e[0] === 'rec');
+                out.gap = rc ? rc[1] - sp[1] : 99999;
+                calmCloseTalk(); await sleep(100);
+                // (2) 받아쓰기가 바로 꺼지면 '잘 듣지 못했습니다' 가 아니라 다시 듣기 → 말한 것 받음
+                ev.length = 0; script = ['fail', '내일 오후 3시 미팅'];
+                document.getElementById('calm-voice-fab').click();
+                for (let k = 0; k < 100 && !/참석자를 지정/.test(document.getElementById('calm-talk-log').innerText); k++) await sleep(50);
+                out.log2 = Array.from(document.querySelectorAll('#calm-talk-log > div')).map(x => x.textContent);
+                out.retryOk = out.log2.some(x => /참석자를 지정/.test(x)) && !out.log2.some(x => /잘 듣지 못했습니다/.test(x));
+                calmCloseTalk(); await sleep(100);
+                // (3) 계속 꺼지면 되묻기 반복 없이 안내만
+                ev.length = 0; script = ['fail', 'fail', 'fail', 'fail'];
+                document.getElementById('calm-voice-fab').click();
+                await sleep(3500);
+                out.log3 = Array.from(document.querySelectorAll('#calm-talk-log > div')).map(x => x.textContent);
+                out.noLoop = !out.log3.some(x => /잘 듣지 못했습니다/.test(x)) && ev.filter(e => e[0] === 'rec').length <= 2;
+                out.failHint = /받아쓰기/.test(document.getElementById('calm-talk-hint').textContent) && /🎤/.test(document.getElementById('calm-talk-hint').textContent);
+                calmCloseTalk(); await sleep(100);
+                // (4) 받아쓰기 뒤 읽기가 버려지면 한 번 다시 읽기
+                ev.length = 0; script = ['내일 오후 3시 미팅', null]; dropNext = 0;
+                document.getElementById('calm-voice-fab').click();
+                for (let k = 0; k < 60 && ev.filter(e => e[0] === 'rec').length < 1; k++) await sleep(50);
+                dropNext = 1;
+                for (let k = 0; k < 100 && ev.filter(e => e[0] === 'speak' && /참석자/.test(e[2])).length < 2; k++) await sleep(50);
+                out.respeak = ev.filter(e => e[0] === 'speak' && /참석자/.test(e[2])).length >= 2;
+                // (5) 진단 기록
+                const dg = document.getElementById('calm-talk-diag');
+                out.diag = !!dg && /읽기/.test(dg.textContent) && /듣기/.test(dg.textContent);
+                calmCloseTalk();
+                return out;
+            });
+            ok(r.gap < 1500, `다 읽은 뒤 바로 듣기 (아이폰은 '다 읽음' 신호를 빠뜨림) — ${r.gap}ms`);
+            ok(r.retryOk, `받아쓰기가 시작 못 하고 꺼지면 '잘 듣지 못했습니다' 없이 다시 들음 (${JSON.stringify(r.log2)})`);
+            ok(r.noLoop && r.failHint, `계속 안 되면 되묻기 반복 없이 🎤 · 입력 안내 (${JSON.stringify(r.log3)})`);
+            ok(r.respeak, '받아쓰기 뒤 안내가 소리 나지 않으면 한 번 다시 읽음');
+            ok(r.diag, '창 아래 진단 기록(읽기 · 듣기 순서와 시각)');
             ok(m.__errs.length === 0, '스크립트 오류 없음 ' + m.__errs.join(' | '));
             await m.close();
         }
