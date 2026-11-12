@@ -60997,24 +60997,35 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             const safe = (n) => String(n || 'file').replace(/[\\/:*?"<>|]+/g, '_').slice(0, 120);
             const label = btn ? btn.innerHTML : '';
             if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>압축 중…'; }
+            let JSZip = null;
+            try { JSZip = await loadJsZip(); } catch (e) { JSZip = null; }
             try {
-                const JSZip = await loadJsZip();
-                const zip = new JSZip();
-                const used = {};
-                for (const it of set.list) {
-                    let nm = safe(it.name);
-                    if (used[nm]) nm = nm.replace(/(\.[^.]*)?$/, `_${++used[nm]}$1`); else used[nm] = 1;
-                    const res = await fetch(safeFileUrl(it.url), { credentials: 'same-origin' });
-                    if (!res.ok) throw new Error('file ' + res.status);
-                    zip.file(nm, await res.blob());
+                if (!JSZip) {                     // 압축 도구를 못 불러오면 하나씩 내려받습니다
+                    set.list.forEach((it, i) => setTimeout(() => {
+                        const a = document.createElement('a');
+                        a.href = safeFileUrl(it.url); a.download = safe(it.name);
+                        document.body.appendChild(a); a.click(); a.remove();
+                    }, i * 400));
+                } else {
+                    // 받은 파일만 담고, 못 받은 파일은 이름을 알려 드립니다 (오류 내용을 파일로 저장하지 않게)
+                    const zip = new JSZip();
+                    const used = {};
+                    const failed = [];
+                    let added = 0;
+                    for (const it of set.list) {
+                        let blob = null;
+                        try {
+                            const res = await fetch(safeFileUrl(it.url), { credentials: 'same-origin' });
+                            if (res.ok) blob = await res.blob();
+                        } catch (e) { blob = null; }
+                        if (!blob) { failed.push(it.name || '이름 없음'); continue; }
+                        let nm = safe(it.name);
+                        if (used[nm]) nm = nm.replace(/(\.[^.]*)?$/, `_${++used[nm]}$1`); else used[nm] = 1;
+                        zip.file(nm, blob); added++;
+                    }
+                    if (added) downloadBlobAs(await zip.generateAsync({ type: 'blob' }), `${safe(set.zipName).slice(0, 60)}_첨부.zip`);
+                    if (failed.length) alert(`${added ? `${added}개는 압축 파일로 받았고, ` : ''}아래 ${failed.length}개는 받지 못했습니다. 파일이 지워졌거나 접근 권한이 없습니다.\n\n· ` + failed.join('\n· '));
                 }
-                downloadBlobAs(await zip.generateAsync({ type: 'blob' }), `${safe(set.zipName).slice(0, 60)}_첨부.zip`);
-            } catch (e) {
-                set.list.forEach((it, i) => setTimeout(() => {
-                    const a = document.createElement('a');
-                    a.href = safeFileUrl(it.url); a.download = safe(it.name);
-                    document.body.appendChild(a); a.click(); a.remove();
-                }, i * 400));
             } finally {
                 if (btn && btn.isConnected) { btn.disabled = false; btn.innerHTML = label; }
             }

@@ -4,7 +4,7 @@ const srv=http.createServer((q,r)=>{let p=decodeURIComponent(q.url.split('?')[0]
  if(p.startsWith('/api/')){r.writeHead(404);return r.end('{}');}
  fs.readFile(path.join(ROOT,p),(e,b)=>{if(e){r.writeHead(404);return r.end();}r.writeHead(200,{'content-type':p.endsWith('.html')?'text/html; charset=utf-8':p.endsWith('.js')?'text/javascript':'application/octet-stream'});r.end(b);});});
 let pass=0,fail=0;const ok=(c,n,x)=>{if(c){pass++;console.log('  ✓',n);}else{fail++;console.log('  ✗',n,x===undefined?'':JSON.stringify(x).slice(0,400));}};
-srv.listen(8872,async()=>{const br=await pp.launch({executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',headless:'new'});const pg=await br.newPage();const errs=[];pg.on('pageerror',e=>errs.push(String(e).slice(0,200)));pg.on('dialog',d=>d.accept());await pg.setViewport({width:1400,height:900});await pg.goto('http://localhost:8872/',{waitUntil:'networkidle0'});
+srv.listen(8872,async()=>{const br=await pp.launch({executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',headless:'new'});const pg=await br.newPage();const errs=[];pg.on('pageerror',e=>errs.push(String(e).slice(0,200)));const dlg=[];pg.on('dialog',d=>{dlg.push(d.message());d.accept();});await pg.setViewport({width:1400,height:900});await pg.goto('http://localhost:8872/',{waitUntil:'networkidle0'});
  await pg.evaluate(()=>enterApp({email:'daniel@kingorder.co.kr',dept:'admin',name:'정장훈'}));
  const r=await pg.evaluate(async()=>{
   const out={};const got=[];window.downloadBlobAs=(b,n)=>got.push({b,n});
@@ -30,6 +30,10 @@ srv.listen(8872,async()=>{const br=await pp.launch({executablePath:'/Application
   const old=kobFiles.src;kobFiles.src=(f)=>blobUrl(f.name);
   window.archivePosts=window.archivePosts||[];try{archivePosts.push(Object.assign(arc,{dept:'it',cat:'etc',by:'정장훈',at:'2026-11-12'}));openArchiveView('a1');out.arc=!!document.querySelector('#arc-view-body [data-zip-all="2"]');}catch(e){out.arcErr=String(e);}
   kobFiles.src=old;
+  // 파일 하나를 못 받으면 나머지만 담고 알림 (오류 내용을 파일로 저장하지 않음)
+  got.length=0;const dd=document.createElement('div');dd.innerHTML=gwZipBtnHtml([{name:'있음.txt',url:blobUrl('ok')},{name:'없음.txt',url:'/api/files/missing'}],'일부');
+  await gwZipDownload(dd.firstElementChild.getAttribute('onclick').match(/'(z\d+)'/)[1],null);
+  if(got[0]){const z=await (await loadJsZip()).loadAsync(got[0].b);out.partial=Object.keys(z.files);}
   return out;});
  console.log(JSON.stringify(r));
  ok(r.collab==='3','협업 완료 첨부 3개 → 일괄 다운로드 단추',r.collab);
@@ -40,4 +44,5 @@ srv.listen(8872,async()=>{const br=await pp.launch({executablePath:'/Application
  ok(r.wbs,'WBS 산출물 2개 → 단추',r.wbs);
  ok(r.devThread,'개발요청 메시지 첨부 2개 → 단추',r.devThread);
  ok(r.arc,'자료실 글 첨부 2개 → 단추',r);
+ ok(JSON.stringify(r.partial)==='["있음.txt"]'&&dlg.some(m=>m.includes('없음.txt')&&m.includes('1개는 압축')),'못 받은 파일은 빼고 이름 알림',{p:r.partial,dlg});
  ok(errs.length===0,'페이지 오류 없음',errs);console.log(`통과 ${pass} · 실패 ${fail}`);await br.close();srv.close();process.exit(fail?1:0);});
