@@ -718,7 +718,7 @@ srv.listen(PORT, async () => {
                 let script = [];
                 class Fake {
                     start() { ev.push(['rec', at()]); this._live = true; const a = script.shift();
-                        setTimeout(() => { if (a == null) return; this.onaudiostart && this.onaudiostart(); const res = [{ transcript: a }]; if (window.__fin) res.isFinal = true; this.onresult && this.onresult({ results: [res] }); }, 60); }
+                        setTimeout(() => { if (a == null) return; this.onaudiostart && this.onaudiostart(); this.onsoundstart && this.onsoundstart(); this.onspeechstart && this.onspeechstart(); const res = [{ transcript: a }]; if (window.__fin) res.isFinal = true; this.onresult && this.onresult({ results: [res] }); }, 60); }
                     stop() { this.abort(); }
                     abort() { if (!this._live) return; this._live = false; setTimeout(() => { ev.push(['closed', at()]); this.onend && this.onend(); }, 100); }   // 실제처럼 닫히는 데 시간이 걸림
                 }
@@ -734,6 +734,14 @@ srv.listen(PORT, async () => {
                 out.endBeep = b2 > r1 && s2 > b2 && ev[b2][2] > ev[b1][2];
                 out.closedFirst = c1 > r1 && s2 > c1;
                 out.second = idx('rec', s2) > s2 && idx('beep', s2) > s2;
+                // 진단 기록 — 마이크 켜짐 · 소리 감지 · 말소리 감지 · 결과를 따로, [기록 복사]
+                const dtext = document.getElementById('calm-talk-diag-list').textContent;
+                out.diagKinds = /마이크 켜짐/.test(dtext) && /소리 감지/.test(dtext) && /말소리 감지/.test(dtext) && /결과 1개: 내일 오후 3시 미팅/.test(dtext);
+                let copied = '';
+                try { Object.defineProperty(navigator, 'clipboard', { value: { writeText: (t) => { copied = t; return Promise.resolve(); } }, configurable: true }); } catch (e) { }
+                const cb = document.getElementById('calm-talk-diag-copy');
+                if (cb) { cb.click(); await sleep(100); }
+                out.copy = !!cb && /듣기 시작/.test(copied) && /소리 감지/.test(copied) && /아이폰|기기/.test(copied);
                 // '말 끝남(isFinal)' 표시가 오면 2.5초 기다리지 않고 바로 종료 삐
                 calmCloseTalk(); await sleep(150);
                 ev.length = 0; window.__fin = true; script = ['내일 오후 3시 미팅', null];
@@ -761,6 +769,8 @@ srv.listen(PORT, async () => {
             ok(r.endBeep, '들은 뒤 다른 높이(더 높은) 종료 삐');
             ok(r.closedFirst, '마이크가 완전히 닫힌 뒤 다음 질문 읽기');
             ok(r.second, '두 번째 질문도 읽기 → 삐 → 듣기');
+            ok(r.diagKinds, '진단 기록에 마이크 켜짐 · 소리 감지 · 말소리 감지 · 결과(글자)를 따로 남김');
+            ok(r.copy, '[기록 복사] — 기기 정보와 기록 전체를 복사');
             ok(r.finalGap < 1000, `'말 끝남' 표시가 오면 바로 종료 삐 (듣기 시작부터 ${r.finalGap}ms)`);
             ok(r.ttsSwitch && r.noSpeak, '실험실 › 질문 소리로 읽기 (기본 켬) — 끄면 글자로만 묻고 삐 · 듣기는 그대로 (원인 확인용)');
             ok(m.__errs.length === 0, '스크립트 오류 없음 ' + m.__errs.join(' | '));

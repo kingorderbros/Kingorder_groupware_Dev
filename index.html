@@ -3761,7 +3761,7 @@
                                     <input type="text" id="calm-talk-input" class="flex-1 min-w-0 p-2.5 border border-gray-300 rounded-lg text-base" placeholder="말 대신 입력 (키보드 🎤 도 됩니다)" onkeydown="if(event.key==='Enter'&&!event.isComposing){event.preventDefault();calmTalkSend();}">
                                     <button type="button" id="calm-talk-send" onclick="calmTalkSend()" class="px-3 py-2.5 rounded-lg bg-pink-600 text-white font-semibold shrink-0">보내기</button>
                                 </div>
-                                <details id="calm-talk-diag" class="mt-2 text-[11px] text-gray-400"><summary>진단 기록</summary><div id="calm-talk-diag-list" class="mt-1 max-h-32 overflow-y-auto font-mono leading-4"></div></details>
+                                <details id="calm-talk-diag" class="mt-2 text-[11px] text-gray-400"><summary>진단 기록 <button type="button" id="calm-talk-diag-copy" onclick="event.preventDefault();calmDiagCopy()" class="ml-2 px-2 py-0.5 rounded border border-gray-300 text-gray-600">기록 복사</button></summary><div id="calm-talk-diag-list" class="mt-1 max-h-60 overflow-y-auto font-mono leading-4"></div></details>
                             </div>
                         </div>
                     </div>
@@ -20727,13 +20727,25 @@ const QUOTE_TEMPLATES = [
         let calmRecClosing = null;
         function calmRecClosed() { return calmRecClosing || Promise.resolve(); }
         // 진단 기록 — 창 아래 [진단 기록] 을 펼치면 읽기 · 듣기 순서와 시각이 보입니다 (아이폰 실물 확인용)
+        function calmDiagCopy() {
+            const box = document.getElementById('calm-talk-diag-list');
+            const lines = box ? Array.from(box.childNodes).map(n => n.textContent) : [];
+            const head = `킹오더일정 진단 기록 · ${new Date().toLocaleString('ko-KR')} · ${navigator.standalone ? '홈 화면 앱' : '브라우저'} · 질문 소리 ${calmLabPrefs().talkTts === false ? '끔' : '켬'}\n기기: ${navigator.userAgent}`;
+            const text = head + '\n' + lines.join('\n');
+            const done = () => calmToast('진단 기록을 복사했습니다. 대화창에 붙여 넣어 보내 주세요.');
+            const fallback = () => {
+                try { const ta = document.createElement('textarea'); ta.value = text; ta.setAttribute('readonly', ''); ta.style.position = 'fixed'; ta.style.opacity = '0'; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); done(); }
+                catch (e) { calmToast('복사하지 못했습니다. 기록 화면을 캡처해 주세요.'); }
+            };
+            try { if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, fallback); else fallback(); } catch (e) { fallback(); }
+        }
         function calmDiag(msg) {
             const box = document.getElementById('calm-talk-diag-list'); if (!box) return;
             const d = new Date(), p2 = n => String(n).padStart(2, '0');
             const line = document.createElement('div');
             line.textContent = `${p2(d.getMinutes())}:${p2(d.getSeconds())}.${String(d.getMilliseconds()).padStart(3, '0')} ${msg}`;
             box.appendChild(line);
-            while (box.childNodes.length > 80) box.removeChild(box.firstChild);
+            while (box.childNodes.length > 200) box.removeChild(box.firstChild);
         }
         function calmTalkReplay() { if (!calmSayLast) return; calmSay(calmSayLast, calmTalkMuteHint); }
         function calmTalkMuteHint() { if (calmTalk) calmTalk.muted = true; calmTalkHint(CALM_MUTE_TEXT); }
@@ -20828,12 +20840,16 @@ const QUOTE_TEMPLATES = [
             };
             const arm = (ms) => { clearTimeout(calmRecTimer); calmRecTimer = setTimeout(() => { if (last || gotAudio) finish(last); else fail('소식 없음'); }, ms); };
             rec.lang = 'ko-KR'; rec.interimResults = true; rec.continuous = false;
-            const heard = (k) => () => { if (!gotAudio) calmDiag('듣기: ' + k); gotAudio = true; };
-            rec.onaudiostart = heard('마이크 켜짐'); rec.onsoundstart = heard('소리'); rec.onspeechstart = heard('말소리');
+            // 무엇까지 왔는지 따로 기록 — 마이크 켜짐(소리 받을 준비) · 소리 감지(소리가 들어옴) · 말소리 감지(말로 알아봄) · 결과
+            const heard = (k) => () => { calmDiag('듣기: ' + k); gotAudio = true; };
+            rec.onaudiostart = heard('마이크 켜짐'); rec.onsoundstart = heard('소리 감지'); rec.onspeechstart = heard('말소리 감지');
+            rec.onspeechend = () => calmDiag('듣기: 말소리 끝'); rec.onsoundend = () => calmDiag('듣기: 소리 끝'); rec.onaudioend = () => calmDiag('듣기: 마이크 꺼짐');
+            rec.onnomatch = () => calmDiag('듣기: 알아듣지 못함(nomatch)');
             rec.onresult = (e) => {
                 gotAudio = true; const rs = Array.from(e.results);
                 last = rs.map(r => r[0].transcript).join(' ').trim(); document.getElementById('calm-talk-input').value = last; if (last) calmSetLabValue('voiceNative', true);
                 const isFinal = rs.length && rs[rs.length - 1].isFinal === true;
+                calmDiag(`결과 ${rs.length}개${isFinal ? '(끝)' : ''}: ${last || '(빈 글자)'}`);
                 arm(isFinal && last ? 300 : 2500);                       // '말 끝남' 표시가 오면 바로, 아니면 2.5초 더 들어 봄
             };
             rec.onerror = (e) => {
