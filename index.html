@@ -20332,13 +20332,32 @@ const QUOTE_TEMPLATES = [
         // 킹오더일정 실험실 — "내일 오후 3시 강남 고객사 미팅 김영업 초대" 같은 말을 일정 칸으로 나눕니다 (규칙 방식 · 휴대폰 안에서만, 비용 없음).
         //   opt: { now: Date, names: [직원 이름], me: 내 이름 }
         //   → { date:'YYYY-MM-DD', allDay, startTime, endTime, title, attendees:[이름], calendar }
+        // 한글 숫자 → 숫자 (11/16 진단 기록: 아이폰은 받아쓰는 중엔 '2시' 였다가 마지막 글자를 '두시' 로 줌)
+        //   시각: 한 · 두 · 세 · 네 · 다섯 … 열두 + 시(간)   /   날짜 · 분: 일 · 이 · 삼 … 십 · 이십오 + 월 · 일 · 분, 유월 · 시월
+        //   '일요일 · 오늘 · 일정 · 이번 · 시작 · 시연' 같은 낱말은 그대로 둡니다.
+        function normalizeVoiceNumbers(text) {
+            let t = String(text || '');
+            const NAT = { '한': 1, '두': 2, '세': 3, '네': 4, '다섯': 5, '여섯': 6, '일곱': 7, '여덟': 8, '아홉': 9, '열': 10, '열한': 11, '열두': 12 };
+            t = t.replace(/(^|[\s0-9]|오전|오후|아침|낮|저녁|밤|새벽|부터|까지)(열두|열한|다섯|여섯|일곱|여덟|아홉|열|한|두|세|네)\s*(?=시)(?!시(?:작|청|장|험|스|연|공|설|안|점|트|즌|각|계|민|외|내|도|적))/g,
+                (m, pre, w) => pre + NAT[w] + ' ');
+            t = t.replace(/(^|\s)유월/g, '$16월').replace(/(^|\s)시월/g, '$110월');
+            const D = { '일': 1, '이': 2, '삼': 3, '사': 4, '오': 5, '육': 6, '칠': 7, '팔': 8, '구': 9 };
+            t = t.replace(/(^|\s)((?:[이삼사오육칠팔구]?십)?[일이삼사오육칠팔구]?)\s*(?=(?:월|일|분)(?!장|정|요|자|반|부|과|상))/g, (m, pre, w, off, all) => {
+                if (!w) return m;
+                if (w === '일' && all.slice(off + m.length, off + m.length + 1) === '일' && !/월\s*$/.test(all.slice(0, off))) return m;   // '일일 점검' 은 그대로, '십이월 일일' 만 1일
+                const i = w.indexOf('십');
+                const n = i < 0 ? D[w] : (i ? D[w[0]] : 1) * 10 + (w[i + 1] ? D[w[i + 1]] : 0);
+                return pre + n;
+            });
+            return t;
+        }
         function parseVoiceSchedule(text, opt) {
             const o = opt || {};
             const now = o.now ? new Date(o.now) : new Date();
             const pad = (n) => String(n).padStart(2, '0');
             const fmt = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
             const base = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-            let t = ' ' + String(text || '').replace(/[.,!?·]/g, ' ').replace(/\s+/g, ' ').trim() + ' ';
+            let t = ' ' + normalizeVoiceNumbers(String(text || '').replace(/[.,!?·]/g, ' ').replace(/\s+/g, ' ').trim()).replace(/\s+/g, ' ') + ' ';
             const cut = (re) => { const m = t.match(re); if (m) t = t.replace(m[0], ' '); return m; };
             const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
             const WD = { '일': 0, '월': 1, '화': 2, '수': 3, '목': 4, '금': 5, '토': 6 };
