@@ -205,9 +205,14 @@ srv.listen(PORT, async () => {
                 out.members = item('sales-share').querySelectorAll('[data-member]').length > 0;
                 out.fits = box.scrollWidth <= innerWidth + 1;
                 item('sales-share').click();
-                const chips = Array.from(document.querySelectorAll('#cal-grid [onclick^="event.stopPropagation(); openScheduleDetailModal"]')).map(c => c.getAttribute('onclick'));
-                out.after = !vis(box) && (document.getElementById('calendar-filter-cal') || {}).value === 'sales-share' && currentCalendarView === 'month'
-                    && chips.length === 1 && chips[0].includes('e2e-b');
+                // 11/16 다니엘님: 캘린더를 누르면 → 오늘 목록 · 확인하지 않은 일정을 먼저 · 확인할 수 있게
+                const fr = document.getElementById('calm-fresh');
+                const frCards = fr ? Array.from(fr.querySelectorAll('[data-fresh-sid]')).map(x => x.dataset.freshSid) : [];
+                const todayHd = document.querySelector('#cal-grid [data-today="1"]');
+                out.after = !vis(box) && (document.getElementById('calendar-filter-cal') || {}).value === 'sales-share' && currentCalendarView === 'list';
+                out.freshFirst = vis(fr) && frCards.join() === 'e2e-b' && !!todayHd && !!(fr.compareDocumentPosition(todayHd) & Node.DOCUMENT_POSITION_FOLLOWING)
+                    && !!fr.querySelector('[data-fresh-ok]') && /확인하지 않은 일정/.test(fr.innerText);
+                out.freshTxt = fr ? fr.innerText.replace(/\n/g, ' ') : '(없음)';
                 out.curName = (document.getElementById('calm-cur-cal') || {}).innerText || '';
                 calmShowAll();
                 out.backAll = (document.getElementById('calendar-filter-cal') || {}).value === '' && /전체/.test((document.getElementById('calm-cur-cal') || {}).innerText || '');
@@ -222,12 +227,87 @@ srv.listen(PORT, async () => {
             ok(r.newSales, '새 일정이 있는 캘린더만 New');
             ok(r.members, '캘린더를 보는 사람 얼굴(첫 글자) 표시');
             ok(r.fits, '리스트 화면 가로 넘침 없음');
-            ok(r.after, '캘린더를 누르면 그 캘린더 일정만 월 보기로');
+            ok(r.after, '캘린더를 누르면 그 캘린더 일정만 날짜별 목록(오늘)으로');
+            ok(r.freshFirst, `오늘 목록 위에 확인하지 않은 일정을 먼저 · [확인] 단추 (${r.freshTxt})`);
             ok(/킹오더 영업일정 및 진행상황 공유/.test(r.curName), `위 줄에 고른 캘린더 이름 (얻음 ${r.curName})`);
             ok(r.backAll, '전체 캘린더로 돌아가기');
             if (SHOTS) { await m.evaluate(() => calmOpenCalList()); await m.screenshot({ path: `${SHOTS}/callist-390.png` }); }
             ok(m.__errs.length === 0, '스크립트 오류 없음 ' + m.__errs.join(' | '));
             await m.close();
+        }
+
+        // ---------- 11/16 다니엘님: 확인하지 않은 일정 — 휴대폰 [확인] · 그룹웨어 일정캘린더 표시 ----------
+        console.log('[N] 확인하지 않은 일정 — 휴대폰 [확인]');
+        {
+            const m = await openPage(br, base + '?mode=calendar', 390, 800);
+            await m.evaluate(u => { try { localStorage.removeItem('kobReads.v1'); } catch (e) { } enterApp(u); }, ADMIN);
+            await m.evaluate(seedSchedules);
+            const r = await m.evaluate(async () => {
+                const sleep = ms => new Promise(r => setTimeout(r, ms));
+                const out = {};
+                calmOpenCalList(); calmShowAll(); calmOpenCalList();
+                document.querySelector('#calm-callist [data-cal-item="install-as"]').click();
+                await sleep(50);
+                const fr = () => document.getElementById('calm-fresh');
+                out.one = fr() && fr().querySelectorAll('[data-fresh-sid]').length === 1;
+                out.date = fr() && /\d+월 \d+일/.test(fr().innerText);      // 다른 날 일정이라 날짜를 함께
+                const rect = fr() ? fr().getBoundingClientRect() : { top: -1, bottom: 99999 };
+                out.inView = rect.top >= 0 && rect.top < innerHeight - 100;
+                fr().querySelector('[data-fresh-ok]').click();
+                await sleep(200);
+                out.gone = !fr() && !document.querySelector('#cal-grid [data-sid="e2e-c"] .calm-new');
+                const b = document.querySelector('#calendar-legend [data-cal-new="install-as"]');
+                out.badge = !b || b.classList.contains('hidden');
+                // 전체 캘린더 — 2건 → [모두 확인]
+                calmShowAll(); calmShowToday(); await sleep(50);
+                out.two = fr() && fr().querySelectorAll('[data-fresh-sid]').length === 1;   // e2e-c 는 확인했으니 e2e-b 만
+                return out;
+            });
+            ok(r.one && r.date, '캘린더 고르면 그 캘린더의 확인하지 않은 일정만 · 날짜 함께 표시');
+            ok(r.inView, '확인하지 않은 일정 칸이 화면에 보이게 넘김');
+            ok(r.gone && r.badge, '[확인] → 칸에서 빠지고 새 일정 표시 · 숫자도 없어짐');
+            ok(r.two, '[오늘] 에서도 확인하지 않은 일정이 먼저');
+            ok(m.__errs.length === 0, '스크립트 오류 없음 ' + m.__errs.join(' | '));
+            await m.close();
+        }
+        console.log('[G] 그룹웨어 일정캘린더 — 새 일정 표시');
+        {
+            const g = await openPage(br, base, 1400, 900);
+            await g.evaluate(u => { try { localStorage.removeItem('kobReads.v1'); } catch (e) { } enterApp(u); }, ADMIN);
+            await g.evaluate(() => navigate('calendar-center', document.getElementById('nav-calendar-center')));
+            await g.evaluate(seedSchedules);
+            const r = await g.evaluate(async () => {
+                const sleep = ms => new Promise(r => setTimeout(r, ms));
+                const vis = el => !!el && !el.classList.contains('hidden') && getComputedStyle(el).display !== 'none' && el.getBoundingClientRect().width > 0;
+                const out = {};
+                setCalendarView('month'); await sleep(50);
+                const chip = (id) => Array.from(document.querySelectorAll('#cal-grid [onclick*="openScheduleDetailModal"]')).find(c => c.getAttribute('onclick').includes(id));
+                out.chipNew = !!chip('e2e-b') && !!chip('e2e-b').querySelector('.gw-new') && /새/.test(chip('e2e-b').querySelector('.gw-new').textContent);
+                out.chipMine = !!chip('e2e-a') && !chip('e2e-a').querySelector('.gw-new');
+                const bar = document.getElementById('cal-fresh-bar');
+                out.bar = vis(bar) && /확인하지 않은 일정\s*2\s*건/.test(bar.innerText);
+                document.getElementById('cal-fresh-open').click(); await sleep(50);
+                const pan = document.getElementById('cal-fresh-panel');
+                out.panel = vis(pan) && pan.querySelectorAll('[data-fresh-sid]').length === 2 && /키오스크 설치/.test(pan.innerText) && /영업 미팅/.test(pan.innerText);
+                pan.querySelector('[data-fresh-sid="e2e-c"] [data-fresh-ok]').click(); await sleep(200);
+                out.one = /확인하지 않은 일정\s*1\s*건/.test(document.getElementById('cal-fresh-bar').innerText) && !chip('e2e-c').querySelector('.gw-new');
+                // 변경됨
+                await sleep(20); const s = schedules.find(x => x.id === 'e2e-c'); s.startTime = '15:00'; s.changedAt = new Date().toISOString(); s.changedBy = '박설치'; renderCalendar(); await sleep(50);
+                out.changed = !!chip('e2e-c').querySelector('.gw-new') && /변경/.test(chip('e2e-c').querySelector('.gw-new').textContent);
+                document.getElementById('cal-fresh-all').click(); await sleep(200);
+                out.allDone = !vis(document.getElementById('cal-fresh-bar')) && !document.querySelector('#cal-grid .gw-new');
+                setCalendarView('week'); await sleep(50);
+                out.week = true;
+                return out;
+            });
+            ok(r.chipNew && r.chipMine, '달력 칸 일정에 [새] 표시 (내가 등록한 일정은 없음)');
+            ok(r.bar, '위쪽에 "확인하지 않은 일정 2건" 줄');
+            ok(r.panel, '[보기] → 확인하지 않은 일정 목록');
+            ok(r.one, '목록에서 [확인] → 1건으로 · 그 일정 [새] 표시 없어짐');
+            ok(r.changed, '확인 뒤 남이 바꾸면 [변경] 표시');
+            ok(r.allDone, '[모두 확인] → 줄과 표시 모두 없어짐');
+            ok(g.__errs.length === 0, '스크립트 오류 없음 ' + g.__errs.join(' | '));
+            await g.close();
         }
 
         // ---------- 설정 › 일정 표시 방법 (11/12 다니엘님) ----------

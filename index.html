@@ -210,6 +210,16 @@
         .calm-freshbar { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin: 8px 12px 0; padding: 8px 12px; border-radius: 10px; background: #fff1f2; color: #9f1239; font-size: 13px; }
         .calm-freshbar button { padding: 6px 12px; border-radius: 8px; background: #e11d48; color: #fff; font-weight: 600; font-size: 13px; }
         .calm-empty { margin: 6px 12px; padding: 10px 12px; font-size: 13px; color: #94a3b8; }
+        /* 확인하지 않은 일정 칸 — 오늘 목록 바로 위 (2026-11-16 다니엘님) */
+        .calm-fresh { margin: 8px 0 4px; padding-bottom: 6px; background: #fff1f2; border-top: 1px solid #fecdd3; border-bottom: 1px solid #fecdd3; scroll-margin-top: 8px; }
+        .calm-fresh .calm-freshbar { margin: 0; border-radius: 0; background: transparent; }
+        .calm-fresh-item { position: relative; }
+        .calm-fresh-date { margin: 4px 12px 0; font-size: 12px; font-weight: 600; color: #9f1239; }
+        .calm-fresh-item .calm-card { padding-right: 64px; }
+        .calm-fresh-ok { position: absolute; right: 20px; top: 50%; transform: translateY(-20%); padding: 6px 10px; border-radius: 8px; background: #fff; border: 1px solid #fda4af; color: #be123c; font-weight: 700; font-size: 13px; }
+        /* 그룹웨어 일정캘린더 — 새 일정 · 변경 표시 (2026-11-16) */
+        .gw-new { display: inline-block; margin-right: 3px; padding: 0 4px; border-radius: 4px; font-size: 10px; font-weight: 700; line-height: 14px; color: #fff; background: #e11d48; vertical-align: 1px; }
+        .gw-new.gw-chg { background: #f59e0b; }
         /* 설정 창 */
         .calm-sheet-wrap { position: fixed; inset: 0; z-index: 60; background: rgba(15,23,42,.45); display: flex; align-items: flex-end; }
         .calm-sheet-wrap.hidden { display: none; }
@@ -3819,6 +3829,8 @@
                     </div>
                     <!-- 킹오더일정 — 캘린더 리스트 (2026-11-12 다니엘님 샘플) -->
                     <div id="calm-callist" class="hidden"></div>
+                    <!-- 확인하지 않은 일정 (그룹웨어 일정캘린더 · 2026-11-16 다니엘님) — 킹오더일정은 목록 칸으로 따로 보여 줌 -->
+                    <div id="cal-fresh-wrap" class="calm-hide"></div>
                     <!-- 캘린더 범례 (클릭하면 해당 캘린더만 보기) -->
                     <div id="calendar-legend" class="mb-3 flex flex-wrap items-center gap-2 bg-white border border-gray-200 rounded-lg p-3">
                         <!-- JS 동적 렌더링 -->
@@ -19492,7 +19504,10 @@ const QUOTE_TEMPLATES = [
             const size = o.large ? 'px-2 py-1 text-xs sm:text-sm' : 'px-1.5 py-0.5 text-[10px] sm:text-xs';
             // 날짜 셀 전체가 '하루 요약' 클릭 영역이므로, 칩 클릭은 상세 모달만 열리도록 전파를 막는다
             const look = scheduleChipLook(s, cal);
-            return `<div onclick="event.stopPropagation(); openScheduleDetailModal(${jsArg(s.id)})" class="rounded truncate cursor-pointer hover:opacity-80 ${size} ${look.cls}${dim}"${look.style} title="${escapeHtml(tooltip)}">${offIcon}${timeHtml}${inviteIcon}${isRecurring(s) ? '<i class="fas fa-repeat text-[9px] opacity-60 mr-0.5" title="반복 일정"></i>' : ''}${escapeHtml(s.title)}${isBirthdaySchedule(s) ? '' : ` <span class="opacity-70">(${escapeHtml(s.salesperson || '미지정')})</span>`}</div>`;
+            // 확인하지 않은 새 일정 · 변경된 일정 표시 (2026-11-16 다니엘님 — 그룹웨어 일정캘린더에도)
+            const freshTag = scheduleIsNewForMe(s) ? '<span class="gw-new" title="확인하지 않은 새 일정">새</span>'
+                : scheduleIsChangedForMe(s) ? '<span class="gw-new gw-chg" title="확인한 뒤 바뀐 일정">변경</span>' : '';
+            return `<div onclick="event.stopPropagation(); openScheduleDetailModal(${jsArg(s.id)})" class="rounded truncate cursor-pointer hover:opacity-80 ${size} ${look.cls}${dim}"${look.style} title="${escapeHtml(tooltip)}">${freshTag}${offIcon}${timeHtml}${inviteIcon}${isRecurring(s) ? '<i class="fas fa-repeat text-[9px] opacity-60 mr-0.5" title="반복 일정"></i>' : ''}${escapeHtml(s.title)}${isBirthdaySchedule(s) ? '' : ` <span class="opacity-70">(${escapeHtml(s.salesperson || '미지정')})</span>`}</div>`;
         }
 
         // ==================== 하루 일정 요약 모달 ====================
@@ -19976,6 +19991,7 @@ const QUOTE_TEMPLATES = [
             const deptSchedules = visible.filter(s => !calFilter || scheduleCalendarId(s) === calFilter);
             // 범례 건수는 부서 필터까지 반영한 값 (캘린더 필터는 제외 — 클릭 전환용) · 보고 있는 달의 일정만 (2026-10-14)
             renderCalendarLegend(visible, calFilter, `${year}-${String(month + 1).padStart(2, '0')}`);
+            renderCalFreshBar();
 
             // '구분 관리' 버튼은 편집 권한이 있는 사용자에게만 노출
             const typeBtn = document.getElementById('calendar-type-manage-btn');
@@ -20188,9 +20204,16 @@ const QUOTE_TEMPLATES = [
                 html += `<div class="calm-day${isToday ? ' calm-today' : ''}"${isToday ? ' data-today="1"' : ''}>${month + 1}월 ${d}일 (${WD[new Date(year, month, d).getDay()]})${isToday ? ' · 오늘' : ''}${hol ? ` <span class="calm-hol">${escapeHtml(hol)}</span>` : ''}</div>`;
                 html += day.length ? day.map(calmCardHtml).join('') : '<div class="calm-empty">오늘 일정이 없습니다.</div>';
             }
-            const freshN = calmFreshList().length;
-            const top = freshN ? `<div class="calm-freshbar"><span><i class="fas fa-bell mr-1"></i>확인하지 않은 일정 <b>${freshN}</b>건</span><button type="button" onclick="calmMarkAllSeen()">모두 확인</button></div>` : '';
-            grid.innerHTML = top + (html || '<div class="calm-empty">이 달에 등록된 일정이 없습니다.</div>');
+            // 확인하지 않은 일정 — 오늘 줄 바로 위에 먼저 (오늘이 이 달에 없으면 맨 위) · 일정마다 [확인] (2026-11-16 다니엘님)
+            const fresh = calmFreshList().sort((a, b) => String(a.date).localeCompare(String(b.date)) || compareScheduleTime(a, b));
+            const freshHtml = fresh.length ? `<div id="calm-fresh" class="calm-fresh"><div class="calm-freshbar"><span><i class="fas fa-bell mr-1"></i>확인하지 않은 일정 <b>${fresh.length}</b>건</span><button type="button" onclick="calmMarkAllSeen()">모두 확인</button></div>${fresh.map(s => {
+                const [yy, mm, dd] = String(s.date || '').split('-').map(Number);
+                const dl = yy ? `${mm}월 ${dd}일 (${WD[new Date(yy, mm - 1, dd).getDay()]})${s.date === today ? ' · 오늘' : ''}` : '';
+                return `<div class="calm-fresh-item" data-fresh-sid="${escapeHtml(s.id)}"><div class="calm-fresh-date">${dl}</div>${calmCardHtml(s)}<button type="button" class="calm-fresh-ok" data-fresh-ok onclick="event.stopPropagation(); calmMarkSeen(${jsArg(s.id)})">확인</button></div>`;
+            }).join('')}</div>` : '';
+            const todayAt = html.indexOf('<div class="calm-day calm-today"');
+            const body = html || '<div class="calm-empty">이 달에 등록된 일정이 없습니다.</div>';
+            grid.innerHTML = todayAt >= 0 ? html.slice(0, todayAt) + freshHtml + html.slice(todayAt) : freshHtml + body;
             calmFillReadCounts(grid);
         }
         // 지금 거르기(부서 · 캘린더)에 맞는 확인하지 않은 일정 (회차가 여러 개인 반복 일정은 하나로)
@@ -20203,6 +20226,45 @@ const QUOTE_TEMPLATES = [
                 .filter(s => (!deptFilter || (s.dept || 'sales') === deptFilter) && (!calFilter || scheduleCalendarId(s) === calFilter))
                 .filter(s => scheduleIsNewForMe(s) || scheduleIsChangedForMe(s))
                 .filter(s => { const m = scheduleMasterId(s.id); if (seen.has(m)) return false; seen.add(m); return true; });
+        }
+        // 그룹웨어 일정캘린더 — '확인하지 않은 일정 N건 [보기] [모두 확인]' 줄 · 펼치면 목록(날짜 · 시간 · 제목 · 캘린더 · 등록자 · [확인])
+        let calFreshOpen = false;
+        function renderCalFreshBar() {
+            const box = document.getElementById('cal-fresh-wrap'); if (!box) return;
+            if (isCalendarMode()) { box.innerHTML = ''; return; }
+            const list = calmFreshList().sort((a, b) => String(a.date).localeCompare(String(b.date)) || compareScheduleTime(a, b));
+            if (!list.length) { calFreshOpen = false; box.innerHTML = ''; return; }
+            const WD = ['일', '월', '화', '수', '목', '금', '토'];
+            const rows = list.map(s => {
+                const cal = scheduleCalendar(s);
+                const [yy, mm, dd] = String(s.date || '').split('-').map(Number);
+                const when = (yy ? `${mm}/${dd}(${WD[new Date(yy, mm - 1, dd).getDay()]})` : '') + ' ' + (isAllDaySchedule(s) ? '종일' : escapeHtml(s.startTime || ''));
+                const tag = scheduleIsNewForMe(s) ? '<span class="gw-new">새</span>' : '<span class="gw-new gw-chg">변경</span>';
+                return `<div data-fresh-sid="${escapeHtml(s.id)}" class="flex items-center gap-2 px-3 py-2 border-t border-rose-100 hover:bg-rose-50 cursor-pointer" onclick="openScheduleDetailModal(${jsArg(s.id)})">
+                    ${tag}<span class="text-xs text-gray-500 tabular-nums w-24 shrink-0">${when}</span>
+                    <span class="flex-1 min-w-0 truncate text-sm text-gray-800">${escapeHtml(s.title || '(제목 없음)')}</span>
+                    <span class="text-[11px] px-2 py-0.5 rounded-full ${cal.chip} shrink-0"><i class="fas ${cal.icon} mr-1"></i>${escapeHtml(cal.short)}</span>
+                    <span class="text-xs text-gray-400 w-20 truncate shrink-0">${escapeHtml(scheduleOrganizer(s) || '')}</span>
+                    <button type="button" data-fresh-ok onclick="event.stopPropagation(); calmMarkSeen(${jsArg(s.id)})" class="text-xs px-2 py-1 rounded border border-rose-300 text-rose-700 bg-white hover:bg-rose-100 shrink-0">확인</button>
+                </div>`;
+            }).join('');
+            box.innerHTML = `<div id="cal-fresh-bar" class="mb-3 rounded-lg border border-rose-200 bg-rose-50/60">
+                <div class="flex items-center gap-2 px-3 py-2 text-sm text-rose-800">
+                    <i class="fas fa-bell"></i><span>확인하지 않은 일정 <b>${list.length}</b>건</span>
+                    <button type="button" id="cal-fresh-open" onclick="calFreshOpen = !calFreshOpen; renderCalFreshBar()" class="ml-auto text-xs px-2.5 py-1 rounded border border-rose-300 bg-white hover:bg-rose-100">${calFreshOpen ? '접기' : '보기'}</button>
+                    <button type="button" id="cal-fresh-all" onclick="calmMarkAllSeen()" class="text-xs px-2.5 py-1 rounded bg-rose-600 text-white hover:bg-rose-700">모두 확인</button>
+                </div>
+                <div id="cal-fresh-panel" class="${calFreshOpen ? '' : 'hidden '}max-h-64 overflow-y-auto bg-white rounded-b-lg">${rows}</div>
+            </div>`;
+        }
+        function calmMarkSeen(id) { if (window.kobReads && id) kobReads.markAllSeen([scheduleMasterId(id)]); }
+        // 확인하지 않은 일정 칸이 있으면 그곳을, 없으면 오늘을 화면에 (캘린더 고를 때 · [오늘])
+        function calmScrollToFreshOrToday() {
+            requestAnimationFrame(() => {
+                const fr = document.getElementById('calm-fresh');
+                if (fr && fr.offsetParent !== null) fr.scrollIntoView({ block: 'start', behavior: 'auto' });
+                else scrollCalendarToToday();
+            });
         }
         function calmMarkAllSeen() {
             const ids = calmFreshList().map(s => scheduleMasterId(s.id));
@@ -21097,12 +21159,15 @@ const QUOTE_TEMPLATES = [
             const id = (document.getElementById('calendar-filter-cal') || {}).value || '';
             el.innerHTML = `${escapeHtml(id ? getCalendar(id).name : '전체 캘린더')} <i class="fas fa-caret-down"></i>`;
         }
-        // 캘린더를 고르면 그 캘린더 일정만 월 보기로
+        // 캘린더를 고르면 그 캘린더 일정만 — 날짜별 목록을 오늘 위치로, 확인하지 않은 일정을 먼저 (2026-11-16 다니엘님)
         function calmPickCalendar(id) {
             const sel = document.getElementById('calendar-filter-cal');
             if (sel) { if (!Array.from(sel.options).some(o => o.value === id)) fillCalendarFilterSelect(); sel.value = id; }
             calmCloseCalList();
-            calmSetView('month');
+            currentDate = new Date();
+            setCalendarView('list');
+            calmTodayMode = false; calmSyncBar();
+            calmScrollToFreshOrToday();
         }
         function calmShowAll() { const sel = document.getElementById('calendar-filter-cal'); if (sel) sel.value = ''; calmCloseCalList(); renderCalendar(); }
         // [오늘] — 날짜별 목록(리스트)을 오늘 위치로 엽니다. 설정의 표시 방법은 바꾸지 않습니다 (2026-11-12 다니엘님)
@@ -21112,7 +21177,7 @@ const QUOTE_TEMPLATES = [
             currentDate = new Date();
             setCalendarView('list');
             calmTodayMode = true; calmSyncBar();
-            scrollCalendarToToday();
+            calmScrollToFreshOrToday();
         }
         function calmToggleFilters() { document.getElementById('sec-calendar-center').classList.toggle('calm-filters-open'); }
         function calmOpenSettings() {
