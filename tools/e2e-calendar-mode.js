@@ -692,6 +692,81 @@ srv.listen(PORT, async () => {
             await m.close();
         }
 
+        // ---------- 11/16 다니엘님 가이드(모바일캘린더/아이폰 음성 일정 등록 인식 문제 해결 가이드.md) ----------
+        console.log('[A6] 음성 안내 — 읽기 끝 → 시작 삐 → 듣기 → 종료 삐 → 마이크 닫힘 → 다음 질문');
+        {
+            const m = await openPage(br, base + '?mode=calendar', 390, 800);
+            await m.evaluate(u => { try { localStorage.setItem('kobCalmLab.v1', '{"voice":true,"talk":true}'); } catch (e) { } enterApp(u); }, ADMIN);
+            const r = await m.evaluate(async () => {
+                const sleep = ms => new Promise(r => setTimeout(r, ms));
+                const out = {}; const ev = [];
+                const T0 = Date.now(); const at = () => Date.now() - T0;
+                window.AudioContext = function () {
+                    this.state = 'running'; this.currentTime = 0; this.destination = {};
+                    this.resume = () => { this.state = 'running'; return Promise.resolve(); };
+                    this.suspend = () => { this.state = 'suspended'; return Promise.resolve(); };
+                    const prm = () => ({ value: 0, setValueAtTime(v) { this.value = v; }, linearRampToValueAtTime() { }, exponentialRampToValueAtTime() { } });
+                    this.createOscillator = () => ({ type: '', frequency: prm(), connect() { return this; }, start() { ev.push(['beep', at(), this.frequency.value]); }, stop() { } });
+                    this.createGain = () => ({ gain: prm(), connect() { return this; } });
+                    this.createBuffer = () => ({}); this.createBufferSource = () => ({ connect() { }, start() { } });
+                };
+                window.webkitAudioContext = window.AudioContext;
+                const fake = { speaking: false, pending: false, getVoices() { return []; }, resume() { }, cancel() { this.speaking = false; },
+                    speak(u) { ev.push(['speak', at(), u.text]); this.speaking = true; setTimeout(() => { u.onstart && u.onstart(); setTimeout(() => { this.speaking = false; u.onend && u.onend(); }, 150); }, 20); } };
+                Object.defineProperty(window, 'speechSynthesis', { value: fake, configurable: true });
+                window.SpeechSynthesisUtterance = function (t) { this.text = t; };
+                let script = [];
+                class Fake {
+                    start() { ev.push(['rec', at()]); this._live = true; const a = script.shift();
+                        setTimeout(() => { if (a == null) return; this.onaudiostart && this.onaudiostart(); const res = [{ transcript: a }]; if (window.__fin) res.isFinal = true; this.onresult && this.onresult({ results: [res] }); }, 60); }
+                    stop() { this.abort(); }
+                    abort() { if (!this._live) return; this._live = false; setTimeout(() => { ev.push(['closed', at()]); this.onend && this.onend(); }, 100); }   // 실제처럼 닫히는 데 시간이 걸림
+                }
+                window.SpeechRecognition = Fake; window.webkitSpeechRecognition = Fake;
+                script = ['내일 오후 3시 미팅', null];
+                document.getElementById('calm-voice-fab').click();
+                for (let k = 0; k < 160 && ev.filter(e => e[0] === 'rec').length < 2; k++) await sleep(50);
+                out.ev = ev.map(e => e[0] + (e[0] === 'beep' ? e[2] : '') + '@' + e[1]);
+                const idx = (name, from, f) => ev.findIndex((e, i) => i >= (from || 0) && e[0] === name && (!f || f(e)));
+                const s1 = idx('speak'), b1 = idx('beep', s1), r1 = idx('rec', s1);
+                out.startBeep = s1 >= 0 && b1 > s1 && r1 > b1 && ev[b1][2] < 1000 && ev[r1][1] - ev[b1][1] >= 150;
+                const b2 = idx('beep', r1), c1 = idx('closed', r1), s2 = idx('speak', r1);
+                out.endBeep = b2 > r1 && s2 > b2 && ev[b2][2] > ev[b1][2];
+                out.closedFirst = c1 > r1 && s2 > c1;
+                out.second = idx('rec', s2) > s2 && idx('beep', s2) > s2;
+                // '말 끝남(isFinal)' 표시가 오면 2.5초 기다리지 않고 바로 종료 삐
+                calmCloseTalk(); await sleep(150);
+                ev.length = 0; window.__fin = true; script = ['내일 오후 3시 미팅', null];
+                document.getElementById('calm-voice-fab').click();
+                for (let k = 0; k < 100 && ev.filter(e => e[0] === 'beep').length < 2; k++) await sleep(50);
+                const rr = ev.find(e => e[0] === 'rec'), eb = ev.filter(e => e[0] === 'beep')[1];
+                out.finalGap = rr && eb ? eb[1] - rr[1] : 99999;
+                window.__fin = false;
+                calmCloseTalk(); await sleep(150);
+                // 원인 확인용: 질문 소리로 읽기 끄기 — 글자로만 묻고 삐 · 듣기는 그대로
+                calmOpenSettings();
+                const sw = document.getElementById('calm-lab-tts');
+                out.ttsSwitch = !!sw && sw.checked;
+                if (sw) { sw.checked = false; sw.dispatchEvent(new Event('change')); }
+                calmCloseSettings();
+                ev.length = 0; script = [null];
+                document.getElementById('calm-voice-fab').click();
+                for (let k = 0; k < 60 && !ev.some(e => e[0] === 'rec'); k++) await sleep(50);
+                out.noSpeak = !ev.some(e => e[0] === 'speak') && ev.some(e => e[0] === 'beep') && ev.some(e => e[0] === 'rec') && /어떤 일정/.test(document.getElementById('calm-talk-log').innerText);
+                calmCloseTalk();
+                calmSetLab('talkTts', true);
+                return out;
+            });
+            ok(r.startBeep, `질문 읽기가 끝난 뒤 시작 삐, 삐가 끝난 뒤 듣기 (${r.ev.join(' ')})`);
+            ok(r.endBeep, '들은 뒤 다른 높이(더 높은) 종료 삐');
+            ok(r.closedFirst, '마이크가 완전히 닫힌 뒤 다음 질문 읽기');
+            ok(r.second, '두 번째 질문도 읽기 → 삐 → 듣기');
+            ok(r.finalGap < 1000, `'말 끝남' 표시가 오면 바로 종료 삐 (듣기 시작부터 ${r.finalGap}ms)`);
+            ok(r.ttsSwitch && r.noSpeak, '실험실 › 질문 소리로 읽기 (기본 켬) — 끄면 글자로만 묻고 삐 · 듣기는 그대로 (원인 확인용)');
+            ok(m.__errs.length === 0, '스크립트 오류 없음 ' + m.__errs.join(' | '));
+            await m.close();
+        }
+
         // ---------- [오늘] = 날짜별 목록을 오늘 위치로 (11/12 다니엘님) ----------
         console.log('[T] 아래 줄 [오늘] → 날짜별 목록 · 오늘');
         {
