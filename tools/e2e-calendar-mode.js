@@ -236,6 +236,31 @@ srv.listen(PORT, async () => {
             await m.close();
         }
 
+        // ---------- 11/17 다니엘님: [오늘] 을 누르면 오늘 날짜 줄이 일정 칸 맨 위에 (가운데 아님) ----------
+        console.log('[T] [오늘] — 오늘 날짜를 맨 위로');
+        for (const [tw, th] of [[390, 800], [360, 640], [430, 932], [800, 400]]) {
+            const m = await openPage(br, base + '?mode=calendar', tw, th);
+            await m.evaluate(u => enterApp(u), ADMIN);
+            const r = await m.evaluate(async (me) => {
+                const sleep = ms => new Promise(r => setTimeout(r, ms));
+                const t = new Date();
+                for (let k = -20; k <= 20; k++) {                       // 앞뒤로 일정을 넉넉히 — 위아래로 넘길 수 있게
+                    const d = new Date(t.getFullYear(), t.getMonth(), t.getDate() + k);
+                    for (let j = 0; j < 2; j++) schedules.push({ id: `e2e-t${k}-${j}`, title: `오늘시험 ${k}-${j}`, date: ymd(d), startTime: '10:00', endTime: '11:00', calendar: 'team', dept: 'admin', salesperson: me.name, createdBy: me.email, attendees: [] });
+                }
+                calmShowAll(); calmShowToday(); await sleep(1200);
+                const hd = document.querySelector('#cal-grid [data-today="1"]');
+                let sc = hd && hd.parentElement;
+                while (sc && !(/(auto|scroll)/.test(getComputedStyle(sc).overflowY) && sc.scrollHeight > sc.clientHeight)) sc = sc.parentElement;
+                const top = hd ? hd.getBoundingClientRect().top : -999;
+                const boxTop = sc ? sc.getBoundingClientRect().top : 0;
+                return { gap: Math.round(top - boxTop), scrolled: sc ? sc.scrollTop : 0, hasFresh: !!document.getElementById('calm-fresh') };
+            }, ADMIN);
+            ok(!r.hasFresh && r.scrolled > 0 && Math.abs(r.gap) <= 4, `[오늘] ${tw}x${th} → 오늘 날짜 줄이 일정 칸 맨 위 (맨 위와 차이 ${r.gap}px, 넘김 ${r.scrolled})`);
+            ok(m.__errs.length === 0, '스크립트 오류 없음 ' + m.__errs.join(' | '));
+            await m.close();
+        }
+
         // ---------- 11/16 다니엘님: 확인하지 않은 일정 — 휴대폰 [확인] · 그룹웨어 일정캘린더 표시 ----------
         console.log('[N] 확인하지 않은 일정 — 휴대폰 [확인]');
         {

@@ -30,7 +30,7 @@
     <script src="config/app-config.js"></script>
     <!-- 화면 버전 (2026-11-16) — 배포할 때마다 올립니다. 개발 · 운영 화면 아래에 "그룹웨어 v1.1.0 · 운영" 처럼 보입니다.
          groupware = 그룹웨어 화면 · calendar = 킹오더일정(?mode=calendar) -->
-    <script>window.KOB_VERSION = { groupware: '1.1.1', calendar: '1.0.2', date: '2026-11-16' };</script>
+    <script>window.KOB_VERSION = { groupware: '1.1.1', calendar: '1.0.3', date: '2026-11-16' };</script>
     <script>
         (function () {
             // manifest 는 **여기서 만들어 답니다.** (2026-09-05 고침)
@@ -21424,7 +21424,9 @@ const QUOTE_TEMPLATES = [
         function scrollCalendarToToday() {
             requestAnimationFrame(() => {
                 const cell = document.querySelector('#cal-grid [data-today="1"]');
-                if (cell && cell.offsetParent !== null) cell.scrollIntoView({ block: 'center', behavior: 'smooth' });
+                // 킹오더일정 날짜별 목록은 오늘 날짜 줄을 맨 위에 (11/17 다니엘님 — 가운데면 오늘 일정이 아래로 밀림). 달력 칸은 그대로 가운데
+                const top = isCalendarMode() && currentCalendarView === 'list';
+                if (cell && cell.offsetParent !== null) cell.scrollIntoView({ block: top ? 'start' : 'center', behavior: 'smooth' });
             });
         }
         function calendarGoToday() {
