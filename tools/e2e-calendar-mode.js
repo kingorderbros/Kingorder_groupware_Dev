@@ -238,7 +238,7 @@ srv.listen(PORT, async () => {
 
         // ---------- 11/17 다니엘님: [오늘] 을 누르면 오늘 날짜 줄이 일정 칸 맨 위에 (가운데 아님) ----------
         console.log('[T] [오늘] — 오늘 날짜를 맨 위로');
-        for (const [tw, th] of [[390, 800], [360, 640], [430, 932], [800, 400]]) {
+        for (const [tw, th] of [[390, 800], [360, 640], [430, 932], [800, 400], [1200, 838]]) {
             const m = await openPage(br, base + '?mode=calendar', tw, th);
             await m.evaluate(u => enterApp(u), ADMIN);
             const r = await m.evaluate(async (me) => {
@@ -252,11 +252,14 @@ srv.listen(PORT, async () => {
                 const hd = document.querySelector('#cal-grid [data-today="1"]');
                 let sc = hd && hd.parentElement;
                 while (sc && !(/(auto|scroll)/.test(getComputedStyle(sc).overflowY) && sc.scrollHeight > sc.clientHeight)) sc = sc.parentElement;
-                const top = hd ? hd.getBoundingClientRect().top : -999;
-                const boxTop = sc ? sc.getBoundingClientRect().top : 0;
-                return { gap: Math.round(top - boxTop), scrolled: sc ? sc.scrollTop : 0, hasFresh: !!document.getElementById('calm-fresh') };
+                // 날짜 줄은 위에 붙는 줄이라 원래 자리로 재고, 기준은 위 머리 줄(#calm-top) 아래 끝 — 머리 줄에 가려지면 실패
+                hd.style.position = 'static'; const top = hd.getBoundingClientRect().top; hd.style.position = '';
+                const bar = document.getElementById('calm-top').getBoundingClientRect().bottom;
+                const r = hd.getBoundingClientRect();
+                const at = document.elementFromPoint(Math.min(60, innerWidth - 5), r.top + r.height / 2);
+                return { gap: Math.round(top - bar), seen: !!(at && at.closest('[data-today]')), scrolled: sc ? sc.scrollTop : 0, hasFresh: !!document.getElementById('calm-fresh') };
             }, ADMIN);
-            ok(!r.hasFresh && r.scrolled > 0 && Math.abs(r.gap) <= 4, `[오늘] ${tw}x${th} → 오늘 날짜 줄이 일정 칸 맨 위 (맨 위와 차이 ${r.gap}px, 넘김 ${r.scrolled})`);
+            ok(!r.hasFresh && r.scrolled > 0 && Math.abs(r.gap) <= 4 && r.seen, `[오늘] ${tw}x${th} → 오늘 날짜 줄이 위 머리 줄 바로 아래에 보임 (차이 ${r.gap}px, 보임 ${r.seen}, 넘김 ${r.scrolled})`);
             ok(m.__errs.length === 0, '스크립트 오류 없음 ' + m.__errs.join(' | '));
             await m.close();
         }

@@ -30,7 +30,7 @@
     <script src="config/app-config.js"></script>
     <!-- 화면 버전 (2026-11-16) — 배포할 때마다 올립니다. 개발 · 운영 화면 아래에 "그룹웨어 v1.1.0 · 운영" 처럼 보입니다.
          groupware = 그룹웨어 화면 · calendar = 킹오더일정(?mode=calendar) -->
-    <script>window.KOB_VERSION = { groupware: '1.1.1', calendar: '1.0.3', date: '2026-11-16' };</script>
+    <script>window.KOB_VERSION = { groupware: '1.1.1', calendar: '1.0.4', date: '2026-11-16' };</script>
     <script>
         (function () {
             // manifest 는 **여기서 만들어 답니다.** (2026-09-05 고침)
@@ -20280,9 +20280,23 @@ const QUOTE_TEMPLATES = [
         function calmScrollToFreshOrToday() {
             requestAnimationFrame(() => {
                 const fr = document.getElementById('calm-fresh');
-                if (fr && fr.offsetParent !== null) fr.scrollIntoView({ block: 'start', behavior: 'auto' });
+                if (fr && fr.offsetParent !== null) calmScrollToTop(fr, 'auto');
                 else scrollCalendarToToday();
             });
+        }
+        // 킹오더일정 — el 을 위 머리 줄(#calm-top, 일정 칸 위에 붙어 있음) 바로 아래에 맞춥니다 (11/17)
+        //   scrollIntoView('start') 는 머리 줄 밑에 가려지고, 날짜 줄은 위에 붙는(sticky) 줄이라 지금 보이는 위치 대신 원래 자리를 잽니다
+        function calmScrollToTop(el, behavior) {
+            let sc = el.parentElement;
+            while (sc && !(/(auto|scroll)/.test(getComputedStyle(sc).overflowY) && sc.scrollHeight > sc.clientHeight)) sc = sc.parentElement;
+            if (!sc) { el.scrollIntoView({ block: 'start', behavior: behavior || 'smooth' }); return; }
+            const pos = el.style.position; el.style.position = 'static';
+            const elTop = el.getBoundingClientRect().top;
+            el.style.position = pos;
+            const bar = document.getElementById('calm-top');
+            const scTop = sc.getBoundingClientRect().top;
+            const barH = bar && bar.offsetParent !== null && sc.contains(bar) ? Math.max(0, bar.getBoundingClientRect().bottom - scTop) : 0;
+            sc.scrollTo({ top: Math.max(0, sc.scrollTop + elTop - scTop - barH), behavior: behavior || 'smooth' });
         }
         function calmMarkAllSeen() {
             const ids = calmFreshList().map(s => scheduleMasterId(s.id));
@@ -21425,8 +21439,10 @@ const QUOTE_TEMPLATES = [
             requestAnimationFrame(() => {
                 const cell = document.querySelector('#cal-grid [data-today="1"]');
                 // 킹오더일정 날짜별 목록은 오늘 날짜 줄을 맨 위에 (11/17 다니엘님 — 가운데면 오늘 일정이 아래로 밀림). 달력 칸은 그대로 가운데
-                const top = isCalendarMode() && currentCalendarView === 'list';
-                if (cell && cell.offsetParent !== null) cell.scrollIntoView({ block: top ? 'start' : 'center', behavior: 'smooth' });
+                if (cell && cell.offsetParent !== null) {
+                    if (isCalendarMode() && currentCalendarView === 'list') calmScrollToTop(cell);
+                    else cell.scrollIntoView({ block: 'center', behavior: 'smooth' });
+                }
             });
         }
         function calendarGoToday() {

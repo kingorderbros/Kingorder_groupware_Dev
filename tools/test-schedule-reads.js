@@ -13,7 +13,10 @@ const START = 'let schedules = (window.kobDb';
 const END = 'function setCalendarView(';
 const i = html.indexOf(START), j = html.indexOf(END, i);
 if (i < 0 || j < 0) { console.error('index.html 에서 일정 저장 부분을 찾지 못했습니다.'); process.exit(1); }
-const CODE = html.slice(i, j) + `
+// 시작일은 개발(2026-11-12)과 운영(2026-11-16)이 다릅니다 — 실제 값은 형식만 확인하고, 아래 시험은 2026-11-12 기준으로 돌립니다
+const SINCE_RE = /const CAL_NEW_SINCE = '([0-9-]+)';/;
+const REAL_SINCE = (html.slice(i, j).match(SINCE_RE) || [])[1] || '';
+const CODE = html.slice(i, j).replace(SINCE_RE, "const CAL_NEW_SINCE = '2026-11-12';") + `
 ;globalThis.__t = {
     get schedules() { return schedules; }, set schedules(v) { schedules = v; },
     saveSchedules, reloadSchedulesFromDb,
@@ -67,7 +70,7 @@ const base = (x) => Object.assign({ date: '2026-11-20', startTime: '10:00', endT
 console.log('[새 일정 숫자]');
 {
     const { t } = setup();
-    ok(t.CAL_NEW_SINCE === '2026-11-12', '기능 시작일 2026-11-12');
+    ok(/^2026-\d\d-\d\d$/.test(REAL_SINCE) && REAL_SINCE >= '2026-11-12', `기능 시작일 형식 (이 화면 ${REAL_SINCE})`);
     const list = [
         base({ id: 'a' }),
         base({ id: 'b', calendar: 'sales-share' }),
