@@ -7,7 +7,7 @@
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#000000",
+  "background_color": "#ffffff",
   "theme_color": "#1e293b",
   "lang": "ko",
   "dir": "ltr",
@@ -25,7 +25,7 @@
       "purpose": "any"
     },
     {
-      "src": "calendar-icon-512.png",
+      "src": "calendar-icon-maskable-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"

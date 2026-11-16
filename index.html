@@ -30,7 +30,7 @@
     <script src="config/app-config.js"></script>
     <!-- 화면 버전 (2026-11-16) — 배포할 때마다 올립니다. 개발 · 운영 화면 아래에 "그룹웨어 v1.1.0 · 운영" 처럼 보입니다.
          groupware = 그룹웨어 화면 · calendar = 킹오더일정(?mode=calendar) -->
-    <script>window.KOB_VERSION = { groupware: '1.1.0', calendar: '1.0.0', date: '2026-11-16' };</script>
+    <script>window.KOB_VERSION = { groupware: '1.1.0', calendar: '1.0.1', date: '2026-11-16' };</script>
     <script>
         (function () {
             // manifest 는 **여기서 만들어 답니다.** (2026-09-05 고침)
@@ -81,8 +81,9 @@
                 // 킹오더일정 아이콘 — 그룹웨어 로고에 달력 표시 (2026-11-12)
                 if (m === 'calendar') {
                     var pre = ((window.KOB_CONFIG || {}).env === 'dev') ? 'dev-' : '';
-                    var ico2 = document.querySelector('link[rel="icon"]'); if (ico2) ico2.href = 'assets/pwa/' + pre + 'calendar-icon-192.png';
-                    var ati2 = document.querySelector('link[rel="apple-touch-icon"]'); if (ati2) ati2.href = 'assets/pwa/' + pre + 'calendar-icon-192.png';
+                    // 운영: 원래 로고 + 오른쪽 위 달력 (2026-11-16) — 탭 아이콘 calendar-favicon-32 · 홈 화면 calendar-apple-touch-icon(180)
+                    var ico2 = document.querySelector('link[rel="icon"]'); if (ico2) { ico2.href = 'assets/pwa/' + (pre ? pre + 'calendar-icon-192.png' : 'calendar-favicon-32.png'); if (!pre) ico2.setAttribute('sizes', '32x32'); }
+                    var ati2 = document.querySelector('link[rel="apple-touch-icon"]'); if (ati2) ati2.href = 'assets/pwa/' + (pre ? pre + 'calendar-icon-192.png' : 'calendar-apple-touch-icon.png');
                 }
                 // 인바운드 접수는 2026-09-08 부터 그룹웨어 안(파트너센터 › 영업본부 › 인바운드 관리)으로 들어왔습니다.
                 // 별도 주소(?mode=inbound)와 그 홈 화면 이름은 더 쓰지 않습니다.
