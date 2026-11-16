@@ -36,7 +36,7 @@ async function openPage(br, url, w, h) {
 }
 
 srv.listen(PORT, async () => {
-    const br = await pp.launch({ executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', headless: 'new' });
+    const br = await pp.launch({ executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', headless: 'new', args: ['--autoplay-policy=no-user-gesture-required'] });
     const base = `http://localhost:${PORT}/`;
     try {
         // ---------- Task 1: 일정 전용 주소 ----------
@@ -895,6 +895,87 @@ srv.listen(PORT, async () => {
             ok(r.devFab, '개발에서는 🎤 보임');
             ok(r.prodFab && r.prodLab && r.prodNoOpen, '운영(prod)에서는 실험실 음성 항목 · 🎤 숨김, 열리지 않음 (설정이 켜져 있어도)');
             ok(r.recs === 1, `읽기 도중 🎤 를 누르면 듣기 한 번만 (${r.recs}번)`);
+            ok(m.__errs.length === 0, '스크립트 오류 없음 ' + m.__errs.join(' | '));
+            await m.close();
+        }
+
+        // ---------- 11/16 서버 받아쓰기 (실험실) — 마이크는 한 번만 열고, 대답마다 녹음 → /api/stt ----------
+        console.log('[A8] 음성 — 서버 받아쓰기');
+        {
+            const m = await openPage(br, base + '?mode=calendar', 390, 800);
+            await m.evaluate(u => { try { localStorage.setItem('kobCalmLab.v1', '{"voice":true,"talk":true}'); } catch (e) { } enterApp(u); }, ADMIN);
+            const r = await m.evaluate(async () => {
+                const sleep = ms => new Promise(r => setTimeout(r, ms));
+                const out = {}; const ev = [];
+                calmOpenSettings();
+                const sw = document.getElementById('calm-lab-stt');
+                out.switch = !!sw && !sw.checked;
+                if (sw) { sw.checked = true; sw.dispatchEvent(new Event('change')); }
+                calmCloseSettings();
+                window.CALM_TTS_OFF = true;
+                // 가짜 마이크 — 소리 크기를 시험이 정함 (gain 0 = 조용, 1 = 말함)
+                const ac2 = new AudioContext(); const osc = ac2.createOscillator(); const g = ac2.createGain(); g.gain.value = 0;
+                const dest = ac2.createMediaStreamDestination(); osc.connect(g); g.connect(dest); osc.start();
+                let gum = 0;
+                navigator.mediaDevices.getUserMedia = async () => { gum++; ev.push('mic-open'); await sleep(700); return dest.stream; };   // 허용 창처럼 늦게 열림
+                window.MediaRecorder = class { constructor(st, o) { this.stream = st; this.mimeType = (o && o.mimeType) || 'audio/mp4'; this.state = 'inactive'; }
+                    static isTypeSupported(t) { return t === 'audio/mp4'; }
+                    start() { this.state = 'recording'; ev.push('rec'); }
+                    stop() { if (this.state === 'inactive') return; this.state = 'inactive'; this.ondataavailable && this.ondataavailable({ data: new Blob([new Uint8Array(3000)], { type: this.mimeType }) }); setTimeout(() => this.onstop && this.onstop(), 5); } };
+                const answers = ['내일 오후 3시 미팅', '아니요'];
+                let stt = 0, sttType = '', noKey = false;
+                const realFetch = window.fetch;
+                window.fetch = async (url, opt) => {
+                    if (String(url).includes('/api/stt')) { stt++; sttType = (opt.headers || {})['Content-Type']; ev.push('stt');
+                        if (noKey) return new Response(JSON.stringify({ ok: false, error: 'no-key' }), { status: 503 });
+                        return new Response(JSON.stringify({ ok: true, text: answers.shift() || '' }), { status: 200 }); }
+                    return realFetch(url, opt);
+                };
+                const say = async (ms) => { g.gain.value = 1; await sleep(ms); g.gain.value = 0; };
+                document.getElementById('calm-voice-fab').click();
+                for (let k = 0; k < 60 && !ev.includes('rec'); k++) await sleep(50);
+                await sleep(300); await say(700);                                    // 첫 대답
+                for (let k = 0; k < 80 && stt < 1; k++) await sleep(50);
+                for (let k = 0; k < 80 && ev.filter(e => e === 'rec').length < 2; k++) await sleep(50);
+                await sleep(300); await say(500);                                    // 두 번째 대답
+                for (let k = 0; k < 80 && stt < 2; k++) await sleep(50);
+                await sleep(400);
+                const log = Array.from(document.querySelectorAll('#calm-talk-log > div')).map(x => x.textContent);
+                out.log = log;
+                out.flow = log.includes('내일 오후 3시 미팅') && log.some(x => /참석자를 지정/.test(x)) && log.includes('아니요') && log.some(x => /세부내용/.test(x));
+                out.once = gum === 1;
+                out.type = sttType === 'audio/mp4';
+                out.diag = /말소리 감지/.test(document.getElementById('calm-talk-diag-list').textContent) && /서버로 보냄/.test(document.getElementById('calm-talk-diag-list').textContent);
+                calmCloseTalk(); await sleep(50);
+                out.closed = dest.stream.getAudioTracks().every(t => t.readyState === 'ended');
+                // 말 없음 — 서버로 안 보내고 '잘 듣지 못했습니다'
+                window.CALM_VOICE_WAIT_MS = 1200; const s0 = stt;
+                const ac3 = new AudioContext(); const d3 = ac3.createMediaStreamDestination();
+                navigator.mediaDevices.getUserMedia = async () => { gum++; return d3.stream; };
+                document.getElementById('calm-voice-fab').click();
+                for (let k = 0; k < 60 && !Array.from(document.querySelectorAll('#calm-talk-log > div')).some(x => /잘 듣지 못했습니다/.test(x.textContent)); k++) await sleep(50);
+                out.silent = stt === s0 && Array.from(document.querySelectorAll('#calm-talk-log > div')).some(x => /잘 듣지 못했습니다/.test(x.textContent));
+                calmCloseTalk(); await sleep(50);
+                // 열쇠 없음 — 안내
+                window.CALM_VOICE_WAIT_MS = 7000; noKey = true;
+                const ac4 = new AudioContext(); const o4 = ac4.createOscillator(); const g4 = ac4.createGain(); g4.gain.value = 0; const d4 = ac4.createMediaStreamDestination(); o4.connect(g4); g4.connect(d4); o4.start();
+                navigator.mediaDevices.getUserMedia = async () => d4.stream;
+                document.getElementById('calm-voice-fab').click();
+                await sleep(600); g4.gain.value = 1; await sleep(500); g4.gain.value = 0;
+                for (let k = 0; k < 60 && !/열쇠/.test(document.getElementById('calm-talk-hint').textContent); k++) await sleep(50);
+                out.noKey = /열쇠/.test(document.getElementById('calm-talk-hint').textContent);
+                calmCloseTalk();
+                window.fetch = realFetch; window.CALM_TTS_OFF = false; calmSetLab('sttServer', false);
+                return out;
+            });
+            ok(r.switch, '실험실 › 서버 받아쓰기 (기본 꺼짐)');
+            ok(r.flow, `말하고 멈추면 녹음을 서버로 보내 글자로 받아 다음 질문으로 (${JSON.stringify(r.log)})`);
+            ok(r.once, '마이크는 처음 한 번만 열고 두 번째 대답에도 그대로 씀');
+            ok(r.type, '녹음 형식을 함께 보냄 (아이폰 audio/mp4)');
+            ok(r.diag, '진단 기록에 말소리 감지 · 서버로 보냄');
+            ok(r.closed, '창을 닫으면 마이크도 끔');
+            ok(r.silent, '말이 없으면 서버로 보내지 않고 잘 듣지 못했습니다');
+            ok(r.noKey, '서버 열쇠가 없으면 안내');
             ok(m.__errs.length === 0, '스크립트 오류 없음 ' + m.__errs.join(' | '));
             await m.close();
         }

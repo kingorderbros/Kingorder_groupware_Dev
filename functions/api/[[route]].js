@@ -321,6 +321,35 @@ export async function onRequest(context) {
     try { store = db(env); } catch (e) { return json(500, { ok: false, error: e.message }); }
 
     try {
+        // ---------- 서버 받아쓰기 (2026-11-16 · 킹오더일정 음성 안내 실험실) ----------
+        // 아이폰 웹 받아쓰기가 두 번째부터 소리를 못 받는 문제 → 휴대폰은 녹음만, 글자는 여기서 OpenAI 로.
+        // 직원 이름(퇴사자 제외)을 함께 넘겨 이름을 잘 알아듣게 합니다. 열쇠는 환경변수 OPENAI_API_KEY, 모델은 STT_MODEL(기본 gpt-transcribe).
+        if (path === '/api/stt' && method === 'POST') {
+            const who = await requireStaff(env, store, request);
+            if (who.error) return who.error;
+            const keyAi = str(env.OPENAI_API_KEY);
+            if (!keyAi) return json(503, { ok: false, error: 'no-key', message: '서버 받아쓰기 열쇠(OPENAI_API_KEY)가 아직 없습니다.' });
+            const type = str(request.headers.get('Content-Type')).toLowerCase();
+            const buf = await request.arrayBuffer();
+            if (!buf.byteLength) return json(400, { ok: false, error: '녹음이 비어 있습니다.' });
+            if (buf.byteLength > 8 * 1024 * 1024) return json(413, { ok: false, error: '녹음이 너무 깁니다.' });
+            const ext = /webm/.test(type) ? 'webm' : /ogg/.test(type) ? 'ogg' : /wav/.test(type) ? 'wav' : /mpeg|mp3/.test(type) ? 'mp3' : 'm4a';
+            const uv = await store.storeValues(['gwUsers.v1']);
+            const names = (Array.isArray(uv['gwUsers.v1']) ? uv['gwUsers.v1'] : []).filter(u => u && u.name && u.resigned !== true).map(u => str(u.name));
+            const prompt = `킹오더브라더스 회사 일정 등록 대화. 날짜·시간은 숫자로 (예: 오후 2시 30분, 11월 20일). 직원 이름: ${Array.from(new Set(names)).join(', ')}. 네, 아니요, 참석자, 세부내용, 취소.`;
+            const fd = new FormData();
+            fd.append('file', new Blob([buf], { type: type || 'audio/mp4' }), 'speech.' + ext);
+            fd.append('model', str(env.STT_MODEL) || 'gpt-transcribe');
+            fd.append('language', 'ko');
+            fd.append('prompt', prompt.slice(0, 900));
+            fd.append('response_format', 'json');
+            const t0 = Date.now();
+            const r = await fetch('https://api.openai.com/v1/audio/transcriptions', { method: 'POST', headers: { Authorization: `Bearer ${keyAi}` }, body: fd });
+            let j = {}; try { j = await r.json(); } catch (e) { }
+            if (!r.ok) return json(502, { ok: false, error: (j && j.error && j.error.message) || ('받아쓰기 서버 오류 ' + r.status) });
+            return json(200, { ok: true, text: str(j.text).trim(), ms: Date.now() - t0 });
+        }
+
         // ---------- 대한민국 공휴일 (2026-09-29 · 판단은 _holidays.js) ----------
         // 공개 자료라 로그인 없이. 저장된 것이 하루 넘었으면 구글 공휴일 캘린더를 새로 받아 app_store 에 둡니다.
         if (path === '/api/holidays' && method === 'GET') {
