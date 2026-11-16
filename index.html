@@ -28,6 +28,9 @@
     <link rel="apple-touch-icon" href="assets/pwa/apple-touch-icon.png">
     <!-- 실행 환경 설정 — 아래 홈 화면 이름(dev 는 [DEV] 붙임)이 env 를 보므로 여기서 먼저 읽습니다 -->
     <script src="config/app-config.js"></script>
+    <!-- 화면 버전 (2026-11-16) — 배포할 때마다 올립니다. 개발 · 운영 화면 아래에 "그룹웨어 v1.1.0 · 운영" 처럼 보입니다.
+         groupware = 그룹웨어 화면 · calendar = 킹오더일정(?mode=calendar) -->
+    <script>window.KOB_VERSION = { groupware: '1.1.0', calendar: '1.0.0', date: '2026-11-16' };</script>
     <script>
         (function () {
             // manifest 는 **여기서 만들어 답니다.** (2026-09-05 고침)
@@ -2075,6 +2078,7 @@
                 <p class="text-gray-600 mb-2"><i class="fas fa-circle-info mr-1 text-blue-500"></i>등록된 로그인 계정이 없습니다. 관리자 계정의 임시 비밀번호를 먼저 생성해 주세요.</p>
                 <button type="button" onclick="bootstrapAdminAccount()" class="w-full py-2 px-3 bg-white border border-blue-300 text-blue-700 hover:bg-blue-50 rounded-lg text-sm transition-colors"><i class="fas fa-key mr-1"></i>초기 설정: 관리자 임시 비밀번호 생성</button>
             </div>
+            <p class="js-app-ver text-center text-[11px] text-gray-400 mt-4" data-app="auto"></p>
         </div>
     </div>
 
@@ -2334,6 +2338,7 @@
                 <button onclick="handleLogout()" class="w-full flex items-center justify-center px-4 py-2 border border-slate-600 rounded-md hover:bg-slate-800/70 text-red-400 text-sm transition-colors">
                     <i class="fas fa-sign-out-alt mr-2"></i> 로그아웃
                 </button>
+                <p class="js-app-ver text-center text-[11px] text-gray-500 mt-2" data-app="groupware"></p>
             </div>
         </aside>
 
@@ -3739,6 +3744,7 @@
                                 </div>
                                 <a id="calm-open-gw" class="calm-row" href="./" target="_blank" rel="noopener"><i class="fas fa-up-right-from-square"></i> 그룹웨어 열기 <span class="ml-auto text-xs text-gray-400">새 창</span></a>
                                 <button type="button" class="calm-row calm-danger" onclick="calmCloseSettings(); handleLogout()"><i class="fas fa-right-from-bracket"></i> 로그아웃</button>
+                                <p class="js-app-ver text-center text-xs text-gray-400 pt-3 pb-1" data-app="calendar"></p>
                             </div>
                         </div>
                     </div>
@@ -62768,6 +62774,16 @@ ${gwZipBtnHtml(r.items.filter(it => it.fileUrl).map(it => ({ name: `${it.name ||
         // 파트너 로그인 아이디 기억하기 (비밀번호는 남기지 않습니다)
         const PC_SAVED_ID_KEY = 'pcSavedLoginId';
         // 화면 판 — 고칠 때마다 올립니다. 로그인 화면 아래와 상단 로고 말풍선에 보입니다 (2026-09-16)
+        // 화면 버전 표시 (2026-11-16) — .js-app-ver 에 "그룹웨어 v1.1.0 · 운영" (data-app: groupware · calendar · auto)
+        function kobVersionText(app) {
+            const v = window.KOB_VERSION || {}, env = (window.KOB_CONFIG || {}).env || '';
+            if (app === 'auto') app = isCalendarMode() ? 'calendar' : 'groupware';
+            const name = app === 'calendar' ? '킹오더일정' : '그룹웨어';
+            const envName = { dev: '개발', prod: '운영' }[env] || env;
+            return name + ' v' + (v[app] || '?') + (envName ? ' · ' + envName : '');
+        }
+        function kobFillVersions() { document.querySelectorAll('.js-app-ver').forEach(el => { el.textContent = kobVersionText(el.dataset.app || 'groupware'); el.title = '화면 버전 · ' + ((window.KOB_VERSION || {}).date || ''); }); }
+        if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', kobFillVersions); else kobFillVersions();
         const PC_BUILD = '2026-09-16.22';
         function stampPartnerBuild() {
             document.querySelectorAll('.js-pc-build').forEach(el => { el.textContent = PC_BUILD + ((window.KOB_CONFIG || {}).env ? ` · ${window.KOB_CONFIG.env}` : ''); });

@@ -1154,7 +1154,21 @@ srv.listen(PORT, async () => {
         console.log('[1] 그룹웨어 기본 주소는 그대로');
         const gw = await openPage(br, base, 1400, 900);
         ok(await gw.evaluate(() => document.documentElement.dataset.mode) === 'groupware', '모드 없음 = groupware');
+        const verOf = (pg, sel) => pg.evaluate(s => { const e = document.querySelector(s); return e ? e.textContent : null; }, sel);
+        const vLogin = await verOf(gw, '#login-card .js-app-ver');
+        ok(/^그룹웨어 v\d+\.\d+\.\d+( · .+)?$/.test(vLogin || ''), `로그인 화면 버전 표시 (얻음 ${vLogin})`);
         await gw.evaluate(u => enterApp(u), ADMIN);
+        const vSide = await verOf(gw, '#sidebar .js-app-ver');
+        ok(/^그룹웨어 v\d+\.\d+\.\d+/.test(vSide || '') && await gw.evaluate(() => document.querySelector('#sidebar .js-app-ver').getBoundingClientRect().height > 0), `왼쪽 메뉴 아래 버전 표시 (얻음 ${vSide})`);
+        {
+            const cv = await openPage(br, base + '?mode=calendar', 390, 844);
+            const vcl = await verOf(cv, '#login-card .js-app-ver');
+            ok(/^킹오더일정 v\d+\.\d+\.\d+/.test(vcl || ''), `킹오더일정 로그인 화면 버전 (얻음 ${vcl})`);
+            await cv.evaluate(u => enterApp(u), ADMIN);
+            const vcs = await verOf(cv, '#calm-settings .js-app-ver');
+            ok(/^킹오더일정 v\d+\.\d+\.\d+/.test(vcs || ''), `킹오더일정 설정 창 버전 (얻음 ${vcs})`);
+            await cv.close();
+        }
         ok(await gw.evaluate(() => getComputedStyle(document.getElementById('sidebar')).display !== 'none'), '그룹웨어는 왼쪽 메뉴 보임');
         await gw.evaluate(() => navigate('calendar-center', document.getElementById('nav-calendar-center')));
         const link = await gw.evaluate(() => { const a = document.getElementById('calm-open-link'); return a ? { href: a.href, vis: a.getBoundingClientRect().width > 0, target: a.target, text: a.innerText } : null; });
