@@ -3727,12 +3727,14 @@
                                 <button type="button" id="calm-open-filter" class="calm-row" onclick="calmCloseSettings(); calmOpenFilterSheet()"><i class="fas fa-filter"></i> 필터 설정 <i class="fas fa-chevron-right ml-auto text-gray-300"></i></button>
                                 <div id="calm-noti"></div>
                                 <div class="py-2">
+                                    <div id="calm-lab-voice-box">
                                     <p class="font-semibold text-gray-800 mb-1"><i class="fas fa-flask mr-1"></i>실험실 <span class="text-xs font-normal text-gray-400">시험 중인 기능</span></p>
                                     <label class="calm-radio justify-between"><span><i class="fas fa-microphone mr-2 text-pink-600"></i>음성으로 일정 만들기</span><span class="calm-switch"><input type="checkbox" id="calm-lab-voice" onchange="calmSetLab('voice', this.checked)"><span></span></span></label>
                                     <label class="calm-radio justify-between"><span><i class="fas fa-comments mr-2 text-pink-600"></i>음성 안내로 묻고 답하기</span><span class="calm-switch"><input type="checkbox" id="calm-lab-talk" onchange="calmSetLab('talk', this.checked)"><span></span></span></label>
                                     <label class="calm-radio justify-between"><span><i class="fas fa-volume-high mr-2 text-pink-600"></i>질문 소리로 읽기</span><span class="calm-switch"><input type="checkbox" id="calm-lab-tts" onchange="calmSetLab('talkTts', this.checked)"><span></span></span></label>
                                     <p class="text-xs text-gray-500">함께 켜면 🎤 를 눌렀을 때 시리처럼 소리로 물어봅니다 — 언제 · 어떤 내용 · 참석자 · 세부내용을 차례로 묻고, "네" 하면 바로 등록합니다.</p>
                                     <p class="text-xs text-gray-500">켜면 [+] 위에 🎤 단추가 생깁니다. "내일 오후 3시 강남 고객사 미팅 김영업 초대" 처럼 말하면 일정 입력창을 채워 줍니다. 확인한 뒤 [등록하기] 를 누르세요.</p>
+                                    </div>
                                 </div>
                                 <a id="calm-open-gw" class="calm-row" href="./" target="_blank" rel="noopener"><i class="fas fa-up-right-from-square"></i> 그룹웨어 열기 <span class="ml-auto text-xs text-gray-400">새 창</span></a>
                                 <button type="button" class="calm-row calm-danger" onclick="calmCloseSettings(); handleLogout()"><i class="fas fa-right-from-bracket"></i> 로그아웃</button>
@@ -20476,10 +20478,36 @@ const QUOTE_TEMPLATES = [
             out.slice().forEach(x => { if (/(님|씨)$/.test(x) && x.length > 1) out.push(x.slice(0, -1)); });
             return [...new Set(out)].filter(x => /^[가-힣]{2,4}$/.test(x));
         }
+        // 비슷한 이름 — 자음 · 모음으로 쪼개 비교 (ㅔ/ㅐ · ㅖ/ㅒ 는 같은 소리로). 받아쓰기가 '임희선' 을 '이미선' · '이혜선' 으로 적는 경우 (11/16 진단)
+        function voiceJamo(str) {
+            const CHO = 'ㄱㄲㄴㄷㄸㄹㅁㅂㅃㅅㅆㅇㅈㅉㅊㅋㅌㅍㅎ', JUNG = 'ㅏㅐㅑㅒㅓㅔㅕㅖㅗㅘㅙㅚㅛㅜㅝㅞㅟㅠㅡㅢㅣ';
+            const JONG = ['', 'ㄱ', 'ㄲ', 'ㄳ', 'ㄴ', 'ㄵ', 'ㄶ', 'ㄷ', 'ㄹ', 'ㄺ', 'ㄻ', 'ㄼ', 'ㄽ', 'ㄾ', 'ㄿ', 'ㅀ', 'ㅁ', 'ㅂ', 'ㅄ', 'ㅅ', 'ㅆ', 'ㅇ', 'ㅈ', 'ㅊ', 'ㅋ', 'ㅌ', 'ㅍ', 'ㅎ'];
+            return Array.from(String(str || '')).map(ch => {
+                const c = ch.charCodeAt(0) - 0xAC00;
+                return c >= 0 && c < 11172 ? CHO[Math.floor(c / 588)] + JUNG[Math.floor((c % 588) / 28)] + JONG[c % 28] : ch;
+            }).join('').replace(/ㅐ/g, 'ㅔ').replace(/ㅒ/g, 'ㅖ');
+        }
+        function voiceEditDist(a, b) {
+            const d = Array.from({ length: b.length + 1 }, (_, i) => i);
+            for (let i = 1; i <= a.length; i++) {
+                let p = d[0]; d[0] = i;
+                for (let j = 1; j <= b.length; j++) { const t = d[j]; d[j] = Math.min(d[j] + 1, d[j - 1] + 1, p + (a[i - 1] !== b[j - 1] ? 1 : 0)); p = t; }
+            }
+            return d[b.length];
+        }
+        // 가장 비슷한 한 사람 — 차이가 자모 2개 이하이고 두 번째로 비슷한 사람보다 확실히 가까울 때만
+        function voiceGuessName(tok, list, me) {
+            const q = voiceJamo(tok);
+            const scored = list.filter(n => n !== me && n.length >= 2 && Math.abs(n.length - tok.length) <= 1)
+                .map(n => ({ n, d: voiceEditDist(q, voiceJamo(n)) })).sort((a, b) => a.d - b.d);
+            if (!scored.length || scored[0].d > 2) return '';
+            if (scored[1] && scored[1].d <= scored[0].d) return '';
+            return scored[0].n;
+        }
         function findVoiceAttendees(text, names, me) {
             const list = (names || []).filter(Boolean);
             let t = ' ' + String(text || '').replace(/[.,!?·]/g, ' ').replace(/\s+/g, ' ') + ' ';
-            const found = [], missing = [], ambiguous = [];
+            const found = [], missing = [], ambiguous = [], guess = [];
             const add = (n) => { if (n !== me && !found.includes(n)) found.push(n); };
             list.slice().sort((a, b) => b.length - a.length).forEach(n => { if (t.includes(n)) { add(n); t = t.split(n).join(' '); } });
             t.split(' ').filter(Boolean).forEach(w => {
@@ -20495,9 +20523,12 @@ const QUOTE_TEMPLATES = [
                 for (let k = 0; k < 3; k++) { const j = VOICE_JOSA.find(x => core.length > x.length && core.endsWith(x)); if (!j) break; core = core.slice(0, -j.length); }
                 if (core.length < 2 || VOICE_JOSA.includes(core) || VOICE_NOT_NAME_WORD.test(core)) return;
                 const tok = cands[cands.length - 1];          // 덧붙인 말을 뗀 가장 짧은 꼴
-                if (tok && !missing.includes(tok) && !list.includes(tok) && tok !== me) missing.push(tok);
+                if (!tok || missing.includes(tok) || list.includes(tok) || tok === me) return;
+                const g = voiceGuessName(tok, list, me);
+                if (g && !found.includes(g) && !guess.some(x => x.name === g)) guess.push({ tok, name: g });
+                else if (!g) missing.push(tok);
             });
-            return { found, missing, ambiguous };
+            return { found, missing, ambiguous, guess };
         }
         // 일정 읽어 주기 — "11월 13일 오후 3시, 강남 고객사 미팅. 참석자 김영업."
         function voiceSummary(d) {
@@ -20523,6 +20554,7 @@ const QUOTE_TEMPLATES = [
             const question = (st, s) => {
                 if (st === 'att?') return (s.draft.attendees.length ? `참석자 ${s.draft.attendees.join(', ')} 님. 참석자를 더 지정하시겠어요?` : '참석자를 지정하시겠어요?');
                 if (st === 'confirm') return voiceSummary(s.draft) + ' 이대로 일정을 등록할까요?';
+                if (st === 'attGuess') return `${((s.guess || [])[0] || {}).name || ''} 님이 맞나요?`;
                 return Q[st];
             };
             if (!state) return { state: { step: 'what', draft: null, silent: 0 }, say: Q.what, listen: true, action: null };
@@ -20567,13 +20599,13 @@ const QUOTE_TEMPLATES = [
                     if (yn === 'no') { s.attDone = true; return next(); }
                     if (yn === 'yes') return ask('att');
                     const f = findVoiceAttendees(txt, o.names, o.me);   // "김영업" 처럼 이름을 바로 말하면 바로 찾기
-                    if (!f.found.length && !f.missing.length && !f.ambiguous.length) return reaskYN();
+                    if (!f.found.length && !f.missing.length && !f.ambiguous.length && !f.guess.length) return reaskYN();
                     s.step = 'att';
                     return voiceDialogStep(s, txt, o);
                 }
                 case 'att': {
                     const f = findVoiceAttendees(txt, o.names, o.me);
-                    if (!f.found.length && !f.missing.length && !f.ambiguous.length) return { state: s, say: '이름을 알아듣지 못했습니다. ' + Q.att, listen: true, action: null };
+                    if (!f.found.length && !f.missing.length && !f.ambiguous.length && !f.guess.length) return { state: s, say: '이름을 알아듣지 못했습니다. ' + Q.att, listen: true, action: null };
                     const added = f.found.filter(n => !s.draft.attendees.includes(n));
                     added.forEach(n => s.draft.attendees.push(n));
                     const msg = [];
@@ -20581,9 +20613,28 @@ const QUOTE_TEMPLATES = [
                     f.missing.forEach(n => { const c = n.charCodeAt(n.length - 1) - 0xAC00; msg.push(`참석자 ${n}${c >= 0 && c < 11172 && c % 28 ? '을' : '를'} 그룹웨어에서 찾지 못했습니다.`); });
                     f.ambiguous.forEach(x => msg.push(`${x.tok} 님이 여러 명입니다. ${x.names.join(', ')} 중에서 성까지 말씀해 주세요.`));
                     s.silent = 0;
+                    // 비슷한 이름 — 하나씩 "○○○ 님이 맞나요?" (여러 명 · 성까지 다시 묻기가 먼저)
+                    if (f.guess.length && !f.ambiguous.length) {
+                        s.step = 'attGuess'; s.guess = f.guess.slice();
+                        msg.push(`${s.guess[0].name} 님이 맞나요?`);
+                        return { state: s, say: msg.join(' '), listen: true, action: null, added, missing: f.missing };
+                    }
                     if (f.ambiguous.length) { s.step = 'att'; return { state: s, say: msg.join(' '), listen: true, action: null, added, missing: f.missing }; }
                     s.step = 'att?';
                     return { state: s, say: msg.join(' ') + ' 참석자를 더 지정하시겠어요?', listen: true, action: null, added, missing: f.missing };
+                }
+                case 'attGuess': {
+                    const g = (s.guess || [])[0];
+                    if (!g) { s.step = 'att?'; return ask('att?'); }
+                    const josa = (n) => { const c = n.charCodeAt(n.length - 1) - 0xAC00; return c >= 0 && c < 11172 && c % 28 ? '을' : '를'; };
+                    let pre;
+                    if (yn === 'yes') { if (!s.draft.attendees.includes(g.name)) s.draft.attendees.push(g.name); pre = `${g.name} 님을 참석자로 추가했습니다.`; }
+                    else if (yn === 'no') pre = `참석자 ${g.tok}${josa(g.tok)} 그룹웨어에서 찾지 못했습니다.`;
+                    else { s.step = 'att'; s.guess = []; return voiceDialogStep(s, txt, o); }   // 다른 이름을 말하면 그 이름으로
+                    s.guess = s.guess.slice(1);
+                    if (s.guess.length) { s.silent = 0; return { state: s, say: `${pre} ${s.guess[0].name} 님이 맞나요?`, listen: true, action: null }; }
+                    s.step = 'att?'; s.silent = 0;
+                    return { state: s, say: pre + ' 참석자를 더 지정하시겠어요?', listen: true, action: null };
                 }
                 case 'detail?':
                     if (yn === 'yes') return ask('detail');
@@ -20605,8 +20656,11 @@ const QUOTE_TEMPLATES = [
         function calmLabPrefs() { try { const p = JSON.parse(localStorage.getItem('kobCalmLab.v1') || '{}'); return (p && typeof p === 'object') ? p : {}; } catch (e) { return {}; } }
         function calmSetLabValue(k, v) { const p = calmLabPrefs(); p[k] = v; try { localStorage.setItem('kobCalmLab.v1', JSON.stringify(p)); } catch (e) { } }
         function calmSetLab(k, v) { calmSetLabValue(k, !!v); calmApplyLab(); }
+        // 음성 기능은 실험실 시험이 끝날 때까지 운영(prod)에서 숨김 (11/16 다니엘님). 운영에서 켜려면 설정에 voiceLab: true
+        function calmVoiceAllowed() { const c = window.KOB_CONFIG || {}; return c.env !== 'prod' || c.voiceLab === true; }
         function calmApplyLab() {
-            const on = isCalendarMode() && calmLabPrefs().voice === true;
+            const box = document.getElementById('calm-lab-voice-box'); if (box) box.classList.toggle('hidden', !calmVoiceAllowed());
+            const on = isCalendarMode() && calmLabPrefs().voice === true && calmVoiceAllowed();
             const fab = document.getElementById('calm-voice-fab'); if (fab) fab.classList.toggle('hidden', !on);
             const sw = document.getElementById('calm-lab-voice'); if (sw) sw.checked = calmLabPrefs().voice === true;
             const sw2 = document.getElementById('calm-lab-talk'); if (sw2) sw2.checked = calmLabPrefs().talk === true;
@@ -20642,6 +20696,7 @@ const QUOTE_TEMPLATES = [
             else st.textContent = '멈췄습니다. [다시 듣기] 를 누르거나 직접 입력해 주세요.';
         }
         function calmOpenVoice() {
+            if (!calmVoiceAllowed()) return;
             if (calmLabPrefs().talk === true) return calmOpenTalk();
             const ta = document.getElementById('calm-voice-text'); ta.value = ''; calmVoicePreview();
             document.getElementById('calm-voice-sheet').classList.remove('hidden');
@@ -20947,7 +21002,14 @@ const QUOTE_TEMPLATES = [
             calmDiag('듣기 시작' + (retry ? ' (다시)' : ''));
             try { rec.start(); } catch (e) { fail('시작 못 함'); }
         }
-        function calmTalkMic() { if (!calmTalk) return; if (calmRec) { calmTalkStopRec(); calmTalkHint(''); return; } try { if (window.speechSynthesis) speechSynthesis.cancel(); } catch (e) { } calmTalkListen(calmTalk.seq, true); }
+        // 🎤 — 읽는 중이면 읽기를 멈추고 바로 듣기. 차례 번호를 올려 멈춘 읽기 뒤의 '삐 → 듣기' 가 또 시작되지 않게 (11/16 진단: 듣기가 두 번 겹침)
+        function calmTalkMic() {
+            if (!calmTalk) return;
+            if (calmRec) { calmTalkStopRec(); calmTalkHint(''); return; }
+            const my = ++calmTalk.seq;
+            try { if (window.speechSynthesis) speechSynthesis.cancel(); } catch (e) { }
+            calmTalkListen(my, true);
+        }
         function calmTalkSend() { const i = document.getElementById('calm-talk-input'); const v = i.value.trim(); if (!v) return; calmTalkAnswer(v); }
         function calmTalkAnswer(text, fromVoice) {
             if (!calmTalk) return;

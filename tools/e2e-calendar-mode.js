@@ -857,6 +857,48 @@ srv.listen(PORT, async () => {
             await m.close();
         }
 
+        // ---------- 11/16 다니엘님: 음성은 실험실 시험 끝날 때까지 운영에서 숨김 · 읽기 도중 마이크 누르면 듣기 겹침 ----------
+        console.log('[A7] 음성 — 운영(prod)에서는 숨김 · 읽기 도중 🎤 는 듣기 한 번만');
+        {
+            const m = await openPage(br, base + '?mode=calendar', 390, 800);
+            await m.evaluate(u => { try { localStorage.setItem('kobCalmLab.v1', '{"voice":true,"talk":true}'); } catch (e) { } enterApp(u); }, ADMIN);
+            const r = await m.evaluate(async () => {
+                const sleep = ms => new Promise(r => setTimeout(r, ms));
+                const vis = el => !!el && !el.classList.contains('hidden') && getComputedStyle(el).display !== 'none' && el.getBoundingClientRect().width > 0;
+                const out = {};
+                calmApplyLab();
+                out.devFab = vis(document.getElementById('calm-voice-fab'));
+                const env0 = window.KOB_CONFIG.env;
+                window.KOB_CONFIG.env = 'prod'; calmApplyLab();
+                calmOpenSettings();
+                out.prodFab = !vis(document.getElementById('calm-voice-fab'));
+                out.prodLab = !vis(document.getElementById('calm-lab-voice-box'));
+                calmOpenVoice(); await sleep(50);
+                out.prodNoOpen = !vis(document.getElementById('calm-talk-sheet')) && !vis(document.getElementById('calm-voice-sheet'));
+                calmCloseSettings();
+                window.KOB_CONFIG.env = env0; calmApplyLab();
+                // 읽기 도중 🎤 — 듣기 한 번만
+                const ev = [];
+                const fake = { speaking: false, pending: false, getVoices() { return []; }, resume() { }, cancel() { this.speaking = false; if (this._u && this._u.onerror) { const u = this._u; this._u = null; setTimeout(() => u.onerror({ error: 'canceled' }), 5); } },
+                    speak(u) { this._u = u; this.speaking = true; setTimeout(() => u.onstart && u.onstart(), 10); } };
+                Object.defineProperty(window, 'speechSynthesis', { value: fake, configurable: true });
+                window.SpeechSynthesisUtterance = function (t) { this.text = t; };
+                class Fake { start() { ev.push('rec'); } stop() { } abort() { } }
+                window.SpeechRecognition = Fake; window.webkitSpeechRecognition = Fake;
+                document.getElementById('calm-voice-fab').click(); await sleep(200);
+                document.getElementById('calm-talk-mic').click();
+                await sleep(1500);
+                out.recs = ev.length;
+                calmCloseTalk();
+                return out;
+            });
+            ok(r.devFab, '개발에서는 🎤 보임');
+            ok(r.prodFab && r.prodLab && r.prodNoOpen, '운영(prod)에서는 실험실 음성 항목 · 🎤 숨김, 열리지 않음 (설정이 켜져 있어도)');
+            ok(r.recs === 1, `읽기 도중 🎤 를 누르면 듣기 한 번만 (${r.recs}번)`);
+            ok(m.__errs.length === 0, '스크립트 오류 없음 ' + m.__errs.join(' | '));
+            await m.close();
+        }
+
         // ---------- [오늘] = 날짜별 목록을 오늘 위치로 (11/12 다니엘님) ----------
         console.log('[T] 아래 줄 [오늘] → 날짜별 목록 · 오늘');
         {

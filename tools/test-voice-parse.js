@@ -193,5 +193,27 @@ ok(P('오후두시 내일 회의').startTime === '14:00', "'오후두시'(붙여
 var kd = ctx.__step(ctx.__step(null, null, O).state, '오늘 오후 두시', O);
 ok(kd.state.step === 'title' && /어떤 내용으로 일정을 잡을까요/.test(kd.say), `대화: '오늘 오후 두시' → 어떤 내용으로 일정을 잡을까요? (${kd.say})`);
 
+console.log('[비슷한 이름 — 받아쓰기가 이름을 잘못 적을 때 (11/16 진단: 임희선 → 이미선 · 이혜선)]');
+const N3 = ['임희선', '이해인', '박예선', '신민성', '임재원', '김영업', '정장훈'];
+const FA3 = (t) => ctx.__fa(t, N3, '정장훈');
+var g1 = FA3('이미선');
+ok(!g1.found.length && !g1.missing.length && (g1.guess || []).length === 1 && g1.guess[0].name === '임희선' && g1.guess[0].tok === '이미선', `'이미선' → 임희선 추측 (${show(g1)})`);
+var g2 = FA3('이혜선');
+ok((g2.guess || [])[0] && g2.guess[0].name === '임희선', `'이혜선' → 임희선 추측 (${show(g2)})`);
+ok((FA3('이혜선 추가해 줘').guess || [])[0] && FA3('이혜선 추가해 줘').guess[0].name === '임희선', "'이혜선 추가해 줘' → 임희선 추측");
+var g3 = FA3('홍길동');
+ok(g3.missing.join() === '홍길동' && !(g3.guess || []).length, '전혀 다른 이름은 추측 없이 찾지 못함');
+ok(FA3('김영업').found.join() === '김영업' && !(FA3('김영업').guess || []).length, '정확한 이름은 추측 없이 바로');
+const O3 = { now: NOW, names: N3, me: '정장훈' };
+let h1 = ctx.__step(ctx.__step(ctx.__step(null, null, O3).state, '내일 오후 3시 미팅', O3).state, '네', O3);
+let h2 = ctx.__step(h1.state, '이미선', O3);
+ok(/임희선 님이 맞나요/.test(h2.say) && !/찾지 못했습니다/.test(h2.say) && h2.state.step === 'attGuess', `추측이면 → 임희선 님이 맞나요? (${h2.say})`);
+let h3 = ctx.__step(h2.state, '네', O3);
+ok(h3.state.draft.attendees.join() === '임희선' && /임희선 님을 참석자로 추가했습니다/.test(h3.say) && /더 지정하시겠어요/.test(h3.say), `네 → 추가 (${h3.say})`);
+let h4 = ctx.__step(h2.state, '아니요', O3);
+ok(!h4.state.draft.attendees.length && /참석자 이미선을 그룹웨어에서 찾지 못했습니다/.test(h4.say) && h4.state.step === 'att?', `아니요 → 찾지 못했습니다 (${h4.say})`);
+let h5 = ctx.__step(h2.state, '이해인', O3);
+ok(h5.state.draft.attendees.join() === '이해인', '맞나요? 에 다른 이름을 말하면 그 이름으로');
+
 console.log(`\n=========== 통과 ${pass} · 실패 ${fail} ===========`);
 process.exit(fail ? 1 : 0);
