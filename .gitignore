@@ -20,3 +20,6 @@ desktop.ini
 백업/
 _to_delete/
 *.bak
+
+# Claude Code 개인 설정 (사람마다 다름, 공용 설정은 .claude/settings.json)
+.claude/settings.local.json
