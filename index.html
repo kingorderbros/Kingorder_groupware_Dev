@@ -50449,7 +50449,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
         function previewQuoteTpl() {
             if (!quoteTplDraft) return;
             const t = quoteTplToTemplate(quoteTplDraft, 'preview');
-            quotePdfFile = null; setQuotePdfBtn('idle');
+            resetQuotePdf();
             const doc = document.getElementById('quote-preview-doc');
             doc.innerHTML = `<p class="text-xs text-gray-400 mb-3"><i class="fas fa-circle-info mr-1"></i>템플릿 상단 블록 미리보기입니다. 실제 견적서에는 이 아래로 품목표·합계·견적조건이 이어집니다.</p>`
                 + buildTemplateHeaderHtmlFrom(t);
@@ -51858,7 +51858,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
         }
 
         function showQuotePreview(q) {
-            quotePdfFile = null; setQuotePdfBtn('idle');
+            resetQuotePdf();
             document.getElementById('quote-preview-doc').innerHTML = buildQuoteDocHtml(q);
             document.getElementById('quote-preview-modal').classList.remove('hidden');
             fitQuotePreview();
@@ -51928,29 +51928,37 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
         function closeQuotePreview() {
             document.getElementById('quote-preview-modal').classList.add('hidden');
             window.removeEventListener('resize', fitQuotePreview);
+            resetQuotePdf();
         }
 
-        // ---------- 휴대폰 · 태블릿: PDF 파일을 직접 만들어 공유 (2026-11-17) ----------
+        // ---------- 아이폰 · 앱 안 브라우저: PDF 파일을 직접 만들어 공유 (2026-11-17) ----------
         //   아이폰 크롬 · 홈 화면 앱 · 카카오톡 안 브라우저는 인쇄(window.print)를 지원하지 않아 [PDF] 를 눌러도 반응이 없었습니다.
-        //   손가락으로 쓰는 기기에서는 견적서를 그림으로 떠서(html2canvas) A4 PDF 파일(jsPDF)로 만든 뒤 공유 창을 띄웁니다.
-        //   공유 창을 못 띄우면 파일로 내려받습니다. 컴퓨터는 지금처럼 인쇄 화면(PDF 로 저장)을 씁니다.
+        //   이런 기기에서는 견적서를 그림으로 떠서(html2canvas) A4 PDF 파일(jsPDF)로 만든 뒤 공유 창을 띄웁니다.
+        //   공유 창을 못 띄우면 파일로 내려받습니다. 컴퓨터 · 갤럭시 크롬 등 인쇄가 되는 곳은 지금처럼 인쇄 화면(PDF 로 저장)을 씁니다.
         const QUOTE_PDF_LIBS = [
             'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js',
             'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js'
         ];
+        const QUOTE_INAPP_RE = /KAKAOTALK|NAVER\(inapp|Instagram|FBAN|FBAV|Line\/|DaumApps|; wv\)/i;
         let quotePdfFile = null;   // 공유 창을 바로 못 띄웠을 때 다시 누르면 쓰는 파일
+        let quotePdfSeq = 0;       // 다른 견적을 열거나 창을 닫으면 올라감 — 그 전에 만들던 파일은 버립니다
         function quotePdfUseFile() {
-            return !!(window.matchMedia && matchMedia('(pointer: coarse)').matches);
+            const ua = navigator.userAgent || '';
+            const iOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+            return iOS || QUOTE_INAPP_RE.test(ua) || !!navigator.standalone || typeof window.print !== 'function';
         }
+        const quoteScriptLoads = {};
         function loadScriptOnce(src) {
-            return new Promise((resolve, reject) => {
-                if (document.querySelector(`script[data-src="${src}"]`)) return resolve();
-                const el = document.createElement('script');
-                el.src = src; el.async = true; el.setAttribute('data-src', src);
-                el.onload = () => resolve();
-                el.onerror = () => { el.remove(); reject(new Error('불러오기 실패: ' + src)); };
-                document.head.appendChild(el);
-            });
+            if (!quoteScriptLoads[src]) {
+                quoteScriptLoads[src] = new Promise((resolve, reject) => {
+                    const el = document.createElement('script');
+                    el.src = src; el.async = true;
+                    el.onload = () => resolve();
+                    el.onerror = () => { el.remove(); delete quoteScriptLoads[src]; reject(new Error('불러오기 실패: ' + src)); };
+                    document.head.appendChild(el);
+                });
+            }
+            return quoteScriptLoads[src];
         }
         function quotePdfFileName() {
             const doc = document.getElementById('quote-preview-doc');
@@ -51958,74 +51966,110 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             const cust = (doc.querySelector('.quote-cust-name') || {}).textContent || '';
             return ['견적서', no, cust.trim()].filter(Boolean).join('_').replace(/[\\/:*?"<>|]/g, '') + '.pdf';
         }
-        // 견적서 → PDF 파일 (A4 한 장, 여백 12mm — 인쇄와 같은 기준으로 넘치면 비율대로 줄임)
+        // 견적서 → PDF 파일 — 인쇄와 같은 기준: A4 · 여백 12mm, 조금 넘치면 한 장에 맞춰 줄이고(최대 절반), 그래도 넘치면 여러 장
         async function buildQuotePdfFile() {
             for (const src of QUOTE_PDF_LIBS) await loadScriptOnce(src);
             const src = document.getElementById('quote-preview-doc');
+            const name = quotePdfFileName();
             const box = document.createElement('div');
             box.className = 'quote-fit p-8 text-gray-800 bg-white';
             box.style.cssText = 'position:fixed;left:-10000px;top:0;width:' + QUOTE_DOC_W + 'px;background:#fff';
             box.innerHTML = src.innerHTML;
             document.body.appendChild(box);
             try {
-                // 그림(로고 · 직인 · 제품 사진)이 다 뜬 뒤에 뜹니다
-                await Promise.all(Array.from(box.querySelectorAll('img')).map(img => img.complete ? null : new Promise(r => { img.onload = img.onerror = r; })));
-                const canvas = await window.html2canvas(box, { scale: 2, backgroundColor: '#ffffff', useCORS: true, logging: false, windowWidth: 1024 });
+                // 그림(로고 · 직인 · 제품 사진)이 뜰 때까지 — 최대 5초
+                const imgs = Array.from(box.querySelectorAll('img')).filter(img => !img.complete);
+                await Promise.race([
+                    Promise.all(imgs.map(img => new Promise(r => { img.onload = img.onerror = r; }))),
+                    new Promise(r => setTimeout(r, 5000))
+                ]);
+                // 아이폰 그림판 한도(약 1,600만 화소)를 넘지 않게 배율을 정합니다
+                const area = box.scrollWidth * box.scrollHeight;
+                const scale = Math.max(1, Math.min(2, Math.sqrt(16000000 / Math.max(1, area))));
+                // 여러 장으로 나눌 때 표 줄 · 칸 가운데가 잘리지 않게 — 줄 · 칸 아래 끝을 나눌 자리 후보로
+                const top0 = box.getBoundingClientRect().top;
+                const cuts = Array.from(box.querySelectorAll('tr, :scope > *, li')).map(el => Math.round((el.getBoundingClientRect().bottom - top0) * scale)).sort((a, b) => a - b);
+                const canvas = await window.html2canvas(box, { scale, backgroundColor: '#ffffff', logging: false, windowWidth: 1024 });
                 const { jsPDF } = window.jspdf;
                 const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
                 const maxW = 186, maxH = 273;
-                let w = maxW, h = canvas.height * maxW / canvas.width;
-                if (h > maxH) { w = w * maxH / h; h = maxH; }
-                pdf.addImage(canvas.toDataURL('image/jpeg', 0.92), 'JPEG', (210 - w) / 2, 12, w, h);
-                const name = quotePdfFileName();
+                const fullH = canvas.height * maxW / canvas.width;          // 폭을 맞췄을 때 높이(mm)
+                const fit = fullH > maxH ? Math.max(0.5, maxH / fullH) : 1; // 인쇄와 같게 최대 절반까지 줄임
+                const w = maxW * fit, mmPerPx = w / canvas.width;
+                const pagePx = Math.floor(maxH / mmPerPx);                  // 한 장에 들어가는 그림 높이(px)
+                for (let y = 0, page = 0, hPx; y < canvas.height; y += hPx, page++) {
+                    hPx = Math.min(pagePx, canvas.height - y);
+                    if (y + hPx < canvas.height) {
+                        const cut = cuts.filter(c => c > y + pagePx * 0.5 && c <= y + pagePx).pop();
+                        if (cut) hPx = cut - y;
+                    }
+                    const part = document.createElement('canvas');
+                    part.width = canvas.width; part.height = hPx;
+                    const ctx = part.getContext('2d');
+                    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, part.width, hPx);
+                    ctx.drawImage(canvas, 0, y, canvas.width, hPx, 0, 0, canvas.width, hPx);
+                    if (page) pdf.addPage();
+                    pdf.addImage(part.toDataURL('image/jpeg', 0.92), 'JPEG', (210 - w) / 2, 12, w, hPx * mmPerPx);
+                }
                 return new File([pdf.output('blob')], name, { type: 'application/pdf' });
             } finally {
                 box.remove();
             }
         }
-        // 공유 창 → 안 되면 내려받기
-        async function shareQuotePdfFile(file) {
-            if (navigator.canShare && navigator.share && navigator.canShare({ files: [file] })) {
-                await navigator.share({ files: [file], title: file.name.replace(/\.pdf$/, '') });
-                return;
-            }
+        function downloadQuotePdfFile(file) {
             const url = URL.createObjectURL(file);
             const a = document.createElement('a');
             a.href = url; a.download = file.name;
             document.body.appendChild(a); a.click(); a.remove();
             setTimeout(() => URL.revokeObjectURL(url), 60000);
+            // 앱 안 브라우저는 내려받기가 막혀 있는 경우가 많아 안내합니다
+            if (QUOTE_INAPP_RE.test(navigator.userAgent || '')) alert('이 앱 안에서는 PDF 파일 저장이 안 될 수 있습니다. 파일이 저장되지 않으면 오른쪽 위 메뉴에서 [다른 브라우저로 열기]로 사파리 · 크롬에서 열어 주세요.');
         }
-        function quotePdfBtn() { return document.getElementById('quote-pdf-btn'); }
+        // 공유 창 → 'blocked'(누른 효과가 끝나 막힘) · 'cancel'(사용자가 닫음) · 'done'
+        async function shareQuotePdfFile(file) {
+            if (!(navigator.canShare && navigator.share && navigator.canShare({ files: [file] }))) { downloadQuotePdfFile(file); return 'done'; }
+            try {
+                await navigator.share({ files: [file], title: file.name.replace(/\.pdf$/, '') });
+                return 'done';
+            } catch (e) {
+                if (e && e.name === 'AbortError') return 'cancel';
+                if (e && e.name === 'NotAllowedError') return 'blocked';
+                downloadQuotePdfFile(file);   // 이 파일은 공유를 못 하는 브라우저 — 내려받기로
+                return 'done';
+            }
+        }
         function setQuotePdfBtn(state) {
-            const b = quotePdfBtn(); if (!b) return;
+            const b = document.getElementById('quote-pdf-btn'); if (!b) return;
             b.disabled = state === 'busy';
             b.innerHTML = state === 'busy' ? '<i class="fas fa-spinner fa-spin mr-1"></i>만드는 중'
                 : state === 'ready' ? '<i class="fas fa-share-from-square mr-1"></i>PDF 공유'
                 : '<i class="fas fa-file-pdf mr-1"></i>PDF<span class="hidden sm:inline"> 저장 / 인쇄</span>';
         }
+        function resetQuotePdf() { quotePdfSeq++; quotePdfFile = null; setQuotePdfBtn('idle'); }
         async function saveQuotePdfFile() {
+            if (quotePdfFile) {   // 만들어 둔 파일 — 이번 누름으로 바로 공유 창을 띄웁니다
+                const r = await shareQuotePdfFile(quotePdfFile);
+                if (r === 'blocked') { downloadQuotePdfFile(quotePdfFile); }   // 두 번째도 막히면 내려받기
+                resetQuotePdf();
+                return;
+            }
+            const seq = ++quotePdfSeq;
+            setQuotePdfBtn('busy');
+            let file;
             try {
-                if (quotePdfFile) {   // 만들어 둔 파일 — 이번 누름으로 바로 공유 창을 띄웁니다
-                    const f = quotePdfFile;
-                    await shareQuotePdfFile(f);
-                    quotePdfFile = null; setQuotePdfBtn('idle');
-                    return;
-                }
-                setQuotePdfBtn('busy');
-                const file = await buildQuotePdfFile();
-                try {
-                    await shareQuotePdfFile(file);
-                    setQuotePdfBtn('idle');
-                } catch (e) {
-                    if (e && e.name === 'AbortError') { setQuotePdfBtn('idle'); return; }   // 공유 창에서 취소
-                    // 파일을 만드는 사이 누른 효과가 끝나 공유 창이 막힌 경우 — 한 번 더 누르면 바로 공유합니다
-                    quotePdfFile = file; setQuotePdfBtn('ready');
-                }
+                file = await buildQuotePdfFile();
             } catch (e) {
                 console.error('[견적서 PDF]', e);
-                quotePdfFile = null; setQuotePdfBtn('idle');
-                if (!(e && e.name === 'AbortError')) alert('PDF 파일을 만들지 못했습니다. 인터넷 연결을 확인한 뒤 다시 시도해 주세요.\n(' + (e && e.message || e) + ')');
+                if (seq !== quotePdfSeq) return;
+                setQuotePdfBtn('idle');
+                alert('PDF 파일을 만들지 못했습니다. 인터넷 연결을 확인한 뒤 다시 시도해 주세요.\n(' + (e && e.message || e) + ')');
+                return;
             }
+            if (seq !== quotePdfSeq) return;   // 그사이 다른 견적을 열었거나 창을 닫음
+            const r = await shareQuotePdfFile(file);
+            if (seq !== quotePdfSeq) return;
+            if (r === 'blocked') { quotePdfFile = file; setQuotePdfBtn('ready'); }   // 한 번 더 누르면 바로 공유
+            else setQuotePdfBtn('idle');
         }
 
         function printQuotePreview() {
