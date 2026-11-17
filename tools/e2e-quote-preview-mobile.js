@@ -43,7 +43,7 @@ srv.listen(8875,async()=>{const br=await pp.launch({executablePath:'/Application
   const [a,b]=r.btns;ok(a.r<=b.l&&b.r<=r.vw&&a.l>=0,`${label}: PDF·닫기 단추가 안 겹치고 화면 안`,r.btns);
   ok(r.panel.w<768?!!r.zoom:!r.zoom,`${label}: ${r.panel.w<768?'화면 폭에 맞춰 줄임':'원래 크기'}`,r.zoom);
   await pg.screenshot({path:path.join(SHOTS,`quote-preview-${w}x${h}.png`)});
-  if(label==='컴퓨터')ok(/1\.1\.7/.test(r.ver),'화면 버전 v1.1.7',r.ver);
+  if(label==='컴퓨터')ok(/1\.1\.8/.test(r.ver),'화면 버전 v1.1.8',r.ver);
  }
  // 닫기 단추로 닫힘 · 템플릿 미리보기도 맞춤
  await pg.setViewport({width:390,height:844,isMobile:true,hasTouch:true});

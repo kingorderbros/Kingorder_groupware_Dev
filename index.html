@@ -30,7 +30,7 @@
     <script src="config/app-config.js"></script>
     <!-- 화면 버전 (2026-11-16) — 배포할 때마다 올립니다. 개발 · 운영 화면 아래에 "그룹웨어 v1.1.0 · 운영" 처럼 보입니다.
          groupware = 그룹웨어 화면 · calendar = 킹오더일정(?mode=calendar) -->
-    <script>window.KOB_VERSION = { groupware: '1.1.7', calendar: '1.0.4', date: '2026-11-17' };</script>
+    <script>window.KOB_VERSION = { groupware: '1.1.8', calendar: '1.0.4', date: '2026-11-18' };</script>
     <script>
         (function () {
             // manifest 는 **여기서 만들어 답니다.** (2026-09-05 고침)
@@ -6920,7 +6920,7 @@
             </p>
             <div class="calm-actions flex flex-wrap justify-end gap-2">
                 <button id="btn-restore-schedule" class="hidden px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition-colors"><i class="fas fa-rotate-left mr-1"></i>되살리기</button>
-                <button id="btn-purge-schedule" class="hidden px-4 py-2 bg-red-800 text-white rounded hover:bg-red-900 transition-colors" title="관리자 — 캘린더에서 완전히 지웁니다">완전 삭제</button>
+                <button id="btn-purge-schedule" class="hidden px-4 py-2 bg-red-800 text-white rounded hover:bg-red-900 transition-colors" title="취소 · 삭제된 일정을 캘린더에서 완전히 지웁니다">완전 삭제</button>
                 <button id="btn-edit-schedule" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors">수정</button>
                 <button id="btn-cancel-schedule" class="px-4 py-2 bg-amber-500 text-white rounded hover:bg-amber-600 transition-colors"><i class="fas fa-ban mr-1"></i>일정 취소</button>
                 <button id="btn-delete-schedule" class="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition-colors">삭제</button>
@@ -18918,7 +18918,7 @@ const QUOTE_TEMPLATES = [
         //   일정 전체   : s.offState = 'cancelled' | 'deleted', s.offAt('YYYY-MM-DD HH:MM'), s.offBy(이름), s.offReason
         //   반복의 한 날: s.recur.offDates = { 'YYYY-MM-DD': { state, at, by, reason } }
         //                 그 날은 exdates 에도 넣어 두어 구글 캘린더 · 일정 알림에서는 빠집니다.
-        // 구글 캘린더에서는 지우고(서버 _gcal.js), 일정 알림도 보내지 않습니다(_reminders.js). 완전 삭제는 관리자만.
+        // 구글 캘린더에서는 지우고(서버 _gcal.js), 일정 알림도 보내지 않습니다(_reminders.js). 완전 삭제는 그 일정을 삭제할 수 있는 사람 모두(등록자 · 대리 수정 권한자 · 관리자, 2026-11-17).
         const SCHEDULE_OFF = {
             cancelled: { name: '취소됨', verb: '취소', chip: 'bg-gray-200 text-gray-700', icon: 'fa-ban' },
             deleted:   { name: '삭제됨', verb: '삭제', chip: 'bg-red-100 text-red-700',  icon: 'fa-trash-can' }
@@ -22022,7 +22022,7 @@ const QUOTE_TEMPLATES = [
             document.getElementById('btn-cancel-schedule').classList.toggle('hidden', !manageable || !!off);
             document.getElementById('btn-delete-schedule').classList.toggle('hidden', !manageable || off === 'deleted');
             document.getElementById('btn-restore-schedule').classList.toggle('hidden', !manageable || !off);
-            document.getElementById('btn-purge-schedule').classList.toggle('hidden', !off || !canManageAllData());
+            document.getElementById('btn-purge-schedule').classList.toggle('hidden', !off || !manageable);   // 모든 사용자 (2026-11-17)
             const offBox = document.getElementById('detail-schedule-off');
             offBox.classList.toggle('hidden', !off);
             if (off) {
@@ -22182,7 +22182,7 @@ const QUOTE_TEMPLATES = [
         }
         // ---------- 일정 취소 · 삭제 · 되살리기 (2026-10-30) ----------
         // 삭제해도 일정은 남기고 '삭제됨' 으로 표시합니다. 취소는 '취소됨'. 둘 다 참석자 · 담당자에게 알립니다.
-        // 반복 일정은 '이 날만 / 반복 전체' 를 고릅니다. 캘린더에서 아예 지우는 것은 관리자의 [완전 삭제] 입니다.
+        // 반복 일정은 '이 날만 / 반복 전체' 를 고릅니다. 캘린더에서 아예 지우는 것은 [완전 삭제] 입니다(삭제할 수 있는 사람 모두).
         function scheduleOffNow() {
             const d = new Date();
             return `${ymd(d)} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
@@ -22319,12 +22319,13 @@ const QUOTE_TEMPLATES = [
             closeScheduleDetailModal();
             if (n) alert(`일정을 되살리고 ${n}명에게 알림을 보냈습니다.`);
         }
-        // 관리자 — 취소 · 삭제된 일정을 캘린더에서 완전히 지웁니다 (알림 없음)
+        // 취소 · 삭제된 일정을 캘린더에서 완전히 지웁니다 (알림 없음)
+        // 관리자만 → 그 일정을 삭제할 수 있는 사람 모두(등록자 · 대리 수정 권한자 · 관리자) (2026-11-17)
         function purgeSchedule(id) {
-            if (!canManageAllData()) { alert('완전 삭제는 관리자만 할 수 있습니다.'); return; }
             const occDate = scheduleOccDate(id);
             const schedule = schedules.find(s => s.id === scheduleMasterId(id));
             if (!schedule) return;
+            if (!canManageSchedule(schedule)) { alert('이 일정을 완전 삭제할 권한이 없습니다. 일정을 등록한 사람이나 관리자에게 요청해 주세요.'); return; }
             const day = occDate || schedule.date;
             const one = !schedule.offState && schedule.recur && schedule.recur.offDates && schedule.recur.offDates[day];
             if (!one && !schedule.offState) return;
