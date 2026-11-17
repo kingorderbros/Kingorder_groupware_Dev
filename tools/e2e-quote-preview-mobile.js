@@ -31,7 +31,7 @@ srv.listen(8875,async()=>{const br=await pp.launch({executablePath:'/Application
      // zoom 이 걸리면 getBoundingClientRect 는 줄어든 크기 — 원래 크기로 돌려 한 줄인지 봅니다
      supH:R(sup).h/z,supHraw:R(sup).h,tagFs:getComputedStyle(tag).fontSize,
      hScroll:m.scrollWidth>m.clientWidth+1||document.documentElement.scrollWidth>innerWidth+1||(()=>{const fb=document.getElementById('quote-preview-fit'),bb=fb.getBoundingClientRect(),db=doc.getBoundingClientRect();return db.left<bb.left-1||db.right>bb.right+1||fb.scrollLeft!==0;})(),
-     ver:(document.querySelector('.js-app-ver')||{}).textContent||''};
+     ver:(document.querySelector('.js-app-ver')||{}).textContent||'',want:(window.KOB_VERSION||{}).groupware||''};
   });
   console.log(label,JSON.stringify({zoom:r.zoom,docW:r.docW,panel:r.panel.w,doc:r.doc.w,tagR:Math.round(r.tag.r),supHraw:r.supHraw}));
   ok(r.doc.r<=r.vw+1&&r.doc.l>=-1,`${label}: 문서가 화면 밖으로 안 나감`,r.doc);
@@ -43,7 +43,7 @@ srv.listen(8875,async()=>{const br=await pp.launch({executablePath:'/Application
   const [a,b]=r.btns;ok(a.r<=b.l&&b.r<=r.vw&&a.l>=0,`${label}: PDF·닫기 단추가 안 겹치고 화면 안`,r.btns);
   ok(r.panel.w<768?!!r.zoom:!r.zoom,`${label}: ${r.panel.w<768?'화면 폭에 맞춰 줄임':'원래 크기'}`,r.zoom);
   await pg.screenshot({path:path.join(SHOTS,`quote-preview-${w}x${h}.png`)});
-  if(label==='컴퓨터')ok(/1\.1\.7/.test(r.ver),'화면 버전 v1.1.7',r.ver);
+  if(label==='컴퓨터')ok(!!r.want&&r.ver.includes(r.want),'화면에 현재 버전 표시 (v'+r.want+')',r.ver);   // 버전을 올려도 시험은 그대로
  }
  // 닫기 단추로 닫힘 · 템플릿 미리보기도 맞춤
  await pg.setViewport({width:390,height:844,isMobile:true,hasTouch:true});

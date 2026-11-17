@@ -25,7 +25,7 @@ srv.listen(8875,async()=>{const br=await pp.launch({executablePath:'/Application
   // ③ 삭제 안 된 일정에는 완전 삭제 단추 없음
   schedules.push({id:'pg-live',title:'살아있는 일정',date:'2026-11-22',startTime:'10:00',endTime:'11:00',calendar:DEFAULT_CALENDAR_ID,dept:'sales',type:'',salesperson:'김직원',createdBy:'staff1@kingorder.co.kr',attendees:[]});
   openScheduleDetailModal('pg-live');out.liveBtn=vis('btn-purge-schedule');closeScheduleDetailModal();
-  out.ver=(document.querySelector('.js-app-ver')||{}).textContent||'';
+  out.ver=(document.querySelector('.js-app-ver')||{}).textContent||'';out.want=(window.KOB_VERSION||{}).groupware||'';
   return out;});
  console.log(JSON.stringify(r));
  ok(r.admin===false,'일반 직원으로 시험 (관리자 아님)',r.admin);
@@ -34,5 +34,5 @@ srv.listen(8875,async()=>{const br=await pp.launch({executablePath:'/Application
  ok(!r.otherBtn&&r.otherKept,'남이 등록한 일정은 단추 없음 · 지워지지 않음',r);
  ok(dialogs.some(m=>m.includes('완전 삭제할 권한이 없습니다')),'권한 없음 안내',dialogs);
  ok(!r.liveBtn,'삭제 안 된 일정엔 [완전 삭제] 없음',r);
- ok(/1\.1\.8/.test(r.ver),'화면 버전 v1.1.8',r.ver);
+ ok(!!r.want&&r.ver.includes(r.want),'화면에 현재 버전 표시 (v'+r.want+')',r.ver);   // 버전을 올려도 시험은 그대로
  ok(errs.length===0,'페이지 오류 없음',errs);console.log(`통과 ${pass} · 실패 ${fail}`);await br.close();srv.close();process.exit(fail?1:0);});
