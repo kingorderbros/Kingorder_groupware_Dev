@@ -25,12 +25,12 @@ srv.listen(8875,async()=>{const br=await pp.launch({executablePath:'/Application
    const btns=[...document.querySelectorAll('#quote-preview-toolbar button')].map(R);
    const tag=doc.querySelector('.quote-tagline');
    const sup=[...doc.querySelectorAll('p.flex span.font-bold')].find(s=>s.textContent.includes('킹오더브랜드팩토리'));
-   const z=parseFloat(doc.style.zoom||'1')||1;
-   return {vw:innerWidth,zoom:doc.style.zoom,docW:doc.style.width,panel:R(panel),doc:R(doc),btns,
+   const z=parseFloat(doc.dataset.fit||'1')||1;
+   return {vw:innerWidth,zoom:doc.dataset.fit,docW:doc.style.width,panel:R(panel),doc:R(doc),btns,
      guardX:!!panel.querySelector('[data-guard-x]'),tag:R(tag),
      // zoom 이 걸리면 getBoundingClientRect 는 줄어든 크기 — 원래 크기로 돌려 한 줄인지 봅니다
      supH:R(sup).h/z,supHraw:R(sup).h,tagFs:getComputedStyle(tag).fontSize,
-     hScroll:m.scrollWidth>m.clientWidth+1||document.getElementById('quote-preview-fit').scrollWidth>document.getElementById('quote-preview-fit').clientWidth+1,
+     hScroll:m.scrollWidth>m.clientWidth+1||document.documentElement.scrollWidth>innerWidth+1||(()=>{const fb=document.getElementById('quote-preview-fit'),bb=fb.getBoundingClientRect(),db=doc.getBoundingClientRect();return db.left<bb.left-1||db.right>bb.right+1||fb.scrollLeft!==0;})(),
      ver:(document.querySelector('.js-app-ver')||{}).textContent||''};
   });
   console.log(label,JSON.stringify({zoom:r.zoom,docW:r.docW,panel:r.panel.w,doc:r.doc.w,tagR:Math.round(r.tag.r),supHraw:r.supHraw}));
@@ -43,7 +43,7 @@ srv.listen(8875,async()=>{const br=await pp.launch({executablePath:'/Application
   const [a,b]=r.btns;ok(a.r<=b.l&&b.r<=r.vw&&a.l>=0,`${label}: PDF·닫기 단추가 안 겹치고 화면 안`,r.btns);
   ok(r.panel.w<768?!!r.zoom:!r.zoom,`${label}: ${r.panel.w<768?'화면 폭에 맞춰 줄임':'원래 크기'}`,r.zoom);
   await pg.screenshot({path:path.join(SHOTS,`quote-preview-${w}x${h}.png`)});
-  if(label==='컴퓨터')ok(/1\.1\.4/.test(r.ver),'화면 버전 v1.1.4',r.ver);
+  if(label==='컴퓨터')ok(/1\.1\.5/.test(r.ver),'화면 버전 v1.1.5',r.ver);
  }
  // 닫기 단추로 닫힘 · 템플릿 미리보기도 맞춤
  await pg.setViewport({width:390,height:844,isMobile:true,hasTouch:true});
@@ -55,9 +55,11 @@ srv.listen(8875,async()=>{const br=await pp.launch({executablePath:'/Application
  const t=await pg.evaluate(async()=>{const wait=ms=>new Promise(x=>setTimeout(x,ms));
   quoteTplDraft=quoteTplDraftFrom(QUOTE_TEMPLATES[0]);previewQuoteTpl();await wait(300);
   const doc=document.getElementById('quote-preview-doc'),b=doc.getBoundingClientRect();
-  const out={zoom:doc.style.zoom,r:b.right,vw:innerWidth,guardX:!!document.querySelector('#quote-preview-modal [data-guard-x]'),title:doc.textContent.includes(QUOTE_TEMPLATES[0].title)};
+  const fx=doc.querySelector('.flex-row.items-center.gap-4'),fb=document.getElementById('quote-preview-fit');const out={row:fx&&getComputedStyle(fx).flexDirection,gap:Math.abs(fb.getBoundingClientRect().height-b.height),zoom:doc.dataset.fit,r:b.right,vw:innerWidth,guardX:!!document.querySelector('#quote-preview-modal [data-guard-x]'),title:doc.textContent.includes(QUOTE_TEMPLATES[0].title)};
   closeQuotePreview();quoteTplDraft=null;return out;});
  ok(t.title&&!!t.zoom&&t.r<=t.vw+1&&!t.guardX,'템플릿 미리보기도 화면 폭에 맞춰 줄임 · X 겹침 없음',t);
+ ok(t.row==='row','휴대폰에서도 제품 사진 · 사양표가 컴퓨터처럼 옆으로 나란히',t.row);
+ ok(t.gap<3,'줄인 문서 아래 빈 칸 없음(높이 맞춤)',t.gap);
  // 아이폰 [PDF] — 인쇄 대신 PDF 파일을 만들어 공유 창 (아이폰 크롬은 인쇄 미지원, 2026-11-17)
  const SAMPLE={id:'QT-0023',name:'시험 견적',customerManual:{name:'코리아타운',contactName:'권승택 사장님',phone:'010-1234-4656',email:''},owner:'권승택',expiry:'2026-12-12',supplier:{name:'킹오더브랜드팩토리',businessNo:'790-86-03045',ceo:'정승우'},lines:[{name:'삼포트 POS SET',qty:1,price:1200000}],terms:['설치 일정은 계약 후 협의']};
  const UA_IPHONE_CHROME='Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/131.0.6778.73 Mobile/15E148 Safari/604.1';
