@@ -29,8 +29,8 @@ srv.listen(8875,async()=>{const br=await pp.launch({executablePath:'/Application
    return {vw:innerWidth,zoom:doc.style.zoom,docW:doc.style.width,panel:R(panel),doc:R(doc),btns,
      guardX:!!panel.querySelector('[data-guard-x]'),tag:R(tag),
      // zoom 이 걸리면 getBoundingClientRect 는 줄어든 크기 — 원래 크기로 돌려 한 줄인지 봅니다
-     supH:R(sup).h/(z<1&&R(sup).h<40*z?z:1),supHraw:R(sup).h,
-     hScroll:m.scrollWidth>m.clientWidth+1,
+     supH:R(sup).h/z,supHraw:R(sup).h,tagFs:getComputedStyle(tag).fontSize,
+     hScroll:m.scrollWidth>m.clientWidth+1||document.getElementById('quote-preview-fit').scrollWidth>document.getElementById('quote-preview-fit').clientWidth+1,
      ver:(document.querySelector('.js-app-ver')||{}).textContent||''};
   });
   console.log(label,JSON.stringify({zoom:r.zoom,docW:r.docW,panel:r.panel.w,doc:r.doc.w,tagR:Math.round(r.tag.r),supHraw:r.supHraw}));
@@ -38,6 +38,7 @@ srv.listen(8875,async()=>{const br=await pp.launch({executablePath:'/Application
   ok(r.tag.r<=r.vw+1,`${label}: 로고 옆 문구가 창 안`,r.tag);
   ok(!r.hScroll,`${label}: 옆으로 밀리는 스크롤 없음`);
   ok(r.supH<32,`${label}: 공급자 상호가 한 줄`,r);
+  if(r.zoom)ok(r.tagFs==='18.4px',`${label}: 줄일 때 로고 옆 문구는 컴퓨터와 같은 크기로 그림`,r.tagFs);
   ok(!r.guardX,`${label}: 공통 X 가 따로 안 붙음(겹침 없음)`);
   const [a,b]=r.btns;ok(a.r<=b.l&&b.r<=r.vw&&a.l>=0,`${label}: PDF·닫기 단추가 안 겹치고 화면 안`,r.btns);
   ok(r.panel.w<768?!!r.zoom:!r.zoom,`${label}: ${r.panel.w<768?'화면 폭에 맞춰 줄임':'원래 크기'}`,r.zoom);
@@ -50,4 +51,11 @@ srv.listen(8875,async()=>{const br=await pp.launch({executablePath:'/Application
   document.querySelectorAll('#quote-preview-toolbar button')[1].click();await wait(100);
   return document.getElementById('quote-preview-modal').classList.contains('hidden');});
  ok(c,'닫기(X) 누르면 닫힘');
+ // 견적 템플릿 미리보기도 같은 창 — 화면 폭에 맞춰 줄임
+ const t=await pg.evaluate(async()=>{const wait=ms=>new Promise(x=>setTimeout(x,ms));
+  quoteTplDraft=quoteTplDraftFrom(QUOTE_TEMPLATES[0]);previewQuoteTpl();await wait(300);
+  const doc=document.getElementById('quote-preview-doc'),b=doc.getBoundingClientRect();
+  const out={zoom:doc.style.zoom,r:b.right,vw:innerWidth,guardX:!!document.querySelector('#quote-preview-modal [data-guard-x]'),title:doc.textContent.includes(QUOTE_TEMPLATES[0].title)};
+  closeQuotePreview();quoteTplDraft=null;return out;});
+ ok(t.title&&!!t.zoom&&t.r<=t.vw+1&&!t.guardX,'템플릿 미리보기도 화면 폭에 맞춰 줄임 · X 겹침 없음',t);
  ok(errs.length===0,'페이지 오류 없음',errs);console.log(`통과 ${pass} · 실패 ${fail}`);await br.close();srv.close();process.exit(fail?1:0);});

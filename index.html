@@ -383,6 +383,8 @@
 
         /* 로고 옆 회사 문구: 화면에서는 한 줄에 맞춰 폭에 따라 자동 축소 */
         .quote-tagline { font-size: clamp(0.7rem, 1.7vw, 1.15rem); }
+        /* 휴대폰에서 문서를 통째로 줄여 보일 때(fitQuotePreview)는 컴퓨터와 같은 크기로 그린 뒤 줄입니다 — 화면 폭 기준이면 두 번 작아집니다 */
+        #quote-preview-doc.quote-fit .quote-tagline { font-size: 1.15rem; }
 
         /* ===== 모바일 운행일지 입력 폼 정렬 ===== */
         /* 각 필드를 세로 flex로 만들고 입력창을 셀 하단에 정렬 → 라벨이 여러 줄이어도
@@ -9563,7 +9565,7 @@
                 </div>
             </div>
             <!-- 견적서 문서 본문 -->
-            <div id="quote-preview-fit" class="overflow-hidden">
+            <div id="quote-preview-fit" class="overflow-x-auto">
                 <div id="quote-preview-doc" class="p-8 text-gray-800"><!-- JS 동적 렌더링 --></div>
             </div>
         </div>
@@ -51869,16 +51871,16 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             const box = document.getElementById('quote-preview-fit');
             const doc = document.getElementById('quote-preview-doc');
             if (!modal || !box || !doc || modal.classList.contains('hidden')) return;
-            const avail = box.clientWidth;
-            if (avail && avail < QUOTE_DOC_W) {
-                doc.style.width = QUOTE_DOC_W + 'px';
-                doc.style.zoom = String(Math.floor(avail / QUOTE_DOC_W * 1000) / 1000);
-            } else {
-                doc.style.width = '';
-                doc.style.zoom = '';
-            }
+            //   줄이기(zoom)를 못 하는 브라우저에서는 잘리지 않고 옆으로 밀어 볼 수 있습니다 (#quote-preview-fit overflow-x-auto)
+            const avail = box.clientWidth || modal.clientWidth;
+            const fit = avail && avail < QUOTE_DOC_W;
+            doc.classList.toggle('quote-fit', !!fit);
+            doc.style.width = fit ? QUOTE_DOC_W + 'px' : '';
+            doc.style.zoom = fit ? String(Math.floor(avail / QUOTE_DOC_W * 1000) / 1000) : '';
+            // 화면 돌리기 · 창 크기 바꾸기 — 미리보기가 열려 있는 동안만 살핍니다 (closeQuotePreview 에서 뗌)
+            window.removeEventListener('resize', fitQuotePreview);
+            window.addEventListener('resize', fitQuotePreview);
         }
-        window.addEventListener('resize', fitQuotePreview);
 
         // 저장된 견적 미리보기
         function openQuotePreview(quoteId) {
@@ -51923,6 +51925,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
 
         function closeQuotePreview() {
             document.getElementById('quote-preview-modal').classList.add('hidden');
+            window.removeEventListener('resize', fitQuotePreview);
         }
 
         function printQuotePreview() {
