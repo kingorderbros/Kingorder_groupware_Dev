@@ -30,7 +30,7 @@
     <script src="config/app-config.js"></script>
     <!-- 화면 버전 (2026-11-16) — 배포할 때마다 올립니다. 개발 · 운영 화면 아래에 "그룹웨어 v1.1.0 · 운영" 처럼 보입니다.
          groupware = 그룹웨어 화면 · calendar = 킹오더일정(?mode=calendar) -->
-    <script>window.KOB_VERSION = { groupware: '1.1.2', calendar: '1.0.4', date: '2026-11-17' };</script>
+    <script>window.KOB_VERSION = { groupware: '1.1.3', calendar: '1.0.4', date: '2026-11-17' };</script>
     <script>
         (function () {
             // manifest 는 **여기서 만들어 답니다.** (2026-09-05 고침)
@@ -383,6 +383,8 @@
 
         /* 로고 옆 회사 문구: 화면에서는 한 줄에 맞춰 폭에 따라 자동 축소 */
         .quote-tagline { font-size: clamp(0.7rem, 1.7vw, 1.15rem); }
+        /* 휴대폰에서 문서를 통째로 줄여 보일 때(fitQuotePreview)는 컴퓨터와 같은 크기로 그린 뒤 줄입니다 — 화면 폭 기준이면 두 번 작아집니다 */
+        #quote-preview-doc.quote-fit .quote-tagline { font-size: 1.15rem; }
 
         /* ===== 모바일 운행일지 입력 폼 정렬 ===== */
         /* 각 필드를 세로 flex로 만들고 입력창을 셀 하단에 정렬 → 라벨이 여러 줄이어도
@@ -9550,18 +9552,22 @@
     </div>
 
     <!-- ==================== 견적서 미리보기 / PDF 모달 ==================== -->
-    <div id="quote-preview-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-start justify-center z-50 p-4 overflow-y-auto">
-        <div class="bg-white w-full max-w-3xl rounded-lg shadow-xl my-4">
+    <!-- 휴대폰(2026-11-17): 창을 화면 가득 채우고, 견적서는 컴퓨터와 같은 폭(768px)으로 그린 뒤 화면 폭에 맞춰 줄여 보여 줍니다 (fitQuotePreview).
+         닫기 단추에 X 아이콘을 넣어 팝업 공통 X 가 따로 붙어 겹치지 않게 합니다. -->
+    <div id="quote-preview-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-start justify-center z-50 p-0 sm:p-4 overflow-y-auto">
+        <div class="bg-white w-full max-w-3xl sm:rounded-lg shadow-xl min-h-full sm:min-h-0 sm:my-4">
             <!-- 툴바 (인쇄 시 숨김) -->
-            <div id="quote-preview-toolbar" class="flex justify-between items-center px-5 py-3 border-b border-gray-200 bg-gray-50 rounded-t-lg sticky top-0">
-                <h3 class="font-bold text-gray-800"><i class="fas fa-file-invoice-dollar text-blue-500 mr-2"></i>견적서 미리보기</h3>
-                <div class="flex space-x-2">
-                    <button onclick="printQuotePreview()" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded text-sm transition-colors"><i class="fas fa-file-pdf mr-1"></i>PDF 저장 / 인쇄</button>
-                    <button onclick="closeQuotePreview()" class="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded text-sm transition-colors">닫기</button>
+            <div id="quote-preview-toolbar" class="flex justify-between items-center gap-2 px-3 sm:px-5 py-2.5 sm:py-3 border-b border-gray-200 bg-gray-50 sm:rounded-t-lg sticky top-0 z-30">
+                <h3 class="font-bold text-gray-800 truncate min-w-0"><i class="fas fa-file-invoice-dollar text-blue-500 mr-2"></i>견적서 미리보기</h3>
+                <div class="flex items-center gap-2 shrink-0">
+                    <button onclick="printQuotePreview()" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded text-sm whitespace-nowrap transition-colors"><i class="fas fa-file-pdf mr-1"></i>PDF<span class="hidden sm:inline"> 저장 / 인쇄</span></button>
+                    <button onclick="closeQuotePreview()" title="닫기" aria-label="닫기" class="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded text-sm whitespace-nowrap transition-colors"><i class="fas fa-times sm:mr-1"></i><span class="hidden sm:inline">닫기</span></button>
                 </div>
             </div>
             <!-- 견적서 문서 본문 -->
-            <div id="quote-preview-doc" class="p-8 text-gray-800"><!-- JS 동적 렌더링 --></div>
+            <div id="quote-preview-fit" class="overflow-x-auto">
+                <div id="quote-preview-doc" class="p-8 text-gray-800"><!-- JS 동적 렌더링 --></div>
+            </div>
         </div>
     </div>
 
@@ -50447,6 +50453,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             doc.innerHTML = `<p class="text-xs text-gray-400 mb-3"><i class="fas fa-circle-info mr-1"></i>템플릿 상단 블록 미리보기입니다. 실제 견적서에는 이 아래로 품목표·합계·견적조건이 이어집니다.</p>`
                 + buildTemplateHeaderHtmlFrom(t);
             document.getElementById('quote-preview-modal').classList.remove('hidden');
+            fitQuotePreview();
         }
 
         // 편집 중인 값을 템플릿 객체로 (저장·미리보기 공용)
@@ -51852,6 +51859,27 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
         function showQuotePreview(q) {
             document.getElementById('quote-preview-doc').innerHTML = buildQuoteDocHtml(q);
             document.getElementById('quote-preview-modal').classList.remove('hidden');
+            fitQuotePreview();
+        }
+
+        // 휴대폰처럼 좁은 화면 — 견적서를 컴퓨터와 같은 폭(768px)으로 그린 뒤 화면 폭에 맞춰 통째로 줄입니다 (2026-11-17)
+        //   좁은 폭에 그대로 그리면 로고 옆 문구가 창 밖으로 나가고 공급자 칸 글자가 한 자씩 접혀 PDF 와 모양이 달라집니다.
+        //   줄인 뒤에도 손가락으로 벌려 크게 볼 수 있습니다.
+        const QUOTE_DOC_W = 768;
+        function fitQuotePreview() {
+            const modal = document.getElementById('quote-preview-modal');
+            const box = document.getElementById('quote-preview-fit');
+            const doc = document.getElementById('quote-preview-doc');
+            if (!modal || !box || !doc || modal.classList.contains('hidden')) return;
+            //   줄이기(zoom)를 못 하는 브라우저에서는 잘리지 않고 옆으로 밀어 볼 수 있습니다 (#quote-preview-fit overflow-x-auto)
+            const avail = box.clientWidth || modal.clientWidth;
+            const fit = avail && avail < QUOTE_DOC_W;
+            doc.classList.toggle('quote-fit', !!fit);
+            doc.style.width = fit ? QUOTE_DOC_W + 'px' : '';
+            doc.style.zoom = fit ? String(Math.floor(avail / QUOTE_DOC_W * 1000) / 1000) : '';
+            // 화면 돌리기 · 창 크기 바꾸기 — 미리보기가 열려 있는 동안만 살핍니다 (closeQuotePreview 에서 뗌)
+            window.removeEventListener('resize', fitQuotePreview);
+            window.addEventListener('resize', fitQuotePreview);
         }
 
         // 저장된 견적 미리보기
@@ -51897,6 +51925,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
 
         function closeQuotePreview() {
             document.getElementById('quote-preview-modal').classList.add('hidden');
+            window.removeEventListener('resize', fitQuotePreview);
         }
 
         function printQuotePreview() {
