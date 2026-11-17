@@ -51996,24 +51996,35 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             return ['견적서', no, cust.trim()].filter(Boolean).join('_').replace(/[\\/:*?"<>|]/g, '') + '.pdf';
         }
         // PDF 용 문서의 그림을 data URL 로 — 이미 data URL 이면 그대로, 못 받으면 원래 주소 그대로(최대 8초)
+        const quotePdfImgCache = new Map();   // 그림 주소 → data URL (한 번 받은 그림은 다시 받지 않음)
         async function embedQuotePdfImages(box) {
+            let over = false;   // 8초가 지나면 더는 그림을 바꾸지 않습니다(그리는 도중 바뀌어 빠지지 않게)
             const toData = async (src) => {
                 if (!src || /^data:/.test(src)) return src;
-                const r = await fetch(src, { credentials: 'same-origin' });
-                if (!r.ok) throw new Error('그림 ' + r.status);
-                const b = await r.blob();
-                return await new Promise((ok, no) => { const fr = new FileReader(); fr.onload = () => ok(fr.result); fr.onerror = no; fr.readAsDataURL(b); });
+                if (quotePdfImgCache.has(src)) return quotePdfImgCache.get(src);
+                const ac = window.AbortController ? new AbortController() : null;
+                const t = setTimeout(() => ac && ac.abort(), 7000);
+                try {
+                    const r = await fetch(src, { credentials: 'same-origin', signal: ac ? ac.signal : undefined });
+                    if (!r.ok) throw new Error('그림 ' + r.status);
+                    const b = await r.blob();
+                    const d = await new Promise((ok, no) => { const fr = new FileReader(); fr.onload = () => ok(fr.result); fr.onerror = no; fr.readAsDataURL(b); });
+                    quotePdfImgCache.set(src, d);
+                    return d;
+                } finally { clearTimeout(t); }
             };
+            const waitImg = img => img.complete ? null : new Promise(r => { img.addEventListener('load', r, { once: true }); img.addEventListener('error', r, { once: true }); });
             const imgs = Array.from(box.querySelectorAll('img'));
             const work = Promise.all(imgs.map(async img => {
                 try {
                     const d = await toData(img.getAttribute('src'));
-                    if (d && d !== img.getAttribute('src')) img.src = d;
+                    if (!over && d && d !== img.getAttribute('src')) img.src = d;
                 } catch (e) { /* 못 받으면 원래 주소로 둡니다 */ }
-                if (!img.complete) await new Promise(r => { img.onload = img.onerror = r; });
+                await waitImg(img);
                 if (img.decode) { try { await img.decode(); } catch (e) { /* 깨진 그림 — 아래에서 숨김 */ } }
             }));
             await Promise.race([work, new Promise(r => setTimeout(r, 8000))]);
+            over = true;
             // 끝내 못 뜬 그림은 숨깁니다(깨진 그림 표시 대신 빈 칸) — 화면 미리보기의 onerror 와 같게
             imgs.forEach(img => { if (!img.complete || !img.naturalWidth) img.style.display = 'none'; });
         }
@@ -52058,13 +52069,13 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                     if (over <= 1020 || pageFit <= 0.5) break;
                     pageFit = Math.max(0.5, Math.floor(pageFit * 1020 / over * 100) / 100);
                 }
+                pinQuotePdfImageSizes(box);   // 배치가 끝난 크기를 픽셀로 고정 — 그릴 때 크기를 다시 계산하지 않게(나눌 자리 재기 전에)
                 // 아이폰 그림판 한도(약 1,600만 화소)를 넘지 않게 배율을 정합니다
                 const area = box.scrollWidth * box.scrollHeight;
                 const scale = Math.max(1, Math.min(2, Math.sqrt(16000000 / Math.max(1, area))));
                 // 여러 장으로 나눌 때 표 줄 · 칸 가운데가 잘리지 않게 — 줄 · 칸 아래 끝을 나눌 자리 후보로
                 const top0 = box.getBoundingClientRect().top;
                 const cuts = Array.from(box.querySelectorAll('tr, :scope > *, li')).map(el => Math.ceil((el.getBoundingClientRect().bottom - top0) * scale) + 1).sort((a, b) => a - b);
-                pinQuotePdfImageSizes(box);   // 배치가 끝난 크기를 픽셀로 고정 — 그릴 때 크기를 다시 계산하지 않게
                 const canvas = await window.html2canvas(box, { scale, backgroundColor: '#ffffff', logging: false, windowWidth: Math.max(1024, box.offsetWidth + 40) });
                 const { jsPDF } = window.jspdf;
                 const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });

@@ -109,12 +109,12 @@ srv.listen(8875,async()=>{const br=await pp.launch({executablePath:'/Application
  await tapPdf();got=await waitFor(()=>window.__shared.length>0,30000);sh=await pg.evaluate(()=>window.__shared);console.log(JSON.stringify(sh));
  ok(got&&sh[0].pages>=2,'긴 견적은 여러 장으로',sh);
  // 키오스크 템플릿(제품 사진 3장) — 사진을 문서 안에 넣고(data URL) 크기를 픽셀로 고정, 사진이 제 칸 밖으로 안 나감
- await pg.evaluate(q=>{window.__shared=[];const o=window.html2canvas;window.html2canvas=(el,opt)=>{window.__imgs=Array.from(el.querySelectorAll('img')).filter(i=>i.style.display!=='none').map(i=>{const r=i.getBoundingClientRect(),pr=i.parentElement.getBoundingClientRect();return {data:/^data:/.test(i.src),pinned:/px$/.test(i.style.width)&&/px$/.test(i.style.height),inside:r.left>=pr.left-1&&r.right<=pr.right+1&&r.top>=pr.top-1&&r.bottom<=pr.bottom+1,loaded:i.complete&&i.naturalWidth>0};});return o(el,opt);};showQuotePreview({...q,templateId:'tpl5'});},SAMPLE);
+ await pg.evaluate(q=>{window.__shared=[];const o=window.html2canvas;window.html2canvas=(el,opt)=>{window.__imgs=Array.from(el.querySelectorAll('img')).filter(i=>i.style.display!=='none').map(i=>{const r=i.getBoundingClientRect(),pr=i.parentElement.getBoundingClientRect();return {seal:i.alt==='직인',data:/^data:/.test(i.src),pinned:/px$/.test(i.style.width)&&/px$/.test(i.style.height),inside:r.left>=pr.left-1&&r.right<=pr.right+1&&r.top>=pr.top-1&&r.bottom<=pr.bottom+1,loaded:i.complete&&i.naturalWidth>0};});return o(el,opt);};showQuotePreview({...q,templateId:'tpl5'});},SAMPLE);
  await tapPdf();got=await waitFor(()=>window.__shared.length>0,30000);const im=await pg.evaluate(()=>window.__imgs);console.log(JSON.stringify(im));
  ok(got&&im&&im.length>=5,'키오스크 견적 PDF 만듦 (로고·직인·제품 사진 3장)',im);
  ok(im&&im.every(x=>x.data&&x.loaded),'사진을 모두 문서 안에 넣음(data URL · 다 뜬 상태)',im);
  ok(im&&im.every(x=>x.pinned),'사진 크기를 픽셀로 고정',im);
- ok(im&&im.filter(x=>!x.inside).length<=1,'제품 사진이 제 칸 밖으로 안 나감(직인만 겹쳐 놓는 그림)',im);
+ ok(im&&im.filter(x=>!x.seal).every(x=>x.inside),'로고 · 제품 사진이 제 칸 밖으로 안 나감(직인은 겹쳐 놓는 그림이라 제외)',im);
  await waitFor(()=>!!window.__pdfData);fs.writeFileSync(path.join(SHOTS,'quote-preview-long.pdf'),Buffer.from((await pg.evaluate(()=>window.__pdfData)).split(',')[1],'base64'));
 
  // 갤럭시 크롬 · 컴퓨터는 그대로 인쇄 화면, 카카오톡 안 브라우저는 파일
