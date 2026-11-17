@@ -30,7 +30,7 @@
     <script src="config/app-config.js"></script>
     <!-- 화면 버전 (2026-11-16) — 배포할 때마다 올립니다. 개발 · 운영 화면 아래에 "그룹웨어 v1.1.0 · 운영" 처럼 보입니다.
          groupware = 그룹웨어 화면 · calendar = 킹오더일정(?mode=calendar) -->
-    <script>window.KOB_VERSION = { groupware: '1.1.1', calendar: '1.0.4', date: '2026-11-16' };</script>
+    <script>window.KOB_VERSION = { groupware: '1.1.2', calendar: '1.0.4', date: '2026-11-17' };</script>
     <script>
         (function () {
             // manifest 는 **여기서 만들어 답니다.** (2026-09-05 고침)
@@ -25702,7 +25702,7 @@ const QUOTE_TEMPLATES = [
                 intakeDesc: '고객 요청을 접수대장 형식으로 받습니다. 접수번호·접수일·접수시간·접수자는 시스템이 기록하고, 업무이관은 부서 단위로만 지정합니다.',
                 processTitle: '업무처리',
                 processDesc: '접수된 건을 배정하고 진행 상태를 갱신합니다.',
-                channels: ['전화', '카카오톡', '이메일', '본사 요청', '현장 방문'],
+                channels: ['전화', '카카오톡', '당직(유선)', '당직(카톡)', '주말당직(유선)', '주말당직(카톡)', '이메일', '본사 요청', '현장 방문'],   // 당직 4종 (2026-11-17)
                 // 담당자 후보 — 조직도의 그 본부 구성원(직급순) + 예전 자료에만 남은 이름
                 get staff() { return wcStaffOf('ops', ['최운영']); },
                 seqPrefix: 'W-2608-',
