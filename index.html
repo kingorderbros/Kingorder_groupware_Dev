@@ -30,7 +30,7 @@
     <script src="config/app-config.js"></script>
     <!-- 화면 버전 (2026-11-16) — 배포할 때마다 올립니다. 개발 · 운영 화면 아래에 "그룹웨어 v1.1.0 · 운영" 처럼 보입니다.
          groupware = 그룹웨어 화면 · calendar = 킹오더일정(?mode=calendar) -->
-    <script>window.KOB_VERSION = { groupware: '1.1.6', calendar: '1.0.4', date: '2026-11-17' };</script>
+    <script>window.KOB_VERSION = { groupware: '1.1.7', calendar: '1.0.4', date: '2026-11-17' };</script>
     <script>
         (function () {
             // manifest 는 **여기서 만들어 답니다.** (2026-09-05 고침)
@@ -51995,6 +51995,52 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             const cust = (doc.querySelector('.quote-cust-name') || {}).textContent || '';
             return ['견적서', no, cust.trim()].filter(Boolean).join('_').replace(/[\\/:*?"<>|]/g, '') + '.pdf';
         }
+        // PDF 용 문서의 그림을 data URL 로 — 이미 data URL 이면 그대로, 못 받으면 원래 주소 그대로(최대 8초)
+        const quotePdfImgCache = new Map();   // 그림 주소 → data URL (한 번 받은 그림은 다시 받지 않음)
+        async function embedQuotePdfImages(box) {
+            let over = false;   // 8초가 지나면 더는 그림을 바꾸지 않습니다(그리는 도중 바뀌어 빠지지 않게)
+            const toData = async (src) => {
+                if (!src || /^data:/.test(src)) return src;
+                if (quotePdfImgCache.has(src)) return quotePdfImgCache.get(src);
+                const ac = window.AbortController ? new AbortController() : null;
+                const t = setTimeout(() => ac && ac.abort(), 7000);
+                try {
+                    const r = await fetch(src, { credentials: 'same-origin', signal: ac ? ac.signal : undefined });
+                    if (!r.ok) throw new Error('그림 ' + r.status);
+                    const b = await r.blob();
+                    const d = await new Promise((ok, no) => { const fr = new FileReader(); fr.onload = () => ok(fr.result); fr.onerror = no; fr.readAsDataURL(b); });
+                    quotePdfImgCache.set(src, d);
+                    return d;
+                } finally { clearTimeout(t); }
+            };
+            const waitImg = img => img.complete ? null : new Promise(r => { img.addEventListener('load', r, { once: true }); img.addEventListener('error', r, { once: true }); });
+            const imgs = Array.from(box.querySelectorAll('img'));
+            const work = Promise.all(imgs.map(async img => {
+                try {
+                    const d = await toData(img.getAttribute('src'));
+                    if (!over && d && d !== img.getAttribute('src')) img.src = d;
+                } catch (e) { /* 못 받으면 원래 주소로 둡니다 */ }
+                await waitImg(img);
+                if (img.decode) { try { await img.decode(); } catch (e) { /* 깨진 그림 — 아래에서 숨김 */ } }
+            }));
+            await Promise.race([work, new Promise(r => setTimeout(r, 8000))]);
+            over = true;
+            // 끝내 못 뜬 그림은 숨깁니다(깨진 그림 표시 대신 빈 칸) — 화면 미리보기의 onerror 와 같게
+            imgs.forEach(img => { if (!img.complete || !img.naturalWidth) img.style.display = 'none'; });
+        }
+        // 지금 배치된 그림 크기를 픽셀로 고정합니다 (max-h-full · max-w-full · object-contain 을 그릴 때 다시 풀지 않게)
+        function pinQuotePdfImageSizes(box) {
+            box.querySelectorAll('img').forEach(img => {
+                if (img.style.display === 'none') return;
+                const r = img.getBoundingClientRect();
+                if (!r.width || !r.height) return;
+                img.style.width = r.width + 'px';
+                img.style.height = r.height + 'px';
+                img.style.maxWidth = 'none';
+                img.style.maxHeight = 'none';
+                img.style.objectFit = 'fill';
+            });
+        }
         // 견적서 → PDF 파일 — 인쇄와 같은 기준: A4 · 여백 12mm, 조금 넘치면 한 장에 맞춰 줄이고(최대 절반), 그래도 넘치면 여러 장
         async function buildQuotePdfFile() {
             for (const src of QUOTE_PDF_LIBS) await loadScriptOnce(src);
@@ -52009,12 +52055,9 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             box.innerHTML = src.innerHTML;
             document.body.appendChild(box);
             try {
-                // 그림(로고 · 직인 · 제품 사진)이 뜰 때까지 — 최대 5초
-                const imgs = Array.from(box.querySelectorAll('img')).filter(img => !img.complete);
-                await Promise.race([
-                    Promise.all(imgs.map(img => new Promise(r => { img.onload = img.onerror = r; }))),
-                    new Promise(r => setTimeout(r, 5000))
-                ]);
+                // 그림(로고 · 직인 · 제품 사진)을 파일 내용(data URL)으로 바꿔 문서 안에 넣습니다 — html2canvas 가 그림을 다시 불러오지 않게.
+                //   실제 아이폰에서 제품 사진이 빠지거나 제자리보다 크게 그려져 글자를 덮던 것 (2026-11-17)
+                await embedQuotePdfImages(box);
                 // 한 장 맞춤도 인쇄와 같게 — 높이가 넘치면 비율(최대 절반)만큼 글자를 줄이는 대신 폭을 넓혀 다시 배치하고,
                 // 그 폭을 186mm 에 맞춰 넣습니다(인쇄의 zoom 과 같은 결과: 폭은 늘 꽉 차고 내용만 작아짐)
                 const PAD_B = 12;   // 아래 여유는 높이에서 뺍니다(인쇄 기준과 같게)
@@ -52026,6 +52069,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                     if (over <= 1020 || pageFit <= 0.5) break;
                     pageFit = Math.max(0.5, Math.floor(pageFit * 1020 / over * 100) / 100);
                 }
+                pinQuotePdfImageSizes(box);   // 배치가 끝난 크기를 픽셀로 고정 — 그릴 때 크기를 다시 계산하지 않게(나눌 자리 재기 전에)
                 // 아이폰 그림판 한도(약 1,600만 화소)를 넘지 않게 배율을 정합니다
                 const area = box.scrollWidth * box.scrollHeight;
                 const scale = Math.max(1, Math.min(2, Math.sqrt(16000000 / Math.max(1, area))));
