@@ -43,7 +43,7 @@ srv.listen(8875,async()=>{const br=await pp.launch({executablePath:'/Application
   const [a,b]=r.btns;ok(a.r<=b.l&&b.r<=r.vw&&a.l>=0,`${label}: PDF·닫기 단추가 안 겹치고 화면 안`,r.btns);
   ok(r.panel.w<768?!!r.zoom:!r.zoom,`${label}: ${r.panel.w<768?'화면 폭에 맞춰 줄임':'원래 크기'}`,r.zoom);
   await pg.screenshot({path:path.join(SHOTS,`quote-preview-${w}x${h}.png`)});
-  if(label==='컴퓨터')ok(/1\.1\.5/.test(r.ver),'화면 버전 v1.1.5',r.ver);
+  if(label==='컴퓨터')ok(/1\.1\.6/.test(r.ver),'화면 버전 v1.1.6',r.ver);
  }
  // 닫기 단추로 닫힘 · 템플릿 미리보기도 맞춤
  await pg.setViewport({width:390,height:844,isMobile:true,hasTouch:true});
@@ -86,9 +86,12 @@ srv.listen(8875,async()=>{const br=await pp.launch({executablePath:'/Application
  ok(!/만드는/.test(await btnText()),'끝나면 단추가 원래대로');
  await waitFor(()=>!!window.__pdfData);const pdfData=await pg.evaluate(()=>window.__pdfData);
  if(pdfData)fs.writeFileSync(path.join(SHOTS,'quote-preview-mobile.pdf'),Buffer.from(pdfData.split(',')[1],'base64'));
+ // 컴퓨터 인쇄와 같은 폭(A4 안쪽 186mm ≈ 703px) · 인쇄용 글자 설정으로 그림 → A4 에 꽉 참
+ await pg.evaluate(()=>{const o=window.html2canvas;window.html2canvas=(el,opt)=>{window.__box={w:Math.round(el.getBoundingClientRect().width),cls:el.className,tag:getComputedStyle(el.querySelector('.quote-tagline')).fontSize};return o(el,opt);};});
  // 만드는 사이 누른 효과가 끝나 공유 창이 막히면 → [PDF 공유] → 한 번 더 누르면 공유
  await pg.evaluate(()=>{window.__shareFail=['NotAllowedError'];window.__shared=[];});
  await tapPdf();ok(await waitFor(()=>/PDF 공유/.test(document.getElementById('quote-pdf-btn').textContent)),'공유 창이 막히면 [PDF 공유] 단추로 바뀜');
+ const bx=await pg.evaluate(()=>window.__box);ok(bx&&bx.w===703&&bx.cls==='quote-pdf-box'&&bx.tag==='16px','컴퓨터 인쇄와 같은 폭 703px · 인쇄용 글자(로고 옆 문구 12pt)로 그림',bx);
  await tapPdf();ok(await waitFor(()=>window.__shared.length>0,5000),'[PDF 공유] 를 누르면 바로 공유 창');
  // 두 번 다 막히면 내려받기
  await pg.evaluate(()=>{window.__shareFail=['NotAllowedError','NotAllowedError'];window.__shared=[];window.__dl=0;});

@@ -30,7 +30,7 @@
     <script src="config/app-config.js"></script>
     <!-- 화면 버전 (2026-11-16) — 배포할 때마다 올립니다. 개발 · 운영 화면 아래에 "그룹웨어 v1.1.0 · 운영" 처럼 보입니다.
          groupware = 그룹웨어 화면 · calendar = 킹오더일정(?mode=calendar) -->
-    <script>window.KOB_VERSION = { groupware: '1.1.5', calendar: '1.0.4', date: '2026-11-17' };</script>
+    <script>window.KOB_VERSION = { groupware: '1.1.6', calendar: '1.0.4', date: '2026-11-17' };</script>
     <script>
         (function () {
             // manifest 는 **여기서 만들어 답니다.** (2026-09-05 고침)
@@ -367,15 +367,18 @@
             #print-area tr { page-break-inside: avoid; }
             #print-area img { page-break-inside: avoid; }
 
-            /* 로고 옆 회사 문구: 인쇄 시 한 줄 고정 + 한 줄에 들어가는 최대 크기 */
-            #print-area .quote-tagline {
-                white-space: nowrap !important;
-                flex: 0 1 auto;
-                min-width: 0;
-                line-height: 1.25;
-                font-size: 12pt !important;
-                letter-spacing: -0.2px;
-            }
+        }
+
+        /* 로고 옆 회사 문구: 인쇄 시 한 줄 고정 + 한 줄에 들어가는 최대 크기
+           컴퓨터 인쇄(#print-area, 화면에서는 숨김)와 아이폰 PDF 파일(.quote-pdf-box)이 같은 규칙을 씁니다 */
+        #print-area .quote-tagline,
+        .quote-pdf-box .quote-tagline {
+            white-space: nowrap !important;
+            flex: 0 1 auto;
+            min-width: 0;
+            line-height: 1.25;
+            font-size: 12pt !important;
+            letter-spacing: -0.2px;
         }
 
         /* 화면에서는 인쇄 전용 영역 숨김 */
@@ -386,6 +389,7 @@
            PDF 파일(buildQuotePdfFile)도 같은 모양으로 뜹니다. 그래서 견적서 안에는 화면 폭에 따라 바뀌는 글자 크기 · sm: 배치를 쓰지 않습니다.
            (아이폰에서 PDF 가 휴대폰 모양 — 사진이 사양표 위로, 문구가 작게 — 으로 만들어지던 것, 2026-11-17) */
         .quote-tagline { font-size: 1.15rem; }
+
 
 
         /* ===== 모바일 운행일지 입력 폼 정렬 ===== */
@@ -1355,12 +1359,14 @@
             :root[data-theme="kingorder"] * { transition: none !important; transform: none !important; }
         }
 
-        /* 인쇄 시에는 테마 레이어가 견적서 출력에 개입하지 않도록 */
-        @media print {
-            :root[data-theme] #print-area table,
-            :root[data-theme] #print-area th,
-            :root[data-theme] #print-area td { background: transparent; }
-        }
+        /* 인쇄 시에는 테마 레이어가 견적서 출력에 개입하지 않도록 — 아이폰 PDF 파일(.quote-pdf-box)도 같게
+           (#print-area 는 화면에서 숨겨져 있어 @media print 밖에 두어도 인쇄 때만 보입니다) */
+        :root[data-theme] #print-area table,
+        :root[data-theme] #print-area th,
+        :root[data-theme] #print-area td,
+        :root[data-theme] .quote-pdf-box table,
+        :root[data-theme] .quote-pdf-box th,
+        :root[data-theme] .quote-pdf-box td { background: transparent; }
     </style>
 </head>
 <body class="bg-gray-50 text-gray-800 font-sans antialiased">
@@ -51958,6 +51964,10 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js',
             'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js'
         ];
+        // A4 한 장 맞춤 기준 — 컴퓨터 인쇄(printQuotePreview)와 아이폰 PDF(buildQuotePdfFile)가 같이 씁니다.
+        //   A4(210×297mm) − 여백 12mm × 2 = 186 × 273mm ≈ 703 × 1032px (96dpi). 1020px 를 넘으면 비율대로(최대 절반) 줄입니다
+        const QUOTE_A4_W_PX = 703;
+        function quotePageFit(h) { return h > 1020 ? Math.max(0.5, Math.floor(1020 / h * 100) / 100) : 1; }
         const QUOTE_INAPP_RE = /KAKAOTALK|NAVER\(inapp|Instagram|FBAN|FBAV|Line\/|DaumApps|; wv\)/i;
         let quotePdfFile = null;   // 공유 창을 바로 못 띄웠을 때 다시 누르면 쓰는 파일
         let quotePdfSeq = 0;       // 다른 견적을 열거나 창을 닫으면 올라감 — 그 전에 만들던 파일은 버립니다
@@ -51990,9 +52000,12 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             for (const src of QUOTE_PDF_LIBS) await loadScriptOnce(src);
             const src = document.getElementById('quote-preview-doc');
             const name = quotePdfFileName();
+            // 컴퓨터 인쇄(printQuotePreview → #print-area)와 똑같이 그립니다 — A4 안쪽 폭(186mm ≈ 703px)에 여백 없이,
+            // 인쇄용 글자 설정(.quote-pdf-box, 인쇄의 #print-area 규칙과 같음)으로. 그래야 A4 에 꽉 차게 나옵니다 (2026-11-17)
+            const A4_W_PX = QUOTE_A4_W_PX;
             const box = document.createElement('div');
-            box.className = 'p-8 text-gray-800 bg-white';
-            box.style.cssText = 'position:fixed;left:-10000px;top:0;width:' + QUOTE_DOC_W + 'px;background:#fff';
+            box.className = 'quote-pdf-box';
+            box.style.cssText = 'position:fixed;left:-10000px;top:0;width:' + A4_W_PX + 'px;padding-bottom:12px;background:#fff;color:#000';   // 아래 여유 — 마지막 줄 글자 아래가 잘리지 않게
             box.innerHTML = src.innerHTML;
             document.body.appendChild(box);
             try {
@@ -52002,19 +52015,28 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                     Promise.all(imgs.map(img => new Promise(r => { img.onload = img.onerror = r; }))),
                     new Promise(r => setTimeout(r, 5000))
                 ]);
+                // 한 장 맞춤도 인쇄와 같게 — 높이가 넘치면 비율(최대 절반)만큼 글자를 줄이는 대신 폭을 넓혀 다시 배치하고,
+                // 그 폭을 186mm 에 맞춰 넣습니다(인쇄의 zoom 과 같은 결과: 폭은 늘 꽉 차고 내용만 작아짐)
+                const PAD_B = 12;   // 아래 여유는 높이에서 뺍니다(인쇄 기준과 같게)
+                let pageFit = quotePageFit(box.scrollHeight - PAD_B);
+                // 폭을 넓히면 줄이 덜 접혀 높이가 비율대로 줄지 않을 수 있어, 다시 재서 아직 넘치면 조금 더 줄입니다(최대 3번, 최소 절반)
+                for (let i = 0; i < 3 && pageFit < 1; i++) {
+                    box.style.width = Math.round(A4_W_PX / pageFit) + 'px';
+                    const over = (box.scrollHeight - PAD_B) * pageFit;
+                    if (over <= 1020 || pageFit <= 0.5) break;
+                    pageFit = Math.max(0.5, Math.floor(pageFit * 1020 / over * 100) / 100);
+                }
                 // 아이폰 그림판 한도(약 1,600만 화소)를 넘지 않게 배율을 정합니다
                 const area = box.scrollWidth * box.scrollHeight;
                 const scale = Math.max(1, Math.min(2, Math.sqrt(16000000 / Math.max(1, area))));
                 // 여러 장으로 나눌 때 표 줄 · 칸 가운데가 잘리지 않게 — 줄 · 칸 아래 끝을 나눌 자리 후보로
                 const top0 = box.getBoundingClientRect().top;
-                const cuts = Array.from(box.querySelectorAll('tr, :scope > *, li')).map(el => Math.round((el.getBoundingClientRect().bottom - top0) * scale)).sort((a, b) => a - b);
-                const canvas = await window.html2canvas(box, { scale, backgroundColor: '#ffffff', logging: false, windowWidth: 1024 });
+                const cuts = Array.from(box.querySelectorAll('tr, :scope > *, li')).map(el => Math.ceil((el.getBoundingClientRect().bottom - top0) * scale) + 1).sort((a, b) => a - b);
+                const canvas = await window.html2canvas(box, { scale, backgroundColor: '#ffffff', logging: false, windowWidth: Math.max(1024, box.offsetWidth + 40) });
                 const { jsPDF } = window.jspdf;
                 const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
-                const maxW = 186, maxH = 273;
-                const fullH = canvas.height * maxW / canvas.width;          // 폭을 맞췄을 때 높이(mm)
-                const fit = fullH > maxH ? Math.max(0.5, maxH / fullH) : 1; // 인쇄와 같게 최대 절반까지 줄임
-                const w = maxW * fit, mmPerPx = w / canvas.width;
+                const maxH = 273;
+                const w = 186, mmPerPx = w / canvas.width;                  // 폭은 늘 A4 안쪽 폭에 꽉 차게
                 const pagePx = Math.floor(maxH / mmPerPx);                  // 한 장에 들어가는 그림 높이(px)
                 for (let y = 0, page = 0, hPx; y < canvas.height; y += hPx, page++) {
                     hPx = Math.min(pagePx, canvas.height - y);
@@ -52108,7 +52130,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                 document.body.appendChild(probe);
                 const h = probe.scrollHeight;
                 probe.remove();
-                const fit = h > 1020 ? Math.max(0.5, Math.floor(1020 / h * 100) / 100) : 1;
+                const fit = quotePageFit(h);
                 if (fit < 1) printArea.style.zoom = String(fit);
             } catch (e) { /* 재지 못하면 그대로 인쇄합니다 */ }
             document.body.classList.add('printing');
