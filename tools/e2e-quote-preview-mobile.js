@@ -43,7 +43,7 @@ srv.listen(8875,async()=>{const br=await pp.launch({executablePath:'/Application
   const [a,b]=r.btns;ok(a.r<=b.l&&b.r<=r.vw&&a.l>=0,`${label}: PDF·닫기 단추가 안 겹치고 화면 안`,r.btns);
   ok(r.panel.w<768?!!r.zoom:!r.zoom,`${label}: ${r.panel.w<768?'화면 폭에 맞춰 줄임':'원래 크기'}`,r.zoom);
   await pg.screenshot({path:path.join(SHOTS,`quote-preview-${w}x${h}.png`)});
-  if(label==='컴퓨터')ok(/1\.1\.3/.test(r.ver),'화면 버전 v1.1.3',r.ver);
+  if(label==='컴퓨터')ok(/1\.1\.4/.test(r.ver),'화면 버전 v1.1.4',r.ver);
  }
  // 닫기 단추로 닫힘 · 템플릿 미리보기도 맞춤
  await pg.setViewport({width:390,height:844,isMobile:true,hasTouch:true});
@@ -58,4 +58,33 @@ srv.listen(8875,async()=>{const br=await pp.launch({executablePath:'/Application
   const out={zoom:doc.style.zoom,r:b.right,vw:innerWidth,guardX:!!document.querySelector('#quote-preview-modal [data-guard-x]'),title:doc.textContent.includes(QUOTE_TEMPLATES[0].title)};
   closeQuotePreview();quoteTplDraft=null;return out;});
  ok(t.title&&!!t.zoom&&t.r<=t.vw+1&&!t.guardX,'템플릿 미리보기도 화면 폭에 맞춰 줄임 · X 겹침 없음',t);
+ // 휴대폰 [PDF] — 인쇄 대신 PDF 파일을 만들어 공유 창 (아이폰 크롬은 인쇄 미지원, 2026-11-17)
+ const SAMPLE={id:'QT-0023',name:'시험 견적',customerManual:{name:'코리아타운',contactName:'권승택 사장님',phone:'010-1234-4656',email:''},owner:'권승택',expiry:'2026-12-12',supplier:{name:'킹오더브랜드팩토리',businessNo:'790-86-03045',ceo:'정승우'},lines:[{name:'삼포트 POS SET',qty:1,price:1200000}],terms:['설치 일정은 계약 후 협의']};
+ await pg.setViewport({width:390,height:844,isMobile:true,hasTouch:true});
+ const tapPdf=async()=>{const p=await pg.evaluate(()=>{const b=document.getElementById('quote-pdf-btn').getBoundingClientRect();return [b.left+b.width/2,b.top+b.height/2];});await pg.touchscreen.tap(p[0],p[1]);};
+ const waitFor=async(fn,ms=20000)=>{const t0=Date.now();while(Date.now()-t0<ms){if(await pg.evaluate(fn))return true;await new Promise(x=>setTimeout(x,200));}return false;};
+ await pg.evaluate((q)=>{window.__print=0;window.print=()=>{window.__print++;};window.__shared=[];window.__shareFail=0;
+  navigator.canShare=()=>true;navigator.share=async(d)=>{if(window.__shareFail>0){window.__shareFail--;const e=new Error('gesture');e.name='NotAllowedError';throw e;}const f=d.files[0];const head=new TextDecoder().decode((await f.arrayBuffer()).slice(0,5));window.__shared.push({name:f.name,type:f.type,size:f.size,head});
+   const r=new FileReader();r.onload=()=>{window.__pdfData=r.result;};r.readAsDataURL(f);};
+  showQuotePreview(q);},SAMPLE);
+ const coarse=await pg.evaluate(()=>quotePdfUseFile());ok(coarse,'휴대폰(손가락 기기)으로 판단');
+ await tapPdf();const got=await waitFor(()=>window.__shared.length>0);
+ const sh=await pg.evaluate(()=>({s:window.__shared,p:window.__print,btn:document.getElementById('quote-pdf-btn').textContent.trim()}));
+ console.log(JSON.stringify(sh));
+ ok(got&&sh.s[0].head==='%PDF-'&&sh.s[0].type==='application/pdf'&&sh.s[0].size>20000,'PDF 파일을 만들어 공유 창에 넘김',sh);
+ ok(got&&sh.s[0].name==='견적서_QT-0023_코리아타운.pdf','파일 이름 견적서_번호_고객사.pdf',sh.s[0]);
+ ok(sh.p===0,'휴대폰에서는 인쇄를 부르지 않음',sh.p);
+ ok(/PDF/.test(sh.btn)&&!/만드는/.test(sh.btn),'끝나면 단추가 원래대로',sh.btn);
+ await waitFor(()=>!!window.__pdfData);const pdfData=await pg.evaluate(()=>window.__pdfData);
+ if(pdfData)fs.writeFileSync(path.join(SHOTS,'quote-preview-mobile.pdf'),Buffer.from(pdfData.split(',')[1],'base64'));
+ // 만드는 사이 누른 효과가 끝나 공유 창이 막히면 → [PDF 공유] 로 바뀌고 한 번 더 누르면 공유
+ await pg.evaluate(()=>{window.__shareFail=1;window.__shared=[];});
+ await tapPdf();const ready=await waitFor(()=>/PDF 공유/.test(document.getElementById('quote-pdf-btn').textContent));
+ ok(ready,'공유 창이 막히면 [PDF 공유] 단추로 바뀜');
+ await tapPdf();const got2=await waitFor(()=>window.__shared.length>0,5000);
+ ok(got2,'[PDF 공유] 를 누르면 바로 공유 창');
+ // 컴퓨터는 그대로 인쇄 화면
+ await pg.setViewport({width:1400,height:900,isMobile:false,hasTouch:false});
+ await pg.waitForFunction(()=>typeof showQuotePreview==='function');const pc=await pg.evaluate(async(q)=>{window.__print=0;window.print=()=>{window.__print++;};window.__shared=[];navigator.share=async()=>{window.__shared.push(1);};showQuotePreview(q);const coarse=quotePdfUseFile();let err='';try{printQuotePreview();}catch(e){err=String(e);}await new Promise(x=>setTimeout(x,300));return {coarse,print:window.__print,shared:window.__shared.length,err,isStub:String(window.print).slice(0,40)};},SAMPLE);
+ ok(!pc.coarse&&pc.print===1&&pc.shared===0,'컴퓨터는 지금처럼 인쇄 화면',pc);
  ok(errs.length===0,'페이지 오류 없음',errs);console.log(`통과 ${pass} · 실패 ${fail}`);await br.close();srv.close();process.exit(fail?1:0);});
