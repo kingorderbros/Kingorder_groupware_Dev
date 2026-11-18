@@ -30,7 +30,7 @@
     <script src="config/app-config.js"></script>
     <!-- 화면 버전 (2026-11-16) — 배포할 때마다 올립니다. 개발 · 운영 화면 아래에 "그룹웨어 v1.1.0 · 운영" 처럼 보입니다.
          groupware = 그룹웨어 화면 · calendar = 킹오더일정(?mode=calendar) -->
-    <script>window.KOB_VERSION = { groupware: '1.1.8', calendar: '1.0.4', date: '2026-11-18' };</script>
+    <script>window.KOB_VERSION = { groupware: '1.1.10', calendar: '1.0.5', date: '2026-11-18' };</script>
     <script>
         (function () {
             // manifest 는 **여기서 만들어 답니다.** (2026-09-05 고침)
@@ -19537,7 +19537,8 @@ const QUOTE_TEMPLATES = [
             // 날짜 셀 전체가 '하루 요약' 클릭 영역이므로, 칩 클릭은 상세 모달만 열리도록 전파를 막는다
             const look = scheduleChipLook(s, cal);
             // 확인하지 않은 새 일정 · 변경된 일정 표시 (2026-11-16 다니엘님 — 그룹웨어 일정캘린더에도)
-            const freshTag = scheduleIsNewForMe(s) ? '<span class="gw-new" title="확인하지 않은 새 일정">새</span>'
+            // 월간 보기는 칸이 좁아 'N'(New)으로 (2026-11-18 다니엘님), 다른 보기는 '새'
+            const freshTag = scheduleIsNewForMe(s) ? (o.month ? '<span class="gw-new" title="확인하지 않은 새 일정(New)">N</span>' : '<span class="gw-new" title="확인하지 않은 새 일정">새</span>')
                 : scheduleIsChangedForMe(s) ? '<span class="gw-new gw-chg" title="확인한 뒤 바뀐 일정">변경</span>' : '';
             return `<div onclick="event.stopPropagation(); openScheduleDetailModal(${jsArg(s.id)})" class="rounded truncate cursor-pointer hover:opacity-80 ${size} ${look.cls}${dim}"${look.style} title="${escapeHtml(tooltip)}">${freshTag}${offIcon}${dotHtml}${inviteIcon}${isRecurring(s) ? '<i class="fas fa-repeat text-[9px] opacity-60 mr-0.5" title="반복 일정"></i>' : ''}<b class="font-semibold">${escapeHtml(s.title)}</b>${timeHtml}${isBirthdaySchedule(s) ? '' : ` <span class="opacity-70">(${escapeHtml(s.salesperson || '미지정')})</span>`}</div>`;
         }
@@ -20052,7 +20053,7 @@ const QUOTE_TEMPLATES = [
 
                 // 종일 → 이른 시간 순으로 정렬해 하루 흐름대로 보이게 한다
                 const daySchedules = deptSchedules.filter(s => s.date === dateString).sort(compareScheduleTime);
-                const scheduleHtml = daySchedules.map(s => scheduleChipHtml(s)).join('');
+                const scheduleHtml = daySchedules.map(s => scheduleChipHtml(s, { month: currentCalendarView === 'month' })).join('');
 
                 const opacityClass = isCurrentMonth ? '' : 'opacity-50 bg-gray-50';
                 // 일간 보기는 아래에서 시간대 타임라인으로 따로 그리므로 여기는 월/주간용
