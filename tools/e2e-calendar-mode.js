@@ -310,13 +310,14 @@ srv.listen(PORT, async () => {
                 const out = {};
                 setCalendarView('month'); await sleep(50);
                 const chip = (id) => Array.from(document.querySelectorAll('#cal-grid [onclick*="openScheduleDetailModal"]')).find(c => c.getAttribute('onclick').includes(id));
-                out.chipNew = !!chip('e2e-b') && !!chip('e2e-b').querySelector('.gw-new') && /새/.test(chip('e2e-b').querySelector('.gw-new').textContent);
+                out.chipNew = !!chip('e2e-b') && !!chip('e2e-b').querySelector('.gw-new') && chip('e2e-b').querySelector('.gw-new').textContent.trim() === 'N';
                 out.chipMine = !!chip('e2e-a') && !chip('e2e-a').querySelector('.gw-new');
+                { const b = schedules.find(x => x.id === 'e2e-b'); out.otherViews = />새<\/span>/.test(scheduleChipHtml(b)) && !/>N<\/span>/.test(scheduleChipHtml(b)); }   // 주 · 일 보기는 '새'
                 const bar = document.getElementById('cal-fresh-bar');
                 out.bar = vis(bar) && /확인하지 않은 일정\s*2\s*건/.test(bar.innerText);
                 document.getElementById('cal-fresh-open').click(); await sleep(50);
                 const pan = document.getElementById('cal-fresh-panel');
-                out.panel = vis(pan) && pan.querySelectorAll('[data-fresh-sid]').length === 2 && /키오스크 설치/.test(pan.innerText) && /영업 미팅/.test(pan.innerText);
+                out.panel = vis(pan) && pan.querySelectorAll('[data-fresh-sid]').length === 2 && pan.querySelector('[data-fresh-sid="e2e-b"] .gw-new').textContent.trim() === '새' && /키오스크 설치/.test(pan.innerText) && /영업 미팅/.test(pan.innerText);
                 pan.querySelector('[data-fresh-sid="e2e-c"] [data-fresh-ok]').click(); await sleep(200);
                 out.one = /확인하지 않은 일정\s*1\s*건/.test(document.getElementById('cal-fresh-bar').innerText) && !chip('e2e-c').querySelector('.gw-new');
                 // 변경됨
@@ -328,7 +329,8 @@ srv.listen(PORT, async () => {
                 out.week = true;
                 return out;
             });
-            ok(r.chipNew && r.chipMine, '달력 칸 일정에 [새] 표시 (내가 등록한 일정은 없음)');
+            ok(r.chipNew && r.chipMine, '월간 보기 칸 일정에 [N] 표시 (내가 등록한 일정은 없음)');
+            ok(r.otherViews, '주 · 일 보기 칸은 [새] 그대로');
             ok(r.bar, '위쪽에 "확인하지 않은 일정 2건" 줄');
             ok(r.panel, '[보기] → 확인하지 않은 일정 목록');
             ok(r.one, '목록에서 [확인] → 1건으로 · 그 일정 [새] 표시 없어짐');
