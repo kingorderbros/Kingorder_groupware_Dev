@@ -20053,7 +20053,7 @@ const QUOTE_TEMPLATES = [
 
                 // 종일 → 이른 시간 순으로 정렬해 하루 흐름대로 보이게 한다
                 const daySchedules = deptSchedules.filter(s => s.date === dateString).sort(compareScheduleTime);
-                const scheduleHtml = daySchedules.map(s => scheduleChipHtml(s, { month: true })).join('');
+                const scheduleHtml = daySchedules.map(s => scheduleChipHtml(s, { month: currentCalendarView === 'month' })).join('');
 
                 const opacityClass = isCurrentMonth ? '' : 'opacity-50 bg-gray-50';
                 // 일간 보기는 아래에서 시간대 타임라인으로 따로 그리므로 여기는 월/주간용

@@ -312,7 +312,9 @@ srv.listen(PORT, async () => {
                 const chip = (id) => Array.from(document.querySelectorAll('#cal-grid [onclick*="openScheduleDetailModal"]')).find(c => c.getAttribute('onclick').includes(id));
                 out.chipNew = !!chip('e2e-b') && !!chip('e2e-b').querySelector('.gw-new') && chip('e2e-b').querySelector('.gw-new').textContent.trim() === 'N';
                 out.chipMine = !!chip('e2e-a') && !chip('e2e-a').querySelector('.gw-new');
-                { const b = schedules.find(x => x.id === 'e2e-b'); out.otherViews = />새<\/span>/.test(scheduleChipHtml(b)) && !/>N<\/span>/.test(scheduleChipHtml(b)); }   // 주 · 일 보기는 '새'
+                setCalendarView('week'); await sleep(50); { const w = chip('e2e-b'); out.otherViews = !!w && !!w.querySelector('.gw-new') && w.querySelector('.gw-new').textContent.trim() === '새'; }   // 주간 보기 칸은 '새'
+                setCalendarView('day'); await sleep(50); { const w = chip('e2e-b'); out.otherViews = out.otherViews && !!w && !!w.querySelector('.gw-new') && w.querySelector('.gw-new').textContent.trim() === '새'; }   // 일간 보기도 '새'
+                setCalendarView('month'); await sleep(50);
                 const bar = document.getElementById('cal-fresh-bar');
                 out.bar = vis(bar) && /확인하지 않은 일정\s*2\s*건/.test(bar.innerText);
                 document.getElementById('cal-fresh-open').click(); await sleep(50);
@@ -330,7 +332,7 @@ srv.listen(PORT, async () => {
                 return out;
             });
             ok(r.chipNew && r.chipMine, '월간 보기 칸 일정에 [N] 표시 (내가 등록한 일정은 없음)');
-            ok(r.otherViews, '주 · 일 보기 칸은 [새] 그대로');
+            ok(r.otherViews, '주간 · 일간 보기 화면 칸은 [새] 그대로');
             ok(r.bar, '위쪽에 "확인하지 않은 일정 2건" 줄');
             ok(r.panel, '[보기] → 확인하지 않은 일정 목록');
             ok(r.one, '목록에서 [확인] → 1건으로 · 그 일정 [새] 표시 없어짐');
