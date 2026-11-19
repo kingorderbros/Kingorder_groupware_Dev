@@ -30,7 +30,7 @@
     <script src="config/app-config.js"></script>
     <!-- 화면 버전 (2026-11-16) — 배포할 때마다 올립니다. 개발 · 운영 화면 아래에 "그룹웨어 v1.1.0 · 운영" 처럼 보입니다.
          groupware = 그룹웨어 화면 · calendar = 킹오더일정(?mode=calendar) -->
-    <script>window.KOB_VERSION = { groupware: '1.1.10', calendar: '1.0.5', date: '2026-11-18' };</script>
+    <script>window.KOB_VERSION = { groupware: '1.1.11', calendar: '1.0.5', date: '2026-11-19' };</script>
     <script>
         (function () {
             // manifest 는 **여기서 만들어 답니다.** (2026-09-05 고침)
@@ -12400,6 +12400,7 @@ const QUOTE_TEMPLATES = [
             'schedule-cancelled': { icon: 'fa-ban',               color: 'red',    label: '일정 취소' },
             'schedule-deleted':   { icon: 'fa-trash-can',         color: 'red',    label: '일정 삭제' },
             'notice-new':         { icon: 'fa-bullhorn',          color: 'amber',  label: '공지사항' },
+            'inbound-new':        { icon: 'fa-headset',           color: 'red',    label: '인바운드' },          // 인바운드 새 건 (2026-11-19)
             'schedule-restored':  { icon: 'fa-rotate-left',       color: 'green',  label: '일정 되살림' },
             'collab-taken':       { icon: 'fa-user-check',        color: 'green',  label: '협업 처리' },
             'schedule-change':        { icon: 'fa-calendar-alt',   color: 'teal', label: '일정 변경 요청' },
@@ -12459,6 +12460,7 @@ const QUOTE_TEMPLATES = [
             if (n.type === 'dev-update') return `<b>${escapeHtml(n.title)}</b> 개발요청에 파트너사의 진행 내용이 등록되었습니다.${n.detail ? `<br><span class="text-xs text-gray-600">${escapeHtml(n.detail)}</span>` : ''}`;
             if (n.type === 'dev-review') return `<b>${escapeHtml(n.title)}</b> 개발이 완료되어 <b>검수 요청</b>이 접수되었습니다. 확인 후 검수완료를 클릭해 주세요.${n.detail ? `<br><span class="text-xs text-gray-600">${escapeHtml(n.detail)}</span>` : ''}`;
             if (n.type === 'delete-request') return `<b>${escapeHtml(n.title)}</b> 삭제 요청이 도착했습니다. 확인 후 삭제하거나 반려해 주세요.${n.detail ? `<br><span class="text-xs text-gray-600">${escapeHtml(n.detail)}</span>` : ''}`;
+            if (n.type === 'inbound-new') return `<b>${escapeHtml(n.title)}</b> 인바운드 새 건이 등록되었습니다.${n.detail ? `<br><span class="text-xs text-gray-600">${escapeHtml(n.detail)}</span>` : ''}`;
             if (n.type === 'delete-request-result') return `<b>${escapeHtml(n.title)}</b> 삭제 요청이 처리되었습니다.${n.detail ? `<br><span class="text-xs text-gray-600">${escapeHtml(n.detail)}</span>` : ''}`;
             return escapeHtml(n.title || '');
         };
@@ -12468,6 +12470,7 @@ const QUOTE_TEMPLATES = [
         function notiClickJs(n) {
             if (n.noticeId) return `navigate('dashboard-personal', document.getElementById('nav-dashboard-personal'))`;   // 공지사항 알림 → 공지가 있는 마이 대시보드
             if (n.scheduleId) return `openScheduleFromNotice(${jsArg(n.scheduleId)})`;   // 일정 알림 (2026-10-23)
+            if (n.type === 'inbound-new') return `openInboundFromNotice(${jsArg(n.inboundId || '')})`;   // 인바운드 새 건 (2026-11-19)
             if (n.deleteReqId) return `openDeleteRequests(${jsArg(n.type === 'delete-request' ? 'pending' : 'done')})`;
             if (n.devId) return `openDevFromNotice(${jsArg(n.devId)})`;
             if (n.meetingId) return `openMeetingFromNotice(${jsArg(n.meetingId)})`;
@@ -29550,6 +29553,7 @@ const QUOTE_TEMPLATES = [
                 d.id = 'IN-' + String(inboundSeq++).padStart(4, '0');
                 d.createdAt = ymd(new Date());
                 inboundRecords.unshift(d);
+                inboundNotifyNew([d]);
             }
             saveInboundRecords();     // 다른 창도 같은 자료를 보도록 담아 둡니다 (2026-09-07)
             closeInboundModal();
@@ -29810,6 +29814,7 @@ const QUOTE_TEMPLATES = [
         // 여러 건 넣기 — 이미 있는 건은 건너뛰고, 같은 연락처 재문의는 표시만 합니다
         function inboundAddRecords(recs) {
             let added = 0, skipped = 0;
+            const fresh = [];
             recs.forEach(src => {
                 const rec = JSON.parse(JSON.stringify(src));
                 if (inboundExisting(rec)) { skipped++; return; }
@@ -29817,10 +29822,62 @@ const QUOTE_TEMPLATES = [
                 if (prev) { if (!rec.flags.includes('재문의: ' + prev.id)) rec.flags.push('재문의: ' + prev.id); rec.dupOf = prev.id; if (prev.kob && prev.kob.dept) rec.kob.dept = prev.kob.dept; }   // 규칙 1순위 — 이전 건의 본부로 (서버 appendRecords 와 같음)
                 rec.id = 'IN-' + String(inboundSeq++).padStart(4, '0');
                 inboundRecords.unshift(rec);
+                fresh.push(rec);
                 added++;
             });
             if (added) saveInboundRecords();
+            inboundNotifyNew(fresh.filter(r => r.channel !== 'sheet'));   // 예전 시트 이관은 새 문의가 아니라 알리지 않음
             return { added, skipped };
+        }
+
+        // ---------- 인바운드 새 건 알림 (2026-11-19 다니엘님 "새로 등록되는 건들을 푸시 알림") ----------
+        // 받는 사람 규칙은 서버 functions/api/_inbound_notify.js 와 같습니다 — 바꾸면 두 곳을 함께 고칩니다.
+        //   배정 본부(영업 → sales · 운영 → ops) 직원 중 인바운드 관리 화면 권한이 있는 사람,
+        //   미배정이거나 그 본부에 받을 사람이 없으면 인바운드 관리 화면 권한이 있는 직원 모두. 퇴사 · 휴직 · 사외 · 등록한 본인 제외.
+        //   한 사람에게 4건 이상이면 'N건' 알림 하나로 묶습니다. 폰 · PC 푸시는 pushNotification 이 함께 보냅니다(인바운드 알림을 끈 사람 제외).
+        const INBOUND_NOTI_DEPT = { '영업': 'sales', '운영': 'ops' };
+        function inboundNotiViewers() {
+            const external = new Set(permissionGroups.filter(g => g.external).map(g => g.id));
+            return pickableUsers().filter(u => {
+                if (!u.name || u.dept === 'vendor') return false;
+                const ids = userGroupIds(u);
+                if (ids.some(id => external.has(id))) return false;
+                if (u.dept === 'admin' || u.isAdmin === true || ids.includes('admin')) return true;
+                return groupsPermissionsOf(ids).includes('inbound-center');
+            });
+        }
+        function inboundNotiRecipients(rec) {
+            const viewers = inboundNotiViewers().filter(u => u.name !== currentUserName);
+            const code = INBOUND_NOTI_DEPT[(rec.kob || {}).dept || ''];
+            const inDept = code ? viewers.filter(u => u.dept === code) : [];
+            return Array.from(new Set((inDept.length ? inDept : viewers).map(u => u.name)));
+        }
+        function inboundNotifyNew(recs) {
+            const per = new Map();
+            (recs || []).filter(r => r && r.id).forEach(r => inboundNotiRecipients(r).forEach(name => {
+                if (!per.has(name)) per.set(name, []);
+                per.get(name).push(r);
+            }));
+            per.forEach((rs, name) => {
+                const base = { id: 'cnoti_' + collabNotiIdCounter++, type: 'inbound-new', toUser: name, toDept: '', date: ymd(new Date()) };
+                if (rs.length >= 4) {
+                    pushNotification(Object.assign(base, { inboundId: '', title: `새 인바운드 ${rs.length}건`,
+                        detail: rs.slice(0, 5).map(r => r.company || r.name || r.id).join(', ') + (rs.length > 5 ? ` 외 ${rs.length - 5}건` : '') }));
+                    return;
+                }
+                rs.forEach((r, i) => {
+                    const k = r.kob || {};
+                    const where = (r.source && r.source.label) || ((INBOUND_CHANNELS[r.channel] || {}).name) || '';
+                    pushNotification(Object.assign({}, base, { id: i ? 'cnoti_' + collabNotiIdCounter++ : base.id, inboundId: r.id, title: r.company || r.name || '새 문의',
+                        detail: [r.id, where, k.dept ? k.dept + '본부' : '미배정', String(r.requestNote || '').replace(/\s+/g, ' ').slice(0, 100)].filter(Boolean).join(' · ') }));
+                });
+            });
+        }
+        // 알림을 누르면 인바운드 관리로 — 한 건 알림은 그 건 상세까지
+        function openInboundFromNotice(id) {
+            if (!canSeePage('inbound-center')) { alert('인바운드 관리 화면 권한이 없습니다.'); return; }
+            navigate('inbound-center', document.getElementById('nav-inbound-center'));
+            if (id && inboundRecords.some(r => r.id === id)) openInboundModal(id);
         }
 
         // ---------- 단계 · 기준 시간 ----------

@@ -73,6 +73,7 @@ import * as fs from './_files.js';
 import * as push from './_push.js';
 import * as hol from './_holidays.js';
 import * as inb from './_inbound.js';
+import { notifyInboundAdded } from './_inbound_notify.js';
 
 const ACTIVE_RESERVE_STATUSES = ['신청완료', '승인대기중', '승인완료', '반납요청'];
 const num = (v) => (v === '' || v === null || v === undefined ? 0 : Number(v) || 0);
@@ -400,6 +401,11 @@ export async function onRequest(context) {
                 if (!str(rec.phone) && !str(rec.email)) return reply(400, { ok: false, error: '연락처 또는 이메일 중 하나를 입력해 주세요.' });
                 if (url.searchParams.get('dry') === '1') return reply(200, { ok: true, dry: true, record: rec });
                 const r = await inb.appendRecords(store, [rec], cfg.rules);
+                // 새 건이면 배정 본부 직원에게 알림함 · 푸시로 — 문의한 사람의 응답은 기다리게 하지 않습니다 (2026-11-19)
+                if (r.added.length) {
+                    const job = notifyInboundAdded(env, r.added).catch(e => console.error('[인바운드 알림] 실패', e && e.message));
+                    if (typeof context.waitUntil === 'function') context.waitUntil(job); else await job;
+                }
                 return reply(200, { ok: true, id: r.added[0] ? r.added[0].id : '', duplicate: !r.added.length });
             }
 
@@ -1010,6 +1016,15 @@ export async function onRequest(context) {
                 const cur = await store.storeValue(key);
                 const r = pc.applyPartnerWrite(key, cur, input.upserts, input.removes, me);
                 await store.setStore(key, r.list);
+                // 외주업체가 새로 넣은 인바운드 건 → 직원에게 알림함 · 푸시로 (2026-11-19)
+                if (key === 'gwInboundRecords.v1') {
+                    const before = new Set(((cur && cur.records) || []).map(x => x && x.id));
+                    const fresh = ((r.list && r.list.records) || []).filter(x => x && x.id && !before.has(x.id));
+                    if (fresh.length) {
+                        const job = notifyInboundAdded(env, fresh).catch(e => console.error('[인바운드 알림] 실패', e && e.message));
+                        if (typeof context.waitUntil === 'function') context.waitUntil(job); else await job;
+                    }
+                }
                 const view = pc.partnerView({ [key]: r.list }, me)[key];
                 return json(200, { ok: true, value: view, renamed: r.renamed, rejected: r.rejected });
             }

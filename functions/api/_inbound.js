@@ -684,11 +684,13 @@ export async function autoPull(env, store, deps) {
     if (!due.length) return { ok: true, skipped: 'not-due' };
     const { values } = await readSecrets(env);
     const out = {};
+    const addedAll = [];   // 새로 들어온 건 — worker.js 가 알림을 보냅니다 (2026-11-19)
     for (const s of due) {
         try {
             const r = await runSource(s, cfg, values, deps || {});
             const recs = (r.items || []).map(x => x.record).filter(rec => rec.extKey);
             const { added, skipped } = await appendRecords(store, recs, cfg.rules);
+            addedAll.push(...added);
             state[s] = { at: new Date().toISOString(), ok: true, added: added.length, skipped: skipped.length };
         } catch (e) {
             state[s] = { at: new Date().toISOString(), ok: false, error: String(e.message || e).slice(0, 300) };
@@ -696,5 +698,5 @@ export async function autoPull(env, store, deps) {
         out[s] = state[s];
     }
     await store.setStore(AUTO_STATE_KEY, state);
-    return { ok: true, ran: out };
+    return { ok: true, ran: out, added: addedAll };
 }
