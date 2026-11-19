@@ -30,7 +30,7 @@
     <script src="config/app-config.js"></script>
     <!-- 화면 버전 (2026-11-16) — 배포할 때마다 올립니다. 개발 · 운영 화면 아래에 "그룹웨어 v1.1.0 · 운영" 처럼 보입니다.
          groupware = 그룹웨어 화면 · calendar = 킹오더일정(?mode=calendar) -->
-    <script>window.KOB_VERSION = { groupware: '1.1.16', calendar: '1.0.5', date: '2026-11-19' };</script>
+    <script>window.KOB_VERSION = { groupware: '1.1.17', calendar: '1.0.5', date: '2026-11-19' };</script>
     <script>
         (function () {
             // manifest 는 **여기서 만들어 답니다.** (2026-09-05 고침)
@@ -28245,7 +28245,9 @@ const QUOTE_TEMPLATES = [
                     dept: 'sales', owner: k.owner || '',
                     statusName: k.result || (k.contactAt ? '컨택함' : '미컨택'),
                     chip: (inboundResultDef(k.result) || {}).chip || 'bg-gray-100 text-gray-700',
-                    due: sp ? (k.dueDate || '') : '', overdue: sp ? sp.late : 0, done, doneAt: k.contactAt || '',
+                    // 완료일은 끝난 건만 (진행 중인데 컨택일자가 '완료일'로 보이던 것 — 2026-11-19 화면 점검)
+                    due: sp ? (k.dueDate || '') : '', overdue: sp ? sp.late : 0, done,
+                    doneAt: done ? ((sp && sp.doneEntry ? String(sp.doneEntry.at || '').slice(0, 10) : '') || k.contactAt || '') : '',
                     issue, detail: [inboundListText(r.needs), r.phone].filter(Boolean).join(' · '), raw: r
                 }));
             });
@@ -28852,7 +28854,7 @@ const QUOTE_TEMPLATES = [
             title: '제목', name: '이름', description: '내용', content: '내용', memo: '메모', note: '비고',
             requester: '요청자', orderedBy: '지시자', assignee: '담당자', assigneeUser: '담당자', owner: '담당자',
             targetDept: '수신 부서', targetName: '수신자', dept: '본부', team: '팀',
-            date: '요청일', dueDate: '완료기한', completedAt: '완료일', completeDetail: '처리 내용',
+            date: '요청일', dueDate: '완료기한', completedAt: '완료일', completeDetail: '처리 내용', workingSince: '진행 시작',
             completeIssue: '이슈', rejectReason: '반려 사유', holdReason: '보류 사유',
             receivedAt: '접수일', receivedTime: '접수시간', receiver: '접수자', doneAt: '완료일',
             actionNote: '조치사항', actionAt: '조치일', actionBy: '조치자', actionTime: '조치시간',
@@ -28867,8 +28869,42 @@ const QUOTE_TEMPLATES = [
             sourceDept: '요청 부서', type: '구분', center: '업무센터', customerId: '고객 id', amount: '금액', approvalNo: '승인번호',
             regType: '등록 구분', targetType: '수신 방식', merchant: '가맹점', requestedAt: '요청일', dueDate: '완료기한',
             ownerName: '소유자', cardNo: '카드번호', usedAt: '사용일시', category: '분류', resolved: '해결됨', level: '심각도',
-            customerName: '고객명', workKey: '업무센터', workId: '업무 id', reRequestOf: '재요청 원본', payStatus: '결제 상태'
+            customerName: '고객명', workKey: '업무센터', workId: '업무 id', reRequestOf: '재요청 원본', payStatus: '결제 상태',
+            // 경영현황판 상세 창 영어 이름 정리 (2026-11-19 다니엘님 "한글로 변경")
+            sub: '세부 분류', assignStatus: '배정 상태', assignedBy: '배정자', assignedAt: '배정일', assignNote: '배정 메모',
+            acceptedAt: '수락일', doneBy: '완료 처리자', doneMemo: '완료 메모', handledBy: '처리자', holdAt: '보류일', holdBy: '보류 처리자',
+            cancelledAt: '취소일', cancelledBy: '취소자', decidedAt: '결정일', decidedBy: '결정자', reason: '사유', cause: '원인',
+            inDate: '인입일자', inAt: '인입 시각', requestNote: '문의 내용', firstContactAt: '1차 컨택일자', dupOf: '중복 원본', spam: '스팸',
+            contactName: '담당자명', businessNo: '사업자번호', brand: '브랜드', franchiseName: '가맹 브랜드', kind: '종류', unit: '단위', qty: '수량',
+            installDate: '설치일', installTime: '설치 시간', installEngineer: '설치 기사', installNote: '설치 메모', installReqDate: '설치 요청일', installReqTime: '설치 요청 시간',
+            occurredAt: '발생일', occurredTime: '발생 시간', severity: '심각도', impact: '영향', urgency: '긴급도', summary: '요약', message: '메시지',
+            submittedAt: '제출일', sentAt: '발송일', uploadedAt: '업로드일', uploadedBy: '업로드한 사람', viewedAt: '열람일', viewedBy: '열람자',
+            reworkAt: '재작업일', reworkBy: '재작업 요청자', reworkReason: '재작업 사유', reworkRound: '재작업 차수',
+            delayReasonAt: '지연 사유 입력일', delayReasonBy: '지연 사유 입력자', dueTime: '완료 시간', reporter: '보고자', writer: '작성자',
+            dlvInvoice: '송장번호', dlvSendDate: '발송일', dlvSender: '발송자', payMemo: '결제 메모', payTerms: '결제 조건', taxInvoice: '세금계산서',
+            approvalStatus: '승인 상태', currentStep: '현재 단계', obAmount: '미납 금액', obCount: '미납 횟수', distAmount: '유통 금액',
+            asShipDate: 'A/S 발송일', asDevice: 'A/S 장비', vehicle: '차량', retransferDept: '재이관 본부', retransferTeam: '재이관 팀', replyMemo: '회신 메모', replyMethod: '회신 방법'
         };
+        // 영어 코드 값 → 한글 (업무센터 업무)
+        const EXEC_ASSIGN_STATUS = { pending: '수락 대기', accepted: '수락', hold: '보류', rejected: '거부' };
+        function execFieldValue(i, k, text) {
+            const key = i.kind === 'work' ? i.srcKey : '';
+            const r = i.raw || {};
+            try {
+                if (key) {
+                    if (k === 'center') return (WORK_CENTERS[text] || {}).title || deptNames[text] || text;
+                    if (k === 'type') return (wcType(key, text) || {}).name || text;
+                    if (k === 'category') return ((wcCategories(key, r.type) || []).find(c => c.id === text) || {}).name || text;
+                    if (k === 'status') return wcStatusName(key, text);
+                }
+                if (k === 'priority') return (WC_PRIORITY[text] || {}).name || text;
+                if (k === 'assignStatus') return EXEC_ASSIGN_STATUS[text] || text;
+                if (k === 'spam' || k === 'resolved') return text;
+                // 2026-11-19T08:22:37.646Z 같은 표준시 → 한국 시각
+                if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(text)) { const d = new Date(text); if (!isNaN(d)) return `${ymd(d)} ${hhmm(d)}`; }
+            } catch (e) { /* 이름을 못 찾으면 원래 값 */ }
+            return text;
+        }
         function execFieldLabel(k) { return EXEC_FIELD_LABELS[k] || k; }
 
         // 원본에서 사람이 읽을 만한 것만 골라 냅니다.
@@ -28886,6 +28922,7 @@ const QUOTE_TEMPLATES = [
                 if (text.indexOf('data:') === 0) return;
                 if (text.length > 400) text = text.slice(0, 400) + ' …';
                 if (k === 'dept' || k === 'targetDept') text = deptNames[text] || text;
+                else text = execFieldValue(i, k, text);
                 out.push({ k: execFieldLabel(k), v: text });
             });
             return out;
