@@ -30,7 +30,7 @@
     <script src="config/app-config.js"></script>
     <!-- 화면 버전 (2026-11-16) — 배포할 때마다 올립니다. 개발 · 운영 화면 아래에 "그룹웨어 v1.1.0 · 운영" 처럼 보입니다.
          groupware = 그룹웨어 화면 · calendar = 킹오더일정(?mode=calendar) -->
-    <script>window.KOB_VERSION = { groupware: '1.1.11', calendar: '1.0.5', date: '2026-11-19' };</script>
+    <script>window.KOB_VERSION = { groupware: '1.1.12', calendar: '1.0.5', date: '2026-11-19' };</script>
     <script>
         (function () {
             // manifest 는 **여기서 만들어 답니다.** (2026-09-05 고침)
@@ -52523,6 +52523,11 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             return r.targetName === currentUserName;
         }
         function payDocReq(id) { return payDocRequests.find(r => r.id === id) || null; }
+        // 영업본부가 서류를 올리고 회신할 차례인지 — 확인대기(submitted)라도 반려된 항목이 있으면 올릴 수 있습니다
+        // (2026-11-19 다니엘님 "결제본부 보완요청에 반려난 부분에 업로드 버튼이 안 보여" — 항목만 [반려]하고 [반려 항목 재요청]을 누르지 않으면 막혔음)
+        function payDocUploadOpen(r) {
+            return ['requested', 'uploading', 'returned'].includes(r.status) || (r.status === 'submitted' && r.items.some(i => i.status === 'rejected'));
+        }
 
         // ---------- 집계 헬퍼 ----------
         function payDocProgress(r) {
@@ -53177,7 +53182,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             const pr = PAY_PRIORITY[r.priority] || PAY_PRIORITY.normal;
             const p = payDocProgress(r);
             // 관리자 · 전체 자료 권한은 확인대기 · 확인완료 뒤에도 파일을 바꾸고 지웁니다 (2026-09-28)
-            const canUpload = payDocCanUpload(r) && ((r.status !== 'completed' && r.status !== 'submitted') || canManageAllData());
+            const canUpload = payDocCanUpload(r) && (payDocUploadOpen(r) || canManageAllData());
             const canReview = payDocCanReview() && (r.status === 'submitted' || r.status === 'returned');
             const canEditItems = payDocItemEditable(r);   // 보완필요서류 항목 추가·수정·삭제 (결제본부 전용)
             const dd = r.status === 'completed' ? null : getDdayInfo(r.dueDate);
@@ -53248,7 +53253,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             if (payDocCanUpload(r) && r.status === 'requested') {
                 btns.push(`<button onclick="payDocStart(${jsArg(r.id)})" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded text-sm" title="결제본부에 요청 확인을 통보하고 보완을 시작합니다"><i class="fas fa-check mr-1"></i>요청 확인</button>`);
             }
-            if (payDocCanUpload(r) && ['requested', 'uploading', 'returned'].includes(r.status)) {
+            if (payDocCanUpload(r) && payDocUploadOpen(r)) {
                 const ok = payDocAllUploaded(r);
                 btns.push(`<button ${ok ? '' : 'disabled'} onclick="payDocSubmitDocs(${jsArg(r.id)})" class="px-4 py-2 rounded text-sm text-white ${ok ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-gray-300 cursor-not-allowed'}" title="${ok ? '' : '요청된 서류를 모두 업로드해야 회신할 수 있습니다'}"><i class="fas fa-paper-plane mr-1"></i>회신 (보완서류 제출)</button>`);
             }
@@ -53327,7 +53332,7 @@ ${gwZipBtnHtml(r.items.filter(it => it.fileUrl).map(it => ({ name: `${it.name ||
                     </table>
                 </div>
 
-                ${payDocCanUpload(r) && ['requested', 'uploading', 'returned'].includes(r.status) ? `
+                ${payDocCanUpload(r) && payDocUploadOpen(r) ? `
                 <div class="mb-3">
                     <label class="block text-xs font-medium text-gray-600 mb-1"><i class="fas fa-reply mr-1 text-indigo-500"></i>회신 메모 <span class="text-gray-400 font-normal">(선택, 결제본부 전달 사항)</span></label>
                     <textarea id="paydoc-reply-memo" rows="2" class="w-full p-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="예: 통장사본은 법인 명의로 다시 받았습니다">${escapeHtml(r.replyMemo || '')}</textarea>
@@ -53738,6 +53743,8 @@ ${gwZipBtnHtml(r.items.filter(it => it.fileUrl).map(it => ({ name: `${it.name ||
             it.status = 'rejected';
             it.rejectReason = reason.trim();
             payDocLog(r, `'${it.name}' 반려: ${reason.trim()}`);
+            // 반려하면 바로 '반려·재요청' — 영업본부가 그 항목을 다시 올릴 수 있게 (2026-11-19, 전에는 [반려 항목 재요청]을 눌러야 했음)
+            if (r.status === 'submitted') r.status = 'returned';
             if (fromPreview) closePayDocPreview(); else renderPayDocDetail();
         }
 
