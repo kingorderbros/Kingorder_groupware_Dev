@@ -30,7 +30,7 @@
     <script src="config/app-config.js"></script>
     <!-- 화면 버전 (2026-11-16) — 배포할 때마다 올립니다. 개발 · 운영 화면 아래에 "그룹웨어 v1.1.0 · 운영" 처럼 보입니다.
          groupware = 그룹웨어 화면 · calendar = 킹오더일정(?mode=calendar) -->
-    <script>window.KOB_VERSION = { groupware: '1.1.17', calendar: '1.0.5', date: '2026-11-19' };</script>
+    <script>window.KOB_VERSION = { groupware: '1.1.18', calendar: '1.0.5', date: '2026-11-19' };</script>
     <script>
         (function () {
             // manifest 는 **여기서 만들어 답니다.** (2026-09-05 고침)
@@ -4884,8 +4884,8 @@
                         </div>
                     </div>
                     <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">담당자</label>
-                        <select id="paydoc-assignee" disabled class="w-full p-2 border border-gray-300 rounded text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-yellow-500"></select>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">담당자 <span class="text-xs font-normal text-gray-400">(여러 명 선택 가능)</span> <span id="paydoc-assignee-count" class="text-xs font-normal text-yellow-700"></span></label>
+                        <div id="paydoc-assignees" class="w-full max-h-40 overflow-y-auto p-2 border border-gray-300 rounded text-sm bg-gray-50"></div>
                     </div>
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-1">우선순위</label>
@@ -4906,7 +4906,8 @@
                     <textarea id="paydoc-memo" rows="2" class="w-full p-2 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-yellow-500" placeholder="예: PG 심사 반려 건, 아래 서류 보완 후 재심사 예정"></textarea>
                 </div>
 
-                <div class="mb-4 border border-gray-200 rounded-lg">
+                <p id="paydoc-edit-items-note" class="hidden mb-4 text-xs text-gray-500 bg-gray-50 border border-gray-200 rounded p-2"><i class="fas fa-circle-info mr-1"></i>보완 서류 항목은 상세 창의 [서류 항목 추가] · 항목별 수정에서 변경합니다. (올린 파일이 지워지지 않게 이 창에서는 바꾸지 않습니다)</p>
+                <div id="paydoc-catalog-box" class="mb-4 border border-gray-200 rounded-lg">
                     <div class="flex justify-between items-center gap-2 flex-wrap px-4 py-2 bg-gray-50 border-b border-gray-200 rounded-t-lg">
                         <p class="text-sm font-semibold text-gray-700"><i class="fas fa-list-check text-yellow-500 mr-1"></i>보완 필요 서류 <span class="text-red-500">*</span></p>
                         <div class="flex items-center gap-3">
@@ -4921,7 +4922,7 @@
 
                 <div class="flex justify-end space-x-2 border-t border-gray-100 pt-4">
                     <button type="button" onclick="closePayDocRequestModal()" class="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition-colors">닫기</button>
-                    <button type="submit" class="px-4 py-2 bg-yellow-600 text-white rounded hover:bg-yellow-700 transition-colors"><i class="fas fa-paper-plane mr-1"></i>보완요청 발송</button>
+                    <button type="submit" id="paydoc-request-submit" class="px-4 py-2 bg-yellow-600 text-white rounded hover:bg-yellow-700 transition-colors"><i class="fas fa-paper-plane mr-1"></i>보완요청 발송</button>
                 </div>
             </form>
         </div>
@@ -18454,7 +18455,11 @@ const QUOTE_TEMPLATES = [
             const colors = { requested: ['border-amber-500', 'text-amber-500'], uploading: ['border-blue-500', 'text-blue-500'], submitted: ['border-indigo-500', 'text-indigo-500'], returned: ['border-red-500', 'text-red-500'], completed: ['border-green-500', 'text-green-500'] };
             const cards = Object.keys(PAY_REQ_STATUS).map(k => dashCard(PAY_REQ_STATUS[k].name, by(k), PAY_REQ_STATUS[k].icon + ' ' + colors[k][1], colors[k][0], go(k))).join('');
             const who = {};
-            open.forEach(r => { const k = r.claimedBy || (payDocIsGroupTarget(r) ? (r.targetType === 'team' ? '영업팀 전체' : PAY_DOC_OPS_TEAM_NAME) : r.targetName) || '-'; who[k] = (who[k] || 0) + 1; });
+            open.forEach(r => {
+                // 담당자를 여러 명 지정한 요청은 사람마다 셉니다 (2026-11-19)
+                const ks = r.claimedBy ? [r.claimedBy] : payDocIsGroupTarget(r) ? [r.targetType === 'team' ? '영업팀 전체' : PAY_DOC_OPS_TEAM_NAME] : payDocTargetNames(r);
+                (ks.length ? ks : ['-']).forEach(k => { who[k] = (who[k] || 0) + 1; });
+            });
             const whoRows = Object.entries(who).sort((a, b) => b[1] - a[1]).slice(0, 12)
                 .map(([n, c]) => `<div class="flex justify-between py-1.5 border-b border-gray-100 text-sm"><span class="text-gray-700">${escapeHtml(n)}</span><span class="font-semibold text-gray-800">${c}건</span></div>`).join('')
                 || '<p class="text-sm text-gray-400 py-4 text-center">처리 중인 요청이 없습니다.</p>';
@@ -19737,7 +19742,7 @@ const QUOTE_TEMPLATES = [
                     sub: `결제업무센터 · ${(PAY_REG_TYPES[r.regType] || {}).name || ''} · 요청 ${r.requester}`,
                     dept: 'payment',
                     date: r.dueDate || ymd(new Date()),
-                    owner: payDocIsGroupTarget(r) ? (r.claimedBy || r.requester) : (r.targetName || r.requester),
+                    owner: payDocIsGroupTarget(r) ? (r.claimedBy || r.requester) : (payDocTargetNames(r)[0] || r.requester),
                     description: `보완요청 ${r.id} · 대상 ${r.targetType === 'team' ? '영업팀 전체' : r.targetName}\n기한 ${r.dueDate}`
                 };
             }
@@ -53140,6 +53145,14 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
         function payDocSalesStaff() { return pickableUsers().filter(u => u.dept === 'sales').map(u => u.name); }
         const PAY_DOC_OPS_TEAM_NAME = '운영/관리파트 전체';
         function payDocIsGroupTarget(r) { return r.targetType === 'team' || r.targetType === 'opsTeam'; }
+        // 담당자 지정은 여러 명 (2026-11-19 다니엘님 "담당자 2명 이상 선택") — targetNames[], targetName 은 이름을 ', ' 로 이은 표시용
+        //   예전 요청(targetName 한 명)도 그대로 읽습니다.
+        function payDocTargetNames(r) {
+            if (!r || payDocIsGroupTarget(r)) return [];
+            if (Array.isArray(r.targetNames) && r.targetNames.length) return r.targetNames.slice();
+            return r.targetName ? [r.targetName] : [];
+        }
+        function payDocIsTarget(r, name) { return !!name && payDocTargetNames(r).includes(name); }
         function payDocOpsTarget(u) { return !!u && u.team === '운영팀' && (u.part === '관리파트' || u.rank === '팀장'); }
         function payDocOpsStaff() { return pickableUsers().filter(payDocOpsTarget).map(u => u.name); }
         // 로그인한 사람이 운영팀 수신 대상인지 — 이 사람들은 운영 그룹 권한은 그대로 두고 '보완서류 제출함' 만 더 씁니다
@@ -53243,7 +53256,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             if (canManageAllData()) return true;
             if (r.targetType === 'team') return !payDocIsOpsRecipient();    // 영업팀 전체는 영업본부 요청
             if (r.targetType === 'opsTeam') return payDocIsOpsRecipient();   // 운영/관리파트 전체는 운영팀장 · 관리파트
-            return r.targetName === currentUserName;
+            return payDocIsTarget(r, currentUserName);
         }
         function payDocReq(id) { return payDocRequests.find(r => r.id === id) || null; }
         // 영업본부가 서류를 올리고 회신할 차례인지 — 확인대기(submitted)라도 반려된 항목이 있으면 올릴 수 있습니다
@@ -53272,9 +53285,9 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
         // 역할별로 '내 몫'인 요청만 추립니다. (결제본부=확인 대기 중심 / 영업본부=수신 요청)
         function payDocMyRequests() {
             if (currentUserDept === 'sales') {
-                return payDocRequests.filter(r => r.targetType === 'team' || r.targetName === currentUserName || r.claimedBy === currentUserName);
+                return payDocRequests.filter(r => r.targetType === 'team' || payDocIsTarget(r, currentUserName) || r.claimedBy === currentUserName);
             }
-            if (payDocIsOpsRecipient()) return payDocRequests.filter(r => r.targetType === 'opsTeam' || r.targetName === currentUserName || r.claimedBy === currentUserName);
+            if (payDocIsOpsRecipient()) return payDocRequests.filter(r => r.targetType === 'opsTeam' || payDocIsTarget(r, currentUserName) || r.claimedBy === currentUserName);
             return payDocRequests.slice();
         }
         function updatePayDocBadge() {
@@ -53455,6 +53468,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             document.getElementById('paydoc-edit-id').value = '';
             document.getElementById('paydoc-request-title').innerText = '보완서류 요청 등록';
             document.getElementById('paydoc-request-form').reset();
+            payDocSetEditMode(false);
 
             // 등록구분
             document.getElementById('paydoc-regtype').innerHTML =
@@ -53466,10 +53480,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             document.getElementById('paydoc-merchant-list').innerHTML =
                 cands.map(c => `<option value="${escapeHtml(c.name)}"></option>`).join('');
 
-            // 담당자 후보
-            document.getElementById('paydoc-assignee').innerHTML =
-                [['영업본부', payDocSalesStaff()], ['운영팀', payDocOpsStaff()]].filter(g => g[1].length).map(g =>
-                    `<optgroup label="${g[0]}">${g[1].map(n => `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join('')}</optgroup>`).join('');
+            renderPayDocAssignees([]);
 
             document.getElementById('paydoc-requester').value = currentUserName || '결제본부';
             document.getElementById('paydoc-due').value = dueIn(3);
@@ -53546,27 +53557,83 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             });
         }
 
+        // 담당자 후보 — 체크해서 여러 명 (영업본부 · 운영팀), 예전에 지정했는데 목록에 없는 이름도 남겨 둡니다
+        function renderPayDocAssignees(picked) {
+            const pick = new Set(picked || []);
+            const groups = [['영업본부', payDocSalesStaff()], ['운영팀', payDocOpsStaff()]];
+            const known = new Set(groups.flatMap(g => g[1]));
+            const extra = Array.from(pick).filter(n => !known.has(n));
+            if (extra.length) groups.push(['기존 지정', extra]);
+            document.getElementById('paydoc-assignees').innerHTML = groups.filter(g => g[1].length).map(g => `
+                <p class="text-[11px] font-semibold text-gray-500 mt-1 first:mt-0">${escapeHtml(g[0])}</p>
+                <div class="flex flex-wrap gap-x-3 gap-y-1">${g[1].map(n => `<label class="inline-flex items-center gap-1 text-sm text-gray-700 cursor-pointer"><input type="checkbox" name="paydoc-assignee" value="${escapeHtml(n)}" ${pick.has(n) ? 'checked' : ''} onchange="updatePayDocAssigneeCount()" class="rounded border-gray-300">${escapeHtml(n)}</label>`).join('')}</div>`).join('')
+                || '<p class="text-xs text-gray-400">선택할 수 있는 담당자가 없습니다.</p>';
+            updatePayDocAssigneeCount();
+        }
+        function payDocPickedAssignees() {
+            return Array.from(document.querySelectorAll('input[name="paydoc-assignee"]:checked')).map(x => x.value);
+        }
+        function updatePayDocAssigneeCount() {
+            const el = document.getElementById('paydoc-assignee-count');
+            const person = (document.querySelector('input[name="paydoc-target"]:checked') || {}).value === 'person';
+            const n = payDocPickedAssignees().length;
+            if (el) el.textContent = person && n ? `${n}명 선택` : '';
+        }
         function onPayDocTargetChange() {
             const person = document.querySelector('input[name="paydoc-target"]:checked').value === 'person';
-            const sel = document.getElementById('paydoc-assignee');
-            sel.disabled = !person;
-            sel.classList.toggle('bg-gray-50', !person);
+            const box = document.getElementById('paydoc-assignees');
+            box.classList.toggle('bg-gray-50', !person);
+            box.classList.toggle('opacity-60', !person);
+            box.querySelectorAll('input[name="paydoc-assignee"]').forEach(x => { x.disabled = !person; });
+            updatePayDocAssigneeCount();
+        }
+        // 등록 ↔ 수정 화면 (수정 때는 서류 항목 칸을 숨깁니다 — 항목은 상세 창에서)
+        function payDocSetEditMode(on) {
+            document.getElementById('paydoc-catalog-box').classList.toggle('hidden', on);
+            document.getElementById('paydoc-edit-items-note').classList.toggle('hidden', !on);
+            const m = document.getElementById('paydoc-request-modal');   // 수정은 상세 창 위에서 열리므로 한 단계 위로
+            m.classList.toggle('z-50', !on); m.classList.toggle('z-[60]', on);
+            document.getElementById('paydoc-request-submit').innerHTML = on ? '<i class="fas fa-floppy-disk mr-1"></i>수정 저장' : '<i class="fas fa-paper-plane mr-1"></i>보완요청 발송';
+        }
+        // 요청 내용 수정 (2026-11-19 다니엘님 "요청 내용 수정 버튼 만들어서 수정 가능하게") — 결제본부 · 관리자, 취합 완료 전
+        function payDocCanEditRequest(r) { return !!r && payDocCanReview() && (r.status !== 'completed' || canManageAllData()); }
+        function openPayDocEditModal(id) {
+            const r = payDocReq(id);
+            if (!r) return;
+            if (!payDocCanEditRequest(r)) { alert('요청 내용은 결제본부 담당자가 취합 완료 전에 수정할 수 있습니다.'); return; }
+            openPayDocRequestModal();
+            document.getElementById('paydoc-edit-id').value = r.id;
+            document.getElementById('paydoc-request-title').innerText = `보완서류 요청 수정 · ${r.id}`;
+            payDocSetEditMode(true);
+            document.getElementById('paydoc-merchant').value = r.merchant || '';
+            document.getElementById('paydoc-bizno').value = r.bizNo || '';
+            document.getElementById('paydoc-regtype').value = r.regType || 'pg';
+            document.getElementById('paydoc-due').value = r.dueDate || '';
+            document.getElementById('paydoc-priority').value = r.priority || 'normal';
+            document.getElementById('paydoc-memo').value = r.memo || '';
+            document.getElementById('paydoc-requester').value = r.requester || '';
+            const t = document.querySelector(`input[name="paydoc-target"][value="${r.targetType || 'team'}"]`);
+            if (t) t.checked = true;
+            renderPayDocAssignees(payDocTargetNames(r));
+            onPayDocTargetChange();
         }
 
         function submitPayDocRequest(event) {
             event.preventDefault();
             if (!payDocCanReview()) { alert('보완요청 등록 권한이 없습니다.'); return; }
 
+            const editId = document.getElementById('paydoc-edit-id').value;
+            const targetType = document.querySelector('input[name="paydoc-target"]:checked').value;
+            const assignees = targetType === 'person' ? payDocPickedAssignees() : [];
+            if (targetType === 'person' && !assignees.length) { alert('요청을 받을 담당자를 1명 이상 선택해 주세요.'); return; }
+            const targetName = targetType === 'team' ? '영업본부 전체' : targetType === 'opsTeam' ? PAY_DOC_OPS_TEAM_NAME : assignees.join(', ');
+            if (editId) { payDocSaveEdit(editId, targetType, targetName, assignees); return; }
+
             const picked = payDocCatalogActive().filter(d => (document.getElementById(`paydoc-doc-${d.id}`) || {}).checked);
             if (!picked.length) { alert('보완이 필요한 서류를 1건 이상 선택해 주세요.'); return; }
 
-            const targetType = document.querySelector('input[name="paydoc-target"]:checked').value;
-            const assignee = document.getElementById('paydoc-assignee').value;
-            if (targetType === 'person' && !assignee) { alert('요청을 받을 담당자를 선택해 주세요.'); return; }
-
             const today = ymd(new Date());
             const id = `PD-2608-${String(payDocSeq++).padStart(4, '0')}`;
-            const targetName = targetType === 'team' ? '영업본부 전체' : targetType === 'opsTeam' ? PAY_DOC_OPS_TEAM_NAME : assignee;
 
             payDocRequests.unshift({
                 id,
@@ -53578,7 +53645,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                 requester: currentUserName || '결제본부',
                 requestedAt: today,
                 dueDate: document.getElementById('paydoc-due').value,
-                targetType, targetName, claimedBy: '',
+                targetType, targetName, targetNames: assignees, claimedBy: '',
                 memo: document.getElementById('paydoc-memo').value.trim(),
                 submittedAt: '', completedAt: '',
                 items: picked.map(d => payDocItem(d.id, (document.getElementById(`paydoc-reason-${d.id}`) || {}).value || '')),
@@ -53589,6 +53656,39 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             closePayDocRequestModal();
             renderPaymentWorkCenter();
             alert(`보완요청 ${id} 이(가) ${targetName}에게 발송되었습니다.`);
+        }
+        // 요청 내용 수정 저장 — 바뀐 항목만 처리 이력에 남깁니다
+        function payDocSaveEdit(id, targetType, targetName, assignees) {
+            const r = payDocReq(id);
+            if (!r || !payDocCanEditRequest(r)) { alert('수정할 수 없는 요청입니다.'); return; }
+            const v = (elId) => document.getElementById(elId).value.trim();
+            const next = { merchant: v('paydoc-merchant'), bizNo: v('paydoc-bizno'), regType: v('paydoc-regtype'), dueDate: v('paydoc-due'), priority: v('paydoc-priority'), memo: v('paydoc-memo') };
+            if (!next.merchant) { alert('가맹점을 입력해 주세요.'); return; }
+            if (!next.dueDate) { alert('보완 기한을 입력해 주세요.'); return; }
+            const LABEL = { merchant: '가맹점', bizNo: '사업자등록번호', regType: '등록구분', dueDate: '보완 기한', priority: '우선순위', memo: '요청 메모' };
+            const show = (k, x) => k === 'regType' ? ((PAY_REG_TYPES[x] || {}).name || x) : k === 'priority' ? ((PAY_PRIORITY[x] || {}).name || x) : k === 'memo' ? (x ? '변경' : '삭제') : (x || '-');
+            const changes = [];
+            Object.keys(next).forEach(k => {
+                if ((r[k] || '') === next[k]) return;
+                changes.push(k === 'memo' ? `${LABEL[k]} ${show(k, next[k])}` : `${LABEL[k]} ${show(k, r[k] || '')} → ${show(k, next[k])}`);
+                r[k] = next[k];
+            });
+            const beforeTarget = r.targetName || '';
+            if (r.targetType !== targetType || beforeTarget !== targetName) {
+                changes.push(`수신 ${beforeTarget || '-'} → ${targetName}`);
+                r.claimedBy = '';   // 수신이 바뀌면 예전 '처리 담당'은 비웁니다 (새 수신 대상이 다시 맡음)
+                r.targetType = targetType;
+                r.targetName = targetName;
+                r.targetNames = assignees;
+            }
+            if (!changes.length) { closePayDocRequestModal(); return; }
+            payDocLog(r, `요청 내용 수정 — ${changes.join(' · ')}`);
+            savePayDocs();
+            closePayDocRequestModal();
+            renderPaymentWorkCenter();
+            const det = document.getElementById('paydoc-detail-modal');
+            if (det && !det.classList.contains('hidden')) renderPayDocDetail();
+            if (typeof showAppToast === 'function') showAppToast('요청 내용을 수정했습니다.', 'green');
         }
 
         // ---------- 보완필요서류 항목 관리 (결제본부 전용) ----------
@@ -54012,6 +54112,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                         <p class="text-sm text-gray-500 mt-1">${escapeHtml(r.merchant)} · ${escapeHtml(r.bizNo || '-')}</p>
                     </div>
                     <div class="flex items-center gap-2 shrink-0">
+                        ${payDocCanEditRequest(r) ? `<button type="button" onclick="openPayDocEditModal(${jsArg(r.id)})" class="px-2.5 py-1 text-xs rounded border border-yellow-400 text-yellow-800 bg-white hover:bg-yellow-50 whitespace-nowrap"><i class="fas fa-pen-to-square mr-1"></i>요청 내용 수정</button>` : ''}
                         ${adminEditButtonHtml(`openPayDocAdminEdit('${escapeHtml(r.id)}')`, '관리자 수정')}
                         <button type="button" onclick="closePayDocDetail()" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times"></i></button>
                     </div>
