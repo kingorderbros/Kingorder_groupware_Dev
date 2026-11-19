@@ -8,6 +8,7 @@ import { onRequest } from './functions/api/[[route]].js';
 import { syncBoth } from './functions/api/_gcal.js';
 import { autoPull as inboundAutoPull } from './functions/api/_inbound.js';
 import { runScheduleReminders } from './functions/api/_reminders.js';
+import { notifyInboundAdded } from './functions/api/_inbound_notify.js';
 
 export default {
     async fetch(request, env, ctx) {
@@ -49,6 +50,11 @@ export default {
             try {
                 const r = await inboundAutoPull(env);
                 if (r && r.ran) console.log('[인바운드 수집]', JSON.stringify(r.ran));
+                // 새로 들어온 건은 배정 본부 직원에게 알림함 · 푸시로 (2026-11-19) — 실패해도 '수집 실패'로 적히지 않게 따로
+                if (r && r.added && r.added.length) {
+                    try { console.log('[인바운드 알림]', JSON.stringify(await notifyInboundAdded(env, r.added))); }
+                    catch (e) { console.error('[인바운드 알림] 실패', e && e.message); }
+                }
             } catch (e) {
                 console.error('[인바운드 수집] 실패', e && e.message);
             }
