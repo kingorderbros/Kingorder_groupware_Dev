@@ -30,7 +30,7 @@
     <script src="config/app-config.js"></script>
     <!-- 화면 버전 (2026-11-16) — 배포할 때마다 올립니다. 개발 · 운영 화면 아래에 "그룹웨어 v1.1.0 · 운영" 처럼 보입니다.
          groupware = 그룹웨어 화면 · calendar = 킹오더일정(?mode=calendar) -->
-    <script>window.KOB_VERSION = { groupware: '1.1.14', calendar: '1.0.5', date: '2026-11-19' };</script>
+    <script>window.KOB_VERSION = { groupware: '1.1.15', calendar: '1.0.5', date: '2026-11-19' };</script>
     <script>
         (function () {
             // manifest 는 **여기서 만들어 답니다.** (2026-09-05 고침)
@@ -38498,7 +38498,6 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             const open = WC_OPEN_STATUSES.includes(w.status);
             const inb = key === SALES_PROG_INBOUND;
             const company = w.company || (inb ? '' : (wcCustomer(key, w.customerId) || {}).name || '');
-            const now = new Date();
             const info = (label, value) => `<div class="min-w-0"><p class="text-[11px] text-gray-500">${label}</p><p class="text-sm text-gray-800 truncate">${value || '<span class="text-gray-300">-</span>'}</p></div>`;
 
             // 경고 줄
@@ -38574,8 +38573,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                             <select id="sales-prog-method" class="w-full text-sm p-2 border border-gray-300 rounded bg-white">
                                 <option value="">선택</option>${SALES_PROG_METHODS.map(m => `<option value="${m}">${m}</option>`).join('')}
                             </select></div>
-                        <div><label class="block text-[11px] text-gray-500 mb-0.5">진행 일자 *</label><input type="date" id="sales-prog-date" value="${ymd(now)}" max="${ymd(now)}" class="w-full text-sm p-2 border border-gray-300 rounded"></div>
-                        <div><label class="block text-[11px] text-gray-500 mb-0.5">진행 시각 *</label><input type="time" id="sales-prog-time" value="${hhmm(now)}" class="w-full text-sm p-2 border border-gray-300 rounded"></div>
+                        <div class="sm:col-span-2"><p class="text-[11px] text-gray-500"><i class="fas fa-clock mr-1"></i>진행 일시는 저장하는 시각으로 자동 기록됩니다 (선택 불가).</p></div>
                         ${issueSel}
                         ${resultSel}
                         <div class="sm:col-span-2"><label id="sales-prog-text-label" class="block text-[11px] text-gray-500 mb-0.5">내용 *</label>
@@ -38690,12 +38688,10 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             const val = (id) => ((document.getElementById(id) || {}).value || '').trim();
             const kind = val('sales-prog-kind') || 'action';
             const method = val('sales-prog-method');
-            const date = val('sales-prog-date');
-            const time = val('sales-prog-time');
+            // 진행 일시는 선택하지 않고 입력(저장)하는 시각으로 고정합니다 (2026-11-19 다니엘님)
+            const at = salesProgStamp();
+            const date = at.slice(0, 10);
             const text = val('sales-prog-text');
-            if (!date || !time) { alert('진행 일자와 시각을 입력해 주세요.'); return; }
-            const at = `${date} ${time}`;
-            if (at > salesProgStamp()) { alert('진행 일시는 현재 시각 이후로 입력할 수 없습니다.'); return; }
             if ((kind === 'action' || kind === 'done') && !method) { alert('어떤 방법으로 진행했는지 선택해 주세요.'); return; }
             if (!text) { alert(({ action: '진행 내용', delay: '지연 사유', stall: '지체 사유', issue: '문제 내용', resolve: '해결 내용', done: '완료 내용' })[kind] + '을(를) 입력해 주세요.'); return; }
             const s = salesProgState(w);

@@ -38,12 +38,12 @@ srv.listen(8866,async()=>{const br=await pp.launch({executablePath:'/Application
    fill({method:'전화',text:''});submitSalesProgress();out.emptyBlocked=w().status!=='working';
    fill({method:'',text:'고객과 통화'});submitSalesProgress();out.noMethodBlocked=w().status!=='working';
    fill({method:'전화',date:'2026-11-18',time:'10:30',text:'고객 담당자와 통화, 설치 3대 확정 — 견적 작성 시작'});submitSalesProgress();
-   out.started={status:w().status,assign:w().assignStatus,actions:salesProgLog(w()).filter(e=>e.kind==='action').length,at:salesProgLog(w()).find(e=>e.kind==='action').at};
+   const a0=salesProgLog(w()).find(e=>e.kind==='action');
+   out.started={status:w().status,assign:w().assignStatus,actions:salesProgLog(w()).filter(e=>e.kind==='action').length,auto:a0.at===a0.loggedAt&&a0.at.slice(0,10)===ymd(new Date())};
+   out.noDateInput=!document.getElementById('sales-prog-date')&&!document.getElementById('sales-prog-time')&&/자동 기록/.test(modal().innerText);
    out.formAfter=!!document.getElementById('sales-prog-kind')&&document.getElementById('sales-prog-kind').tagName==='SELECT';
    // 모바일에서 창이 화면 안에
    const box=modal().firstElementChild.getBoundingClientRect();out.fits=box.left>=0&&box.right<=window.innerWidth+1;
-   // 미래 시각은 막음
-   fill({kind:'action',method:'방문',date:'2099-01-01',time:'10:00',text:'미래'});submitSalesProgress();out.futureBlocked=!salesProgLog(w()).some(e=>e.text==='미래');
    // 문제 발생 → 해결
    fill({kind:'issue',method:'',date:'2026-11-18',time:'15:00',text:'단가표 승인 지연'});submitSalesProgress();
    out.issueOpen=salesProgState(w()).openIssues.length;
@@ -51,10 +51,9 @@ srv.listen(8866,async()=>{const br=await pp.launch({executablePath:'/Application
    const issueId=salesProgState(w()).openIssues[0].id;
    fill({kind:'resolve',issue:issueId,date:'2026-11-19',time:'09:00',text:'팀장 승인 받음'});submitSalesProgress();
    out.issueAfter=salesProgState(w()).openIssues.length;
-   // 순서: 실제 한 때 순
-   fill({kind:'action',method:'이메일',date:'2026-11-17',time:'16:00',text:'자료 요청 메일 (늦게 입력)'});submitSalesProgress();
-   out.order=salesProgSorted(w()).filter(e=>e.kind!=='system').map(e=>e.at);
-   out.lateInputMark=/입력 \d{4}-/.test(modal().innerText);
+   // 순서: 입력한 순서 (일시 = 입력 시각)
+   fill({kind:'action',method:'이메일',text:'자료 요청 메일'});submitSalesProgress();
+   out.order=salesProgSorted(w()).filter(e=>e.kind!=='system').map(e=>e.text);
    // 지체: 마지막 내역이 4일 전
    const keep=JSON.parse(JSON.stringify(w().progressLog));
    const d4=new Date(Date.now()-4*86400000);const s4=`${ymd(d4)} 09:00`;
@@ -118,13 +117,12 @@ srv.listen(8866,async()=>{const br=await pp.launch({executablePath:'/Application
   ok(/담당자 배정 김담당/.test(r.assignLog),'배정하면 진행 내역에 배정 기록',r.assignLog);
   ok(r.startShown&&r.statusBefore==='assigned','수락하면 착수 내용 입력 창 (입력 전에는 상태 그대로)',r);
   ok(r.emptyBlocked&&r.noMethodBlocked,'내용 · 방법 없이 진행중으로 바꿀 수 없음');
-  ok(r.started.status==='working'&&r.started.assign==='accepted'&&r.started.actions===1&&r.started.at==='2026-11-18 10:30','착수 내용 저장 → 진행중 · 수락됨 · 진행 일시 기록',r.started);
+  ok(r.started.status==='working'&&r.started.assign==='accepted'&&r.started.actions===1&&r.started.auto,'착수 내용 저장 → 진행중 · 수락됨 · 진행 일시는 입력한 시각으로 자동',r.started);
+  ok(r.noDateInput,'진행 일자 · 시각 선택 칸 없음 (자동 기록 안내)');
   ok(r.formAfter,'진행중이 된 뒤에는 구분(진행 · 지연 · 지체 · 문제)을 골라 계속 입력');
   ok(r.fits,'진행 내역 창이 화면 폭 안에 들어감');
-  ok(r.futureBlocked,'미래 일시는 입력 불가');
   ok(r.issueOpen===1&&r.issueFlag&&r.issueAfter===0,'문제 발생 → 표시 → 문제 해결로 닫힘',r);
-  ok(JSON.stringify(r.order)===JSON.stringify(r.order.slice().sort())&&r.order[0]==='2026-11-17 16:00','진행 내역은 실제 진행한 일시 순',r.order);
-  ok(r.lateInputMark,'늦게 입력한 건 입력 시각도 함께 표시');
+  ok(r.order[r.order.length-1]==='자료 요청 메일'&&/통화/.test(r.order[0]),'진행 내역은 입력한 순서대로',r.order);
   ok(r.stall===4&&r.stallFlag&&r.stallDefault==='stall'&&r.stallAfter===0,'3일 넘게 내역이 없으면 지체 표시 · 지체 사유 입력으로 해소',r);
   ok(r.lateNeed===true&&r.lateDefault==='delay'&&r.lateAfter===false,'완료 예정일이 지나면 지연 사유 입력 요구 · 입력하면 해소',r);
   ok(r.exec.overdue===1&&r.exec.due&&r.exec.issue==='지연 사유 미입력','전사 업무 현황에도 예정일 · 지연 · 사유 미입력 반영',r.exec);
