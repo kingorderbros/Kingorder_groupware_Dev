@@ -65,6 +65,10 @@ srv.listen(8867,async()=>{const br=await pp.launch({executablePath:'/Application
    out.execRefreshed=shown(em)&&/고객 휴가로 1주 연기/.test(em.innerText);
    closeExecItemModal();
    // 영업업무센터 업무도 경영현황판 상세 창에서 진행 내역
+   S.works.find(x=>x.id==='S-T-9').assignStatus='accepted';S.works.find(x=>x.id==='S-T-9').updatedAt='2026-11-19T08:22:37.646Z';S.works.find(x=>x.id==='S-T-9').sub='제안서 발송';
+   const rawW=execRawRows(execCollectItems().find(i=>i.kind==='work'&&i.id==='S-T-9'));const rawI=execRawRows(execCollectItems().find(i=>i.kind==='inbound'&&i.id==='IN-T-1'));
+   out.rawEn=rawW.concat(rawI).filter(x=>/^[A-Za-z_]+$/.test(x.k)||/^(sales|activity|proposal|normal|working|accepted)$/.test(x.v)||/T\d\d:\d\d:/.test(x.v)).map(x=>x.k+'='+x.v);
+   out.rawKo=rawW.map(x=>x.k+'='+x.v).join(' / ');
    openExecItemModal('work','S-T-9');out.workExec=/상세 진행 내역/.test(em.innerText)&&/제안서 직접 전달/.test(em.innerText);closeExecItemModal();
    // 상세 창을 열어 둔 채(작성 중 사본) 진행 내역 입력 → 상세 창 저장해도 내역 유지
    enterApp(list[0]);await sleep(80);
@@ -124,6 +128,7 @@ srv.listen(8867,async()=>{const br=await pp.launch({executablePath:'/Application
   ok(r.execModal,'경영현황판 항목 클릭 → 상세 창에 진행 내역 전체 표시');
   ok(r.execFits,'경영현황판 상세 창이 화면 폭 안');
   ok(r.progOnTop&&r.execRefreshed,'상세 창에서 진행 내역 창 열어 입력 → 닫으면 상세 창 새 내용');
+  ok(r.rawEn.length===0&&/업무센터=영업업무센터/.test(r.rawKo)&&/상태=진행중/.test(r.rawKo)&&/배정 상태=수락/.test(r.rawKo),'경영현황판 상세 창 원본 항목 이름 · 값 한글 (업무센터 · 구분 · 상태 · 배정 상태 · 수정 일시)',{en:r.rawEn,ko:r.rawKo});
   ok(r.workExec,'영업업무센터 업무도 경영현황판 상세 창에서 진행 내역 표시');
   ok(r.keep.n===r.keep.nBefore&&r.keep.has&&r.keep.status==='방문 상담 예정','상세 창을 열어 둔 채 진행 내역을 입력해도 상세 창 저장 때 지워지지 않음',r.keep);
   ok(r.doneForm&&r.noResult===''&&r.noFail===''&&r.noAck==='','완료 처리는 진행 결과 · 실패사유 · 미해결 문제 확인 필수',r);
