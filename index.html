@@ -30,7 +30,7 @@
     <script src="config/app-config.js"></script>
     <!-- 화면 버전 (2026-11-16) — 배포할 때마다 올립니다. 개발 · 운영 화면 아래에 "그룹웨어 v1.1.0 · 운영" 처럼 보입니다.
          groupware = 그룹웨어 화면 · calendar = 킹오더일정(?mode=calendar) -->
-    <script>window.KOB_VERSION = { groupware: '1.1.13', calendar: '1.0.5', date: '2026-11-19' };</script>
+    <script>window.KOB_VERSION = { groupware: '1.1.14', calendar: '1.0.5', date: '2026-11-19' };</script>
     <script>
         (function () {
             // manifest 는 **여기서 만들어 답니다.** (2026-09-05 고침)
@@ -28213,12 +28213,19 @@ const QUOTE_TEMPLATES = [
                 let issue = '';
                 if (inboundStopped(r) && !done) issue = `추가컨택 ${inboundExtraCount(r)}회 · 중단 대상`;
                 else if (!k.contactAt) issue = '인입 후 미컨택';
+                // 영업본부 건 진행 내역 — 완료 예정일 · 문제 · 지체 (2026-11-19)
+                const sp = inboundProgOn(r) ? salesProgState(inboundProgView(r)) : null;
+                if (sp && !done && !issue) {
+                    if (sp.openIssues.length) issue = `문제 ${sp.openIssues.length}건 미해결`;
+                    else if (sp.lateNeed) issue = '지연 사유 미입력';
+                    else if (sp.stall) issue = `지체 ${sp.stall}일 (진행 내역 없음)`;
+                }
                 out.push(execItem({
                     kind: 'inbound', kindName: '인바운드', id: r.id, title: `${r.company || '(업체명 없음)'} 인입`,
                     dept: 'sales', owner: k.owner || '',
                     statusName: k.result || (k.contactAt ? '컨택함' : '미컨택'),
                     chip: (inboundResultDef(k.result) || {}).chip || 'bg-gray-100 text-gray-700',
-                    due: '', overdue: 0, done, doneAt: k.contactAt || '',
+                    due: sp ? (k.dueDate || '') : '', overdue: sp ? sp.late : 0, done, doneAt: k.contactAt || '',
                     issue, detail: [inboundListText(r.needs), r.phone].filter(Boolean).join(' · '), raw: r
                 }));
             });
@@ -28890,9 +28897,41 @@ const QUOTE_TEMPLATES = [
             return pool.find(x => x.kind === kind && String(x.id) === String(id)) || null;
         }
 
+        let execItemOpen = null;   // 지금 열린 상세 창 { kind, id } — 진행 내역 창을 닫으면 새 내용으로 다시 그립니다
+        // 영업본부 진행 내역이 있는 건 (영업업무센터 업무 · 영업본부 인바운드)
+        function execProgTarget(i) {
+            if (i.kind === 'work' && salesProgOn(i.srcKey, i.raw)) return { key: i.srcKey, w: salesProgFind(i.srcKey, String(i.id)) || i.raw };
+            if (i.kind === 'inbound') { const w = salesProgFind(SALES_PROG_INBOUND, String(i.id)); return w ? { key: SALES_PROG_INBOUND, w } : null; }
+            return null;
+        }
+        function execProgHtml(i) {
+            const t = execProgTarget(i);
+            if (!t) return '';
+            const s = salesProgState(t.w);
+            const rows = salesProgTimelineHtml(t.w);
+            const de = s.doneEntry, ce = s.checkEntry;
+            return `<div class="mt-3 rounded border border-blue-200">
+                    <div class="px-3 py-2 border-b border-blue-100 bg-blue-50/60 flex flex-wrap items-center gap-1.5">
+                        <p class="text-sm font-bold text-gray-700 mr-1"><i class="fas fa-list-check mr-1 text-blue-500"></i>상세 진행 내역 <span class="font-normal text-gray-400">${s.entries}건 · 진행한 일시 순</span></p>
+                        ${salesProgFlagsHtml(t.w)}
+                        <span class="ml-auto text-[11px] text-gray-500">완료 예정일 ${escapeHtml(t.w.dueDate || '-')}</span>
+                    </div>
+                    <div class="px-3 py-2 max-h-80 overflow-y-auto">
+                        ${rows ? `<ol>${rows}</ol>` : '<p class="py-4 text-sm text-gray-400 text-center">아직 입력된 진행 내역이 없습니다.</p>'}
+                    </div>
+                    ${t.w.status === 'done' ? `<div class="px-3 py-2 border-t border-blue-100 text-xs ${ce ? 'bg-emerald-50 text-emerald-800' : 'bg-sky-50 text-sky-800'}">
+                        <i class="fas ${ce ? 'fa-user-check' : 'fa-user-clock'} mr-1"></i>${ce ? `완료 확인 · ${escapeHtml(ce.by)} · ${escapeHtml(ce.loggedAt)}${ce.text ? ' — ' + escapeHtml(ce.text) : ''}` : de ? '완료 확인 대기' : '완료 내용 미입력'}
+                    </div>` : ''}
+                    <div class="px-3 py-2 border-t border-blue-100 flex justify-end">
+                        <button type="button" onclick="openSalesProgress(${jsArg(t.key)}, ${jsArg(String(t.w.id))}, 'log')" class="px-3 py-1.5 text-xs rounded bg-blue-600 text-white hover:bg-blue-700"><i class="fas fa-pen-to-square mr-1"></i>진행 내역 창 열기 (입력 · 완료 확인)</button>
+                    </div>
+                </div>`;
+        }
+
         function openExecItemModal(kind, id) {
             const i = execFindItem(kind, id);
             if (!i) { alert('해당 건을 찾을 수 없습니다. 화면을 새로고침한 후 다시 열어 주세요.'); return; }
+            execItemOpen = { kind, id };
             const ro = (label, value) => `
                 <div class="min-w-0">
                     <p class="text-[11px] text-gray-500">${escapeHtml(label)}</p>
@@ -28933,6 +28972,7 @@ const QUOTE_TEMPLATES = [
                         <p class="text-sm text-gray-700 whitespace-pre-wrap">${escapeHtml(i.detail)}</p>
                     </div>` : ''}
                 </div>
+                ${execProgHtml(i)}
 
                 <div class="mt-3 rounded border border-gray-200">
                     <p class="px-3 py-2 border-b border-gray-100 bg-gray-50 text-sm font-bold text-gray-700">
@@ -28956,6 +28996,7 @@ const QUOTE_TEMPLATES = [
             document.getElementById('exec-item-modal').classList.remove('hidden');
         }
         function closeExecItemModal() {
+            execItemOpen = null;
             document.getElementById('exec-item-modal').classList.add('hidden');
         }
 
@@ -29273,7 +29314,8 @@ const QUOTE_TEMPLATES = [
                 { label: '고객 컨택일자', get: r => (r.kob || {}).contactAt, cls: 'whitespace-nowrap text-gray-500', kob: true },
                 { label: '담당자', get: r => (r.kob || {}).owner, cls: 'whitespace-nowrap', kob: true },
                 { label: '고객 영업 현황', get: r => (r.kob || {}).salesStatus, wide: true, kob: true },
-                { label: '진행 결과', get: r => (r.kob || {}).result, cls: 'text-center whitespace-nowrap', html: inboundResultChipHtml, kob: true },
+                { label: '진행 결과', get: r => (r.kob || {}).result, cls: 'text-center whitespace-nowrap', kob: true,
+                  html: r => inboundResultChipHtml(r) + (inboundProgOn(r) ? `<div class="mt-0.5 flex flex-wrap justify-center gap-0.5">${salesProgFlagsHtml(inboundProgView(r))}</div>` : '') },
                 { label: '실패사유', get: r => (r.kob || {}).failReason, cls: 'whitespace-nowrap', kob: true },
                 { label: '추가 컨택', get: r => inboundExtraCount(r) ? `${inboundExtraCount(r)}회` : '', cls: 'text-center whitespace-nowrap', kob: true,
                   html: r => {
@@ -29516,6 +29558,8 @@ const QUOTE_TEMPLATES = [
                         </div>
                     </div>
 
+                    ${inboundProgBoxHtml(d)}
+
                     <div class="mt-4 border border-gray-200 rounded-lg overflow-hidden">
                         <div class="flex flex-wrap items-center justify-between gap-2 bg-gray-50 px-3 py-2 border-b border-gray-200">
                             <h5 class="text-sm font-bold text-gray-700"><i class="fas fa-phone-volume text-rose-500 mr-1"></i>추가 컨택 <span id="inbound-extra-count" class="ml-1"></span></h5>
@@ -29525,6 +29569,14 @@ const QUOTE_TEMPLATES = [
                     </div>`;
                 renderInboundExtras();
             }
+        }
+
+        // 인바운드 상세 창의 진행 내역 칸 (영업본부 건)
+        function inboundProgBoxHtml(d) {
+            if ((d.kob || {}).dept !== '영업') return '';
+            const pv = inboundEditId ? salesProgFind(SALES_PROG_INBOUND, inboundEditId) : null;
+            if (!pv) return `<div class="mt-4 rounded border border-blue-100 bg-blue-50/40 px-3 py-2 text-xs text-gray-600"><i class="fas fa-list-check text-blue-500 mr-1"></i>영업본부 건은 진행 내역(무엇을 · 언제 · 어떤 방법으로)을 입력합니다. 저장한 뒤 입력할 수 있습니다.</div>`;
+            return `<div class="mt-4"><p class="text-xs font-semibold text-gray-600"><i class="fas fa-list-check text-blue-500 mr-1"></i>진행 내역 <span class="font-normal text-gray-400">· 진행 · 지연/지체 사유 · 문제 · 완료 내용 · 완료 확인</span></p>${salesProgRowHtml(SALES_PROG_INBOUND, pv)}</div>`;
         }
 
         function saveInbound() {
@@ -29553,18 +29605,43 @@ const QUOTE_TEMPLATES = [
                     const merged = canEditInboundVendor() ? { ...before, ...d } : { ...d, ...pickInboundVendorFields(before) };
                     merged.vendor = before.vendor;    // 어느 업체가 넣은 건인지는 바뀌지 않습니다
                     merged.kob = canSeeInboundKob() ? d.kob : before.kob;
+                    if (canSeeInboundKob()) inboundProgMergeOnSave(before, merged);
                     merged.id = before.id;
                     inboundRecords[i] = merged;
                 }
             } else {
                 d.id = 'IN-' + String(inboundSeq++).padStart(4, '0');
                 d.createdAt = ymd(new Date());
+                if (d.kob && d.kob.owner) { d.kob.ownerBy = currentUserName || ''; d.kob.ownerAt = salesProgStamp(); }
                 inboundRecords.unshift(d);
                 inboundNotifyNew([d]);
             }
+            const savedId = inboundEditId || d.id;
             saveInboundRecords();     // 다른 창도 같은 자료를 보도록 담아 둡니다 (2026-09-07)
             closeInboundModal();
             renderInboundCenter();
+            // 영업본부 건을 영업수주 · 실패로 바꾸고 완료 내용이 없으면 바로 받습니다 (교차 확인용)
+            const pv = salesProgFind(SALES_PROG_INBOUND, savedId);
+            if (pv && pv.status === 'done' && !salesProgState(pv).doneEntry && salesProgCanWrite(pv)) openSalesProgress(SALES_PROG_INBOUND, savedId, 'done');
+        }
+        // 상세 창 저장 때 — 진행 내역 · 완료 예정일은 진행 내역 창에서만 바뀌므로 저장된 값을 그대로 둡니다.
+        // 담당자 · 본부 · 진행 결과를 상세 창에서 바꾸면 영업본부 건은 진행 내역에 기록합니다.
+        function inboundProgMergeOnSave(before, merged) {
+            const bk = before.kob || {}, nk = merged.kob || (merged.kob = {});
+            nk.progressLog = Array.isArray(bk.progressLog) ? bk.progressLog : [];
+            ['dueDate', 'workingSince'].forEach(f => { nk[f] = bk[f] || ''; });
+            const changes = [];
+            if ((nk.owner || '') !== (bk.owner || '')) {
+                nk.ownerBy = nk.owner ? (currentUserName || '') : '';
+                nk.ownerAt = nk.owner ? salesProgStamp() : '';
+                changes.push(nk.owner ? `담당자 지정 ${bk.owner ? bk.owner + ' → ' : ''}${nk.owner}` : `담당자 지정 해제 (${bk.owner})`);
+            } else { nk.ownerBy = bk.ownerBy || ''; nk.ownerAt = bk.ownerAt || ''; }
+            if ((nk.dept || '') !== (bk.dept || '')) changes.push(`본부 ${bk.dept || '미배정'} → ${nk.dept || '미배정'}`);
+            if ((nk.result || '') !== (bk.result || '')) changes.push(`진행 결과 ${bk.result || '없음'} → ${nk.result || '없음'}${nk.result === '실패' && nk.failReason ? ' (' + nk.failReason + ')' : ''} (상세 창)`);
+            if (!changes.length || (nk.dept !== '영업' && bk.dept !== '영업')) return;
+            const holder = { progressLog: nk.progressLog };
+            changes.forEach(text => salesProgPush(holder, { kind: 'system', text }));
+            nk.progressLog = holder.progressLog;
         }
 
         // 외주업체 작성 항목만 골라 냅니다 (권한 없는 계정이 저장할 때 원본 보존용)
@@ -38214,6 +38291,11 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
         function salesProgLog(w) { return Array.isArray(w && w.progressLog) ? w.progressLog : []; }
         function salesProgStamp(d) { const t = d || new Date(); return `${ymd(t)} ${hhmm(t)}`; }
         function salesProgPush(w, e) {
+            if (w.src === SALES_PROG_INBOUND) {   // 인바운드는 r.kob.progressLog 에 담습니다
+                const k = inboundKob(w.rec);
+                if (!Array.isArray(k.progressLog)) k.progressLog = [];
+                w.progressLog = k.progressLog;
+            }
             if (!Array.isArray(w.progressLog)) w.progressLog = [];
             const now = salesProgStamp();
             const rec = Object.assign({ id: 'pg' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), kind: 'system', at: now, loggedAt: now, by: currentUserName || '', method: '', text: '' }, e);
@@ -38283,6 +38365,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
         // 누가 적고 누가 확인하는지
         function salesProgCanWrite(w) {
             if (!currentUserName) return false;
+            if (w.src === SALES_PROG_INBOUND && !canSeeInboundKob()) return false;
             if (canManageAllData()) return true;
             return w.assignee ? w.assignee === currentUserName : true;
         }
@@ -38291,15 +38374,85 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             return canManageAllData() || w.assignedBy === currentUserName || w.receiver === currentUserName;
         }
 
+        // ---------- 인바운드(영업본부 배정 건)도 같은 진행 내역 (2026-11-19 다니엘님 "영업본부가 처리할 인바운드에도 동일하게") ----------
+        //   진행 내역 · 완료 예정일은 r.kob.progressLog · r.kob.dueDate 에 둡니다 (인바운드 자료 gwInboundRecords.v1 안).
+        //   상태는 인바운드 값에서 읽습니다: 진행 결과 영업수주 · 실패 = 완료, 보류 = 보류, 컨택 기록 · 진행중 = 진행중, 담당자 있음 = 배정.
+        //   완료 확인은 담당자를 지정한 사람(kob.ownerBy) · 관리자가 합니다.
+        const SALES_PROG_INBOUND = 'inbound';
+        const INBOUND_DONE_RESULTS = ['영업수주', '실패'];
+        const INBOUND_PROG_STATUS_NAME = { received: '미배정', assigned: '배정', working: '진행중', hold: '보류', done: '완료' };
+        function inboundProgOn(r) { return !!r && !r.spam && (r.kob || {}).dept === '영업'; }
+        function inboundProgStatus(r) {
+            const k = r.kob || {};
+            if (INBOUND_DONE_RESULTS.includes(k.result)) return 'done';
+            if (k.result === '보류') return 'hold';
+            if (k.result === '진행중' || inboundHasContact(r)) return 'working';
+            return k.owner ? 'assigned' : 'received';
+        }
+        // 진행 내역 창이 읽는 모양으로 (업무센터 업무와 같은 칸 이름) — 읽기만 하고 자료는 바꾸지 않습니다
+        function inboundProgView(r) {
+            const k = r.kob || {};
+            return {
+                src: SALES_PROG_INBOUND, rec: r, id: r.id,
+                title: `${r.company || r.name || '(업체명 없음)'} 인입`, company: r.company && r.name ? r.name : '',
+                status: inboundProgStatus(r), progressLog: Array.isArray(k.progressLog) ? k.progressLog : [],
+                assignee: k.owner || '', assignedBy: k.ownerBy || '', assignedAt: k.ownerAt || '',
+                receiver: '', receivedAt: r.inAt || r.inDate || '',
+                dueDate: k.dueDate || '', workingSince: k.workingSince || k.contactAt || ''
+            };
+        }
+        // key 'inbound' = 인바운드, 그 밖은 업무센터 key
+        function salesProgFind(key, id) {
+            if (key === SALES_PROG_INBOUND) {
+                const r = (typeof inboundRecords !== 'undefined' ? inboundRecords : []).find(x => x.id === id);
+                return r && inboundProgOn(r) ? inboundProgView(r) : null;
+            }
+            return (wcDef(key) || { works: [] }).works.find(x => x.id === id) || null;
+        }
+        function salesProgStatusName(key, w) {
+            if (key !== SALES_PROG_INBOUND) return wcStatusName(key, w.status);
+            const res = (w.rec.kob || {}).result;
+            return w.status === 'done' || w.status === 'hold' ? res : INBOUND_PROG_STATUS_NAME[w.status];
+        }
+        function salesProgBadgeHtml(key, w) {
+            if (key !== SALES_PROG_INBOUND) return wcStatusBadgeHtml(key, w.status);
+            const d = inboundResultDef((w.rec.kob || {}).result);
+            return `<span class="px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${d ? d.chip : 'bg-gray-100 text-gray-700'}">${escapeHtml(salesProgStatusName(key, w))}</span>`;
+        }
+        // 인바운드 저장 · 화면 갱신 (열려 있는 인바운드 상세 창의 작성 중 사본에도 반영)
+        function inboundProgSaved(r) {
+            saveInboundRecords();
+            if (typeof inboundDraft !== 'undefined' && inboundDraft && inboundEditId === r.id) {
+                const dk = inboundKob(inboundDraft), k = r.kob || {};
+                ['dueDate', 'workingSince', 'contactAt', 'result', 'failReason', 'owner', 'ownerBy', 'ownerAt'].forEach(f => { dk[f] = k[f] || ''; });
+                dk.progressLog = JSON.parse(JSON.stringify(k.progressLog || []));
+                renderInboundModal();
+            }
+            const sec = document.getElementById('sec-inbound-center');
+            if (sec && !sec.classList.contains('hidden')) renderInboundCenter();
+        }
+        // 진행 내역 창을 닫을 때 경영현황판 화면 · 상세 창도 새 내용으로
+        function salesProgRefreshExec() {
+            const sec = document.getElementById('sec-exec-center');
+            if (sec && !sec.classList.contains('hidden')) renderExecCenter();
+            const m = document.getElementById('exec-item-modal');
+            if (m && !m.classList.contains('hidden') && execItemOpen) {
+                if (!sec || sec.classList.contains('hidden')) execAllItems = execCollectItems();
+                openExecItemModal(execItemOpen.kind, execItemOpen.id);
+            }
+        }
+
         // ---------- 진행 내역 창 ----------
         let salesProgCtx = null;   // { key, workId, mode: 'log' | 'start' | 'done', accept }
         function salesProgWork() {
             if (!salesProgCtx) return null;
-            return (wcDef(salesProgCtx.key) || { works: [] }).works.find(x => x.id === salesProgCtx.workId) || null;
+            return salesProgFind(salesProgCtx.key, salesProgCtx.workId);
         }
         function openSalesProgress(key, workId, mode, opts) {
-            const w = wcDef(key).works.find(x => x.id === workId);
+            const w = salesProgFind(key, workId);
             if (!w) return;
+            // 인바운드는 첫 진행 내역이 곧 착수(배정 → 진행중)입니다
+            if (key === SALES_PROG_INBOUND && (mode || 'log') === 'log' && (w.status === 'received' || w.status === 'assigned') && salesProgCanWrite(w)) mode = 'start';
             salesProgCtx = { key, workId, mode: mode || 'log', accept: !!(opts && opts.accept) };
             let el = document.getElementById('sales-prog-modal');
             if (!el) {
@@ -38316,6 +38469,13 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             const el = document.getElementById('sales-prog-modal');
             if (el) el.classList.add('hidden');
             salesProgCtx = null;
+            salesProgRefreshExec();
+        }
+        // 인바운드 창에서 [완료 처리 (영업수주 · 실패)] ↔ [진행 내역 추가]
+        function salesProgSwitchMode(mode) {
+            if (!salesProgCtx) return;
+            salesProgCtx.mode = mode;
+            renderSalesProgress();
         }
         // 영업업무센터 진행 업무의 [진행중] · [완료] 단추
         function salesWorkStatusClick(key, workId, status) {
@@ -38336,7 +38496,8 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             const s = salesProgState(w);
             const canWrite = salesProgCanWrite(w);
             const open = WC_OPEN_STATUSES.includes(w.status);
-            const company = w.company || (wcCustomer(key, w.customerId) || {}).name || '';
+            const inb = key === SALES_PROG_INBOUND;
+            const company = w.company || (inb ? '' : (wcCustomer(key, w.customerId) || {}).name || '');
             const now = new Date();
             const info = (label, value) => `<div class="min-w-0"><p class="text-[11px] text-gray-500">${label}</p><p class="text-sm text-gray-800 truncate">${value || '<span class="text-gray-300">-</span>'}</p></div>`;
 
@@ -38347,29 +38508,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             if (s.stall) warns.push(`<p><i class="fas fa-circle-pause mr-1"></i><b>${s.stall}일</b> 동안 새 진행 내역이 없습니다. 진행한 내용이나 <b>지체 사유</b>를 입력해 주세요.</p>`);
             if (s.openIssues.length) warns.push(`<p><i class="fas fa-triangle-exclamation mr-1"></i>해결되지 않은 문제가 <b>${s.openIssues.length}건</b> 있습니다. 해결되면 구분에서 <b>문제 해결</b>을 선택해 입력해 주세요.</p>`);
 
-            // 진행 내역 (순서대로)
-            const list = salesProgSorted(w);
-            const resolvedBy = {};
-            list.forEach(e => { if (e.kind === 'resolve' && e.issueId) resolvedBy[e.issueId] = e; });
-            const issueNo = {};
-            let n = 0;
-            const rows = list.map(e => {
-                const k = SALES_PROG_KINDS[e.kind] || SALES_PROG_KINDS.system;
-                if (e.kind !== 'system') n++;
-                if (e.kind === 'issue') issueNo[e.id] = n;
-                const lateInput = e.loggedAt && e.at && e.loggedAt.slice(0, 10) !== e.at.slice(0, 10) ? ` <span class="text-gray-400" title="실제 입력한 시각">(입력 ${escapeHtml(e.loggedAt)})</span>` : '';
-                const issueTag = e.kind === 'issue' ? (resolvedBy[e.id] ? ' <span class="text-[10px] px-1 rounded bg-teal-50 text-teal-700">해결됨</span>' : ' <span class="text-[10px] px-1 rounded bg-red-50 text-red-700">미해결</span>') : '';
-                const ref = e.kind === 'resolve' && e.issueId && issueNo[e.issueId] ? `<span class="text-gray-400">#${issueNo[e.issueId]} 문제 → </span>` : '';
-                if (e.kind === 'system') {
-                    return `<li class="pl-7 py-1 text-[11px] text-gray-400"><i class="fas fa-circle-info mr-1"></i>${escapeHtml(e.at)} · ${escapeHtml(e.by || '')} · ${escapeHtml(e.text || '')}</li>`;
-                }
-                return `<li class="relative pl-7 py-2 border-b border-gray-100 last:border-0">
-                        <span class="absolute left-0 top-2 w-5 h-5 rounded-full text-[10px] font-bold flex items-center justify-center ${k.chip}">${n}</span>
-                        <p class="text-xs"><span class="px-1.5 py-0.5 rounded ${k.chip}"><i class="fas ${k.icon} mr-0.5"></i>${k.name}</span>${issueTag}
-                            <span class="ml-1 text-gray-600">${escapeHtml(e.at || '')}</span>${e.method ? `<span class="ml-1 text-gray-500">· ${escapeHtml(e.method)}</span>` : ''}<span class="ml-1 text-gray-500">· ${escapeHtml(e.by || '')}</span>${lateInput}</p>
-                        <p class="mt-1 text-sm text-gray-800 whitespace-pre-wrap break-words">${ref}${escapeHtml(e.text || '')}</p>
-                    </li>`;
-            }).join('');
+            const rows = salesProgTimelineHtml(w);
 
             // 완료 교차 확인
             let checkHtml = '';
@@ -38388,7 +38527,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                             <button type="button" onclick="salesProgCheck('recheck')" class="px-3 py-1.5 text-sm rounded border border-rose-300 text-rose-700 bg-white hover:bg-rose-50"><i class="fas fa-rotate-left mr-1"></i>보완 요청</button>
                             <button type="button" onclick="salesProgCheck('check')" class="px-3 py-1.5 text-sm rounded bg-emerald-600 text-white hover:bg-emerald-700"><i class="fas fa-user-check mr-1"></i>완료 확인</button>
                         </div>` : ''}
-                    ${!ce && de && !salesProgCanCheck(w) ? '<p class="mt-1 text-[11px] text-gray-500">배정한 사람 · 접수자 · 관리자가 확인합니다.</p>' : ''}
+                    ${!ce && de && !salesProgCanCheck(w) ? `<p class="mt-1 text-[11px] text-gray-500">${inb ? '담당자를 지정한 사람 · 관리자' : '배정한 사람 · 접수자 · 관리자'}가 확인합니다.</p>` : ''}
                 </div>`;
             }
 
@@ -38413,6 +38552,15 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                             ${s.openIssues.map(e => `<option value="${escapeHtml(e.id)}">${escapeHtml(e.at)} · ${escapeHtml(String(e.text || '').slice(0, 40))}</option>`).join('')}
                         </select>
                     </div>` : '';
+                const resultSel = inb && formMode === 'done' && w.status !== 'done' ? `
+                    <div><label class="block text-[11px] text-gray-500 mb-0.5">진행 결과 *</label>
+                        <select id="sales-prog-result" onchange="document.getElementById('sales-prog-fail-row').classList.toggle('hidden', this.value !== '실패')" class="w-full text-sm p-2 border border-gray-300 rounded bg-white">
+                            <option value="">선택</option>${INBOUND_DONE_RESULTS.map(x => `<option value="${x}">${x}</option>`).join('')}
+                        </select></div>
+                    <div id="sales-prog-fail-row" class="hidden"><label class="block text-[11px] text-gray-500 mb-0.5">실패사유 *</label>
+                        <select id="sales-prog-fail" class="w-full text-sm p-2 border border-gray-300 rounded bg-white">
+                            <option value="">선택</option>${INBOUND_FAIL_REASONS.map(x => `<option value="${escapeHtml(x)}">${escapeHtml(x)}</option>`).join('')}
+                        </select></div>` : '';
                 const doneWarn = formMode === 'done' && s.openIssues.length ? `
                     <label class="sm:col-span-2 flex items-start gap-2 text-xs text-red-700 bg-red-50 border border-red-200 rounded p-2">
                         <input type="checkbox" id="sales-prog-issue-ack" class="mt-0.5">
@@ -38429,12 +38577,15 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                         <div><label class="block text-[11px] text-gray-500 mb-0.5">진행 일자 *</label><input type="date" id="sales-prog-date" value="${ymd(now)}" max="${ymd(now)}" class="w-full text-sm p-2 border border-gray-300 rounded"></div>
                         <div><label class="block text-[11px] text-gray-500 mb-0.5">진행 시각 *</label><input type="time" id="sales-prog-time" value="${hhmm(now)}" class="w-full text-sm p-2 border border-gray-300 rounded"></div>
                         ${issueSel}
+                        ${resultSel}
                         <div class="sm:col-span-2"><label id="sales-prog-text-label" class="block text-[11px] text-gray-500 mb-0.5">내용 *</label>
                             <textarea id="sales-prog-text" rows="3" class="w-full text-sm p-2 border border-gray-300 rounded" placeholder="${formMode === 'done' ? '예: 견적서 Q-2611-014 발송, 고객 수락 회신 받음 (11/19 메일)' : '예: 고객 담당자와 통화, 설치 대수 3대로 확정 — 견적서 작성 중'}"></textarea></div>
                         ${doneWarn}
                     </div>
-                    <div class="mt-2 flex justify-end gap-2">
-                        ${mode !== 'log' ? '<button type="button" onclick="closeSalesProgress()" class="px-3 py-1.5 text-sm rounded bg-gray-100 text-gray-700 hover:bg-gray-200">취소</button>' : ''}
+                    <div class="mt-2 flex flex-wrap justify-end gap-2">
+                        ${inb && open && formMode === 'log' ? '<button type="button" onclick="salesProgSwitchMode(\'done\')" class="mr-auto px-3 py-1.5 text-sm rounded border border-green-300 text-green-700 bg-white hover:bg-green-50"><i class="fas fa-flag-checkered mr-1"></i>완료 처리 (영업수주 · 실패)</button>' : ''}
+                        ${inb && open && formMode === 'done' ? '<button type="button" onclick="salesProgSwitchMode(\'log\')" class="mr-auto px-3 py-1.5 text-sm rounded bg-gray-100 text-gray-700 hover:bg-gray-200">진행 내역 입력으로</button>' : ''}
+                        ${mode !== 'log' && !(inb && mode === 'done') ? '<button type="button" onclick="closeSalesProgress()" class="px-3 py-1.5 text-sm rounded bg-gray-100 text-gray-700 hover:bg-gray-200">취소</button>' : ''}
                         <button type="button" id="sales-prog-submit" onclick="submitSalesProgress()" class="px-3 py-1.5 text-sm rounded ${formMode === 'done' ? 'bg-green-600 hover:bg-green-700' : 'bg-blue-600 hover:bg-blue-700'} text-white">${submit}</button>
                     </div>
                 </div>`;
@@ -38447,11 +38598,11 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                 <div class="bg-white w-full max-w-2xl rounded-lg shadow-xl max-h-[92vh] overflow-y-auto">
                     <div class="flex justify-between items-start gap-2 p-4 sm:p-5 pb-3 border-b border-gray-100 sticky top-0 bg-white z-10">
                         <div class="min-w-0">
-                            <h3 class="text-lg font-bold text-gray-800"><i class="fas fa-list-check text-blue-600 mr-1"></i>업무 진행 내역</h3>
+                            <h3 class="text-lg font-bold text-gray-800"><i class="fas fa-list-check text-blue-600 mr-1"></i>${inb ? '인바운드 진행 내역' : '업무 진행 내역'}</h3>
                             <p class="text-sm text-gray-500 mt-0.5 truncate">${escapeHtml(w.id)} · ${escapeHtml(w.title || '')}${company ? ' · ' + escapeHtml(company) : ''}</p>
                         </div>
                         <div class="flex items-center gap-2 shrink-0">
-                            ${wcStatusBadgeHtml(key, w.status)}
+                            ${salesProgBadgeHtml(key, w)}
                             <button type="button" onclick="closeSalesProgress()" class="text-gray-400 hover:text-gray-600" aria-label="닫기"><i class="fas fa-times"></i></button>
                         </div>
                     </div>
@@ -38459,7 +38610,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                         <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 rounded border border-gray-200 bg-gray-50 p-3">
                             ${info('담당자', escapeHtml(w.assignee || '미배정'))}
                             ${info('배정', escapeHtml([w.assignedBy, w.assignedAt].filter(Boolean).join(' · ')))}
-                            ${info('접수', escapeHtml([w.receiver, w.receivedAt].filter(Boolean).join(' · ')))}
+                            ${info(inb ? '인입' : '접수', escapeHtml([w.receiver, w.receivedAt].filter(Boolean).join(' · ')))}
                             <div class="min-w-0"><p class="text-[11px] text-gray-500">완료 예정일</p>
                                 ${dueEditable ? `<input type="date" id="sales-prog-due" value="${escapeHtml(w.dueDate || '')}" onchange="salesProgSetDue(this.value)" class="w-full text-sm p-1 border border-gray-300 rounded bg-white">`
                                               : `<p class="text-sm text-gray-800">${escapeHtml(w.dueDate || '-')}</p>`}
@@ -38478,6 +38629,32 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             const kindEl = document.getElementById('sales-prog-kind');
             if (kindEl && kindEl.tagName === 'SELECT') salesProgKindChanged();   // 지연 · 지체를 미리 골라 둔 경우 칸 이름도 맞춤
         }
+        // 진행 내역 목록 (진행 창 · 경영현황판 상세 창이 같이 씁니다)
+        function salesProgTimelineHtml(w) {
+            // 진행 내역 (순서대로)
+            const list = salesProgSorted(w);
+            const resolvedBy = {};
+            list.forEach(e => { if (e.kind === 'resolve' && e.issueId) resolvedBy[e.issueId] = e; });
+            const issueNo = {};
+            let n = 0;
+            return list.map(e => {
+                const k = SALES_PROG_KINDS[e.kind] || SALES_PROG_KINDS.system;
+                if (e.kind !== 'system') n++;
+                if (e.kind === 'issue') issueNo[e.id] = n;
+                const lateInput = e.loggedAt && e.at && e.loggedAt.slice(0, 10) !== e.at.slice(0, 10) ? ` <span class="text-gray-400" title="실제 입력한 시각">(입력 ${escapeHtml(e.loggedAt)})</span>` : '';
+                const issueTag = e.kind === 'issue' ? (resolvedBy[e.id] ? ' <span class="text-[10px] px-1 rounded bg-teal-50 text-teal-700">해결됨</span>' : ' <span class="text-[10px] px-1 rounded bg-red-50 text-red-700">미해결</span>') : '';
+                const ref = e.kind === 'resolve' && e.issueId && issueNo[e.issueId] ? `<span class="text-gray-400">#${issueNo[e.issueId]} 문제 → </span>` : '';
+                if (e.kind === 'system') {
+                    return `<li class="pl-7 py-1 text-[11px] text-gray-400"><i class="fas fa-circle-info mr-1"></i>${escapeHtml(e.at)} · ${escapeHtml(e.by || '')} · ${escapeHtml(e.text || '')}</li>`;
+                }
+                return `<li class="relative pl-7 py-2 border-b border-gray-100 last:border-0">
+                        <span class="absolute left-0 top-2 w-5 h-5 rounded-full text-[10px] font-bold flex items-center justify-center ${k.chip}">${n}</span>
+                        <p class="text-xs"><span class="px-1.5 py-0.5 rounded ${k.chip}"><i class="fas ${k.icon} mr-0.5"></i>${k.name}</span>${issueTag}
+                            <span class="ml-1 text-gray-600">${escapeHtml(e.at || '')}</span>${e.method ? `<span class="ml-1 text-gray-500">· ${escapeHtml(e.method)}</span>` : ''}<span class="ml-1 text-gray-500">· ${escapeHtml(e.by || '')}</span>${lateInput}</p>
+                        <p class="mt-1 text-sm text-gray-800 whitespace-pre-wrap break-words">${ref}${escapeHtml(e.text || '')}</p>
+                    </li>`;
+            }).join('');
+        }
         function salesProgKindChanged() {
             const k = (document.getElementById('sales-prog-kind') || {}).value;
             const row = document.getElementById('sales-prog-issue-row');
@@ -38494,10 +38671,15 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             if (!w || !salesProgCanWrite(w)) return;
             const prev = w.dueDate || '';
             if (prev === value) return;
-            w.dueDate = value || '';
             salesProgPush(w, { kind: 'system', text: `완료 예정일 ${prev ? prev + ' → ' : ''}${value || '삭제'}` });
-            touchWork(w);
-            refreshWorkViews();
+            if (w.src === SALES_PROG_INBOUND) {
+                inboundKob(w.rec).dueDate = value || '';
+                inboundProgSaved(w.rec);
+            } else {
+                w.dueDate = value || '';
+                touchWork(w);
+                refreshWorkViews();
+            }
             renderSalesProgress();
         }
         function submitSalesProgress() {
@@ -38525,6 +38707,35 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             if (kind === 'done' && s.openIssues.length && !(document.getElementById('sales-prog-issue-ack') || {}).checked) {
                 alert(`해결되지 않은 문제 ${s.openIssues.length}건이 있습니다. 문제를 확인한 뒤 체크해 주세요.`); return;
             }
+            if (key === SALES_PROG_INBOUND) {
+                const result = val('sales-prog-result');
+                const fail = val('sales-prog-fail');
+                const closing = kind === 'done' && w.status !== 'done';
+                if (closing && !result) { alert('진행 결과(영업수주 · 실패)를 선택해 주세요.'); return; }
+                if (closing && result === '실패' && !fail) { alert('실패사유를 선택해 주세요.'); return; }
+                const k = inboundKob(w.rec);
+                const before = salesProgStatusName(key, w);
+                salesProgPush(w, Object.assign({ kind, at, method, text }, issueId ? { issueId } : {}));
+                if (!k.owner) {   // 담당자가 없으면 입력한 사람이 담당자가 됩니다
+                    k.owner = currentUserName; k.ownerBy = currentUserName; k.ownerAt = salesProgStamp();
+                    salesProgPush(w, { kind: 'system', text: `담당자 지정 ${currentUserName}` });
+                }
+                if ((kind === 'action' || kind === 'done') && !k.contactAt) k.contactAt = date;   // 고객 컨택일자
+                if (mode === 'start') {
+                    k.workingSince = salesProgStamp();
+                    salesProgPush(w, { kind: 'system', text: `${before} → 진행중` });
+                }
+                if (closing) {
+                    k.result = result;
+                    k.failReason = result === '실패' ? fail : '';
+                    salesProgPush(w, { kind: 'system', text: `${before} → ${result}${result === '실패' ? ' (' + fail + ')' : ''}` });
+                }
+                inboundProgSaved(w.rec);
+                if (typeof showAppToast === 'function') showAppToast(mode === 'start' ? '진행중으로 변경했습니다.' : kind === 'done' ? '완료 내용을 저장했습니다.' : '진행 내역을 추가했습니다.', 'green');
+                salesProgCtx.mode = 'log';
+                renderSalesProgress();
+                return;
+            }
             salesProgPush(w, Object.assign({ kind, at, method, text }, issueId ? { issueId } : {}));
             if (mode === 'start') {
                 salesProgPush(w, { kind: 'system', text: `${wcStatusName(key, w.status)} → 진행중` });
@@ -38548,8 +38759,22 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             if (!w || w.status !== 'done') return;
             if (!salesProgCanCheck(w)) { alert('배정한 사람 · 접수자 · 관리자만 완료를 확인할 수 있습니다.'); return; }
             const note = ((document.getElementById('sales-prog-check-note') || {}).value || '').trim();
+            if (action === 'recheck' && !note) { alert('보완할 내용을 입력해 주세요.'); return; }
+            if (w.src === SALES_PROG_INBOUND) {
+                const k = inboundKob(w.rec);
+                salesProgPush(w, { kind: action, text: note });
+                if (action === 'recheck') {
+                    salesProgPush(w, { kind: 'system', text: `${k.result} → 진행중 (보완 요청)` });
+                    k.result = '진행중';
+                    k.failReason = '';
+                    k.workingSince = salesProgStamp();
+                }
+                inboundProgSaved(w.rec);
+                if (typeof showAppToast === 'function') showAppToast(action === 'recheck' ? '보완 요청을 남기고 진행중으로 되돌렸습니다.' : '완료를 확인했습니다.', action === 'recheck' ? 'orange' : 'green');
+                renderSalesProgress();
+                return;
+            }
             if (action === 'recheck') {
-                if (!note) { alert('보완할 내용을 입력해 주세요.'); return; }
                 salesProgPush(w, { kind: 'recheck', text: note });
                 salesProgPush(w, { kind: 'system', text: '완료 → 진행중 (보완 요청)' });
                 w.status = 'working';
