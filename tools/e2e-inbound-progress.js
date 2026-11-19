@@ -49,7 +49,7 @@ srv.listen(8867,async()=>{const br=await pp.launch({executablePath:'/Application
    // 문제 · 지연
    fill({kind:'issue',date:'2026-11-18',time:'15:00',text:'포스 연동 가능 여부 확인 필요'});submitSalesProgress();
    salesProgSetDue(ymd(new Date(Date.now()-86400000)));
-   const ex=execCollectItems().find(i=>i.kind==='inbound'&&i.id==='IN-T-1');out.exec={due:ex.due,overdue:ex.overdue,issue:ex.issue};
+   const ex=execCollectItems().find(i=>i.kind==='inbound'&&i.id==='IN-T-1');out.exec={due:ex.due,overdue:ex.overdue,issue:ex.issue,doneAt:ex.doneAt};
    closeSalesProgress();
    // 경영현황판 상세 창 — 진행 내역 보임
    navigate('exec-center',document.getElementById('nav-exec-center'));await sleep(150);
@@ -101,7 +101,7 @@ srv.listen(8867,async()=>{const br=await pp.launch({executablePath:'/Application
    enterApp(list[0]);await sleep(80);
    openSalesProgress('inbound','IN-T-1','log');document.getElementById('sales-prog-check-note').value='대조 완료';salesProgCheck('check');closeSalesProgress();
    const st=salesProgState(v());out.checked={by:st.checkEntry&&st.checkEntry.by,flag:/완료 확인됨/.test(salesProgFlagsHtml(v()))};
-   const ex2=execCollectItems().find(i=>i.kind==='inbound'&&i.id==='IN-T-1');out.execDone=ex2.done&&!ex2.overdue;
+   const ex2=execCollectItems().find(i=>i.kind==='inbound'&&i.id==='IN-T-1');out.execDone=ex2.done&&!ex2.overdue&&ex2.doneAt===ymd(new Date());
    // 상세 창에서 진행 결과를 바로 실패로 저장 → 완료 내용 입력 창이 바로 열림
    openInboundModal('IN-T-3');setInboundKobField('owner','박배정');onInboundResultChange('실패');setInboundKobField('failReason','부재중');saveInbound();
    out.autoDone=shown(modal())&&/완료 처리|완료 내용 저장/.test(modal().innerText)&&!document.getElementById('sales-prog-result');
@@ -120,7 +120,7 @@ srv.listen(8867,async()=>{const br=await pp.launch({executablePath:'/Application
   ok(r.startShown&&r.noMethod,'첫 진행 내역은 착수 입력 (방법 필수)');
   ok(r.started.status==='working'&&r.started.contact===r.today&&r.started.stage==='진행중','착수 저장 → 진행중 · 고객 컨택일자 = 입력한 날 자동 기재',r.started);
   ok(r.fits,'진행 내역 창이 화면 폭 안');
-  ok(r.exec.overdue===1&&r.exec.due&&/문제 1건/.test(r.exec.issue),'경영현황판 인바운드 항목에 예정일 · 지연 · 문제 반영',r.exec);
+  ok(r.exec.overdue===1&&r.exec.due&&/문제 1건/.test(r.exec.issue)&&r.exec.doneAt==='','경영현황판 인바운드 항목에 예정일 · 지연 · 문제 반영 (진행 중이면 완료일 없음)',r.exec);
   ok(r.execModal,'경영현황판 항목 클릭 → 상세 창에 진행 내역 전체 표시');
   ok(r.execFits,'경영현황판 상세 창이 화면 폭 안');
   ok(r.progOnTop&&r.execRefreshed,'상세 창에서 진행 내역 창 열어 입력 → 닫으면 상세 창 새 내용');

@@ -30,7 +30,7 @@
     <script src="config/app-config.js"></script>
     <!-- 화면 버전 (2026-11-16) — 배포할 때마다 올립니다. 개발 · 운영 화면 아래에 "그룹웨어 v1.1.0 · 운영" 처럼 보입니다.
          groupware = 그룹웨어 화면 · calendar = 킹오더일정(?mode=calendar) -->
-    <script>window.KOB_VERSION = { groupware: '1.1.16', calendar: '1.0.5', date: '2026-11-19' };</script>
+    <script>window.KOB_VERSION = { groupware: '1.1.17', calendar: '1.0.5', date: '2026-11-19' };</script>
     <script>
         (function () {
             // manifest 는 **여기서 만들어 답니다.** (2026-09-05 고침)
@@ -28245,7 +28245,9 @@ const QUOTE_TEMPLATES = [
                     dept: 'sales', owner: k.owner || '',
                     statusName: k.result || (k.contactAt ? '컨택함' : '미컨택'),
                     chip: (inboundResultDef(k.result) || {}).chip || 'bg-gray-100 text-gray-700',
-                    due: sp ? (k.dueDate || '') : '', overdue: sp ? sp.late : 0, done, doneAt: k.contactAt || '',
+                    // 완료일은 끝난 건만 (진행 중인데 컨택일자가 '완료일'로 보이던 것 — 2026-11-19 화면 점검)
+                    due: sp ? (k.dueDate || '') : '', overdue: sp ? sp.late : 0, done,
+                    doneAt: done ? ((sp && sp.doneEntry ? String(sp.doneEntry.at || '').slice(0, 10) : '') || k.contactAt || '') : '',
                     issue, detail: [inboundListText(r.needs), r.phone].filter(Boolean).join(' · '), raw: r
                 }));
             });
@@ -28852,7 +28854,7 @@ const QUOTE_TEMPLATES = [
             title: '제목', name: '이름', description: '내용', content: '내용', memo: '메모', note: '비고',
             requester: '요청자', orderedBy: '지시자', assignee: '담당자', assigneeUser: '담당자', owner: '담당자',
             targetDept: '수신 부서', targetName: '수신자', dept: '본부', team: '팀',
-            date: '요청일', dueDate: '완료기한', completedAt: '완료일', completeDetail: '처리 내용',
+            date: '요청일', dueDate: '완료기한', completedAt: '완료일', completeDetail: '처리 내용', workingSince: '진행 시작',
             completeIssue: '이슈', rejectReason: '반려 사유', holdReason: '보류 사유',
             receivedAt: '접수일', receivedTime: '접수시간', receiver: '접수자', doneAt: '완료일',
             actionNote: '조치사항', actionAt: '조치일', actionBy: '조치자', actionTime: '조치시간',
