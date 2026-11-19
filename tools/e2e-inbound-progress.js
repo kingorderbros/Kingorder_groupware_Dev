@@ -43,6 +43,7 @@ srv.listen(8867,async()=>{const br=await pp.launch({executablePath:'/Application
    out.startShown=/진행중으로 변경/.test(modal().innerText)&&/인바운드 진행 내역/.test(modal().innerText);
    fill({method:'',text:'통화'});submitSalesProgress();out.noMethod=!(k1().progressLog||[]).some(e=>e.kind==='action');
    fill({method:'전화',date:'2026-11-18',time:'11:00',text:'고객 통화 — 매장 방문 일정 협의'});submitSalesProgress();
+   out.today=ymd(new Date());
    out.started={status:salesProgFind('inbound','IN-T-1').status,contact:k1().contactAt,stage:inboundStage(rec('IN-T-1')),log:k1().progressLog.map(e=>e.kind).join(',')};
    const box=modal().firstElementChild.getBoundingClientRect();out.fits=box.left>=0&&box.right<=window.innerWidth+1;
    // 문제 · 지연
@@ -117,7 +118,7 @@ srv.listen(8867,async()=>{const br=await pp.launch({executablePath:'/Application
   ok(r.owner.owner==='김담당'&&r.owner.by==='박배정'&&/담당자 지정 김담당/.test(r.owner.log),'담당자 지정 → 지정한 사람 · 진행 내역 기록',r.owner);
   ok(r.opsBox&&r.opsOff,'운영본부 인바운드는 대상 아님');
   ok(r.startShown&&r.noMethod,'첫 진행 내역은 착수 입력 (방법 필수)');
-  ok(r.started.status==='working'&&r.started.contact==='2026-11-18'&&r.started.stage==='진행중','착수 저장 → 진행중 · 고객 컨택일자 자동 기재',r.started);
+  ok(r.started.status==='working'&&r.started.contact===r.today&&r.started.stage==='진행중','착수 저장 → 진행중 · 고객 컨택일자 = 입력한 날 자동 기재',r.started);
   ok(r.fits,'진행 내역 창이 화면 폭 안');
   ok(r.exec.overdue===1&&r.exec.due&&/문제 1건/.test(r.exec.issue),'경영현황판 인바운드 항목에 예정일 · 지연 · 문제 반영',r.exec);
   ok(r.execModal,'경영현황판 항목 클릭 → 상세 창에 진행 내역 전체 표시');
