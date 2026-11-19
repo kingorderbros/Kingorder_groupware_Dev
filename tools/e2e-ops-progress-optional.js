@@ -68,6 +68,11 @@ srv.listen(8868,async()=>{const br=await pp.launch({executablePath:'/Application
    document.getElementById('sales-prog-method').value='방문';document.getElementById('sales-prog-text').value='현장 확인';submitSalesProgress();
    out.logged=salesProgLog(w('S-T-1')).some(e=>e.text==='현장 확인');
    closeSalesProgress();
+   // 완료 내용을 넣고 완료한 건 — '완료 확인 대기'가 아니라 '완료 내용 입력됨'
+   S.works.push(Object.assign({},base,{id:'S-T-4',title:'완료 내용 입력 건',status:'working',assignee:'최운영',assignStatus:'accepted'}));
+   openSalesProgress('sales','S-T-4','done');
+   document.getElementById('sales-prog-method').value='방문';document.getElementById('sales-prog-text').value='설치 완료';submitSalesProgress();closeSalesProgress();
+   out.doneEntryChip={status:w('S-T-4').status,html:salesProgFlagsHtml(w('S-T-4'))};
    // 완료 → 창 없이 바로 완료 · 완료 확인 요구 없음
    salesWorkStatusClick('sales','S-T-1','done');
    const s2=salesProgState(w('S-T-1'));out.done={status:w('S-T-1').status,modal:shown(),need:s2.needCheck,html:salesProgFlagsHtml(w('S-T-1'))};
@@ -89,6 +94,7 @@ srv.listen(8868,async()=>{const br=await pp.launch({executablePath:'/Application
   ok(!/지연 사유|지체/.test(r.exec.issue)&&r.exec.overdue===2,'경영현황판에도 지연 사유 · 지체 문제로 잡지 않음',r.exec);
   ok(r.note&&r.logged,'진행 내역 창에 권한 안내 · 원하면 입력 가능',r);
   ok(r.done.status==='done'&&!r.done.modal&&!r.done.need&&!/완료 확인 대기|완료 내용 미입력/.test(r.done.html),'완료도 바로 · 완료 확인 요구 없음',r.done);
+  ok(r.doneEntryChip.status==='done'&&/완료 내용 입력됨/.test(r.doneEntryChip.html)&&!/완료 확인 대기/.test(r.doneEntryChip.html),'완료 내용을 넣고 완료하면 \'완료 내용 입력됨\' (확인 대기 표시 없음)',r.doneEntryChip);
   ok(r.salesModal.modal&&r.salesModal.status==='assigned','영업 담당자는 예전처럼 착수 내용 입력 창',r.salesModal);
   ok(!r.inb.modal&&r.inb.status==='done'&&!r.inb.need&&!/완료 내용 미입력/.test(r.inb.html),'인바운드도 운영 담당자는 완료 내용 창 · 완료 확인 요구 없음',r.inb);
   await pg.close();

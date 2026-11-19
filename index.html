@@ -38382,7 +38382,9 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             if (s.openIssues.length) out.push(chip('bg-red-100 text-red-700', 'fa-triangle-exclamation', `문제 ${s.openIssues.length}건`, '해결되지 않은 문제'));
             if (w.status === 'done' && (!s.optional || s.doneEntry)) out.push(s.checkEntry
                 ? chip('bg-emerald-100 text-emerald-800', 'fa-user-check', '완료 확인됨', `${s.checkEntry.by} · ${s.checkEntry.loggedAt}`)
-                : chip('bg-sky-100 text-sky-700', 'fa-user-clock', s.doneEntry ? '완료 확인 대기' : '완료 내용 미입력'));
+                : s.optional
+                    ? chip('bg-gray-100 text-gray-600', 'fa-flag-checkered', '완료 내용 입력됨', '진행 내역 입력 선택 권한 — 완료 확인을 요구하지 않습니다')
+                    : chip('bg-sky-100 text-sky-700', 'fa-user-clock', s.doneEntry ? '완료 확인 대기' : '완료 내용 미입력'));
             return out.join(' ');
         }
         // 마지막 진행 내역 한 줄
