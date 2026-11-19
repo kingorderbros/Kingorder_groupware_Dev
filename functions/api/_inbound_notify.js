@@ -142,20 +142,33 @@ export async function notifyInboundAdded(env, recs, nowArg) {
     const recRows = (await call('GET', `app_store?select=key,value&key=in.${encodeURIComponent(list2)}`)) || [];
     const subRecs = {}; recRows.forEach(x => { subRecs[x.key] = push.normRec(x.value); });
     const cat = push.categoryOf('inbound-new');
-    const targets = [];
+    // 한도(20)를 넘으면 뒤 사람이 통째로 빠지지 않게 — 사람마다 첫 기기부터 돌아가며 채웁니다
+    const perPerson = [];
     fresh.forEach(n => {
         const u = byName.get(n.toUser); if (!u) return;
-        const rec = subRecs[push.keyOf(u.id)];
+        const key = push.keyOf(u.id);
+        const rec = subRecs[key];
         if (!rec || !push.wants(rec, cat)) return;
-        push.pickSubsFor(rec, cat).filter(push.validSubscription).forEach(sub => targets.push({ n, sub }));
+        perPerson.push(push.pickSubsFor(rec, cat).filter(push.validSubscription).map(sub => ({ n, sub, key })));
     });
-    let pushed = 0;
-    await Promise.all(targets.slice(0, MAX_PUSH_PER_RUN).map(async ({ n, sub }) => {
+    const targets = [];
+    for (let i = 0; perPerson.some(l => l.length > i); i++) perPerson.forEach(l => { if (l[i]) targets.push(l[i]); });
+    let pushed = 0; const gone = [];
+    await Promise.all(targets.slice(0, MAX_PUSH_PER_RUN).map(async ({ n, sub, key }) => {
         try {
             const q = await push.buildRequest(sub, push.forSub(push.payloadOf(n, { 'inbound-new': '인바운드' }), sub), env);
             const res = await fetch(q.url, q.init);
             if (res.ok) pushed++;
+            else if (res.status === 404 || res.status === 410) gone.push({ key, ep: sub.endpoint });   // 브라우저가 구독을 버림 — /api/push/send 와 같게 지웁니다
         } catch (e) { console.warn('[인바운드 알림] 푸시 오류', e && e.message); }
     }));
-    return { ok: true, made: inserted.length, pushed, skippedPush: Math.max(0, targets.length - MAX_PUSH_PER_RUN) };
+    for (const g of gone) {
+        subRecs[g.key] = push.removeSub(subRecs[g.key], g.ep);
+        try {
+            await call('POST', 'app_store?on_conflict=key', [{ key: g.key, value: subRecs[g.key], updated_at: new Date().toISOString() }], { Prefer: 'resolution=merge-duplicates,return=minimal' });
+        } catch (e) { console.warn('[인바운드 알림] 버린 구독 정리 실패', e && e.message); }
+    }
+    const skippedPush = Math.max(0, targets.length - MAX_PUSH_PER_RUN);
+    if (skippedPush) console.warn('[인바운드 알림] 푸시 한도로 보내지 못한 기기', skippedPush);
+    return { ok: true, made: inserted.length, pushed, removed: gone.length, skippedPush };
 }

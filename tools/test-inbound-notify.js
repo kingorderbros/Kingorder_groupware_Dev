@@ -85,6 +85,19 @@ const ok = (c, m) => { if (c) { pass++; console.log('  ✓', m); } else { fail++
         ok(r2.made === 0 && pushed.length === 1, '같은 건을 다시 불러도 알림 · 푸시가 두 번 가지 않음');
         const r3 = await N.notifyInboundAdded(env, [], now);
         ok(r3.ok && r3.made === 0, '새 건이 없으면 아무것도 하지 않음');
+        // 버린 구독(410)은 지우고, 한도를 넘으면 사람마다 첫 기기부터
+        subs['gwPushSubs.v1/s1'].subs.push(await mkSub('kim-old'));
+        const gone410 = new Set(['kim-old']); const removedWrites = [];
+        const f0 = global.fetch;
+        global.fetch = async (url, init) => {
+            const u = decodeURIComponent(String(url));
+            if (u.startsWith('https://fcm.googleapis.com/') && gone410.has(u.split('/').pop())) { pushed.push(u.split('/').pop()); return { ok: false, status: 410, text: async () => '' }; }
+            if (u.includes('/rest/v1/app_store?on_conflict=key')) { removedWrites.push(JSON.parse(init.body)[0]); return { ok: true, status: 201, text: async () => '' }; }
+            return f0(url, init);
+        };
+        const r5 = await N.notifyInboundAdded(env, [Object.assign({}, rec, { id: 'IN-0102' })], now);
+        ok(r5.pushed === 1 && r5.removed === 1 && removedWrites.length === 1 && removedWrites[0].key === 'gwPushSubs.v1/s1' && removedWrites[0].value.subs.length === 1 && removedWrites[0].value.subs[0].endpoint.endsWith('/kim'), '버린 구독(410)은 그 사람 기록에서 지움 · 살아 있는 기기는 받음');
+        global.fetch = f0;
         const r4 = await N.notifyInboundAdded({}, [rec], now);
         ok(r4.ok === false, 'Supabase 설정이 없으면 건너뜀');
     }
