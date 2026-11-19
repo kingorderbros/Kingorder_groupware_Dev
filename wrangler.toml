@@ -14,9 +14,16 @@ keep_vars = true
 directory = "."
 binding = "ASSETS"
 
-# 환경변수(SUPABASE_URL · SUPABASE_SERVICE_ROLE_KEY · KOB_ENV)는 여기 적지 않습니다 —
+# 공개 값은 여기 [vars] 에 둡니다 (2026-11-19) — 대시보드에 일반(Text) 값으로 넣은 SUPABASE_URL 이
+#   GitHub 자동 배포 때마다 지워져(11/17 · 11/19 두 번) 모든 /api 가 '환경변수가 없습니다' 오류를 냈습니다.
+#   SUPABASE_URL 은 config/app-config.js 에도 있는 공개 주소라 저장소에 적어도 됩니다.
+[vars]
+SUPABASE_URL = "https://sejoauspxqrnsrhevwkj.supabase.co"
+KOB_ENV = "dev"
+
+# 비밀값(SUPABASE_SERVICE_ROLE_KEY · VAPID_PRIVATE_KEY · GOOGLE_CLIENT_SECRET 등)은 여기 적지 않습니다 —
 #   · 로컬:  .dev.vars 파일 (git 에 올리지 않음)
-#   · 배포:  Cloudflare 대시보드 › 그 Worker › Settings › Variables and Secrets
+#   · 배포:  Cloudflare 대시보드 › 그 Worker › Settings › Variables and Secrets 에서 Type 을 Secret 으로 (배포해도 지워지지 않음)
 
 # 구글 캘린더 주고받기 — 1분이 Cloudflare 가 허용하는 가장 짧은 간격입니다 (2026-09-23)
 # 회사 도메인을 붙이면 구글이 알려 주는 방식(웹훅)으로 바꿔 10초 수준으로 줄일 수 있습니다.
