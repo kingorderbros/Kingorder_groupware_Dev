@@ -9,6 +9,7 @@ import { syncBoth } from './functions/api/_gcal.js';
 import { autoPull as inboundAutoPull } from './functions/api/_inbound.js';
 import { runScheduleReminders } from './functions/api/_reminders.js';
 import { notifyInboundAdded } from './functions/api/_inbound_notify.js';
+import { runProgressReminders } from './functions/api/_progress_remind.js';
 
 export default {
     async fetch(request, env, ctx) {
@@ -33,6 +34,15 @@ export default {
                 if (r && r.made) console.log('[일정 알림]', JSON.stringify(r));
             } catch (e) {
                 console.error('[일정 알림] 실패', e && e.message);
+            }
+        })());
+        // 진행 내역 업데이트 요청 (2026-11-20) — 평일 09:00~09:09 에만 점검, 3일 넘게 내역이 없는 영업 진행 건의 담당자에게
+        ctx.waitUntil((async () => {
+            try {
+                const r = await runProgressReminders(env);
+                if (r && r.made) console.log('[진행 내역 알림]', JSON.stringify(r));
+            } catch (e) {
+                console.error('[진행 내역 알림] 실패', e && e.message);
             }
         })());
         ctx.waitUntil((async () => {

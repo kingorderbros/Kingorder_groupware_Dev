@@ -30,7 +30,7 @@
     <script src="config/app-config.js"></script>
     <!-- 화면 버전 (2026-11-16) — 배포할 때마다 올립니다. 개발 · 운영 화면 아래에 "그룹웨어 v1.1.0 · 운영" 처럼 보입니다.
          groupware = 그룹웨어 화면 · calendar = 킹오더일정(?mode=calendar) -->
-    <script>window.KOB_VERSION = { groupware: '1.1.20', calendar: '1.0.5', date: '2026-11-19' };</script>
+    <script>window.KOB_VERSION = { groupware: '1.1.21', calendar: '1.0.5', date: '2026-11-19' };</script>
     <script>
         (function () {
             // manifest 는 **여기서 만들어 답니다.** (2026-09-05 고침)
@@ -12482,6 +12482,7 @@ const QUOTE_TEMPLATES = [
             if (n.type === 'dev-update') return `<b>${escapeHtml(n.title)}</b> 개발요청에 파트너사의 진행 내용이 등록되었습니다.${n.detail ? `<br><span class="text-xs text-gray-600">${escapeHtml(n.detail)}</span>` : ''}`;
             if (n.type === 'dev-review') return `<b>${escapeHtml(n.title)}</b> 개발이 완료되어 <b>검수 요청</b>이 접수되었습니다. 확인 후 검수완료를 클릭해 주세요.${n.detail ? `<br><span class="text-xs text-gray-600">${escapeHtml(n.detail)}</span>` : ''}`;
             if (n.type === 'delete-request') return `<b>${escapeHtml(n.title)}</b> 삭제 요청이 도착했습니다. 확인 후 삭제하거나 반려해 주세요.${n.detail ? `<br><span class="text-xs text-gray-600">${escapeHtml(n.detail)}</span>` : ''}`;
+            if (n.type === 'work-progress-remind') return `<b>${escapeHtml(n.title)}</b> 진행 내역 업데이트가 필요합니다.${n.detail ? `<br><span class="text-xs text-gray-600">${escapeHtml(n.detail)}</span>` : ''}`;
             if (n.type === 'inbound-new') return `<b>${escapeHtml(n.title)}</b> 인바운드 새 건이 등록되었습니다.${n.detail ? `<br><span class="text-xs text-gray-600">${escapeHtml(n.detail)}</span>` : ''}`;
             if (n.type === 'delete-request-result') return `<b>${escapeHtml(n.title)}</b> 삭제 요청이 처리되었습니다.${n.detail ? `<br><span class="text-xs text-gray-600">${escapeHtml(n.detail)}</span>` : ''}`;
             return escapeHtml(n.title || '');
@@ -12493,6 +12494,7 @@ const QUOTE_TEMPLATES = [
             if (n.noticeId) return `navigate('dashboard-personal', document.getElementById('nav-dashboard-personal'))`;   // 공지사항 알림 → 공지가 있는 마이 대시보드
             if (n.scheduleId) return `openScheduleFromNotice(${jsArg(n.scheduleId)})`;   // 일정 알림 (2026-10-23)
             if (n.type === 'inbound-new') return `openInboundFromNotice(${jsArg(n.inboundId || '')})`;   // 인바운드 새 건 (2026-11-19)
+            if (n.type === 'work-progress-remind') return `openProgressFromNotice(${jsArg(n.progSrc || '')}, ${jsArg(n.progId || '')})`;   // 진행 내역 업데이트 요청 (2026-11-20)
             if (n.deleteReqId) return `openDeleteRequests(${jsArg(n.type === 'delete-request' ? 'pending' : 'done')})`;
             if (n.devId) return `openDevFromNotice(${jsArg(n.devId)})`;
             if (n.meetingId) return `openMeetingFromNotice(${jsArg(n.meetingId)})`;
@@ -30113,6 +30115,18 @@ const QUOTE_TEMPLATES = [
             });
         }
         // 알림을 누르면 인바운드 관리로 — 한 건 알림은 그 건 상세까지
+        // 진행 내역 업데이트 요청 알림 → 그 화면으로 가서 진행 내역 창 (2026-11-20)
+        function openProgressFromNotice(src, id) {
+            if (src === 'inbound') {
+                if (!canSeePage('inbound-center')) { alert('인바운드 관리 화면 권한이 없습니다.'); return; }
+                navigate('inbound-center', document.getElementById('nav-inbound-center'));
+            } else {
+                if (canSeePage('sales-work-center')) navigate('sales-work-center', document.getElementById('nav-sales-work-center'));
+                else navigate('dashboard-personal', document.getElementById('nav-dashboard-personal'));
+            }
+            if (salesProgFind(src, id)) openSalesProgress(src, id, 'log');
+            else alert('해당 건을 찾을 수 없습니다. 완료되었거나 삭제되었을 수 있습니다.');
+        }
         function openInboundFromNotice(id) {
             if (!canSeePage('inbound-center')) { alert('인바운드 관리 화면 권한이 없습니다.'); return; }
             navigate('inbound-center', document.getElementById('nav-inbound-center'));
