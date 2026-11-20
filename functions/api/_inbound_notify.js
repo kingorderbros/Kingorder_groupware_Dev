@@ -123,7 +123,8 @@ export async function notifyInboundAdded(env, recs, nowArg) {
     const rows = (await call('GET', `app_store?select=key,value&key=in.(${encodeURIComponent('"' + USERS_KEY + '","' + PERM_KEY + '"')})`)) || [];
     const val = (k) => { const r = rows.find(x => x.key === k); return r ? r.value : null; };
     const users = arr(val(USERS_KEY));
-    const groups = arr(val(PERM_KEY));
+    const pg = val(PERM_KEY);
+    const groups = arr(pg && pg.groups ? pg.groups : pg);   // 저장 모양은 { version, removed, groups } (2026-11-20 — 예전엔 배열로만 읽어 늘 기본값을 썼음)
     const notis = inboundNotifications(recs, users, groups, now);
     if (!notis.length) return { ok: true, made: 0 };
 

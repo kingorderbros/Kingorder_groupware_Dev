@@ -73,7 +73,7 @@ const ok = (c, m) => { if (c) { pass++; console.log('  ✓', m); } else { fail++
             const body = init && init.body && typeof init.body === 'string' ? JSON.parse(init.body) : null;
             const resp = (obj) => ({ ok: true, status: 201, text: async () => JSON.stringify(obj) });
             if (u.startsWith('https://fcm.googleapis.com/')) { pushed.push(u.split('/').pop()); return { ok: true, status: 201, text: async () => '' }; }
-            if (u.includes('/rest/v1/app_store') && u.includes('gwUsers.v1')) return resp([{ key: 'gwUsers.v1', value: users }, { key: 'gwPermissionGroups.v2', value: groups }]);
+            if (u.includes('/rest/v1/app_store') && u.includes('gwUsers.v1')) return resp([{ key: 'gwUsers.v1', value: users }, { key: 'gwPermissionGroups.v2', value: { version: 2, removed: [], groups } }]);
             if (u.includes('/rest/v1/app_store') && u.includes('gwPushSubs.v1')) return resp(Object.keys(subs).filter(k => u.includes(k)).map(k => ({ key: k, value: subs[k] })));
             if (u.includes('/rest/v1/notifications')) { const fresh = body.filter(r => !saved.has(r.id)); fresh.forEach(r => saved.set(r.id, r)); return resp(fresh); }
             return resp([]);
