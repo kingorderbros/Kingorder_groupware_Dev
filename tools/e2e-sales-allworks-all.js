@@ -41,6 +41,7 @@ srv.listen(8874,async()=>{const br=await pp.launch({executablePath:'/Application
    setSel(0,'');setSel(2,'김영업');out.kim=rows();
    setSel(2,'');setSel(1,'open');out.open=rows();
    setSel(1,'done');out.done=rows();
+   setSel(1,'working');out.working=rows();
    setSel(1,'');
    const inp=frame.querySelector('input[type=text]');inp.value='5678';inp.dispatchEvent(new Event('input'));out.phone=rows();
    inp.value='';inp.dispatchEvent(new Event('input'));
@@ -62,6 +63,7 @@ srv.listen(8874,async()=>{const br=await pp.launch({executablePath:'/Application
   ok(r.kim.length===4&&r.kim.every(x=>/김영업/.test(x.owner)),'담당자 거르기 — 김영업 (영업 · 운영업무 · 인바운드 · 취소 협업)',r.kim.map(x=>x.text));
   ok(r.open.every(x=>x.open)&&r.open.length===6,'상태 미완료',r.open.length);
   ok(r.done.length===1&&r.done[0].text==='선릉카페 제안','상태 완료 (취소된 협업은 완료로 세지 않음)',r.done.map(x=>x.text));
+  ok(r.working.some(x=>x.text==='영업 자료 요청')&&r.working.some(x=>x.text==='강남치킨 견적')&&!r.working.some(x=>x.text==='영업지원 설치'),'상태 진행중 — 진행중 협업도 함께',r.working.map(x=>x.text));
   ok(r.phone.length===1&&r.phone[0].co==='홍대국밥','연락처 숫자 검색',r.phone);
   ok(r.collabClick,'협업 줄 클릭 → 협업 상세 창');
   ok(r.fits,'화면 폭 안');

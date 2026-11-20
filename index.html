@@ -27663,7 +27663,9 @@ const QUOTE_TEMPLATES = [
             }));
             // 처리가 끝나지 않은 건을 먼저, 그 안에서 최근 순
             const all = rows.sort((a, b) => (b.open - a.open) || b.date.localeCompare(a.date) || b.id.localeCompare(a.id));
-            const statusOk = r => !f.status || (f.status === 'open' ? r.open : r.kind === 'sales' ? r.status === f.status : (f.status === 'done' && r.done));
+            // 그 밖의 업무는 완료 여부 또는 같은 이름의 상태(협업 '진행중' · '보류' 등)로 맞춥니다
+            const statusOk = r => !f.status || (f.status === 'open' ? r.open : r.kind === 'sales' ? r.status === f.status
+                : f.status === 'done' ? r.done : r.stName === (def.statusNames || {})[f.status]);
             const list = all.filter(r => (!f.type || r.type === f.type) && statusOk(r)
                 && (!f.owner || r.owners.includes(f.owner))
                 && (!q || `${r.id} ${r.company} ${r.text} ${r.tip} ${r.from} ${r.ownerText} ${r.phone} ${r.typeName}`.toLowerCase().includes(q)
