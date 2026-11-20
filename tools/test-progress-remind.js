@@ -71,6 +71,7 @@ const ok = (c, m) => { if (c) { pass++; console.log('  ✓', m); } else { fail++
                 { key: 'gwHolidays.v1', value: { days: holidays } }]);
             if (u.includes('/rest/v1/app_store') && u.includes('gwPushSubs.v1')) return resp([{ key: 'gwPushSubs.v1/u1', value: { subs: [sub], prefs: {} } }]);
             if (u.includes('/rest/v1/works')) return resp(u.includes('offset=0') ? [{ id: 'S-1', data: w('S-1') }, { id: 'S-6', data: w('S-6', { progressLog: [{ kind: 'action', loggedAt: '2026-11-22 18:00' }] }) }] : []);
+            if (u.includes('/rest/v1/notifications') && (!init || !init.method || init.method === 'GET')) { const day = (u.match(/like\.prog_\*_(\d{4}-\d{2}-\d{2})/) || [])[1]; return resp(Array.from(saved.keys()).filter(id => id.endsWith('_' + day)).map(id => ({ id }))); }
             if (u.includes('/rest/v1/notifications')) { const fresh = body.filter(r => !saved.has(r.id)); fresh.forEach(r => saved.set(r.id, r)); return resp(fresh); }
             return resp([]);
         };
@@ -87,6 +88,29 @@ const ok = (c, m) => { if (c) { pass++; console.log('  ✓', m); } else { fail++
         const r4 = await R.runProgressReminders(env, kst('2026-11-25', '09:00'));
         ok(r4.skipped && r4.made === undefined, '공휴일은 건너뜀');
         ok((await R.runProgressReminders({}, now)).ok === false, 'Supabase 설정이 없으면 건너뜀');
+        // 기기가 한도(20)를 넘으면 — 이번에 20대, 나머지는 다음 분에 (검토 반영)
+        const many = []; const manyUsers = users.slice(); const manySubs = {};
+        for (let i = 1; i <= 25; i++) {
+            manyUsers.push({ id: 'm' + i, name: '영업' + i, groupId: 'sales' });
+            many.push({ id: 'W-' + i, data: w('W-' + i, { assignee: '영업' + i }) });
+            const kp2 = await subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits']);
+            manySubs['gwPushSubs.v1/m' + i] = { subs: [{ endpoint: 'https://fcm.googleapis.com/fcm/send/m' + i, keys: { p256dh: b64u(new Uint8Array(await subtle.exportKey('raw', kp2.publicKey))), auth: b64u(wc.getRandomValues(new Uint8Array(16))) } }], prefs: {} };
+        }
+        const f1 = global.fetch; pushed.length = 0;
+        global.fetch = async (url, init) => {
+            const u = decodeURIComponent(String(url));
+            const resp = (obj) => ({ ok: true, status: 200, text: async () => JSON.stringify(obj) });
+            if (u.includes('/rest/v1/app_store') && u.includes('gwUsers.v1')) return resp([{ key: 'gwUsers.v1', value: manyUsers }, { key: 'gwPermissionGroups.v2', value: { version: 2, groups } }, { key: 'gwHolidays.v1', value: { days: {} } }]);
+            if (u.includes('/rest/v1/app_store') && u.includes('gwPushSubs.v1')) return resp(Object.keys(manySubs).filter(k => u.includes('"' + k + '"')).map(k => ({ key: k, value: manySubs[k] })));
+            if (u.includes('/rest/v1/works')) return resp(u.includes('offset=0') ? many : []);
+            return f1(url, init);
+        };
+        const d = '2026-11-26';
+        const m1 = await R.runProgressReminders(env, kst(d, '09:00'));
+        const m2 = await R.runProgressReminders(env, kst(d, '09:01'));
+        const m3 = await R.runProgressReminders(env, kst(d, '09:02'));
+        ok(m1.pushed === 20 && m1.left === 5 && m2.pushed === 5 && m2.left === 0 && m3.made === 0 && new Set(pushed).size === 25, `기기 25대 — 첫 분 20대 · 다음 분 5대, 빠지는 사람 없음 (${JSON.stringify([m1, m2, m3])})`);
+        global.fetch = f1;
     }
 
     console.log(`\n=========== 통과 ${pass} · 실패 ${fail} ===========`);

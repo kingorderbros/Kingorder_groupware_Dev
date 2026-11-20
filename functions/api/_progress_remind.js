@@ -152,34 +152,51 @@ export async function runProgressReminders(env, nowArg, opts) {
     const notis = progressReminders(items, users, groups, now);
     if (!notis.length) return { ok: true, checked: items.length, made: 0 };
 
+    // 오늘 이미 보낸 알림은 빼고 — 푸시 한도(20) 안에 들어가는 만큼만 이번에 저장 · 푸시, 나머지는 다음 분(09:09까지)에 이어서
+    // (2026-11-20 검토 — 전부 먼저 저장하면 한도를 넘은 사람은 다음 분에 '이미 있음'으로 걸러져 푸시를 못 받았음)
+    const today = kstParts(now).date;
+    const sentRows = (await call('GET', `notifications?select=id&id=like.${encodeURIComponent('prog_*_' + today)}`)) || [];
+    const sent = new Set(sentRows.map(r => r.id));
+    const pending = notis.filter(n => !sent.has(n.id));
+    if (!pending.length) return { ok: true, checked: items.length, made: 0 };
+    const byName = new Map(users.filter(u => u && u.id && u.name).map(u => [u.name, u]));
+    const ready = push.keysReady(env);
+    const recs = {};
+    if (ready) {
+        const people = Array.from(new Set(pending.map(n => n.toUser))).map(n => byName.get(n)).filter(Boolean);
+        if (people.length) {
+            const list2 = '(' + people.map(u => '"' + push.keyOf(u.id).replace(/"/g, '') + '"').join(',') + ')';
+            const recRows = (await call('GET', `app_store?select=key,value&key=in.${encodeURIComponent(list2)}`)) || [];
+            recRows.forEach(x => { recs[x.key] = push.normRec(x.value); });
+        }
+    }
+    const cat = push.categoryOf('work-progress-remind');
+    const subsOf = (n) => {
+        const u = byName.get(n.toUser); if (!u || !ready) return [];
+        const rec = recs[push.keyOf(u.id)];
+        if (!rec || !push.wants(rec, cat)) return [];
+        return push.pickSubsFor(rec, cat).filter(push.validSubscription);
+    };
+    const batch = []; let budget = MAX_PUSH_PER_RUN;
+    for (const n of pending) {
+        const subs = subsOf(n);
+        if (batch.length && subs.length > budget) break;      // 한 건은 반드시 넣고, 그다음부터는 한도 안에서만
+        batch.push({ n, subs }); budget -= subs.length;
+    }
     const nowIso = new Date(now).toISOString();
     const inserted = (await call('POST', 'notifications?on_conflict=id',
-        notis.map(n => ({ id: n.id, data: n, rev: 1, updated_at: nowIso, updated_by: '진행 내역 알림' })),
+        batch.map(({ n }) => ({ id: n.id, data: n, rev: 1, updated_at: nowIso, updated_by: '진행 내역 알림' })),
         { Prefer: 'resolution=ignore-duplicates,return=representation' })) || [];
-    if (!inserted.length || !push.keysReady(env)) return { ok: true, checked: items.length, made: inserted.length, pushed: 0 };
-
-    const fresh = inserted.map(r => Object.assign({}, r.data || {}, { id: r.id }));
-    const byName = new Map(users.filter(u => u && u.id && u.name).map(u => [u.name, u]));
-    const people = Array.from(new Set(fresh.map(n => n.toUser))).map(n => byName.get(n)).filter(Boolean);
-    if (!people.length) return { ok: true, checked: items.length, made: inserted.length, pushed: 0 };
-    const list2 = '(' + people.map(u => '"' + push.keyOf(u.id).replace(/"/g, '') + '"').join(',') + ')';
-    const recRows = (await call('GET', `app_store?select=key,value&key=in.${encodeURIComponent(list2)}`)) || [];
-    const recs = {}; recRows.forEach(x => { recs[x.key] = push.normRec(x.value); });
-    const cat = push.categoryOf('work-progress-remind');
+    const fresh = new Set(inserted.map(r => r.id));
     const targets = [];
-    fresh.forEach(n => {
-        const u = byName.get(n.toUser); if (!u) return;
-        const rec = recs[push.keyOf(u.id)];
-        if (!rec || !push.wants(rec, cat)) return;
-        push.pickSubsFor(rec, cat).filter(push.validSubscription).forEach(sub => targets.push({ n, sub }));
-    });
+    batch.forEach(({ n, subs }) => { if (fresh.has(n.id)) subs.forEach(sub => targets.push({ n, sub })); });
     let pushed = 0;
-    await Promise.all(targets.slice(0, MAX_PUSH_PER_RUN).map(async ({ n, sub }) => {
+    await Promise.all(targets.map(async ({ n, sub }) => {
         try {
             const q = await push.buildRequest(sub, push.forSub(push.payloadOf(n, { 'work-progress-remind': '진행 내역 업데이트 요청' }), sub), env);
             const res = await fetch(q.url, q.init);
             if (res.ok) pushed++;
         } catch (e) { console.warn('[진행 내역 알림] 푸시 오류', e && e.message); }
     }));
-    return { ok: true, checked: items.length, made: inserted.length, pushed, skippedPush: Math.max(0, targets.length - MAX_PUSH_PER_RUN) };
+    return { ok: true, checked: items.length, made: inserted.length, pushed, left: pending.length - batch.length };
 }
