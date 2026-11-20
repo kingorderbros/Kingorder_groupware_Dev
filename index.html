@@ -30,7 +30,7 @@
     <script src="config/app-config.js"></script>
     <!-- 화면 버전 (2026-11-16) — 배포할 때마다 올립니다. 개발 · 운영 화면 아래에 "그룹웨어 v1.1.0 · 운영" 처럼 보입니다.
          groupware = 그룹웨어 화면 · calendar = 킹오더일정(?mode=calendar) -->
-    <script>window.KOB_VERSION = { groupware: '1.1.21', calendar: '1.0.5', date: '2026-11-19' };</script>
+    <script>window.KOB_VERSION = { groupware: '1.1.22', calendar: '1.0.5', date: '2026-11-20' };</script>
     <script>
         (function () {
             // manifest 는 **여기서 만들어 답니다.** (2026-09-05 고침)
@@ -13807,7 +13807,7 @@ const QUOTE_TEMPLATES = [
             if (wcNavKey && !window.__gwNavSilent && element && typeof wcState !== 'undefined' && wcState[wcNavKey]) {
                 const wantAll = element.id === WC_ALLWORKS_NAV[wcNavKey];
                 // 메뉴로 들어오면 거르기를 비움 — 현황 카드로 들어올 때만 고른 상태를 유지 (2026-11-11)
-                if (wantAll && !window.__wcKeepFilter && typeof wcAllWorksFilter !== 'undefined') { wcAllWorksFilter.status = ''; wcAllWorksFilter.type = ''; }
+                if (wantAll && !window.__wcKeepFilter && typeof wcAllWorksFilter !== 'undefined') { wcAllWorksFilter.status = ''; wcAllWorksFilter.type = ''; wcAllWorksFilter.owner = ''; }
                 const isAll = wcType(wcNavKey, wcState[wcNavKey].activeType).panel === 'allworks';
                 if (wantAll && !isAll && canSeePage(wcTypePerm(wcNavKey, 'allworks'))) wcTabSwitch = 'allworks';
                 else if (!wantAll && isAll) {
@@ -26005,7 +26005,7 @@ const QUOTE_TEMPLATES = [
                         // 전체 업무이력 (2026-11-11) — 운영본부와 같이 왼쪽 메뉴 '전체 업무이력' 으로 들어옵니다 (탭 줄에는 표시 안 함)
                         id: 'allworks', name: '전체 업무이력', icon: 'fa-list-ul', active: 'bg-sky-700', panel: 'allworks',
                         noIntake: true, noProcess: true, hideHistory: true,
-                        desc: '고객과 상관없이 영업업무센터에 등록된 업무 전체를 봅니다. 처리가 끝나지 않은 건이 먼저 표시되며, 줄을 누르면 상세 내용을 봅니다.',
+                        desc: '고객과 상관없이 영업업무센터에 등록된 업무와, 영업본부 담당자에게 배정된 그룹웨어의 모든 업무(인바운드 · 협업요청 · 업무지시 · 운영업무 · 견적서 · 보완서류 · 프로젝트)를 봅니다. 처리가 끝나지 않은 건이 먼저 표시되며, 줄을 클릭하면 상세 내용을 확인할 수 있습니다.',
                         fields: []
                     }
                 ],
@@ -27533,7 +27533,36 @@ const QUOTE_TEMPLATES = [
         }
 
         // ---------- 전체 업무이력 창 (보완사항 2026-10-23) — 고객과 상관없이 운영업무센터에 등록된 업무 전부 ----------
-        let wcAllWorksFilter = { q: '', type: '', status: '' };
+        let wcAllWorksFilter = { q: '', type: '', status: '', owner: '' };
+
+        // ---------- 영업본부 전체 업무이력 — 영업본부 담당자에게 배정된 그룹웨어의 모든 일 (2026-11-20) ----------
+        // 다니엘님 "영업본부 전체업무이력에는 그룹웨어에서 영업본부 담당자들에게 할당되어 진행되는 모든 내역을 볼 수 있게".
+        // 영업업무센터 업무는 지금처럼 모두 보이고, 그 밖의 일(협업요청 · 업무지시 · 운영업무센터 · 견적서 · 보완서류 · 인바운드 · 프로젝트 · WBS)은
+        // 경영현황판이 모으는 것(execCollectItems)에서 영업본부 앞으로 온 건 또는 담당자가 영업본부 직원인 건을 함께 보여 줍니다.
+        function salesAllStaffNames() {
+            return new Set((localUsers || []).filter(u => u.dept === 'sales').map(u => u.name).filter(Boolean));
+        }
+        // 담당자가 여러 명인 일(협업요청 · 보완서류)도 사람별로 봅니다
+        function salesAllOwners(i) {
+            if (i.kind === 'paydoc') { const l = payDocTargetNames(i.raw); return l.length ? l : (i.owner ? [i.owner] : []); }
+            if (i.kind === 'collab' || i.kind === 'directive') return collabReceivers(i.raw);
+            return String(i.owner || '').split(/\s*,\s*/).filter(Boolean);
+        }
+        function salesAllExtraItems() {
+            const staff = salesAllStaffNames();
+            return execCollectItems().filter(i => !(i.kind === 'work' && i.srcKey === 'sales')
+                && (i.dept === 'sales' || salesAllOwners(i).some(n => staff.has(n))));
+        }
+        function salesAllItemDate(i) {
+            const r = i.raw || {};
+            const d = r.receivedAt ? `${r.receivedAt} ${r.receivedTime || ''}` : r.inDate ? `${r.inDate} ${r.inAt || ''}` : (r.requestedAt || r.createdAt || r.startPlan || r.date || '');
+            return String(d).trim();
+        }
+        // 거절 · 취소된 협업은 끝난 것으로 봅니다
+        function salesAllItemOpen(i) { return !i.done && !['거절', '취소'].includes(i.statusName); }
+        const SALES_ALL_KIND_CHIP = { work: 'bg-emerald-50 text-emerald-700', inbound: 'bg-cyan-50 text-cyan-700', collab: 'bg-indigo-50 text-indigo-700', directive: 'bg-violet-50 text-violet-700',
+                                      quote: 'bg-teal-50 text-teal-700', paydoc: 'bg-orange-50 text-orange-700', project: 'bg-purple-50 text-purple-700', wbs: 'bg-purple-50 text-purple-700' };
+        const SALES_ALL_KINDS = [['inbound', '인바운드'], ['collab', '협업요청'], ['directive', '업무지시'], ['work', '운영업무'], ['quote', '견적서'], ['paydoc', '보완서류'], ['project', '프로젝트'], ['wbs', 'WBS 작업']];
         function openWcAllWorks(key) {
             let m = document.getElementById('wc-allworks-modal');
             if (!m) {
@@ -27565,14 +27594,16 @@ const QUOTE_TEMPLATES = [
             const opt = (v, l, cur) => `<option value="${escapeHtml(v)}" ${cur === v ? 'selected' : ''}>${escapeHtml(l)}</option>`;
             return `<div class="px-4 pt-3 flex flex-wrap gap-2 items-center">
                         <input type="text" value="${escapeHtml(f.q)}" oninput="wcAllWorksFilter.q=this.value; renderWcAllWorks(${jsArg(key)})" placeholder="상호명 · 연락처 · 내용 · 접수자 · 담당자 검색" class="flex-1 min-w-[220px] p-2 text-sm border border-gray-300 rounded" />
-                        <select onchange="wcAllWorksFilter.type=this.value; renderWcAllWorks(${jsArg(key)})" class="${sel}"><option value="">업무유형 전체</option>${def.types.filter(t => t.panel !== 'allworks').map(t => opt(t.id, t.name, f.type)).join('')}</select>
+                        <select onchange="wcAllWorksFilter.type=this.value; renderWcAllWorks(${jsArg(key)})" class="${sel}"><option value="">업무유형 전체</option>${key === 'sales' ? `<optgroup label="영업업무센터">` : ''}${def.types.filter(t => t.panel !== 'allworks').map(t => opt(t.id, t.name, f.type)).join('')}${key === 'sales' ? `</optgroup><optgroup label="그 밖의 업무">${SALES_ALL_KINDS.map(([k, l]) => opt('k:' + k, l, f.type)).join('')}</optgroup>` : ''}</select>
                         <select onchange="wcAllWorksFilter.status=this.value; renderWcAllWorks(${jsArg(key)})" class="${sel}"><option value="">상태 전체</option>${opt('open', '미완료', f.status)}${Object.entries(def.statusNames || {}).map(([v, l]) => opt(v, l, f.status)).join('')}</select>
+                        ${key === 'sales' ? `<select onchange="wcAllWorksFilter.owner=this.value; renderWcAllWorks('sales')" class="${sel}"><option value="">담당자 전체</option>${[...salesAllStaffNames()].sort((a, b) => a.localeCompare(b, 'ko')).map(n => opt(n, n, f.owner)).join('')}</select>` : ''}
                     </div>
                     <div id="${wcAllWorksBodyId(key)}" class="p-4 overflow-auto"></div>`;
         }
         function renderWcAllWorks(key) {
             const body = document.getElementById(wcAllWorksBodyId(key));
             if (!body) return;
+            if (key === 'sales') { renderSalesAllWorks(body); return; }
             const def = wcDef(key);
             const f = wcAllWorksFilter;
             const q = String(f.q || '').trim().toLowerCase();
@@ -27601,6 +27632,56 @@ const QUOTE_TEMPLATES = [
                         <td class="p-2 text-xs text-gray-600 whitespace-nowrap">${escapeHtml(w.receiver || '-')}</td>
                         <td class="p-2 text-xs text-gray-600 whitespace-nowrap">${escapeHtml(w.assignee || '-')}</td>
                         <td class="p-2 whitespace-nowrap"><span class="px-1.5 py-0.5 rounded-full text-[11px] font-semibold ${stCls[w.status] || 'bg-gray-100 text-gray-600'}">${escapeHtml((def.statusNames || {})[w.status] || w.status || '-')}</span></td>
+                    <td class="p-2 text-right whitespace-nowrap"><span class="text-xs text-gray-400 group-hover:text-green-700" title="상세 보기">상세 <i class="fas fa-chevron-right text-[10px]"></i></span></td>
+                    </tr>`).join('') || '<tr><td colspan="9" class="p-8 text-center text-gray-400">조건에 맞는 업무가 없습니다.</td></tr>'}</tbody>
+                </table>`;
+        }
+
+        // 영업본부 전체 업무이력 표 — 영업업무센터 업무 + 영업본부 담당자에게 배정된 그 밖의 일 (2026-11-20)
+        function renderSalesAllWorks(body) {
+            const key = 'sales';
+            const def = wcDef(key);
+            const f = wcAllWorksFilter;
+            const q = String(f.q || '').trim().toLowerCase();
+            const qDigits = q.replace(/[\s-]/g, '');
+            const stCls = { received: 'bg-amber-100 text-amber-700', assigned: 'bg-sky-100 text-sky-700', working: 'bg-blue-100 text-blue-700', hold: 'bg-yellow-100 text-yellow-700', done: 'bg-green-100 text-green-700' };
+            // 한 줄 모양으로 맞춥니다 — 영업업무센터 업무(w)와 그 밖의 일(i)
+            const rows = def.works.map(w => {
+                const phone = w.contact || (wcCustomer(key, w.customerId) || {}).phone || '';
+                return { kind: 'sales', type: w.type, open: w.status !== 'done', status: w.status, date: `${w.receivedAt || ''} ${w.receivedTime || ''}`.trim(),
+                         phone, typeName: wcType(key, w.type).name, typeChip: 'bg-gray-100 text-gray-700', company: w.company || '', text: w.title || w.memo || '', tip: w.memo || w.title || '',
+                         from: w.receiver || '', owners: w.assignee ? [w.assignee] : [], ownerText: w.assignee || '',
+                         stName: (def.statusNames || {})[w.status] || w.status || '', stChip: stCls[w.status] || 'bg-gray-100 text-gray-600',
+                         onclick: `openWorkHistoryDetail('sales', ${jsArg(w.id)})`, id: String(w.id) };
+            }).concat(salesAllExtraItems().map(i => {
+                const r = i.raw || {};
+                return { kind: i.kind, type: 'k:' + i.kind, open: salesAllItemOpen(i), status: '', done: !!i.done, date: salesAllItemDate(i),
+                         phone: r.phone || r.contact || '', typeName: i.kindName, typeChip: SALES_ALL_KIND_CHIP[i.kind] || 'bg-gray-100 text-gray-700',
+                         company: r.company || r.merchant || r.customerName || i.projectName || '', text: i.title || '', tip: [i.title, i.detail].filter(Boolean).join(' · '),
+                         from: i.from || '', owners: salesAllOwners(i), ownerText: salesAllOwners(i).join(', ') || i.owner || '',
+                         stName: i.statusName || '-', stChip: i.chip, onclick: execOpenSourceJs(i), id: String(i.id) };
+            }));
+            // 처리가 끝나지 않은 건을 먼저, 그 안에서 최근 순
+            const all = rows.sort((a, b) => (b.open - a.open) || b.date.localeCompare(a.date) || b.id.localeCompare(a.id));
+            const statusOk = r => !f.status || (f.status === 'open' ? r.open : r.kind === 'sales' ? r.status === f.status : (f.status === 'done' && r.done));
+            const list = all.filter(r => (!f.type || r.type === f.type) && statusOk(r)
+                && (!f.owner || r.owners.includes(f.owner))
+                && (!q || `${r.id} ${r.company} ${r.text} ${r.tip} ${r.from} ${r.ownerText} ${r.phone} ${r.typeName}`.toLowerCase().includes(q)
+                       || (/^\d+$/.test(qDigits) && String(r.phone).replace(/\D/g, '').includes(qDigits))));
+            const shown = list.slice(0, 500);
+            const th = t => `<th class="p-2 text-left font-medium">${t}</th>`;
+            body.innerHTML = `<p class="text-xs text-gray-500 mb-2">전체 ${all.length}건 · 조건 ${list.length}건 · 미완료 ${list.filter(r => r.open).length}건${list.length > shown.length ? ` (앞 ${shown.length}건만 표시)` : ''}</p>
+                <table class="w-full text-sm min-w-[980px]">
+                    <thead><tr class="bg-gray-50 text-xs text-gray-500 border-b">${['접수일', '연락처', '업무유형', '상호명', '내용', '접수자', '담당자', '상태'].map(th).join('')}<th class="p-2"></th></tr></thead>
+                    <tbody>${shown.map(r => `<tr ${r.onclick ? `onclick="${r.onclick}"` : ''} class="group border-b border-gray-100 ${r.open ? 'bg-amber-50/50' : ''} hover:bg-green-50 ${r.onclick ? 'cursor-pointer' : ''}" title="눌러서 상세 보기">
+                        <td class="p-2 text-xs text-gray-600 whitespace-nowrap">${escapeHtml(r.date || '-')}</td>
+                        <td class="p-2 text-xs text-gray-600 whitespace-nowrap">${escapeHtml(r.phone || '-')}</td>
+                        <td class="p-2 whitespace-nowrap"><span class="px-1.5 py-0.5 rounded text-[11px] ${r.typeChip}">${escapeHtml(r.typeName)}</span></td>
+                        <td class="p-2 font-semibold text-gray-800 whitespace-nowrap">${escapeHtml(r.company || '-')}</td>
+                        <td class="p-2 text-gray-600 max-w-[280px] truncate" title="${escapeHtml(r.tip)}">${escapeHtml(r.text || '-')}</td>
+                        <td class="p-2 text-xs text-gray-600 whitespace-nowrap">${escapeHtml(r.from || '-')}</td>
+                        <td class="p-2 text-xs text-gray-600 whitespace-nowrap">${escapeHtml(r.ownerText || '-')}</td>
+                        <td class="p-2 whitespace-nowrap"><span class="px-1.5 py-0.5 rounded-full text-[11px] font-semibold ${r.stChip}">${escapeHtml(r.stName)}</span></td>
                     <td class="p-2 text-right whitespace-nowrap"><span class="text-xs text-gray-400 group-hover:text-green-700" title="상세 보기">상세 <i class="fas fa-chevron-right text-[10px]"></i></span></td>
                     </tr>`).join('') || '<tr><td colspan="9" class="p-8 text-center text-gray-400">조건에 맞는 업무가 없습니다.</td></tr>'}</tbody>
                 </table>`;
