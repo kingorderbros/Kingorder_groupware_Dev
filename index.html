@@ -30,7 +30,7 @@
     <script src="config/app-config.js"></script>
     <!-- 화면 버전 (2026-11-16) — 배포할 때마다 올립니다. 개발 · 운영 화면 아래에 "그룹웨어 v1.1.0 · 운영" 처럼 보입니다.
          groupware = 그룹웨어 화면 · calendar = 킹오더일정(?mode=calendar) -->
-    <script>window.KOB_VERSION = { groupware: '1.1.18', calendar: '1.0.5', date: '2026-11-19' };</script>
+    <script>window.KOB_VERSION = { groupware: '1.1.19', calendar: '1.0.5', date: '2026-11-19' };</script>
     <script>
         (function () {
             // manifest 는 **여기서 만들어 답니다.** (2026-09-05 고침)
@@ -7157,7 +7157,8 @@
                 <button type="button" onclick="closeExecListModal()" class="text-gray-400 hover:text-gray-600 shrink-0"><i class="fas fa-times"></i></button>
             </div>
             <div class="px-6 pt-4">
-                <div id="exec-modal-chips" class="flex flex-wrap items-center gap-1.5 mb-3"></div>
+                <div id="exec-modal-chips" class="flex flex-wrap items-center gap-1.5 mb-2"></div>
+                <div id="exec-modal-filter" class="mb-3"></div>
                 <p id="exec-modal-hint" class="hidden text-xs text-gray-400 mb-3"><i class="fas fa-hand-pointer mr-1"></i>행을 클릭하면 해당 건의 <b>상세 내용</b>이 표시됩니다.</p>
                 <div id="exec-modal-extra"></div>
             </div>
@@ -28808,15 +28809,80 @@ const QUOTE_TEMPLATES = [
             document.getElementById('exec-modal-sub').innerText = sub;
             document.getElementById('exec-modal-extra').innerHTML = extra;
 
-            // 구분별 건수 칩
+            // 목록 창 안 거르기 (2026-11-20 다니엘님 "한눈에 보기에서 필터링을 넣어서 볼 수 있게") — 다른 카드를 열면 처음부터
+            if (!execListState || execListState.view !== view) execListFilter = { kind: '', dept: '', owner: '', state: '', q: '' };
+            execListState = { view, list };
+            renderExecListFilter();
+            renderExecListRows();
+            document.getElementById('exec-list-modal').classList.remove('hidden');
+        }
+
+        // ---------- 목록 창 안 거르기 (구분 · 본부 · 담당자 · 상태 · 검색어) ----------
+        let execListState = null;   // { view, list } — 카드에서 고른 목록 (거르기 전)
+        let execListFilter = { kind: '', dept: '', owner: '', state: '', q: '' };
+        const EXEC_LIST_STATES = [['', '전체 상태'], ['open', '진행 중'], ['late', '기한 지연'], ['issue', '문제 있음'], ['done', '완료']];
+        function execListFiltered() {
+            const f = execListFilter;
+            const norm = v => String(v || '').replace(/\s+/g, '').toLowerCase();
+            const q = norm(f.q);
+            return ((execListState && execListState.list) || []).filter(i => {
+                if (f.kind && i.kindName !== f.kind) return false;
+                if (f.dept && i.dept !== f.dept) return false;
+                if (f.owner && (i.owner || '미배정') !== f.owner) return false;
+                if (f.state === 'open' && !execOpen(i)) return false;
+                if (f.state === 'late' && !execLate(i)) return false;
+                if (f.state === 'issue' && !execIssue(i)) return false;
+                if (f.state === 'done' && !i.done) return false;
+                if (q && !norm([i.id, i.title, i.detail, i.owner, i.from, i.statusName, i.issue].join(' ')).includes(q)) return false;
+                return true;
+            });
+        }
+        function setExecListFilter(field, value) {
+            execListFilter[field] = value;
+            if (field === 'q') { renderExecListRows(); return; }   // 검색어는 입력 칸을 다시 그리지 않습니다 (입력 중 커서 유지)
+            renderExecListFilter();
+            renderExecListRows();
+        }
+        function resetExecListFilter() {
+            execListFilter = { kind: '', dept: '', owner: '', state: '', q: '' };
+            renderExecListFilter();
+            renderExecListRows();
+        }
+        function renderExecListFilter() {
+            const list = (execListState && execListState.list) || [];
+            const f = execListFilter;
+            // 구분 칩 — 클릭하면 그 구분만 (다시 클릭하면 전체)
             const byKind = {};
             list.forEach(i => { byKind[i.kindName] = (byKind[i.kindName] || 0) + 1; });
+            const chip = (label, n, on, js) => `<button type="button" onclick="${js}" class="px-2 py-0.5 rounded-full text-xs ${on ? 'font-semibold bg-gray-800 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}">${escapeHtml(label)} ${n}</button>`;
+            document.getElementById('exec-modal-chips').innerHTML =
+                chip('전체', list.length, !f.kind, "setExecListFilter('kind', '')")
+                + Object.keys(byKind).map(k => chip(k, byKind[k], f.kind === k, `setExecListFilter('kind', ${jsArg(f.kind === k ? '' : k)})`)).join('');
+            // 본부 · 담당자 · 상태 · 검색어
+            const depts = Array.from(new Set(list.map(i => i.dept).filter(Boolean)));
+            const owners = Array.from(new Set(list.map(i => i.owner || '미배정'))).sort((a, b) => (a === '미배정') - (b === '미배정') || a.localeCompare(b, 'ko'));
+            const sel = (field, opts) => `<select onchange="setExecListFilter('${field}', this.value)" class="text-sm p-1.5 border border-gray-300 rounded bg-white min-w-0">${opts.map(([v, n]) => `<option value="${escapeHtml(v)}" ${f[field] === v ? 'selected' : ''}>${escapeHtml(n)}</option>`).join('')}</select>`;
+            const on = Object.keys(f).some(k => f[k]);
             const hint = document.getElementById('exec-modal-hint');
             if (hint) hint.classList.toggle('hidden', !list.length);
-            document.getElementById('exec-modal-chips').innerHTML =
-                `<span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-800 text-white">전체 ${list.length}</span>`
-                + Object.keys(byKind).map(k => `<span class="px-2 py-0.5 rounded-full text-xs bg-gray-100 text-gray-600">${escapeHtml(k)} ${byKind[k]}</span>`).join('');
-
+            document.getElementById('exec-modal-filter').innerHTML = list.length ? `
+                <div class="flex flex-wrap items-center gap-2 rounded border border-gray-200 bg-gray-50 p-2">
+                    <i class="fas fa-filter text-gray-400 text-xs"></i>
+                    ${sel('dept', [['', '전체 본부']].concat(depts.map(d => [d, deptNames[d] || d])))}
+                    ${sel('owner', [['', '전체 담당자']].concat(owners.map(o => [o, o])))}
+                    ${sel('state', EXEC_LIST_STATES)}
+                    <input type="search" value="${escapeHtml(f.q)}" oninput="setExecListFilter('q', this.value)" placeholder="번호 · 제목 · 업체 · 담당자 검색" class="flex-1 min-w-[160px] text-sm p-1.5 border border-gray-300 rounded bg-white">
+                    <span id="exec-modal-count" class="text-xs text-gray-500 whitespace-nowrap"></span>
+                    <button type="button" id="exec-modal-reset" onclick="resetExecListFilter()" class="${on ? '' : 'hidden '}px-2 py-1 text-xs rounded bg-white border border-gray-300 text-gray-600 hover:bg-gray-100 whitespace-nowrap"><i class="fas fa-rotate-left mr-1"></i>초기화</button>
+                </div>` : '';
+        }
+        function renderExecListRows() {
+            const all = (execListState && execListState.list) || [];
+            const list = execListFiltered();
+            const cnt = document.getElementById('exec-modal-count');
+            if (cnt) cnt.textContent = list.length === all.length ? `${all.length}건` : `${list.length}건 / 전체 ${all.length}건`;
+            const rs = document.getElementById('exec-modal-reset');   // 검색어만 입력해도 [초기화] 표시
+            if (rs) rs.classList.toggle('hidden', !Object.keys(execListFilter).some(k => execListFilter[k]));
             const body = document.getElementById('exec-modal-rows');
             body.innerHTML = list.length ? list.map(i => {
                 const flag = i.overdue > 0
@@ -28837,9 +28903,8 @@ const QUOTE_TEMPLATES = [
                     <td class="px-3 py-2 whitespace-nowrap">${flag || '<span class="text-gray-300">-</span>'}</td>
                     <td class="px-3 py-2 text-center whitespace-nowrap text-gray-300"><i class="fas fa-chevron-right text-xs"></i></td>
                 </tr>`;
-            }).join('') : '<tr><td colspan="9" class="px-3 py-10 text-center text-sm text-gray-400"><i class="fas fa-circle-check text-2xl block mb-2 text-green-300"></i>해당하는 건이 없습니다.</td></tr>';
+            }).join('') : (all.length ? '<tr><td colspan="9" class="px-3 py-10 text-center text-sm text-gray-400"><i class="fas fa-filter text-2xl block mb-2 text-gray-300"></i>조건에 맞는 건이 없습니다.</td></tr>' : '<tr><td colspan="9" class="px-3 py-10 text-center text-sm text-gray-400"><i class="fas fa-circle-check text-2xl block mb-2 text-green-300"></i>해당하는 건이 없습니다.</td></tr>');
 
-            document.getElementById('exec-list-modal').classList.remove('hidden');
         }
 
         function closeExecListModal() {
