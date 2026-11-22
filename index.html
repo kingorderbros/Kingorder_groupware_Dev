@@ -30,7 +30,7 @@
     <script src="config/app-config.js"></script>
     <!-- 화면 버전 (2026-11-16) — 배포할 때마다 올립니다. 개발 · 운영 화면 아래에 "그룹웨어 v1.1.0 · 운영" 처럼 보입니다.
          groupware = 그룹웨어 화면 · calendar = 킹오더일정(?mode=calendar) -->
-    <script>window.KOB_VERSION = { groupware: '1.1.25', calendar: '1.0.5', date: '2026-11-23' };</script>
+    <script>window.KOB_VERSION = { groupware: '1.1.26', calendar: '1.0.5', date: '2026-11-23' };</script>
     <script>
         (function () {
             // manifest 는 **여기서 만들어 답니다.** (2026-09-05 고침)
@@ -28980,10 +28980,10 @@ const QUOTE_TEMPLATES = [
                 sub = g ? `${g.people}명 · 담당 업무 ${g.total}건 · 완료율 ${g.rate}%`
                     + '  (해당 본부 직원이 담당자인 건, 타 본부 업무 포함, 담당자 미지정 건 제외)' : '';
                 if (g) {
-                    const box = (label, n, cls) => `<div class="bg-white border border-gray-200 rounded p-3 text-center"><p class="text-[11px] text-gray-500">${label}</p><p class="text-xl font-bold ${n ? cls : 'text-gray-300'} mt-0.5">${n}</p></div>`;
-                    extra = `<div class="grid grid-cols-2 sm:grid-cols-5 gap-2 mb-3">
-                            ${box('담당 업무', g.total, 'text-gray-800')}${box('진행중', g.open, 'text-blue-600')}
-                            ${box('완료', g.done, 'text-green-600')}${box('지연', g.late, 'text-red-600')}${box('문제', g.issue, 'text-amber-600')}
+                    const box = execStateBox;
+                    extra = `<div class="grid grid-cols-3 sm:grid-cols-5 gap-2 mb-3">
+                            ${box('담당 업무', g.total, 'text-gray-800', '')}${box('진행중', g.open, 'text-blue-600', 'open')}
+                            ${box('완료', g.done, 'text-green-600', 'done')}${box('지연', g.late, 'text-red-600', 'late')}${box('문제', g.issue, 'text-amber-600', 'issue')}
                         </div>
                         <div class="mb-3 border border-gray-200 rounded p-3">
                             <p class="text-xs font-semibold text-gray-500 mb-2">팀원별 (이름을 클릭하면 해당 직원만 조회)</p>
@@ -29006,10 +29006,10 @@ const QUOTE_TEMPLATES = [
                 list = execItems.filter(i => i.owner === name);
                 sub = s ? `${deptNames[s.dept] || s.dept || ''}${s.rank ? ' · ' + s.rank : ''} · 담당 업무 ${s.total}건 · 완료율 ${s.rate}%` : '';
                 if (s) {
-                    const box = (label, n, cls) => `<div class="bg-white border border-gray-200 rounded p-3 text-center"><p class="text-[11px] text-gray-500">${label}</p><p class="text-xl font-bold ${n ? cls : 'text-gray-300'} mt-0.5">${n}</p></div>`;
-                    extra = `<div class="grid grid-cols-2 sm:grid-cols-5 gap-2 mb-3">
-                            ${box('담당 업무', s.total, 'text-gray-800')}${box('진행중', s.open, 'text-blue-600')}
-                            ${box('완료', s.done, 'text-green-600')}${box('지연', s.late, 'text-red-600')}${box('문제', s.issue, 'text-amber-600')}
+                    const box = execStateBox;
+                    extra = `<div class="grid grid-cols-3 sm:grid-cols-5 gap-2 mb-3">
+                            ${box('담당 업무', s.total, 'text-gray-800', '')}${box('진행중', s.open, 'text-blue-600', 'open')}
+                            ${box('완료', s.done, 'text-green-600', 'done')}${box('지연', s.late, 'text-red-600', 'late')}${box('문제', s.issue, 'text-amber-600', 'issue')}
                         </div>`;
                 }
             }
@@ -29052,6 +29052,22 @@ const QUOTE_TEMPLATES = [
             renderExecListFilter();
             renderExecListRows();
             document.getElementById('exec-list-modal').classList.remove('hidden');
+        }
+
+        // 직원별 · 팀원 담당 업무 창의 요약 카드 — 누르면 아래 목록을 그 상태로 거릅니다 (2026-11-23 다니엘님 "카드 누르면 해당 건 필터해서 상세 내용")
+        //   담당 업무 = 전체, 진행중 = open, 완료 = done, 지연 = late, 문제 = issue (목록 창의 '상태' 거르기와 같은 기준)
+        function execStateBox(label, n, cls, state) {
+            return `<button type="button" data-exec-state="${state}" onclick="setExecListFilter('state', ${jsArg(state)})" title="클릭하면 아래 목록을 '${label}' 건만 표시합니다"
+                        class="exec-state-box bg-white border border-gray-200 rounded p-3 text-center hover:border-gray-400 hover:bg-gray-50 transition-colors">
+                        <p class="text-[11px] text-gray-500">${label}</p><p class="text-xl font-bold ${n ? cls : 'text-gray-300'} mt-0.5">${n}</p></button>`;
+        }
+        function markExecStateBoxes() {
+            const cur = execListFilter.state || '';
+            document.querySelectorAll('#exec-modal-extra .exec-state-box').forEach(b => {
+                const on = b.getAttribute('data-exec-state') === cur;
+                b.classList.toggle('ring-2', on); b.classList.toggle('ring-gray-800', on);
+                b.setAttribute('aria-pressed', on ? 'true' : 'false');
+            });
         }
 
         // ---------- 목록 창 안 거르기 (구분 · 본부 · 담당자 · 상태 · 검색어) ----------
@@ -29112,6 +29128,7 @@ const QUOTE_TEMPLATES = [
                     <span id="exec-modal-count" class="text-xs text-gray-500 whitespace-nowrap"></span>
                     <button type="button" id="exec-modal-reset" onclick="resetExecListFilter()" class="${on ? '' : 'hidden '}px-2 py-1 text-xs rounded bg-white border border-gray-300 text-gray-600 hover:bg-gray-100 whitespace-nowrap"><i class="fas fa-rotate-left mr-1"></i>초기화</button>
                 </div>` : '';
+            markExecStateBoxes();
         }
         function renderExecListRows() {
             const all = (execListState && execListState.list) || [];
