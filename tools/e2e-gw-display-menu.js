@@ -11,7 +11,7 @@ srv.listen(8861,async()=>{const br=await pp.launch({executablePath:'/Application
    o.archiveShown=vis(A);o.chatShown=vis(C);o.chatHref=C.getAttribute('href');o.chatNewTab=C.target==='_blank';
    const inS=e=>{const b=e.getBoundingClientRect();return b.left>=0&&b.right<=innerWidth;};o.archiveInScreen=inS(A);o.btnInScreen=inS(document.getElementById('gw-display-btn'));
    const pb=document.querySelector('header [onclick="openMyProfile()"]');o.lastInScreen=!pb||inS(pb);
-   o.noPageScroll=document.documentElement.scrollWidth<=innerWidth;o.headerOneLine=document.querySelector('header').getBoundingClientRect().height<=64;o.titleW=Math.round(document.getElementById('page-title').getBoundingClientRect().width);
+   o.noPageScroll=document.documentElement.scrollWidth<=innerWidth;o.headerOneLine=document.querySelector('header').getBoundingClientRect().height<=64;o.titleW=Math.round(document.getElementById('page-title').getBoundingClientRect().width);{const t=document.getElementById('page-title');o.titleFull=t.scrollWidth<=t.clientWidth+1;}
    const m=document.getElementById('gw-display-menu');o.noShortcutInMenu=!m.querySelector('#gw-link-archive,#gw-link-chat')&&!/자료실|킹오더챗/.test(m.textContent);return o;});
   if(SHOT)await pg.screenshot({path:path.join(SHOT,name+'.png')});
   await pg.click('#gw-display-btn');await wait(200);
@@ -31,7 +31,8 @@ srv.listen(8861,async()=>{const br=await pp.launch({executablePath:'/Application
  const out={pc:await check(1400,900,'pc-'+ENV),phone:await check(375,700,'phone-'+ENV),narrow:await check(320,600,'narrow-'+ENV)};
  console.log(JSON.stringify(out));console.log('페이지 오류',errs.length,errs.slice(0,3));
  let bad=errs.length;for(const k in out){const r=out[k];for(const x of ['open','inScreen','noPageScroll','archiveShown','archiveInScreen','btnInScreen','lastInScreen','topIsMenu','headerOneLine','noShortcutInMenu','stayOpen','outsideCloses','escCloses','archiveOpen','noPermHidden','permBack'])if(!r[x]){bad++;console.log('실패',k,x);}
-  if(k!=='pc'&&r.titleW<(k==='phone'?70:30)){bad++;console.log('실패',k,'제목 폭',r.titleW);}
+  // 제목이 짧으면(예: 조직도) 폭이 작아도 잘리지 않았으면 통과 (2026-11-20 제목 영어 병기 제거)
+  if(k!=='pc'&&!r.titleFull&&r.titleW<(k==='phone'?70:30)){bad++;console.log('실패',k,'제목 폭',r.titleW);}
   if(r.theme!=='green'||r.faceName!=='그린'||r.checked!=='green'){bad++;console.log('실패',k,'디자인 변경');}
   if(!(r.chatShown&&r.chatNewTab&&new RegExp('kingorder-chat-'+ENV+'\\.').test(r.chatHref||''))){bad++;console.log('실패',k,'챗 단추',r.chatHref);}}
  console.log(bad?'실패 '+bad:'통과');await br.close();srv.close();process.exit(bad?1:0);});
