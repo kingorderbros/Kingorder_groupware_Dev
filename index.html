@@ -30,7 +30,7 @@
     <script src="config/app-config.js"></script>
     <!-- 화면 버전 (2026-11-16) — 배포할 때마다 올립니다. 개발 · 운영 화면 아래에 "그룹웨어 v1.1.0 · 운영" 처럼 보입니다.
          groupware = 그룹웨어 화면 · calendar = 킹오더일정(?mode=calendar) -->
-    <script>window.KOB_VERSION = { groupware: '1.1.24', calendar: '1.0.5', date: '2026-11-23' };</script>
+    <script>window.KOB_VERSION = { groupware: '1.1.25', calendar: '1.0.5', date: '2026-11-23' };</script>
     <script>
         (function () {
             // manifest 는 **여기서 만들어 답니다.** (2026-09-05 고침)
@@ -3028,6 +3028,48 @@
 
                     <!-- 파트너센터 본부 접근 권한 — 화면 전체를 renderPartnerPermSettings() 가 그립니다 (2026-09-05) -->
                     <section id="sec-settings-partner-perm" class="settings-tab-panel hidden"></section>
+
+                    <!-- 팀 통합현황 조회 범위 (2026-11-23 다니엘님 "권한은 설정 가능하게") -->
+                    <section id="sec-settings-team-perm" class="settings-tab-panel hidden">
+                        <div class="mb-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                            <div>
+                                <h3 class="text-lg font-bold text-gray-800">팀 통합현황 조회 범위</h3>
+                                <p class="text-gray-500 text-sm">직급별로 팀 통합현황에서 볼 수 있는 직원 범위를 설정합니다. 개별 사용자별 예외 설정도 가능합니다.</p>
+                            </div>
+                            <button onclick="saveTeamViewPermissions()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded text-sm transition-colors whitespace-nowrap">저장</button>
+                        </div>
+                        <div class="bg-white rounded-lg shadow-sm border border-gray-100 overflow-hidden mb-5">
+                            <div class="p-4 border-b border-gray-100">
+                                <h4 class="font-semibold text-gray-800">직급별 기본 조회 범위</h4>
+                                <p class="text-xs text-gray-500 mt-0.5">팀장급 · 본부장급 직급만 표시됩니다. 대표 · 관리자는 늘 전사, 매니저급은 메뉴가 표시되지 않습니다.</p>
+                            </div>
+                            <div class="overflow-x-auto">
+                                <table class="w-full text-sm text-left">
+                                    <thead class="bg-gray-50 text-gray-500 text-xs">
+                                        <tr><th class="p-3 font-medium">직급</th><th class="p-3 font-medium">설명</th><th class="p-3 font-medium">조회 범위</th></tr>
+                                    </thead>
+                                    <tbody id="team-perm-level-body" class="divide-y divide-gray-100"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="bg-white rounded-lg shadow-sm border border-gray-100 overflow-hidden">
+                            <div class="p-4 border-b border-gray-100 flex flex-wrap justify-between items-center gap-2">
+                                <div>
+                                    <h4 class="font-semibold text-gray-800">개별 사용자 예외</h4>
+                                    <p class="text-xs text-gray-500 mt-0.5">특정 사용자에게 직급 기본값과 다른 범위를 지정합니다. 예: 영업본부장에게 운영본부도 조회 허용.</p>
+                                </div>
+                                <select id="team-perm-user-add" class="text-sm p-1.5 border border-gray-300 rounded bg-gray-50"></select>
+                            </div>
+                            <div class="overflow-x-auto">
+                                <table class="w-full text-sm text-left">
+                                    <thead class="bg-gray-50 text-gray-500 text-xs">
+                                        <tr><th class="p-3 font-medium">사용자</th><th class="p-3 font-medium">부서 · 직급</th><th class="p-3 font-medium">예외 조회 범위</th><th class="p-3 font-medium text-center">사용</th><th class="p-3"></th></tr>
+                                    </thead>
+                                    <tbody id="team-perm-user-body" class="divide-y divide-gray-100"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </section>
 
                     <section id="sec-settings-archive" class="settings-tab-panel hidden">
                         <div class="mb-4">
@@ -10640,6 +10682,7 @@ const QUOTE_TEMPLATES = [
             'settings-approvers': '승인권자 지정관리',
             'settings-collab-perm': '협업 조회 권한 설정',
             'settings-calendar-perm': '일정 조회 권한 설정',
+            'settings-team-perm': '팀 통합현황 조회 범위',
             'settings-notice': '공지사항 작성 권한',
             'settings-penalty': '위약금 계산 설정',
             'settings-partner-perm': '파트너 접근 권한',
@@ -11275,26 +11318,115 @@ const QUOTE_TEMPLATES = [
             return isMgmtDept(dept) && (levelClass(level) === 'leader' || levelClass(level) === 'head');
         }
 
-        // 로그인한 사용자가 통합 조회할 수 있는 팀원 목록 반환 (2026-11-23 다니엘님 "본인 소속된 팀만")
-        // - 대표 · 관리자: 전사
-        // - 본부장: 자기 본부 직원만
-        // - 팀장: 같은 본부 안에서 자기 팀 직원만 (팀이 없는 팀장은 같은 본부의 팀 미지정 직원)
-        // - 매니저: 본인만
-        // 예전에는 일정 조회 범위 설정을 따라 본부장이 전 부서를, 팀장이 본부 전체를 봤습니다.
+        // ==================== 팀 통합현황 조회 범위 (2026-11-23) ====================
+        // 다니엘님 "본인 소속된 팀만 … 본부장은 각 본부 팀원만, 팀장은 본인 팀원만" + "권한은 설정 가능하게".
+        // 설정 › 팀 통합현황 조회 범위 에서 직급별 기본값과 사용자별 예외를 바꿉니다. 저장 키 gwTeamViewPerm.v1
+        //   self 본인만 · team 자기 팀 · dept 자기 본부 · custom 자기 본부 + 지정 본부 · all 전사
+        const TEAM_VIEW_KEY = 'gwTeamViewPerm.v1';
+        const TEAM_VIEW_DEFAULT = { leader: 'team', head: 'dept' };   // 등급별 기본값 — 직급별로 따로 정하면 그 값이 먼저
+        const teamViewScopeNames = { self: '본인만', team: '자기 팀', dept: '자기 본부', custom: '자기 본부 + 지정 본부', all: '전사' };
+        let teamViewLevelScope = {}, teamViewLevelDepts = {}, teamViewUserOverrides = {};
+        (function loadTeamViewPerm() {
+            const saved = loadJsonStore(TEAM_VIEW_KEY, null);
+            if (saved && saved.levelScope) teamViewLevelScope = saved.levelScope;
+            if (saved && saved.levelDepts) teamViewLevelDepts = saved.levelDepts;
+            if (saved && saved.userOverrides && typeof saved.userOverrides === 'object') teamViewUserOverrides = saved.userOverrides;
+        })();
+        function teamViewLevelOf(level) { return scopeOfLevel(teamViewLevelScope, level, TEAM_VIEW_DEFAULT[levelClass(level)] || 'self'); }
+        // 그 사람의 실제 조회 범위 { scope, depts }
+        function getTeamViewScopeFor(name, dept, level) {
+            const user = localUsers.find(u => u.name === name);
+            const ov = user && teamViewUserOverrides[user.id];
+            if (ov && ov.enabled && teamViewScopeNames[ov.scope]) return { scope: ov.scope, depts: ov.depts || [] };
+            if (dept === 'admin' || dept === '' || levelClass(level) === 'admin' || levelClass(level) === 'exec' || isAdminAccount(user)) return { scope: 'all', depts: [] };
+            if (levelClass(level) === 'manager') return { scope: 'self', depts: [] };
+            return { scope: teamViewLevelOf(level), depts: teamViewLevelDepts[level] || [] };
+        }
+        // 로그인한 사용자가 팀 통합현황에서 볼 수 있는 직원 (퇴사자 제외 · 2026-11-10)
         function getVisibleMembers(name, dept, level) {
             const self = localUsers.find(u => u.name === name);
-            const live = activeUsers();   // 퇴사자는 통합현황에 표시하지 않습니다 (2026-11-10)
-            // 대표·관리자: 전사 (권한 그룹이 관리자인 겸직 계정 포함 · 2026-09-21)
-            if (dept === 'admin' || dept === '' || levelClass(level) === 'admin' || levelClass(level) === 'exec' || isAdminAccount(self)) {
-                return live.slice();
-            }
-            if (levelClass(level) === 'manager') {
-                return self ? [self] : [{ name, dept, rank: '', level }];
+            const live = activeUsers();
+            const sc = getTeamViewScopeFor(name, dept, level);
+            if (sc.scope === 'all') return live.slice();
+            if (sc.scope === 'self') return self ? [self] : [{ name, dept, rank: '', level }];
+            if (sc.scope === 'custom') {
+                const allowed = new Set([dept].concat(sc.depts || []));
+                return live.filter(u => allowed.has(u.dept));
             }
             const sameDept = live.filter(u => u.dept === dept);
-            if (levelClass(level) === 'head') return sameDept;
+            if (sc.scope === 'dept') return sameDept;
+            // 자기 팀 — 팀이 없는 사람은 같은 본부의 팀 미지정 직원
             const team = String((self && self.team) || '').trim();
             return sameDept.filter(u => String(u.team || '').trim() === team);
+        }
+        // ---------- 설정 화면 ----------
+        function teamViewEditable() { return canSeePage('settings-team-perm'); }
+        function teamViewLevels() { return PERM_LEVELS.filter(lv => ['leader', 'head'].includes(levelClass(lv))); }
+        function syncTeamViewFromScreen() {
+            document.querySelectorAll('[data-team-level]').forEach(sel => {
+                const lv = sel.getAttribute('data-team-level');
+                teamViewLevelScope[lv] = sel.value;
+                if (sel.value === 'custom' && document.querySelector(`[data-team-level-dept="${lv}"]`)) teamViewLevelDepts[lv] = collectCalendarDepts('data-team-level-dept', lv);
+            });
+            document.querySelectorAll('[data-team-override]').forEach(sel => {
+                const uid = sel.getAttribute('data-team-override');
+                const ov = teamViewUserOverrides[uid]; if (!ov) return;
+                ov.scope = sel.value;
+                if (sel.value === 'custom' && document.querySelector(`[data-team-override-dept="${uid}"]`)) ov.depts = collectCalendarDepts('data-team-override-dept', uid);
+            });
+            document.querySelectorAll('[data-team-override-en]').forEach(cb => {
+                const ov = teamViewUserOverrides[cb.getAttribute('data-team-override-en')]; if (ov) ov.enabled = cb.checked;
+            });
+        }
+        function renderTeamViewPermissions() {
+            const levelBody = document.getElementById('team-perm-level-body');
+            if (!levelBody) return;
+            const opts = (cur) => Object.entries(teamViewScopeNames).map(([v, l]) => `<option value="${v}" ${cur === v ? 'selected' : ''}>${l}</option>`).join('');
+            const levels = teamViewLevels();
+            levelBody.innerHTML = levels.length ? levels.map(lv => {
+                const cur = teamViewLevelOf(lv);
+                return `<tr>
+                    <td class="p-3 align-top"><span class="text-xs font-bold rounded px-2 py-0.5 whitespace-nowrap ${levelBadgeClass(lv)}">${escapeHtml(levelNames[lv] || lv)}</span></td>
+                    <td class="p-3 text-gray-500 align-top whitespace-nowrap">${escapeHtml(levelClassNames[levelClass(lv)] || '')}</td>
+                    <td class="p-3"><select data-team-level="${escapeHtml(lv)}" onchange="syncTeamViewFromScreen(); renderTeamViewPermissions();" class="text-sm p-1.5 border border-gray-300 rounded bg-gray-50">${opts(cur)}</select>
+                        ${cur === 'custom' ? calendarDeptChecks('data-team-level-dept', lv, teamViewLevelDepts[lv], null) : ''}</td>
+                </tr>`;
+            }).join('') : '<tr><td colspan="3" class="p-4 text-center text-gray-400 text-sm">팀장급 · 본부장급 직급이 없습니다. 사용자/권한관리 › 조직도 관리에서 직급의 권한 등급을 확인해 주세요.</td></tr>';
+            const userBody = document.getElementById('team-perm-user-body');
+            const ids = Object.keys(teamViewUserOverrides).filter(uid => localUsers.some(u => u.id === uid));
+            userBody.innerHTML = ids.length ? ids.map(uid => {
+                const u = localUsers.find(x => x.id === uid), ov = teamViewUserOverrides[uid];
+                return `<tr>
+                    <td class="p-3 align-top">${collabAssigneeChip(u.name)}</td>
+                    <td class="p-3 text-gray-500 align-top">${escapeHtml(deptNames[u.dept] || u.dept || '')}${u.team ? ' · ' + escapeHtml(u.team) : ''} · ${escapeHtml(levelNames[u.level] || u.level || '')}</td>
+                    <td class="p-3"><select data-team-override="${escapeHtml(uid)}" onchange="syncTeamViewFromScreen(); renderTeamViewPermissions();" class="text-sm p-1.5 border border-gray-300 rounded bg-gray-50">${opts(ov.scope)}</select>
+                        ${ov.scope === 'custom' ? calendarDeptChecks('data-team-override-dept', uid, ov.depts, u.dept) : ''}</td>
+                    <td class="p-3 text-center align-top"><input type="checkbox" data-team-override-en="${escapeHtml(uid)}" ${ov.enabled ? 'checked' : ''} class="w-4 h-4"></td>
+                    <td class="p-3 text-right align-top"><button type="button" onclick="removeTeamViewOverride(${jsArg(uid)})" class="px-2 py-1 text-xs rounded border border-gray-300 text-gray-600 hover:bg-gray-50">빼기</button></td>
+                </tr>`;
+            }).join('') : '<tr><td colspan="5" class="p-4 text-center text-gray-400 text-sm">예외 사용자가 없습니다. 오른쪽 위에서 추가해 주세요.</td></tr>';
+            const add = document.getElementById('team-perm-user-add');
+            const cands = activeUsers().filter(u => !teamViewUserOverrides[u.id] && canViewTeam(u.level) && !isAdminAccount(u) && u.dept !== 'vendor');
+            add.innerHTML = '<option value="">＋ 예외 사용자 추가…</option>' + cands.map(u => `<option value="${escapeHtml(u.id)}">${escapeHtml(u.name)} (${escapeHtml(deptNames[u.dept] || u.dept || '')})</option>`).join('');
+            add.onchange = function () {
+                if (!this.value) return;
+                syncTeamViewFromScreen();
+                const u = localUsers.find(x => x.id === this.value);
+                teamViewUserOverrides[this.value] = { scope: u ? getTeamViewScopeFor(u.name, u.dept, u.level).scope : 'dept', enabled: true, depts: [] };
+                renderTeamViewPermissions();
+            };
+        }
+        function removeTeamViewOverride(uid) {
+            syncTeamViewFromScreen();
+            delete teamViewUserOverrides[uid];
+            renderTeamViewPermissions();
+        }
+        function saveTeamViewPermissions() {
+            if (!teamViewEditable()) { alert('팀 통합현황 조회 범위는 설정 권한이 있는 사람만 바꿀 수 있습니다.'); return; }
+            syncTeamViewFromScreen();
+            saveJsonStore(TEAM_VIEW_KEY, { levelScope: teamViewLevelScope, levelDepts: teamViewLevelDepts, userOverrides: teamViewUserOverrides });
+            renderTeamViewPermissions();
+            if (typeof showAppToast === 'function') showAppToast('팀 통합현황 조회 범위가 저장되었습니다. 다른 직원은 화면을 새로 열면 적용됩니다.', 'green');
         }
 
         // 사용자 입력을 innerHTML에 삽입하기 전 HTML 이스케이프 (XSS 방지)
@@ -11483,7 +11615,7 @@ const QUOTE_TEMPLATES = [
                 group: '공통 (Main)', items: [
                     { id: 'dashboard-personal', name: '마이 대시보드' },
                     { id: 'org-chart', name: '조직도' },
-                    { id: 'team-overview', name: '팀 통합현황', note: '팀장은 자기 팀, 본부장은 자기 본부만' },
+                    { id: 'team-overview', name: '팀 통합현황', note: '보는 범위는 설정 › 팀 통합현황 조회 범위' },
                     { id: 'calendar-center', name: '일정캘린더' },
                     { id: 'collab-center', name: '협업업무센터' },
                     { id: 'project-center', name: '프로젝트 관리' },
@@ -11630,6 +11762,7 @@ const QUOTE_TEMPLATES = [
                             { id: 'settings-approvers', name: '승인권자 지정관리' },
                             { id: 'settings-collab-perm', name: '협업 조회 권한' },
                             { id: 'settings-calendar-perm', name: '일정 조회 권한' },
+                            { id: 'settings-team-perm', name: '팀 통합현황 조회 범위' },
                             { id: 'settings-notice', name: '공지사항 작성 권한' },
                             { id: 'settings-penalty', name: '위약금 계산 설정' },
                             { id: 'settings-partner-perm', name: '파트너 접근 권한' },
@@ -11813,7 +11946,8 @@ const QUOTE_TEMPLATES = [
                 { id: 'sales-wc-issue',   parent: 'sales-work-center' },
                 { id: 'ops-wc-simple',    parent: 'ops-work-center' },     // 기타&단순문의 (보완사항 2026-11-06)
                 { id: 'ops-wc-allworks',  parent: 'ops-work-center' },     // 전체 업무이력 탭
-                { id: 'sales-wc-allworks', parent: 'sales-work-center' }   // 영업 전체 업무이력 (2026-11-11)
+                { id: 'sales-wc-allworks', parent: 'sales-work-center' },  // 영업 전체 업무이력 (2026-11-11)
+                { id: 'settings-team-perm', parent: 'settings' }           // 팀 통합현황 조회 범위 (2026-11-23)
             ];
             permissionGroups.forEach(g => {
                 if (g.id === 'admin' || g.external) return;
@@ -50648,6 +50782,12 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                 render: () => renderCalendarPermissions()
             },
             {
+                id: 'team-perm', name: '팀 통합현황 조회 범위', icon: 'fa-users-viewfinder',
+                panel: 'sec-settings-team-perm', perm: 'settings-team-perm',
+                desc: '직급별로 팀 통합현황에서 볼 수 있는 직원 범위(자기 팀 · 자기 본부 · 지정 본부 · 전사)를 설정합니다.',
+                render: () => renderTeamViewPermissions()
+            },
+            {
                 id: 'notice', name: '공지사항 작성 권한', icon: 'fa-bullhorn',
                 panel: 'sec-settings-notice', perm: 'settings-notice',
                 desc: '마이 대시보드 공지사항을 등록·수정·삭제할 수 있는 사람을 지정합니다.',
@@ -50674,7 +50814,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
         ];
         const SETTINGS_TAB_ALIASES = {
             'settings-contract-approval': 'contract-approval', 'settings-approvers': 'approvers',
-            'settings-collab-perm': 'collab-perm', 'settings-calendar-perm': 'calendar-perm',
+            'settings-collab-perm': 'collab-perm', 'settings-calendar-perm': 'calendar-perm', 'settings-team-perm': 'team-perm',
             'settings-notice': 'notice', 'settings-penalty': 'penalty',
             'settings-partner-perm': 'partner-perm', 'settings-archive': 'archive'
         };
