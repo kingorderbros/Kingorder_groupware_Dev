@@ -30,7 +30,7 @@
     <script src="config/app-config.js"></script>
     <!-- 화면 버전 (2026-11-16) — 배포할 때마다 올립니다. 개발 · 운영 화면 아래에 "그룹웨어 v1.1.0 · 운영" 처럼 보입니다.
          groupware = 그룹웨어 화면 · calendar = 킹오더일정(?mode=calendar) -->
-    <script>window.KOB_VERSION = { groupware: '1.1.23', calendar: '1.0.5', date: '2026-11-20' };</script>
+    <script>window.KOB_VERSION = { groupware: '1.1.24', calendar: '1.0.5', date: '2026-11-23' };</script>
     <script>
         (function () {
             // manifest 는 **여기서 만들어 답니다.** (2026-09-05 고침)
@@ -11275,9 +11275,12 @@ const QUOTE_TEMPLATES = [
             return isMgmtDept(dept) && (levelClass(level) === 'leader' || levelClass(level) === 'head');
         }
 
-        // 로그인한 사용자가 통합 조회할 수 있는 팀원 목록 반환
+        // 로그인한 사용자가 통합 조회할 수 있는 팀원 목록 반환 (2026-11-23 다니엘님 "본인 소속된 팀만")
+        // - 대표 · 관리자: 전사
+        // - 본부장: 자기 본부 직원만
+        // - 팀장: 같은 본부 안에서 자기 팀 직원만 (팀이 없는 팀장은 같은 본부의 팀 미지정 직원)
         // - 매니저: 본인만
-        // - 팀장/본부장: 같은 부서(팀) 전체 (admin/본부장 데모는 전 부서)
+        // 예전에는 일정 조회 범위 설정을 따라 본부장이 전 부서를, 팀장이 본부 전체를 봤습니다.
         function getVisibleMembers(name, dept, level) {
             const self = localUsers.find(u => u.name === name);
             const live = activeUsers();   // 퇴사자는 통합현황에 표시하지 않습니다 (2026-11-10)
@@ -11288,15 +11291,10 @@ const QUOTE_TEMPLATES = [
             if (levelClass(level) === 'manager') {
                 return self ? [self] : [{ name, dept, rank: '', level }];
             }
-            // 팀장/본부장: 일정 조회 범위 설정을 그대로 따름
-            //  (본부장 기본값 cross → 전 부서 크로스체크, 팀장 기본값 dept → 자기 부서)
-            const scopeInfo = getCalendarScopeFor(name, dept, level);
-            if (scopeInfo.scope === 'all' || scopeInfo.scope === 'cross') return live.slice();
-            if (scopeInfo.scope === 'custom') {
-                const allowed = new Set([dept, ...(scopeInfo.depts || [])]);
-                return live.filter(u => allowed.has(u.dept));
-            }
-            return live.filter(u => u.dept === dept);
+            const sameDept = live.filter(u => u.dept === dept);
+            if (levelClass(level) === 'head') return sameDept;
+            const team = String((self && self.team) || '').trim();
+            return sameDept.filter(u => String(u.team || '').trim() === team);
         }
 
         // 사용자 입력을 innerHTML에 삽입하기 전 HTML 이스케이프 (XSS 방지)
@@ -11485,7 +11483,7 @@ const QUOTE_TEMPLATES = [
                 group: '공통 (Main)', items: [
                     { id: 'dashboard-personal', name: '마이 대시보드' },
                     { id: 'org-chart', name: '조직도' },
-                    { id: 'team-overview', name: '팀 통합현황', note: '팀장·본부장 이상만' },
+                    { id: 'team-overview', name: '팀 통합현황', note: '팀장은 자기 팀, 본부장은 자기 본부만' },
                     { id: 'calendar-center', name: '일정캘린더' },
                     { id: 'collab-center', name: '협업업무센터' },
                     { id: 'project-center', name: '프로젝트 관리' },
@@ -13344,13 +13342,14 @@ const QUOTE_TEMPLATES = [
             }
             const members = deptFilter ? allMembers.filter(m => m.dept === deptFilter) : allMembers;
 
+            // 팀장은 '영업본부 · 영업1팀' 처럼 팀 이름까지
+            const myTeam = levelClass(currentUserLevel) === 'leader' ? String(((localUsers.find(u => u.name === currentUserName)) || {}).team || '').trim() : '';
             const scopeLabel = deptFilter
                 ? (deptNames[deptFilter] || deptFilter)
-                : (deptsInView.length > 1 ? '전사' : (deptNames[currentUserDept] || '소속'));
+                : (deptsInView.length > 1 ? '전사' : ((deptNames[currentUserDept] || '소속') + (myTeam ? ' · ' + myTeam : '')));
 
             if (sub) {
-                const crossNote = (deptsInView.length > 1 && levelClass(currentUserLevel) === 'head')
-                    ? ' 타 부서는 크로스체크(조회 전용)입니다.' : '';
+                const crossNote = '';
                 sub.innerText = `${scopeLabel} · ${levelNames[currentUserLevel] || ''} 통합 조회 (팀원 ${members.length}명의 업무·일정 현황)${crossNote}`;
             }
 
