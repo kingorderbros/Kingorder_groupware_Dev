@@ -30,7 +30,7 @@
     <script src="config/app-config.js"></script>
     <!-- 화면 버전 (2026-11-16) — 배포할 때마다 올립니다. 개발 · 운영 화면 아래에 "그룹웨어 v1.1.0 · 운영" 처럼 보입니다.
          groupware = 그룹웨어 화면 · calendar = 킹오더일정(?mode=calendar) -->
-    <script>window.KOB_VERSION = { groupware: '1.1.22', calendar: '1.0.5', date: '2026-11-20' };</script>
+    <script>window.KOB_VERSION = { groupware: '1.1.23', calendar: '1.0.5', date: '2026-11-20' };</script>
     <script>
         (function () {
             // manifest 는 **여기서 만들어 답니다.** (2026-09-05 고침)
@@ -1230,12 +1230,27 @@
         /* 가로 스크롤 — 인원이 많아 넓어져도 본문이 밀리지 않게 */
         .org-scroll { overflow-x: auto; padding-bottom: 8px; }
 
+        /* ---------- 13-B. kingorder 색 정리 (2026-11-20 디자인 점검) ----------
+           킹오더 규칙 "단추 · 선택은 먹색, 분홍은 작은 곳에만" 에 맞춥니다.
+           · 노랑 · 금색 · 초록 · 하늘 등으로 칠한 단추는 먹색으로 (빨강 · 장미색 = 삭제 · 반려 같은 위험 단추는 그대로)
+           · 수치 카드 위 · 옆 색 띠는 회색 선으로 — 상태는 숫자 색(1건 이상일 때만)과 아이콘으로 봅니다 */
+        :root[data-theme="kingorder"] :is(button, a):is(.bg-yellow-500, .bg-yellow-600, .bg-yellow-700, .bg-amber-500, .bg-amber-600, .bg-amber-700,
+            .bg-orange-500, .bg-orange-600, .bg-orange-700, .bg-green-500, .bg-green-600, .bg-green-700, .bg-emerald-600, .bg-emerald-700,
+            .bg-teal-600, .bg-teal-700, .bg-cyan-600, .bg-cyan-700, .bg-sky-600, .bg-sky-700, .bg-purple-600, .bg-purple-700, .bg-pink-600, .bg-pink-700) {
+            background-color: var(--gw-p-600); color: #fff;
+        }
+        :root[data-theme="kingorder"] :is(button, a):is(.hover\:bg-yellow-600, .hover\:bg-yellow-700, .hover\:bg-amber-600, .hover\:bg-amber-700, .hover\:bg-orange-600,
+            .hover\:bg-orange-700, .hover\:bg-green-700, .hover\:bg-green-800, .hover\:bg-emerald-700, .hover\:bg-emerald-800, .hover\:bg-teal-700, .hover\:bg-teal-800,
+            .hover\:bg-cyan-700, .hover\:bg-cyan-800, .hover\:bg-sky-700, .hover\:bg-purple-700, .hover\:bg-purple-800, .hover\:bg-pink-700):hover { background-color: var(--gw-p-800); }
+        :root[data-theme="kingorder"] #app-view .shadow-sm.border-t-4 { border-top-color: var(--gw-line); border-top-width: 1px; }
+        :root[data-theme="kingorder"] #app-view .shadow-sm.border-l-4:not(.border) { border-left-color: var(--gw-line); border-left-width: 1px; }
+
         /* ---------- 14. kingorder 테마 마감 (2026-10-30) ----------
            브랜드 톤에 맞춘 세부 — 로고 · 선택 표시 · 단추 · 표 숫자 · 창 · 움직임 */
         /* 먹색 사이드바에서는 로고를 흰색으로 */
         :root[data-theme="kingorder"] #sidebar > div:first-of-type img { background: transparent; filter: invert(1); padding: 0; }
         :root[data-theme="kingorder"] #sidebar > div:first-of-type { font-weight: 700; letter-spacing: -0.03em; }
-        :root[data-theme="kingorder"] #sidebar nav > p { letter-spacing: .12em; font-weight: 600; }
+        :root[data-theme="kingorder"] #sidebar nav > p { letter-spacing: 0; font-weight: 600; font-size: 12px; }
         :root[data-theme="kingorder"] #sidebar .nav-item { transition: background-color .18s ease, color .18s ease; }
         :root[data-theme="kingorder"] #sidebar .nav-item.bg-blue-600\/25 .fas,
         :root[data-theme="kingorder"] #sidebar .nav-item.bg-blue-600\/25 .far { color: var(--gw-accent); }
@@ -2181,18 +2196,18 @@
     <div id="app-view" class="hidden flex h-screen overflow-hidden bg-gray-100 relative">
         
         <!-- 모바일 사이드바 오버레이 -->
-        <div id="mobile-overlay" class="fixed inset-0 bg-black bg-opacity-50 z-20 hidden md:hidden" onclick="toggleSidebar()"></div>
+        <div id="mobile-overlay" class="fixed inset-0 bg-black bg-opacity-50 z-20 hidden lg:hidden" onclick="toggleSidebar()"></div>
 
         <!-- 사이드바 (Navigation) -->
-        <aside id="sidebar" class="fixed inset-y-0 left-0 transform -translate-x-full md:relative md:translate-x-0 transition duration-200 ease-in-out z-30 w-64 bg-slate-900 text-white flex flex-col h-full">
+        <aside id="sidebar" class="fixed inset-y-0 left-0 transform -translate-x-full lg:relative lg:translate-x-0 transition duration-200 ease-in-out z-30 w-64 bg-slate-900 text-white flex flex-col h-full">
             <div class="h-16 flex items-center px-4 border-b border-slate-700/60 font-bold text-base tracking-wide truncate">
                 <img src="image/logo.png" alt="킹오더브라더스 로고" class="h-9 w-9 mr-2 rounded-md bg-white object-contain p-0.5 shrink-0" onerror="this.onerror=null;this.outerHTML='&lt;i class=&quot;fas fa-layer-group mr-2 text-blue-500&quot;&gt;&lt;/i&gt;'" /> <span class="truncate min-w-0 flex-1">킹오더브라더스 그룹웨어</span>
                 <!-- 휴대폰에서는 열린 메뉴가 머리 줄의 줄 세 개를 가립니다 — 메뉴 안에서 바로 닫는 단추 (2026-11-04) -->
-                <button type="button" id="sidebar-close" onclick="toggleSidebar()" aria-label="메뉴 닫기" title="메뉴 닫기" class="md:hidden ml-2 -mr-1 w-10 h-10 shrink-0 grid place-items-center rounded-md text-gray-300 focus:outline-none"><i class="fas fa-xmark text-lg"></i></button>
+                <button type="button" id="sidebar-close" onclick="toggleSidebar()" aria-label="메뉴 닫기" title="메뉴 닫기" class="lg:hidden ml-2 -mr-1 w-10 h-10 shrink-0 grid place-items-center rounded-md text-gray-300 focus:outline-none"><i class="fas fa-xmark text-lg"></i></button>
             </div>
             
             <nav class="flex-1 px-4 py-6 space-y-1 overflow-y-auto">
-                <p id="nav-main-header" class="px-2 text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Main</p>
+                <p id="nav-main-header" class="px-2 text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">주요 메뉴</p>
                 <!-- 조직도 — 전 직원이 쓰는 화면이라 맨 위에 둡니다 (관리는 Admin › 사용자/권한관리 안의 탭) -->
                 <a href="#" onclick="navigate('org-chart', this)" id="nav-org-chart" class="nav-item block px-3 py-2 rounded-md hover:bg-slate-800/70 transition-colors">
                     <i class="fas fa-users w-5 mr-2 text-rose-400"></i> 조직도
@@ -2248,7 +2263,7 @@
                         <span id="nav-partner-center-it-badge" class="hidden ml-auto bg-red-500 text-white text-xs font-bold rounded-full px-2 leading-5"></span>
                     </a>
                 </div>
-                <p id="nav-dept-header" class="px-2 text-xs font-semibold text-gray-400 uppercase tracking-wider mt-6 mb-2">Departments</p>
+                <p id="nav-dept-header" class="px-2 text-xs font-semibold text-gray-400 uppercase tracking-wider mt-6 mb-2">본부</p>
                 <a href="#" onclick="navigate('sales', this)" id="nav-sales" class="nav-item flex justify-between items-center px-3 py-2 rounded-md hover:bg-slate-800/70 transition-colors">
                     <div><i class="fas fa-briefcase w-5 mr-2 text-blue-400"></i><span id="nav-sales-label"> 영업본부 </span></div>
                     <span role="button" tabindex="0" onclick="event.preventDefault(); event.stopPropagation(); toggleSubmenu('submenu-sales')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault(); event.stopPropagation(); toggleSubmenu('submenu-sales')}" class="nav-caret -mr-1.5 px-2 py-1 rounded hover:bg-slate-700/70" title="하위 메뉴 펼치기 · 접기" aria-label="하위 메뉴 펼치기 · 접기"><i class="fas fa-chevron-down text-xs transition-transform duration-200" id="icon-submenu-sales"></i></span>
@@ -2333,7 +2348,7 @@
                 </a>
 
 
-                <p id="nav-admin-header" class="px-2 text-xs font-semibold text-gray-400 uppercase tracking-wider mt-6 mb-2">Admin</p>
+                <p id="nav-admin-header" class="px-2 text-xs font-semibold text-gray-400 uppercase tracking-wider mt-6 mb-2">관리자</p>
                 <!-- 사용자 관리 · 권한 관리를 한 메뉴에서 탭으로 (기존 메뉴 2개 통합) -->
                 <a href="#" onclick="navigate('admin-center', this)" id="nav-admin-center" class="nav-item block px-3 py-2 rounded-md hover:bg-slate-800/70 transition-colors hidden">
                     <i class="fas fa-user-shield w-5 mr-2 text-purple-400"></i> 사용자/권한관리
@@ -3214,7 +3229,7 @@
                             <p class="text-sm font-bold text-gray-700"><i class="fas fa-building-columns text-teal-500 mr-1"></i> 본부별 현황</p>
                             <span id="prj-dept-hint" class="text-xs text-gray-400"></span>
                         </div>
-                        <div id="prj-dept-board" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2"></div>
+                        <div id="prj-dept-board" class="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-7 gap-2"></div>
                     </div>
 
                     <!-- 상세를 볼 프로젝트는 드롭다운으로 선택 (프로젝트가 많아도 목록이 길어지지 않도록) -->
@@ -3821,7 +3836,7 @@
                             </div>
                         </div>
                     </div>
-                    <div id="cal-head" class="mb-4 flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-3 sm:space-y-0">
+                    <div id="cal-head" class="mb-4 flex flex-col 2xl:flex-row justify-between items-start 2xl:items-center gap-3">
                         <div class="calm-hide">
                             <h3 class="text-lg font-bold text-gray-800">일정캘린더</h3>
                             <p class="text-gray-500 text-sm">개인, 팀별, 공유 캘린더를 통합 조회합니다. <span id="calendar-scope-label" class="text-sky-600 font-medium"></span></p>
@@ -10611,50 +10626,50 @@ const QUOTE_TEMPLATES = [
         }
 
         const pageTitles = {
-            'partner-center-sales': '파트너센터 - 영업본부 (Partner Center)',
-            'partner-center-payment': '파트너센터 - 결제본부 (Partner Center)',
-            'partner-center-ops': '파트너센터 - 운영본부 (Partner Center)',
-            'partner-center-it': '파트너센터 - IT본부 (Partner Center)',
-            'dashboard-personal': '마이 대시보드 (My Dashboard)',
-            'team-overview': '팀 통합현황 (Team Overview)',
-            'admin-center': '사용자/권한관리 (User & Permission)',
-            'users': '사용자 관리 (User Management)',
-            'permissions': '권한 관리 (Permission Management)',
-            'settings': '설정 (Settings)',
-            'settings-contract-approval': '계약서 승인 설정 (Contract Approval Settings)',
-            'settings-approvers': '승인권자 지정관리 (Approver Management)',
-            'settings-collab-perm': '협업 조회 권한 설정 (Collaboration View Permissions)',
-            'settings-calendar-perm': '일정 조회 권한 설정 (Calendar View Permissions)',
-            'settings-notice': '공지사항 작성 권한 (Notice Writers)',
-            'settings-penalty': '위약금 계산 설정 (Termination Penalty Settings)',
-            'settings-partner-perm': '파트너 접근 권한 (Partner Center Access)',
-            'settings-archive': '자료실 관리 권한 (Archive Managers)',
-            'partner-ids': '업체 관리 › 파트너센터 아이디 (Partner Accounts)',
-            'data-admin': '전체 자료 수정 · 삭제 (Data Admin)',
-            'collab-center': '협업업무센터 (Collaboration Work Center)',
-            'project-center': '프로젝트 관리 (Project Management)',
-            'exec-center': '경영 현황판 (Executive Overview)',
-            'inbound-center': '인바운드 관리 (Inbound Lead Management)',
-            'calendar-center': '일정캘린더 (Calendar Center)',
-            'sales': '영업본부 현황 (Sales)',
-            'sales-customers': '잠재고객관리 (Customer Management)',
-            'sales-work-center': '영업업무센터 (Sales Work Center)',
-            'sales-supply': '거래처 관리 (Account Management)',
-            'sales-consulting': '상담관리 (Consulting Management)',
-            'sales-quote': '견적관리 (Quote Management)',
-            'ops': '운영본부 현황 (Operations)',
-            'ops-work-center': '운영업무센터 (Ops Work Center)',
-            'payment': '결제본부 현황 (Payment)',
-            'payment-work-center': '결제업무센터 (Payment Work Center)',
-            'management': '관리본부 현황 (Management HQ)',
-            'management-work-center': '관리업무센터 (Management Work Center)',
-            'it-work-center': 'IT업무센터 (IT Work Center)',
-            'management-vehicle': '관리업무센터 (Management Work Center)',   // 옛 경로 — 관리업무센터로 들어옵니다
+            'partner-center-sales': '파트너센터 - 영업본부',
+            'partner-center-payment': '파트너센터 - 결제본부',
+            'partner-center-ops': '파트너센터 - 운영본부',
+            'partner-center-it': '파트너센터 - IT본부',
+            'dashboard-personal': '마이 대시보드',
+            'team-overview': '팀 통합현황',
+            'admin-center': '사용자/권한관리',
+            'users': '사용자 관리',
+            'permissions': '권한 관리',
+            'settings': '설정',
+            'settings-contract-approval': '계약서 승인 설정',
+            'settings-approvers': '승인권자 지정관리',
+            'settings-collab-perm': '협업 조회 권한 설정',
+            'settings-calendar-perm': '일정 조회 권한 설정',
+            'settings-notice': '공지사항 작성 권한',
+            'settings-penalty': '위약금 계산 설정',
+            'settings-partner-perm': '파트너 접근 권한',
+            'settings-archive': '자료실 관리 권한',
+            'partner-ids': '업체 관리 › 파트너센터 아이디',
+            'data-admin': '전체 자료 수정 · 삭제',
+            'collab-center': '협업업무센터',
+            'project-center': '프로젝트 관리',
+            'exec-center': '경영 현황판',
+            'inbound-center': '인바운드 관리',
+            'calendar-center': '일정캘린더',
+            'sales': '영업본부 현황',
+            'sales-customers': '잠재고객관리',
+            'sales-work-center': '영업업무센터',
+            'sales-supply': '거래처 관리',
+            'sales-consulting': '상담관리',
+            'sales-quote': '견적관리',
+            'ops': '운영본부 현황',
+            'ops-work-center': '운영업무센터',
+            'payment': '결제본부 현황',
+            'payment-work-center': '결제업무센터',
+            'management': '관리본부 현황',
+            'management-work-center': '관리업무센터',
+            'it-work-center': 'IT업무센터',
+            'management-vehicle': '관리업무센터',   // 옛 경로 — 관리업무센터로 들어옵니다
 
-            'org-chart': '조직도 (Org Chart)',
+            'org-chart': '조직도',
 
-            'common': '공통관리 (Common Management)',
-            'archive': '자료실 (Archive)'
+            'common': '공통관리',
+            'archive': '자료실'
         };
 
         // 협업 요청(요청): assigneeUser = 수신 부서의 담당자(개인). ageDays = 발행 후 경과일(데모용 지연 계산).
@@ -13671,11 +13686,12 @@ const QUOTE_TEMPLATES = [
             const sidebar = document.getElementById('sidebar');
             const overlay = document.getElementById('mobile-overlay');
             
-            if (window.innerWidth < 768) {
+            // 1024px 미만(휴대폰 · 태블릿)은 덮는 메뉴, 넓은 화면은 접기 (2026-11-20 — 태블릿에서 메뉴가 본문을 좁히던 것)
+            if (window.innerWidth < 1024) {
                 sidebar.classList.toggle('-translate-x-full');
                 overlay.classList.toggle('hidden');
             } else {
-                sidebar.classList.toggle('md:hidden');
+                sidebar.classList.toggle('lg:hidden');
             }
         }
 
@@ -13818,6 +13834,7 @@ const QUOTE_TEMPLATES = [
 
             // 모든 콘텐츠 섹션 숨기기
             const sections = document.querySelectorAll('.content-section');
+            const prevSection = document.querySelector('.content-section:not(.hidden)');
             sections.forEach(sec => sec.classList.add('hidden'));
 
             // 선택한 섹션 보이기
@@ -13830,6 +13847,8 @@ const QUOTE_TEMPLATES = [
             // 업무센터는 위(고객조회) · 아래(내용) 두 칸 — 바깥 스크롤을 끄고 아래 칸만 스크롤 (CSS #main-scroll.wc-mode)
             const mainScroll = document.getElementById('main-scroll');
             if (mainScroll) mainScroll.classList.toggle('wc-mode', sectionId === 'ops-work-center' || sectionId === 'sales-work-center');
+            // 다른 화면으로 옮기면 맨 위부터 — 일정캘린더에서 내려간 위치가 남아 다음 화면 제목이 머리 줄에 가리던 것 (2026-11-20)
+            if (mainScroll && !window.__gwNavSilent && prevSection && prevSection !== targetSection) mainScroll.scrollTop = 0;
 
             // 대시보드는 진입할 때마다 최신 데이터로 다시 렌더링
             if (sectionId === 'dashboard-personal') {
@@ -13902,8 +13921,8 @@ const QUOTE_TEMPLATES = [
                 element.classList.add('bg-blue-600/25');
             }
 
-            // 모바일 화면일 경우, 메뉴 이동 후 사이드바 닫기
-            if (window.innerWidth < 768) {
+            // 휴대폰 · 태블릿 화면일 경우, 메뉴 이동 후 사이드바 닫기
+            if (window.innerWidth < 1024) {
                 const sidebar = document.getElementById('sidebar');
                 const overlay = document.getElementById('mobile-overlay');
                 if (sidebar && !sidebar.classList.contains('-translate-x-full')) {
@@ -23498,7 +23517,7 @@ const QUOTE_TEMPLATES = [
                     <p class="text-lg font-bold text-gray-800 tabular-nums mt-0.5">${st.total}<span class="text-xs font-normal text-gray-400 ml-0.5">건</span></p>
                     <p class="text-[11px] text-gray-500">진행 ${st.active} · 진척 ${st.avg}%</p>
                     ${st.delay ? `<p class="text-[11px] font-semibold text-red-600"><i class="fas fa-triangle-exclamation mr-0.5"></i>지연 ${st.delay}</p>`
-                               : '<p class="text-[11px] text-gray-300">지연 없음</p>'}
+                               : '<p class="text-[11px] text-gray-500">지연 없음</p>'}
                 </button>`;
             }).join('');
 
@@ -27058,7 +27077,7 @@ const QUOTE_TEMPLATES = [
         function buildWorkCenter(key) {
             const c = wcDef(key);
             const sl = wcSearchLabels(key);
-            const ex = c.customers[0] || { name: '', bizNo: '', ceo: '' };
+            const ex = c.customers[0] || { name: '맛있는김밥 역삼점', bizNo: '123-45-67890', ceo: '김대표' };
             const inputCls = `w-full p-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 ${c.accent.ring}`;
             return `
                 <!-- ① 고객검색 바 — 위 칸(고정). 아래 ②~ 은 따로 스크롤되는 칸이라 내용이 이 바 뒤로 지나가지 않습니다.
@@ -28475,14 +28494,14 @@ const QUOTE_TEMPLATES = [
             }).join('');
 
             host.innerHTML = `
-                <div class="mb-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                <div class="mb-4 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-3">
                     <div>
                         <h3 class="text-lg font-bold text-gray-800"><i class="fas fa-chess-king text-amber-500 mr-2"></i>경영 현황판</h3>
                         <p class="text-gray-500 text-sm">협업요청, 업무센터, 프로젝트, 견적, 보완서류, 인바운드 현황을 통합 조회합니다. 카드를 클릭하면 상세 정보가 표시됩니다.</p>
                     </div>
-                    <div class="flex items-center gap-2">
+                    <div class="flex items-center gap-2 shrink-0 whitespace-nowrap">
                         <span class="text-xs text-gray-400">${today} 기준 · ${execFilterOn() ? `<b class="text-amber-700">${it.length}건</b> / 전체 ${execAllItems.length}건` : `전체 ${it.length}건`}</span>
-                        <button onclick="renderExecCenter()" class="px-3 py-1.5 rounded border border-gray-300 bg-white text-sm text-gray-600 hover:bg-gray-50 transition-colors"><i class="fas fa-rotate mr-1"></i>새로고침</button>
+                        <button onclick="renderExecCenter()" class="px-3 py-1.5 rounded border border-gray-300 bg-white text-sm text-gray-600 hover:bg-gray-50 transition-colors whitespace-nowrap"><i class="fas fa-rotate mr-1"></i>새로고침</button>
                     </div>
                 </div>
 
@@ -28505,7 +28524,7 @@ const QUOTE_TEMPLATES = [
 
                 <!-- ③ 본부별 -->
                 <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">③ 본부별 현황</p>
-                <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">${deptCards}</div>
+                <div class="grid grid-cols-2 lg:grid-cols-3 gap-4 mb-6">${deptCards}</div>
 
                 <!-- ④ 직원별 -->
                 <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">④ 직원별 처리 현황</p>
@@ -30350,8 +30369,8 @@ const QUOTE_TEMPLATES = [
                 </div>
                 <div class="grid grid-cols-1 xl:grid-cols-3 gap-4 mb-4">
                     ${inbCard(`<div class="p-4"><h4 class="font-bold text-sm text-gray-800 mb-2"><i class="fas fa-plug text-rose-500 mr-1"></i>이번 달 채널별</h4>
-                        ${byCh.length ? byCh.map(([k, n]) => inbBar(INBOUND_CHANNELS[k].name, n, chMax, INBOUND_CHANNELS[k].auto ? 'bg-emerald-500' : 'bg-amber-500')).join('') : '<p class="text-xs text-gray-400 py-4 text-center">이번 달 인입이 없습니다.</p>'}
-                        <p class="text-[11px] text-gray-400 mt-2">초록: 자동 수집 / 노랑: 수동·이관</p></div>`)}
+                        ${byCh.length ? byCh.map(([k, n]) => inbBar(INBOUND_CHANNELS[k].name, n, chMax, INBOUND_CHANNELS[k].auto ? 'bg-rose-500' : 'bg-rose-200')).join('') : '<p class="text-xs text-gray-400 py-4 text-center">이번 달 인입이 없습니다.</p>'}
+                        <p class="text-[11px] text-gray-400 mt-2">진한 색: 자동 수집 / 연한 색: 수동·이관</p></div>`)}
                     ${inbCard(`<div class="p-4"><h4 class="font-bold text-sm text-gray-800 mb-2"><i class="fas fa-user-clock text-rose-500 mr-1"></i>담당자별 대기</h4>
                         ${owners.size ? `<table class="w-full text-sm"><thead class="text-[11px] text-gray-500"><tr><th class="text-left py-1">담당</th><th>본부</th><th>미컨택</th><th>진행</th><th>기준 초과</th></tr></thead><tbody class="divide-y text-center tabular-nums">
                         ${Array.from(owners.values()).sort((a, b) => b.late - a.late || b.wait - a.wait).map(o => `<tr><td class="text-left py-1.5">${escapeHtml(o.name)}</td><td class="text-xs">${o.dept}</td><td>${o.wait}</td><td>${o.doing}</td><td class="${o.late ? 'text-rose-600 font-bold' : ''}">${o.late}</td></tr>`).join('')}</tbody></table>` : '<p class="text-xs text-gray-400 py-4 text-center">배정된 진행 건이 없습니다.</p>'}</div>`)}
@@ -30367,11 +30386,11 @@ const QUOTE_TEMPLATES = [
                     ${inbCard(`<div class="p-4"><h4 class="font-bold text-sm text-gray-800 mb-1">월별 인입 (최근 12개월)</h4><p class="text-[11px] text-gray-400 mb-3">스팸 제외</p>
                         <div class="flex items-end gap-1 h-36 border-b border-gray-200">${months.map((m, i) => `<div class="flex-1 flex flex-col items-center justify-end h-full" title="${m} · ${mCount[i]}건">
                             <div class="text-[10px] tabular-nums text-gray-500">${mCount[i] || ''}</div><div class="w-full rounded-t ${m === month ? 'bg-rose-500' : 'bg-rose-200'}" style="height:${mCount[i] / mMax * 85}%"></div></div>`).join('')}</div>
-                        <div class="flex gap-1 mt-1">${months.map(m => `<div class="flex-1 text-center text-[10px] text-gray-400">${m.slice(5)}</div>`).join('')}</div></div>`, 'xl:col-span-2')}
+                        <div class="flex gap-1 mt-1">${months.map(m => `<div class="flex-1 text-center text-[10px] text-gray-400">${Number(m.slice(5))}월</div>`).join('')}</div></div>`, 'xl:col-span-2')}
                     ${inbCard(`<div class="p-4"><h4 class="font-bold text-sm text-gray-800 mb-2">자료 품질</h4>
                         ${inbBar("경로 '기타' · 미기재", routeEtc, live.length, 'bg-rose-400', '유입 경로 미확인 건 (홈페이지 폼 자동 수집(UTM) 적용 시 감소)')}
-                        ${inbBar('컨택 후 결과 미기재', noResult, live.length, 'bg-amber-400')}
-                        ${inbBar('실패 사유 미기재', failNoReason, live.length, 'bg-amber-400')}
+                        ${inbBar('컨택 후 결과 미기재', noResult, live.length, 'bg-rose-400')}
+                        ${inbBar('실패 사유 미기재', failNoReason, live.length, 'bg-rose-400')}
                         <p class="text-[11px] text-gray-500 mt-2">전체 ${live.length}건 중 경로 불명 ${pct(routeEtc, live.length)}%</p></div>`)}
                 </div>`;
         }
@@ -53536,9 +53555,9 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
 
             const statCards = stats.map(s => `
                 <button type="button" onclick="setPayDocFilter('status', ${jsArg(s.key)})"
-                        class="bg-white p-3 rounded-lg shadow-sm border-t-4 ${s.cls} text-left hover:shadow-md transition-shadow ${payDocFilter.status === s.key ? 'ring-2 ring-yellow-400' : ''}">
+                        class="bg-white p-3 rounded-lg shadow-sm border-t-4 ${s.cls} text-left hover:shadow-md transition-shadow ${payDocFilter.status === s.key ? 'ring-2 ring-gray-800' : ''}">
                     <p class="text-xs text-gray-500">${s.label}</p>
-                    <p class="text-2xl font-bold ${s.text} mt-1">${s.value}<span class="text-sm font-normal text-gray-400 ml-0.5">건</span></p>
+                    <p class="text-2xl font-bold ${s.value ? s.text : 'text-gray-400'} mt-1">${s.value}<span class="text-sm font-normal text-gray-400 ml-0.5">건</span></p>
                 </button>`).join('');
 
             const scopeSwitch = (payDocSalesView() && !payDocIsOpsRecipient()) ? `
@@ -53562,14 +53581,15 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             const rows = list.length ? list.map(r => payDocRowHtml(r)).join('') : `
                 <tr><td colspan="7" class="p-8 text-center text-gray-400 text-sm">조건에 맞는 보완요청이 없습니다.</td></tr>`;
 
+            // 결제본부 안내는 위 설명 칸과 같은 내용이라 표시하지 않습니다 (2026-11-20 디자인 점검)
             const roleHint = payDocCanReview()
-                ? '<i class="fas fa-circle-info mr-1"></i>결제본부 화면입니다. 보완요청을 발송하고, 제출된 서류를 항목별로 확인·반려한 후 취합 완료 처리합니다.'
+                ? ''
                 : (payDocIsSales()
                     ? '<i class="fas fa-circle-info mr-1"></i>' + (payDocIsOpsRecipient() ? '보완서류 제출 화면입니다.' : '영업본부 화면입니다.') + ' 결제본부의 보완요청을 열어 <b>[요청 확인]</b>을 클릭하고, 고객사에서 받은 서류를 항목별로 업로드한 후 <b>[회신 (보완서류 제출)]</b>을 클릭해 주세요.'
                     : '<i class="fas fa-circle-info mr-1"></i>조회 전용 화면입니다.');
 
             host.innerHTML = `
-                <div class="mb-4 text-xs text-gray-500 bg-white border border-gray-200 rounded-lg px-3 py-2">${roleHint}</div>
+                ${roleHint ? `<div class="mb-4 text-xs text-gray-500 bg-white border border-gray-200 rounded-lg px-3 py-2">${roleHint}</div>` : ''}
 
                 <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-4">${statCards}</div>
 
