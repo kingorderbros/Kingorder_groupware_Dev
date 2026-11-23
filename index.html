@@ -30,7 +30,7 @@
     <script src="config/app-config.js"></script>
     <!-- 화면 버전 (2026-11-16) — 배포할 때마다 올립니다. 개발 · 운영 화면 아래에 "그룹웨어 v1.1.0 · 운영" 처럼 보입니다.
          groupware = 그룹웨어 화면 · calendar = 킹오더일정(?mode=calendar) -->
-    <script>window.KOB_VERSION = { groupware: '1.1.26', calendar: '1.0.5', date: '2026-11-23' };</script>
+    <script>window.KOB_VERSION = { groupware: '1.1.27', calendar: '1.0.5', date: '2026-11-23' };</script>
     <script>
         (function () {
             // manifest 는 **여기서 만들어 답니다.** (2026-09-05 고침)
@@ -19310,7 +19310,9 @@ const QUOTE_TEMPLATES = [
 
         // ==================== 일정 조회 권한 (협업 조회 권한과 동일 구조) ====================
         // 스코프 값: self(본인 일정만) / dept(자기 부서) / hq(본부) / custom(자기 부서+지정 부서) / all(전사)
-        let calendarLevelScope = { manager: 'self', leader: 'dept', head: 'cross', exec: 'all', admin: 'all' };
+        // 매니저급 기본값 self → dept (2026-11-23 다니엘님 "팀별에 KOP · 기술영업본부 일정이 안 보임") — 팀별 캘린더는 같은 부서 구성원이
+        // 공유하는 일정인데, 매니저가 같은 본부 동료의 팀별 일정을 못 봤습니다. 설정 › 일정 조회 권한에서 저장한 값이 있으면 그 값을 따릅니다.
+        let calendarLevelScope = { manager: 'dept', leader: 'dept', head: 'cross', exec: 'all', admin: 'all' };
         // custom 스코프에서 볼 수 있는 '추가 지정 부서' 목록 (자기 부서에 더해 보이는 부서들)
         let calendarLevelDepts = { manager: [], leader: [], head: [], exec: [], admin: [] };
         let calendarUserOverrides = {}; // { userId: { scope, enabled, depts:[...] } }
