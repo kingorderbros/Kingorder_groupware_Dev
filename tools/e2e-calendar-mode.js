@@ -236,6 +236,42 @@ srv.listen(PORT, async () => {
             await m.close();
         }
 
+        // ---------- 11/24 다니엘님: 위쪽 '2026년 11월' 줄까지 고정 — 같이 올라가 몇 월 · 어떤 캘린더인지 안 보이던 것 ----------
+        console.log('[K] 머리 줄 · 캘린더 줄 · 월 줄 · 요일 줄 고정');
+        for (const [tw, th] of [[390, 800], [360, 640], [800, 400]]) {
+            const m = await openPage(br, base + '?mode=calendar', tw, th);
+            await m.evaluate(u => enterApp(u), ADMIN);
+            const r = await m.evaluate(async (me) => {
+                const sleep = ms => new Promise(r => setTimeout(r, ms));
+                const t = new Date();
+                for (let k = -20; k <= 20; k++) {
+                    const d = new Date(t.getFullYear(), t.getMonth(), t.getDate() + k);
+                    for (let j = 0; j < 3; j++) schedules.push({ id: `e2e-k${k}-${j}`, title: `고정시험 ${k}-${j}`, date: ymd(d), startTime: '10:00', endTime: '11:00', calendar: 'team', dept: 'admin', salesperson: me.name, createdBy: me.email, attendees: [] });
+                }
+                const sc = document.getElementById('main-scroll');
+                // 보이는지: 그 칸 가운데 점을 눌렀을 때 그 칸이 잡히는지 (다른 줄에 가려지면 안 됨)
+                const seen = (el) => { if (!el || el.offsetParent === null) return false; const r = el.getBoundingClientRect(); if (r.bottom <= 0 || r.top >= innerHeight) return false; const at = document.elementFromPoint(Math.min(r.left + 20, innerWidth - 5), r.top + r.height / 2); return !!at && (el === at || el.contains(at)); };
+                const out = {};
+                for (const v of ['list', 'month', 'week', 'day3', 'day']) {
+                    setCalendarView(v); calmShowAll(); await sleep(200);
+                    sc.scrollTop = 1200; await sleep(300);
+                    const day = v === 'list' ? Array.from(document.querySelectorAll('#cal-grid .calm-day')).filter(e => e.getBoundingClientRect().top < innerHeight / 2).pop() : null;
+                    out[v] = { scrolled: sc.scrollTop > 0, top: seen(document.getElementById('calm-top')), legend: seen(document.getElementById('calendar-legend')),
+                        month: seen(document.getElementById('cal-month-year')), week: v === 'month' ? seen(document.getElementById('cal-day-header')) : true, day: v === 'list' ? seen(day) : true,
+                        txt: (document.getElementById('cal-month-year') || {}).innerText };
+                }
+                return out;
+            }, ADMIN);
+            for (const v of ['list', 'month', 'week', 'day3', 'day']) {
+                const x = r[v];
+                const nm = { list: '목록', month: '월간', week: '주간', day3: '3일', day: '1일' }[v];
+                ok(x.top && x.legend && x.month && x.week && x.day, `${tw}x${th} ${nm} — 아래로 넘겨도 머리 줄·캘린더 줄·'${x.txt}' 줄${v === 'month' ? '·요일 줄' : v === 'list' ? '·날짜 줄' : ''} 보임 ${JSON.stringify(x)}`);
+            }
+            if (SHOTS) for (const v of ['list', 'month', 'week', 'day3']) { await m.evaluate(async (v) => { setCalendarView(v); calmShowAll(); await new Promise(r => setTimeout(r, 200)); document.getElementById('main-scroll').scrollTop = 900; await new Promise(r => setTimeout(r, 300)); }, v); await m.screenshot({ path: path.join(SHOTS, `stick-${tw}-${v}.png`) }); }
+            ok(m.__errs.length === 0, '스크립트 오류 없음 ' + m.__errs.join(' | '));
+            await m.close();
+        }
+
         // ---------- 11/17 다니엘님: [오늘] 을 누르면 오늘 날짜 줄이 일정 칸 맨 위에 (가운데 아님) ----------
         console.log('[T] [오늘] — 오늘 날짜를 맨 위로');
         for (const [tw, th] of [[390, 800], [360, 640], [430, 932], [800, 400], [1200, 838]]) {
@@ -254,12 +290,13 @@ srv.listen(PORT, async () => {
                 while (sc && !(/(auto|scroll)/.test(getComputedStyle(sc).overflowY) && sc.scrollHeight > sc.clientHeight)) sc = sc.parentElement;
                 // 날짜 줄은 위에 붙는 줄이라 원래 자리로 재고, 기준은 위 머리 줄(#calm-top) 아래 끝 — 머리 줄에 가려지면 실패
                 hd.style.position = 'static'; const top = hd.getBoundingClientRect().top; hd.style.position = '';
-                const bar = document.getElementById('calm-top').getBoundingClientRect().bottom;
+                // 11/24: 머리 줄 · 캘린더 줄 · 월 줄(· 요일 줄)까지 고정 → 그 아래 끝이 기준
+                const bar = Math.max(...['calm-top', 'cal-head', 'calendar-legend', 'cal-nav-bar', 'cal-day-header'].map(id => document.getElementById(id)).filter(e => e && e.offsetParent !== null && getComputedStyle(e).display !== 'none').map(e => e.getBoundingClientRect().bottom));
                 const r = hd.getBoundingClientRect();
                 const at = document.elementFromPoint(Math.min(60, innerWidth - 5), r.top + r.height / 2);
                 return { gap: Math.round(top - bar), seen: !!(at && at.closest('[data-today]')), scrolled: sc ? sc.scrollTop : 0, hasFresh: !!document.getElementById('calm-fresh') };
             }, ADMIN);
-            ok(!r.hasFresh && r.scrolled > 0 && Math.abs(r.gap) <= 4 && r.seen, `[오늘] ${tw}x${th} → 오늘 날짜 줄이 위 머리 줄 바로 아래에 보임 (차이 ${r.gap}px, 보임 ${r.seen}, 넘김 ${r.scrolled})`);
+            ok(!r.hasFresh && r.scrolled > 0 && Math.abs(r.gap) <= 4 && r.seen, `[오늘] ${tw}x${th} → 오늘 날짜 줄이 고정된 위쪽 줄 바로 아래에 보임 (차이 ${r.gap}px, 보임 ${r.seen}, 넘김 ${r.scrolled})`);
             ok(m.__errs.length === 0, '스크립트 오류 없음 ' + m.__errs.join(' | '));
             await m.close();
         }
