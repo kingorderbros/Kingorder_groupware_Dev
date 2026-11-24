@@ -30,7 +30,7 @@
     <script src="config/app-config.js"></script>
     <!-- 화면 버전 (2026-11-16) — 배포할 때마다 올립니다. 개발 · 운영 화면 아래에 "그룹웨어 v1.1.0 · 운영" 처럼 보입니다.
          groupware = 그룹웨어 화면 · calendar = 킹오더일정(?mode=calendar) -->
-    <script>window.KOB_VERSION = { groupware: '1.1.37', calendar: '1.0.8', date: '2026-11-24' };</script>
+    <script>window.KOB_VERSION = { groupware: '1.1.38', calendar: '1.0.8', date: '2026-11-24' };</script>
     <script>
         (function () {
             // manifest 는 **여기서 만들어 답니다.** (2026-09-05 고침)
@@ -28599,7 +28599,10 @@ const QUOTE_TEMPLATES = [
 
         // ---------- 본부 · 기능(메뉴) 나누기 (2026-11-24) ----------
         const EXEC_NO_DEPT = '_none';
-        function execDeptKey(i, depts) { return (depts || allDeptIds()).indexOf(i.dept) > -1 ? i.dept : EXEC_NO_DEPT; }
+        // ③ 에 보이는 본부 — 경영진은 뺍니다 (2026-11-24 다니엘님 "본부별 현황의 경영진은 삭제") · 경영진 앞 건은 '본부 미지정' 으로 모아 합계를 맞춥니다
+        const EXEC_HIDE_DEPTS = ['management'];
+        function execDeptIds() { return allDeptIds().filter(d => EXEC_HIDE_DEPTS.indexOf(d) < 0); }
+        function execDeptKey(i, depts) { return (depts || execDeptIds()).indexOf(i.dept) > -1 ? i.dept : EXEC_NO_DEPT; }
         function execDeptName(dp) { return dp === EXEC_NO_DEPT ? '본부 미지정' : (deptNames[dp] || dp); }
         // 기능 = 그 건이 들어 있는 메뉴. 업무센터 업무는 업무유형 탭(AS유지보수 · 영업활동 등록 …)까지 나눕니다.
         const EXEC_FN_FIXED = {
@@ -28728,7 +28731,7 @@ const QUOTE_TEMPLATES = [
             // 본부별 — 조직 마스터에 등록된 본부를 모두 보여 줍니다 (새 본부도 자동으로 들어옵니다)
             // 2026-11-24 다니엘님 "각 본부 현황에 경영현황 숫자와 맞춰 카드 구성, 본부의 기능(메뉴)별 현황을 카드로, 서로 크로스 체크"
             //   · ① 과 같은 목록(execItems)을 본부 → 기능(메뉴)으로 나눕니다. 본부가 없는 건은 '본부 미지정' 으로 모아 합계가 ① 과 같게
-            const DEPTS = allDeptIds();
+            const DEPTS = execDeptIds();
             const deptKeys = DEPTS.concat(it.some(i => execDeptKey(i, DEPTS) === EXEC_NO_DEPT) ? [EXEC_NO_DEPT] : []);
             const deptCards = deptKeys.map(dp => {
                 const list = it.filter(i => execDeptKey(i, DEPTS) === dp);
@@ -29101,7 +29104,7 @@ const QUOTE_TEMPLATES = [
             }
             else if (view.indexOf('d:') === 0) {
                 const dp = view.slice(2);
-                const depts = allDeptIds();
+                const depts = execDeptIds();
                 eyebrow = '③ 본부별 현황'; title = `${execDeptName(dp)} 현황`;
                 list = execItems.filter(i => execDeptKey(i, depts) === dp);
                 sub = `전체 ${list.length}건 · 진행중 ${list.filter(execOpen).length}건 · 지연 ${list.filter(execLate).length}건 · 문제 ${list.filter(execIssue).length}건 · 완료 ${list.filter(i => i.done).length}건`

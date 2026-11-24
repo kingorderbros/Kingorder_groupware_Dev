@@ -25,7 +25,7 @@ srv.listen(8887,async()=>{const br=await pp.launch({executablePath:'/Application
     {id:'IB-3',company:'다',phone:'010',flags:[],dupOf:'IB-1',kob:{dept:'운영',owner:'최운영'}},
     {id:'IB-4',company:'라',phone:'010',flags:[],kob:{result:'영업수주',dept:'영업',owner:'김영업'}},
     {id:'IB-5',company:'마',phone:'010',flags:['문의내용 없음'],spam:true,kob:{}}];
-   collabRequests.length=0;collabRequests.push({id:'CR-1',title:'협업',status:'accepted',targetDept:'ops',assignee:'김영업',date:y},{id:'CR-2',title:'본부 없음',status:'pending',targetDept:'',assignee:'대표'});
+   collabRequests.length=0;collabRequests.push({id:'CR-1',title:'협업',status:'accepted',targetDept:'ops',assignee:'김영업',date:y},{id:'CR-2',title:'본부 없음',status:'pending',targetDept:'',assignee:'대표'},{id:'CR-3',title:'경영진 앞',status:'accepted',targetDept:'management',assignee:'대표'});
    enterApp(U[0]);await sleep(120);navigate('exec-center',document.getElementById('nav-exec-center'));await sleep(200);
    const o={};
    const tileOf=v=>parseInt([...document.querySelectorAll('#sec-exec-center button')].find(b=>new RegExp(`^openExecListModal\\(["']${v}["']\\)$`).test(b.getAttribute('onclick')||'')).querySelector('.text-2xl').textContent);const tiles=['open','late','issue'].map(tileOf);
@@ -73,6 +73,8 @@ srv.listen(8887,async()=>{const br=await pp.launch({executablePath:'/Application
   ok(JSON.stringify(r.sum)===JSON.stringify(r.tiles),'본부 합계(진행·지연·문제) = ① 한눈에 보기',{sum:r.sum,tiles:r.tiles});
   ok(r.check.includes('일치'),'크로스 체크 문구 일치',r.check);
   ok(r.panelDepts.includes('_none'),'본부 없는 건은 본부 미지정으로',r.panelDepts);
+  ok(!r.panelDepts.includes('management'),'경영진 칸 없음 (2026-11-24)',r.panelDepts);
+  ok(r.fnSums.find(x=>x.dp==='_none').tot===2,'경영진 앞 건은 본부 미지정에 포함 (합계 유지)',r.fnSums.find(x=>x.dp==='_none'));
   r.fnSums.forEach(x=>ok(x.tot===x.sum,`${x.dp} 기능 카드 합 = 본부 전체 ${x.tot}`,x));
   ok(r.fnSums.find(x=>x.dp==='ops').names.join(',')==='AS유지보수,메뉴유지보수,장비설치,인바운드,협업요청','운영본부 기능 순서(메뉴 순)',r.fnSums.find(x=>x.dp==='ops').names);
   ok(r.clicks.length>0&&r.clicks.every(c=>c.card===c.rows),'기능 카드 클릭 → 목록 건수 = 카드 숫자',r.clicks.filter(c=>c.card!==c.rows));
