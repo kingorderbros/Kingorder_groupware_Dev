@@ -30,7 +30,7 @@
     <script src="config/app-config.js"></script>
     <!-- 화면 버전 (2026-11-16) — 배포할 때마다 올립니다. 개발 · 운영 화면 아래에 "그룹웨어 v1.1.0 · 운영" 처럼 보입니다.
          groupware = 그룹웨어 화면 · calendar = 킹오더일정(?mode=calendar) -->
-    <script>window.KOB_VERSION = { groupware: '1.1.33', calendar: '1.0.8', date: '2026-11-24' };</script>
+    <script>window.KOB_VERSION = { groupware: '1.1.36', calendar: '1.0.8', date: '2026-11-24' };</script>
     <script>
         (function () {
             // manifest 는 **여기서 만들어 답니다.** (2026-09-05 고침)
@@ -12606,7 +12606,9 @@ const QUOTE_TEMPLATES = [
             'dev-update':              { icon: 'fa-code',             color: 'teal',   label: '개발 진행' },
             'dev-review':              { icon: 'fa-magnifying-glass', color: 'purple', label: '검수 요청' },
             'delete-request':          { icon: 'fa-trash-can',        color: 'red',    label: '삭제 요청' },
-            'delete-request-result':   { icon: 'fa-trash-can',        color: 'amber',  label: '삭제 요청 결과' }
+            'delete-request-result':   { icon: 'fa-trash-can',        color: 'amber',  label: '삭제 요청 결과' },
+            'download-request':        { icon: 'fa-file-excel',       color: 'amber',  label: '다운로드 승인 요청' },
+            'download-request-result': { icon: 'fa-file-excel',       color: 'green',  label: '다운로드 승인 결과' }
         };
 
         const notiText = (n) => {
@@ -12644,6 +12646,8 @@ const QUOTE_TEMPLATES = [
             if (n.type === 'delete-request') return `<b>${escapeHtml(n.title)}</b> 삭제 요청이 도착했습니다. 확인 후 삭제하거나 반려해 주세요.${n.detail ? `<br><span class="text-xs text-gray-600">${escapeHtml(n.detail)}</span>` : ''}`;
             if (n.type === 'work-progress-remind') return `<b>${escapeHtml(n.title)}</b> 진행 내역 업데이트가 필요합니다.${n.detail ? `<br><span class="text-xs text-gray-600">${escapeHtml(n.detail)}</span>` : ''}`;
             if (n.type === 'inbound-new') return `<b>${escapeHtml(n.title)}</b> 인바운드 새 건이 등록되었습니다.${n.detail ? `<br><span class="text-xs text-gray-600">${escapeHtml(n.detail)}</span>` : ''}`;
+            if (n.type === 'download-request') return `<b>${escapeHtml(n.title)}</b> 다운로드 승인 요청이 도착했습니다. 확인 후 승인하거나 반려해 주세요.${n.detail ? `<br><span class="text-xs text-gray-600">${escapeHtml(n.detail)}</span>` : ''}`;
+            if (n.type === 'download-request-result') return `<b>${escapeHtml(n.title)}</b> 다운로드 승인 요청이 처리되었습니다.${n.detail ? `<br><span class="text-xs text-gray-600">${escapeHtml(n.detail)}</span>` : ''}`;
             if (n.type === 'delete-request-result') return `<b>${escapeHtml(n.title)}</b> 삭제 요청이 처리되었습니다.${n.detail ? `<br><span class="text-xs text-gray-600">${escapeHtml(n.detail)}</span>` : ''}`;
             return escapeHtml(n.title || '');
         };
@@ -12655,6 +12659,7 @@ const QUOTE_TEMPLATES = [
             if (n.scheduleId) return `openScheduleFromNotice(${jsArg(n.scheduleId)})`;   // 일정 알림 (2026-10-23)
             if (n.type === 'inbound-new') return `openInboundFromNotice(${jsArg(n.inboundId || '')})`;   // 인바운드 새 건 (2026-11-19)
             if (n.type === 'work-progress-remind') return `openProgressFromNotice(${jsArg(n.progSrc || '')}, ${jsArg(n.progId || '')})`;   // 진행 내역 업데이트 요청 (2026-11-20)
+            if (n.dlReqId) return `openDlReqModal()`;   // 중요정보 엑셀 다운로드 승인 (2026-11-24)
             if (n.deleteReqId) return `openDeleteRequests(${jsArg(n.type === 'delete-request' ? 'pending' : 'done')})`;
             if (n.devId) return `openDevFromNotice(${jsArg(n.devId)})`;
             if (n.meetingId) return `openMeetingFromNotice(${jsArg(n.meetingId)})`;
@@ -28592,6 +28597,83 @@ const QUOTE_TEMPLATES = [
         const execLate = i => !i.done && i.overdue > 0;
         const execIssue = i => !i.done && !!i.issue;
 
+        // ---------- 본부 · 기능(메뉴) 나누기 (2026-11-24) ----------
+        const EXEC_NO_DEPT = '_none';
+        function execDeptKey(i, depts) { return (depts || allDeptIds()).indexOf(i.dept) > -1 ? i.dept : EXEC_NO_DEPT; }
+        function execDeptName(dp) { return dp === EXEC_NO_DEPT ? '본부 미지정' : (deptNames[dp] || dp); }
+        // 기능 = 그 건이 들어 있는 메뉴. 업무센터 업무는 업무유형 탭(AS유지보수 · 영업활동 등록 …)까지 나눕니다.
+        const EXEC_FN_FIXED = {
+            inbound:   { name: '인바운드',  order: 50, page: 'inbound-center' },
+            quote:     { name: '견적서',    order: 51, work: ['sales', 'quote'] },
+            paydoc:    { name: '보완서류',  order: 52, page: 'payment-work-center' },
+            collab:    { name: '협업요청',  order: 60, page: 'collab-center' },
+            directive: { name: '업무지시',  order: 61, page: 'collab-center' },
+            project:   { name: '프로젝트',  order: 70, page: 'project-center' },
+            wbs:       { name: 'WBS 작업',  order: 71, page: 'project-center' }
+        };
+        function execFnOf(i) {
+            if (i.kind === 'work') {
+                const d = wcDef(i.srcKey);
+                const types = (d && d.types) || [];
+                const ti = types.findIndex(t => t.id === i.srcType);
+                return { fn: `w:${i.srcKey}:${i.srcType || ''}`, name: ti > -1 ? types[ti].name : (i.kindName || '업무'), order: ti > -1 ? ti : 49, work: [i.srcKey, i.srcType || ''] };
+            }
+            const f = EXEC_FN_FIXED[i.kind] || { name: i.kindName || i.kind, order: 90 };
+            return Object.assign({ fn: i.kind }, f);
+        }
+        // 그 기능의 원본 화면을 여는 코드 (권한이 없으면 '')
+        function execFnOpenJs(f) {
+            if (f.work) return canSeePage(`${f.work[0]}-work-center`) ? `closeExecListModal(); openWorkFromNotice(${jsArg(f.work[0])}, ${jsArg(f.work[1])})` : '';
+            if (f.page) return canSeePage(f.page) ? `closeExecListModal(); navigate(${jsArg(f.page)}, document.getElementById(${jsArg('nav-' + f.page)}))` : '';
+            return '';
+        }
+        // 인바운드 '확인 필요' — 인바운드 화면과 같은 기준(inboundNeedsCheck · 영업수주 · 실패 제외)
+        function execInboundCheck(i) { return i.kind === 'inbound' && typeof inboundNeedsCheck === 'function' && inboundNeedsCheck(i.raw || {}); }
+        function execFnStats(list) {
+            const m = new Map();
+            list.forEach(i => {
+                const f = execFnOf(i);
+                if (!m.has(f.fn)) m.set(f.fn, Object.assign({ list: [] }, f));
+                m.get(f.fn).list.push(i);
+            });
+            return Array.from(m.values()).sort((a, b) => a.order - b.order || a.name.localeCompare(b.name, 'ko')).map(g => Object.assign(g, {
+                open: g.list.filter(execOpen).length, late: g.list.filter(execLate).length, issue: g.list.filter(execIssue).length,
+                done: g.list.filter(i => i.done).length, check: g.list.filter(execInboundCheck).length
+            }));
+        }
+        // 기능별 카드 — 현황판(③)과 본부 상세 팝업이 같은 카드를 씁니다. inModal 이면 팝업 목록을 그 기능으로 거릅니다.
+        function execFnCardsHtml(dp, list, inModal) {
+            return execFnStats(list).map(g => {
+                const pick = st => inModal ? `setExecListFn(${jsArg(g.fn)}, ${jsArg(st)})` : `openExecDeptFn(${jsArg(dp)}, ${jsArg(g.fn)}, ${jsArg(st)})`;
+                const n = (v, cls, label, st) => `<button type="button" onclick="event.stopPropagation(); ${pick(st)}" class="rounded px-0.5 hover:bg-white" title="${label} 건 보기"><span class="font-bold ${v ? cls : 'text-gray-300'}">${v}</span><span class="block text-[10px] text-gray-400">${label}</span></button>`;
+                const go = execFnOpenJs(g);
+                return `<div role="button" tabindex="0" data-fn="${escapeHtml(g.fn)}" onclick="${pick('')}" onkeydown="if(event.key==='Enter'){${pick('')}}"
+                        class="exec-fn-card cursor-pointer rounded border border-gray-200 bg-gray-50/60 p-2.5 hover:border-gray-400 hover:bg-white transition-colors">
+                        <div class="flex items-start justify-between gap-1">
+                            <p class="text-xs font-semibold text-gray-700 leading-tight">${escapeHtml(g.name)}</p>
+                            <span class="text-base font-bold text-gray-800 leading-none" title="전체">${g.list.length}</span>
+                        </div>
+                        <div class="grid grid-cols-4 gap-0.5 text-center text-sm mt-1.5">
+                            ${n(g.open, 'text-blue-600', '진행', 'open')}${n(g.late, 'text-red-600', '지연', 'late')}${n(g.issue, 'text-amber-600', '문제', 'issue')}${n(g.done, 'text-green-600', '완료', 'done')}
+                        </div>
+                        ${g.fn === 'inbound' ? `<button type="button" onclick="event.stopPropagation(); ${pick('check')}" class="mt-1 w-full text-left text-[11px] ${g.check ? 'text-amber-700 font-semibold' : 'text-gray-400'} hover:underline">확인 필요 ${g.check}건</button>` : ''}
+                        ${go ? `<button type="button" onclick="event.stopPropagation(); ${go}" class="mt-1 text-[11px] text-gray-500 hover:text-gray-800 hover:underline"><i class="fas fa-arrow-up-right-from-square mr-0.5"></i>메뉴 열기</button>` : ''}
+                    </div>`;
+            }).join('');
+        }
+        // 본부 팝업을 열고 기능 · 상태로 거릅니다
+        function openExecDeptFn(dp, fn, state) {
+            openExecListModal('d:' + dp);
+            if (fn || state) setExecListFn(fn, state);
+        }
+        // 'check' 는 인바운드 확인 필요 (상태 칸이 아니라 기능 거르기로 둡니다)
+        function setExecListFn(fn, state) {
+            if (state === 'check') { execListFilter.fn = 'inbound-check'; execListFilter.state = ''; }
+            else { execListFilter.fn = fn || ''; execListFilter.state = state || ''; }
+            renderExecListFilter();
+            renderExecListRows();
+        }
+
         // ---------- 문제·지연 묶음 ----------
         function execGroups() {
             const it = execItems;
@@ -28644,28 +28726,39 @@ const QUOTE_TEMPLATES = [
                 </button>`).join('');
 
             // 본부별 — 조직 마스터에 등록된 본부를 모두 보여 줍니다 (새 본부도 자동으로 들어옵니다)
+            // 2026-11-24 다니엘님 "각 본부 현황에 경영현황 숫자와 맞춰 카드 구성, 본부의 기능(메뉴)별 현황을 카드로, 서로 크로스 체크"
+            //   · ① 과 같은 목록(execItems)을 본부 → 기능(메뉴)으로 나눕니다. 본부가 없는 건은 '본부 미지정' 으로 모아 합계가 ① 과 같게
             const DEPTS = allDeptIds();
-            const deptCards = DEPTS.map(dp => {
-                const list = it.filter(i => i.dept === dp);
+            const deptKeys = DEPTS.concat(it.some(i => execDeptKey(i, DEPTS) === EXEC_NO_DEPT) ? [EXEC_NO_DEPT] : []);
+            const deptCards = deptKeys.map(dp => {
+                const list = it.filter(i => execDeptKey(i, DEPTS) === dp);
                 const open = list.filter(execOpen).length;
                 const late = list.filter(execLate).length;
                 const issue = list.filter(execIssue).length;
                 const done = list.filter(i => i.done).length;
                 const rate = list.length ? Math.round(done / list.length * 100) : 0;
+                const num = (n, cls, label, state) => `<button type="button" onclick="openExecDeptFn(${jsArg(dp)}, '', ${jsArg(state)})" class="text-center px-1 rounded hover:bg-gray-50">
+                        <p class="text-lg font-bold ${n ? cls : 'text-gray-300'}">${n}</p><p class="text-[11px] text-gray-400">${label}</p></button>`;
                 return `
-                <button type="button" onclick="openExecListModal('d:${dp}')" class="bg-white p-4 rounded-lg shadow-sm border border-gray-200 text-left hover:shadow-md transition-shadow">
-                    <div class="flex items-center justify-between mb-2">
-                        <p class="font-semibold text-gray-800">${escapeHtml(deptNames[dp] || dp)}</p>
-                        <span class="text-xs text-gray-400">완료율 ${rate}%</span>
+                <div class="exec-dept-panel bg-white p-4 rounded-lg shadow-sm border border-gray-200" data-dept="${escapeHtml(dp)}">
+                    <div class="flex flex-wrap items-center gap-x-4 gap-y-2 mb-3">
+                        <button type="button" onclick="openExecListModal('d:${escapeHtml(dp)}')" class="text-left min-w-[8rem]">
+                            <p class="font-semibold text-gray-800 hover:underline">${escapeHtml(execDeptName(dp))} <span class="text-xs font-normal text-gray-400">전체 ${list.length}건</span></p>
+                            <div class="w-32 bg-gray-100 rounded-full h-1.5 mt-1.5"><div class="bg-blue-500 h-1.5 rounded-full" style="width:${rate}%"></div></div>
+                            <p class="text-[11px] text-gray-400 mt-0.5">완료율 ${rate}%</p>
+                        </button>
+                        <div class="exec-dept-nums grid grid-cols-4 gap-1 ml-auto">
+                            ${num(open, 'text-blue-600', '진행중', 'open')}${num(late, 'text-red-600', '지연', 'late')}${num(issue, 'text-amber-600', '문제', 'issue')}${num(done, 'text-green-600', '완료', 'done')}
+                        </div>
                     </div>
-                    <div class="w-full bg-gray-100 rounded-full h-1.5 mb-3"><div class="bg-blue-500 h-1.5 rounded-full" style="width:${rate}%"></div></div>
-                    <div class="grid grid-cols-3 gap-1 text-center">
-                        <div><p class="text-lg font-bold text-blue-600">${open}</p><p class="text-[11px] text-gray-400">진행중</p></div>
-                        <div><p class="text-lg font-bold ${late ? 'text-red-600' : 'text-gray-300'}">${late}</p><p class="text-[11px] text-gray-400">지연</p></div>
-                        <div><p class="text-lg font-bold ${issue ? 'text-amber-600' : 'text-gray-300'}">${issue}</p><p class="text-[11px] text-gray-400">문제</p></div>
-                    </div>
-                </button>`;
+                    ${list.length ? `<div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-2">${execFnCardsHtml(dp, list, false)}</div>` : '<p class="text-xs text-gray-400 py-2">해당 건이 없습니다.</p>'}
+                </div>`;
             }).join('');
+            // 크로스 체크 — 본부 합계가 ① 한눈에 보기와 같은지
+            const sumBy = fnc => deptKeys.reduce((n, dp) => n + it.filter(i => execDeptKey(i, DEPTS) === dp && fnc(i)).length, 0);
+            const xc = [['진행중', sumBy(execOpen), openList.length], ['지연', sumBy(execLate), it.filter(execLate).length], ['문제', sumBy(execIssue), it.filter(execIssue).length]];
+            const xcOk = xc.every(x => x[1] === x[2]);
+            const deptCheck = `<p id="exec-dept-check" class="text-xs mb-2 ${xcOk ? 'text-green-700' : 'text-red-700 font-semibold'}"><i class="fas ${xcOk ? 'fa-circle-check' : 'fa-triangle-exclamation'} mr-1"></i>본부 합계 ${xc.map(x => `${x[0]} ${x[1]}`).join(' · ')} ${xcOk ? '= ① 한눈에 보기와 일치' : '≠ ① 한눈에 보기 (' + xc.map(x => `${x[0]} ${x[2]}`).join(' · ') + ')'}</p>`;
 
             host.innerHTML = `
                 <div class="mb-4 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-3">
@@ -28697,8 +28790,11 @@ const QUOTE_TEMPLATES = [
                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">${groupCards}</div>
 
                 <!-- ③ 본부별 -->
-                <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">③ 본부별 현황</p>
-                <div class="grid grid-cols-2 lg:grid-cols-3 gap-4 mb-6">${deptCards}</div>
+                <div class="flex flex-wrap items-baseline justify-between gap-x-3">
+                    <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">③ 본부별 현황 <span class="normal-case font-normal">· 기능(메뉴)별 카드를 클릭하면 해당 건 상세, [메뉴 열기]로 원본 화면과 대조</span></p>
+                    ${deptCheck}
+                </div>
+                <div class="grid grid-cols-1 gap-3 mb-6">${deptCards}</div>
 
                 <!-- ④ 직원별 -->
                 <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">④ 직원별 처리 현황</p>
@@ -29005,10 +29101,13 @@ const QUOTE_TEMPLATES = [
             }
             else if (view.indexOf('d:') === 0) {
                 const dp = view.slice(2);
-                eyebrow = '③ 본부별 현황'; title = `${deptNames[dp] || dp} 현황`;
-                list = execItems.filter(i => i.dept === dp);
-                sub = `진행중 ${list.filter(execOpen).length}건 · 지연 ${list.filter(execLate).length}건 · 문제 ${list.filter(execIssue).length}건`
-                    + '  (해당 본부에 배정된 업무 전체, 담당자 미지정 건 포함)';
+                const depts = allDeptIds();
+                eyebrow = '③ 본부별 현황'; title = `${execDeptName(dp)} 현황`;
+                list = execItems.filter(i => execDeptKey(i, depts) === dp);
+                sub = `전체 ${list.length}건 · 진행중 ${list.filter(execOpen).length}건 · 지연 ${list.filter(execLate).length}건 · 문제 ${list.filter(execIssue).length}건 · 완료 ${list.filter(i => i.done).length}건`
+                    + (dp === EXEC_NO_DEPT ? '  (본부가 지정되지 않은 건)' : '  (해당 본부에 배정된 업무 전체, 담당자 미지정 건 포함)');
+                // 기능(메뉴)별 카드 — 누르면 아래 목록을 그 기능으로 거릅니다 (2026-11-24)
+                if (list.length) extra = `<div id="exec-fn-cards" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 mb-3">${execFnCardsHtml(dp, list, true)}</div>`;
             }
             else if (view.indexOf('sd:') === 0) {
                 const dp = view.slice(3);
@@ -29088,7 +29187,7 @@ const QUOTE_TEMPLATES = [
             document.getElementById('exec-modal-extra').innerHTML = extra;
 
             // 목록 창 안 거르기 (2026-11-20 다니엘님 "한눈에 보기에서 필터링을 넣어서 볼 수 있게") — 다른 카드를 열면 처음부터
-            if (!execListState || execListState.view !== view) execListFilter = { kind: '', dept: '', owner: '', state: '', q: '' };
+            if (!execListState || execListState.view !== view) execListFilter = { kind: '', dept: '', owner: '', state: '', q: '', fn: '' };
             execListState = { view, list };
             renderExecListFilter();
             renderExecListRows();
@@ -29103,6 +29202,11 @@ const QUOTE_TEMPLATES = [
                         <p class="text-[11px] text-gray-500">${label}</p><p class="text-xl font-bold ${n ? cls : 'text-gray-300'} mt-0.5">${n}</p></button>`;
         }
         function markExecStateBoxes() {
+            const fn = execListFilter.fn === 'inbound-check' ? 'inbound' : (execListFilter.fn || '');
+            document.querySelectorAll('#exec-modal-extra .exec-fn-card').forEach(b => {
+                const on = !!fn && b.getAttribute('data-fn') === fn;
+                b.classList.toggle('ring-2', on); b.classList.toggle('ring-gray-800', on); b.classList.toggle('bg-white', on);
+            });
             const cur = execListFilter.state || '';
             document.querySelectorAll('#exec-modal-extra .exec-state-box').forEach(b => {
                 const on = b.getAttribute('data-exec-state') === cur;
@@ -29113,13 +29217,15 @@ const QUOTE_TEMPLATES = [
 
         // ---------- 목록 창 안 거르기 (구분 · 본부 · 담당자 · 상태 · 검색어) ----------
         let execListState = null;   // { view, list } — 카드에서 고른 목록 (거르기 전)
-        let execListFilter = { kind: '', dept: '', owner: '', state: '', q: '' };
+        let execListFilter = { kind: '', dept: '', owner: '', state: '', q: '', fn: '' };
         const EXEC_LIST_STATES = [['', '전체 상태'], ['open', '진행 중'], ['late', '기한 지연'], ['issue', '문제 있음'], ['done', '완료']];
         function execListFiltered() {
             const f = execListFilter;
             const norm = v => String(v || '').replace(/\s+/g, '').toLowerCase();
             const q = norm(f.q);
             return ((execListState && execListState.list) || []).filter(i => {
+                if (f.fn === 'inbound-check') { if (!execInboundCheck(i)) return false; }
+                else if (f.fn && execFnOf(i).fn !== f.fn) return false;
                 if (f.kind && i.kindName !== f.kind) return false;
                 if (f.dept && i.dept !== f.dept) return false;
                 if (f.owner && (i.owner || '미배정') !== f.owner) return false;
@@ -29138,7 +29244,7 @@ const QUOTE_TEMPLATES = [
             renderExecListRows();
         }
         function resetExecListFilter() {
-            execListFilter = { kind: '', dept: '', owner: '', state: '', q: '' };
+            execListFilter = { kind: '', dept: '', owner: '', state: '', q: '', fn: '' };
             renderExecListFilter();
             renderExecListRows();
         }
@@ -43550,7 +43656,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                     { id: 'phone',        label: '사업장 연락처', type: 'text', table: true },
                     { id: 'pg',           label: '계약 PG명',    type: 'select', table: true, options: ['갤럭시아', '헥토', '기타'],
                       chip: { '갤럭시아': 'bg-indigo-100 text-indigo-700', '헥토': 'bg-purple-100 text-purple-700' } },
-                    { id: 'fee',          label: '가맹점 수수료', type: 'number', table: true, pct: true, step: '0.001' },
+                    { id: 'fee',          label: '가맹점 수수료', type: 'number', table: true, pct: true, step: '0.001', feeSecret: true },
                     { id: 'cycle',        label: '정산 주기',    type: 'select', table: true, options: ['D+1', 'D+2', 'D+3', '기타'] },
                     { id: 'equipment',    label: '제공 장비 대수', type: 'text', table: true, wide: true },
                     { id: 'memo',         label: '특이사항',      type: 'textarea', table: false, wide: true }
@@ -43566,7 +43672,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                     { id: 'program',      label: '프로그램',    type: 'select', table: true, options: ['아이리젠', '토마토', '기타'],
                       chip: { '아이리젠': 'bg-emerald-100 text-emerald-700', '토마토': 'bg-red-100 text-red-700' } },
                     { id: 'cycle',        label: '정산주기',    type: 'select', table: true, options: ['D+1', 'D+2', 'D+3'] },
-                    { id: 'fee',          label: '수수료',      type: 'number', table: true, pct: true, step: '0.001' },
+                    { id: 'fee',          label: '수수료',      type: 'number', table: true, pct: true, step: '0.001', feeSecret: true },
                     { id: 'ali',          label: '알리위챗 접수', type: 'select', table: true, options: ['O', 'X'] },
                     { id: 'esl',          label: 'ESL 사용여부', type: 'select', table: true, options: ['O', 'X', '미정'] },
                     { id: 'doc',          label: '서류설명',    type: 'select', table: true, options: ['O', 'X'] },
@@ -43585,6 +43691,14 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
         function supplyDef(ch) { return SUPPLY_CHANNELS[ch] || SUPPLY_CHANNELS.franchise; }
         function supplyFields(ch) { return supplyDef(ch).fields; }
         function supplyTableFields(ch) { return supplyFields(ch).filter(f => f.table); }
+        // 가맹점별 수수료는 본부장급 이상(본부장 · 부장 · 대표급 · 관리자)만 봅니다 — 팀장급 · 매니저급은 *** 로 표시
+        //   (2026-11-24 다니엘님 "가맹점별 수수료는 본부장급만 볼 수 있게, 본부장 이하는 * 로 표시")
+        const FEE_MASK = '***';
+        function canSeeMerchantFee() {
+            const c = levelClass(currentUserLevel);
+            return c === 'head' || c === 'exec' || c === 'admin';
+        }
+        function supplyFeeHidden(f) { return !!(f && f.feeSecret) && !canSeeMerchantFee(); }
 
         // ---------- 저장 (2026-09-17) ----------
         // 공급내역은 Supabase 'supplies' 표에 한 건 = 한 줄로 둡니다 (js/kob-db.js).
@@ -43659,7 +43773,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                 if (f.owner && (r.owner || '') !== f.owner) return false;
                 if (f.v1 && ff[0] && String(r[ff[0].id] || '') !== f.v1) return false;
                 if (f.v2 && ff[1] && String(r[ff[1].id] || '') !== f.v2) return false;
-                if (q && !norm(supplyFields(ch).map(x => r[x.id]).join(' ')).includes(q)) return false;
+                if (q && !norm(supplyFields(ch).filter(x => !supplyFeeHidden(x)).map(x => r[x.id]).join(' ')).includes(q)) return false;   // 가려진 수수료로는 검색되지 않게
                 return true;
             });
         }
@@ -43676,6 +43790,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
         function supplyCellHtml(r, f) {
             const v = r[f.id];
             if (v === '' || v === null || v === undefined) return '<span class="text-gray-300">-</span>';
+            if (supplyFeeHidden(f)) return `<span class="text-gray-400 tracking-widest" title="본부장급 이상만 조회할 수 있습니다">${FEE_MASK}</span>`;
             if (f.pct) return `<span class="text-indigo-800 font-medium">${v}%</span>`;
             if (f.num) return `<span class="tabular-nums">${Number(v).toLocaleString('en-US')}</span>`;
             if (f.chip && f.chip[v]) return `<span class="px-2 py-0.5 rounded-full text-xs font-medium ${f.chip[v]}">${escapeHtml(String(v))}</span>`;
@@ -43722,7 +43837,8 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                     </div>
                     <div class="flex flex-wrap gap-2">
                         <button onclick="openSupplyModal()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded text-sm transition-colors whitespace-nowrap"><i class="fas fa-plus mr-1"></i>거래처 등록</button>
-                        <button onclick="downloadSupplyXlsx()" class="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded text-sm transition-colors whitespace-nowrap"><i class="fas fa-file-excel mr-1"></i>엑셀 다운로드</button>
+                        <button onclick="downloadSupplyXlsx()" class="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded text-sm transition-colors whitespace-nowrap"><i class="fas fa-file-excel mr-1"></i>엑셀 다운로드${supplyHasSecret(ch) && !canSeeMerchantFee() ? ' <span class="text-[11px] opacity-80">(승인 필요)</span>' : ''}</button>
+                        ${(supplyHasSecret(ch) || dlReqPendingForMe() || dlReqVisible().length) ? `<button onclick="openDlReqModal()" class="bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 px-3 py-1.5 rounded text-sm transition-colors whitespace-nowrap"><i class="fas fa-user-check mr-1"></i>다운로드 승인${dlReqPendingForMe() ? ` <span class="ml-1 px-1.5 rounded-full bg-red-600 text-white text-[11px]">${dlReqPendingForMe()}</span>` : ''}</button>` : ''}
                     </div>
                 </div>
 
@@ -43802,6 +43918,9 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                         + (f.options || []).map(o => `<option value="${escapeHtml(o)}" ${String(v) === o ? 'selected' : ''}>${escapeHtml(o)}</option>`).join('') + '</select>';
                 } else if (f.type === 'textarea') {
                     input = `<textarea id="sup-${f.id}" rows="3" class="${cls}">${escapeHtml(String(v))}</textarea>`;
+                } else if (supplyFeeHidden(f)) {
+                    // 값은 화면에 싣지 않습니다 — 저장할 때 원래 값을 그대로 둡니다 (submitSupply)
+                    input = `<input type="text" id="sup-${f.id}" value="${(v === '' || v === null) ? '' : FEE_MASK}" disabled title="본부장급 이상만 조회 · 수정할 수 있습니다" class="${cls} bg-gray-100 text-gray-400 tracking-widest" />`;
                 } else if (f.type === 'number') {
                     input = `<div class="relative"><input type="number" step="${f.step || '1'}" min="0" id="sup-${f.id}" value="${escapeHtml(String(v))}" class="${cls}${f.pct ? ' pr-6 text-right' : ''}" />${f.pct ? '<span class="absolute right-2 top-2.5 text-xs text-gray-400">%</span>' : ''}</div>`;
                 } else {
@@ -43838,6 +43957,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             const data = { channel: ch, partnerId: (document.getElementById('sup-partnerId') || {}).value || '' };
             let bad = null;
             def.fields.forEach(f => {
+                if (supplyFeeHidden(f)) { data[f.id] = rec && rec[f.id] !== undefined ? rec[f.id] : ''; return; }   // 가려진 수수료는 원래 값 유지
                 const el = document.getElementById('sup-' + f.id);
                 let v = el ? (el.value || '').trim() : '';
                 if (f.type === 'number' && v !== '') v = Number(v);
@@ -43865,17 +43985,175 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
         }
 
         // ---------- 엑셀 (원본 시트 컬럼 순서) ----------
-        function downloadSupplyXlsx() {
+        //   가맹점별 수수료가 든 채널(병원·기타 PG · 약국)은 본부장급 이상만 바로 받고, 그 밖의 직원은 본부장 승인 후 1회 받습니다 (supplyDlGate)
+        function downloadSupplyXlsx(approvedReqId) {
             const ch = supplyChannel, def = supplyDef(ch);
             const list = supplyFiltered();
             if (!list.length) { alert('다운로드할 거래처가 없습니다.'); return; }
+            const req = supplyDlGate(ch, approvedReqId);
+            if (req === false) return;
+            const showFee = canSeeMerchantFee() || !!req;   // 승인받은 다운로드는 수수료까지 담습니다
             const today = ymd(new Date());
             const rows = [
                 [`${def.sheet} (${list.length}건 · ${today} 기준)`],
                 def.fields.map(f => f.label + (f.pct ? '(%)' : '')),
-                ...list.map(r => def.fields.map(f => (r[f.id] === undefined || r[f.id] === null) ? '' : r[f.id]))
+                ...list.map(r => def.fields.map(f => (r[f.id] === undefined || r[f.id] === null || r[f.id] === '') ? '' : ((f.feeSecret && !showFee) ? FEE_MASK : r[f.id])))
             ];
             downloadBlobAs(buildXlsxBlob(rows, def.name), `거래처관리_${def.name}_${today.replace(/-/g, '')}.xlsx`);
+            if (req) {   // 승인 1건 = 다운로드 1회
+                req.status = 'used'; req.usedAt = new Date().toISOString(); req.rows = list.length;
+                saveDlReq(req); renderDlReqModalIfOpen();
+                showAppToast('승인받은 엑셀을 다운로드했습니다. 다시 받으려면 새로 승인을 요청해 주세요.', 'blue');
+            }
+        }
+
+        // ==================== 중요정보 엑셀 다운로드 승인 (2026-11-24) ====================
+        // 다니엘님 "중요정보 가맹점 리스트 수수료 포함된 데이터들은 엑셀 다운로드할 때 본부장 승인을 받고 다운로드하게"
+        //   · 대상: 수수료 항목(feeSecret)이 있는 거래처 채널 — 병원·기타 PG · 약국
+        //   · 본부장급 이상(canSeeMerchantFee)은 바로 다운로드
+        //   · 그 밖의 직원은 사유를 적어 요청 → 같은 본부 본부장급(없으면 본부장급 이상 전원 · 관리자)에게 알림
+        //     → 승인되면 요청자가 24시간 안에 1회 다운로드(수수료 포함), 반려되면 사유와 함께 알림
+        const DL_REQ_KEY = 'gwDownloadRequests.v1';
+        const DL_REQ_HOURS = 24;
+        function supplyHasSecret(ch) { return supplyFields(ch).some(f => f.feeSecret); }
+        function dlReqList() { return (loadJsonStore(DL_REQ_KEY, []) || []).filter(x => x && x.id); }
+        function saveDlReq(req) {
+            const list = dlReqList();   // 저장 직전에 다시 읽고 한 건만 바꿉니다
+            const i = list.findIndex(x => x.id === req.id);
+            if (i > -1) list[i] = req; else list.push(req);
+            saveJsonStore(DL_REQ_KEY, list.slice(-300));
+        }
+        function dlReqExpired(r) { return r.status === 'approved' && r.decidedAt && (Date.now() - new Date(r.decidedAt).getTime()) > DL_REQ_HOURS * 3600000; }
+        function dlReqStatusOf(r) { return dlReqExpired(r) ? 'expired' : r.status; }
+        // 승인할 사람 — 요청자 본부의 본부장급, 없으면 본부장급 이상 전원과 관리자
+        function dlApproverNames(dept) {
+            const users = (typeof activeUsers === 'function' ? activeUsers() : localUsers).filter(u => u && u.name && u.name !== currentUserName);
+            const headOf = u => ['head', 'exec'].indexOf(levelClass(u.level)) > -1;
+            const mine = users.filter(u => u.dept === dept && levelClass(u.level) === 'head').map(u => u.name);
+            if (mine.length) return Array.from(new Set(mine));
+            return Array.from(new Set(users.filter(u => headOf(u) || isAdminAccount(u)).map(u => u.name)));
+        }
+        function canDecideDlReq(r) {
+            if (!r || r.status !== 'pending' || r.by === currentUserName) return false;
+            return canSeeMerchantFee() && ((r.approvers || []).indexOf(currentUserName) > -1 || levelClass(currentUserLevel) === 'exec' || levelClass(currentUserLevel) === 'admin');
+        }
+        // 다운로드 직전 — 바로 받을 수 있으면 null, 승인으로 받으면 그 요청, 막으면 false
+        function supplyDlGate(ch, approvedReqId) {
+            if (!supplyHasSecret(ch) || canSeeMerchantFee()) return null;
+            const mine = dlReqList().filter(r => r.by === currentUserName && r.ch === ch);
+            const ok = mine.find(r => (approvedReqId ? r.id === approvedReqId : true) && dlReqStatusOf(r) === 'approved');
+            if (ok) return ok;
+            const pending = mine.find(r => r.status === 'pending');
+            if (pending) { alert(`이미 본부장 승인을 요청했습니다.\n요청: ${String(pending.at).slice(0, 16).replace('T', ' ')} · 승인할 사람: ${(pending.approvers || []).join(', ') || '-'}\n\n승인되면 알림이 옵니다.`); openDlReqModal(); return false; }
+            requestSupplyDownload(ch);
+            return false;
+        }
+        function requestSupplyDownload(ch) {
+            const def = supplyDef(ch);
+            const approvers = dlApproverNames(currentUserDept);
+            const reason = prompt(`[${def.name}] 거래처 목록은 가맹점별 수수료가 포함된 중요정보입니다.\n엑셀 다운로드는 본부장 승인 후 가능합니다.\n\n승인할 사람: ${approvers.join(', ') || '(없음)'}\n\n다운로드 사유를 입력해 주세요.`, '');
+            if (reason === null) return null;
+            if (!reason.trim()) { alert('다운로드 사유를 입력해 주세요.'); return null; }
+            if (!approvers.length) { alert('승인할 본부장급 직원이 없습니다. 관리자에게 문의해 주세요.'); return null; }
+            const now = new Date();
+            const req = { id: 'DLR-' + now.getTime(), ch, chName: def.name, reason: reason.trim(), by: currentUserName || '', byDept: currentUserDept || '',
+                          at: now.toISOString(), status: 'pending', approvers };
+            saveDlReq(req);
+            approvers.forEach(name => pushNotification({
+                id: 'cnoti_' + collabNotiIdCounter++, type: 'download-request', ticketId: '', projectId: '', dlReqId: req.id,
+                title: `[${def.name}] 거래처 엑셀`, toUser: name, toDept: '', toTeam: '',
+                detail: `요청: ${req.by}${deptNames[req.byDept] ? ' (' + deptNames[req.byDept] + ')' : ''} · 사유: ${req.reason}`, date: ymd(now)
+            }));
+            showAppToast('본부장에게 엑셀 다운로드 승인을 요청했습니다. 승인되면 알림이 옵니다.', 'blue');
+            return req;
+        }
+        function decideDlReq(id, approve) {
+            const r = dlReqList().find(x => x.id === id);
+            if (!canDecideDlReq(r)) { alert('승인할 수 있는 요청이 아닙니다.'); renderDlReqModalIfOpen(); return; }
+            let note = '';
+            if (!approve) {
+                note = prompt('반려 사유를 입력해 주세요.', '');
+                if (note === null) return;
+                if (!note.trim()) { alert('반려 사유를 입력해 주세요.'); return; }
+            }
+            r.status = approve ? 'approved' : 'rejected'; r.decidedBy = currentUserName || ''; r.decidedAt = new Date().toISOString(); r.note = note.trim();
+            saveDlReq(r);
+            pushNotification({
+                id: 'cnoti_' + collabNotiIdCounter++, type: 'download-request-result', ticketId: '', projectId: '', dlReqId: r.id,
+                title: `[${r.chName}] 거래처 엑셀`, toUser: r.by, toDept: '', toTeam: '',
+                detail: approve ? `${r.decidedBy} 승인 · ${DL_REQ_HOURS}시간 안에 1회 다운로드할 수 있습니다.` : `${r.decidedBy} 반려 · 사유: ${r.note}`, date: ymd(new Date())
+            });
+            showAppToast(approve ? '승인했습니다. 요청자에게 알렸습니다.' : '반려했습니다. 요청자에게 알렸습니다.', approve ? 'green' : 'amber');
+            renderDlReqModalIfOpen();
+        }
+        // 승인받은 요청의 [엑셀 다운로드] — 그 채널로 바꾼 뒤 받습니다
+        function downloadApprovedSupply(id) {
+            const r = dlReqList().find(x => x.id === id);
+            if (!r || r.by !== currentUserName || dlReqStatusOf(r) !== 'approved') { alert('다운로드할 수 있는 승인 건이 아닙니다.'); renderDlReqModalIfOpen(); return; }
+            if (!canSeePage('supply-' + r.ch)) { alert('해당 거래처 채널을 볼 권한이 없습니다.'); return; }
+            ensureSuppliesLoaded();
+            if (supplyChannel !== r.ch) { supplyChannel = r.ch; supplyFilter = { q: '', owner: '', v1: '', v2: '' }; }
+            downloadSupplyXlsx(r.id);
+        }
+        // ---------- 승인 요청 창 (알림 · 거래처 관리 단추에서 엽니다) ----------
+        function dlReqVisible() {
+            return dlReqList().filter(r => r.by === currentUserName || (r.approvers || []).indexOf(currentUserName) > -1 || canDecideDlReq(r))
+                .sort((a, b) => String(b.at).localeCompare(String(a.at)));
+        }
+        function dlReqPendingForMe() { return dlReqList().filter(canDecideDlReq).length; }
+        function openDlReqModal() {
+            let m = document.getElementById('dl-req-modal');
+            if (!m) {
+                m = document.createElement('div');
+                m.id = 'dl-req-modal';
+                m.className = 'hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[70] p-2 sm:p-4';
+                m.innerHTML = `<div class="bg-white w-full max-w-3xl max-h-full rounded-lg shadow-xl flex flex-col min-h-0">
+                        <div class="flex justify-between items-start gap-2 px-5 py-3 border-b border-gray-100 shrink-0">
+                            <div class="min-w-0"><p class="text-xs font-semibold text-amber-700">중요정보 엑셀 다운로드</p><h3 class="text-lg font-bold text-gray-800">다운로드 승인 요청</h3>
+                                <p class="text-xs text-gray-500 mt-0.5">가맹점별 수수료가 포함된 거래처 목록은 본부장 승인 후 ${DL_REQ_HOURS}시간 안에 1회 다운로드할 수 있습니다.</p></div>
+                            <button type="button" onclick="closeDlReqModal()" class="shrink-0 text-gray-400 hover:text-gray-600"><i class="fas fa-times"></i></button>
+                        </div>
+                        <div id="dl-req-body" class="p-4 flex-1 min-h-0 overflow-y-auto"></div>
+                        <div class="flex justify-end px-4 py-3 border-t border-gray-100 bg-gray-50 rounded-b-lg shrink-0">
+                            <button type="button" onclick="closeDlReqModal()" class="px-4 py-2 text-sm bg-gray-200 text-gray-700 rounded hover:bg-gray-300">닫기</button>
+                        </div></div>`;
+                document.body.appendChild(m);
+            }
+            renderDlReqModal();
+            m.classList.remove('hidden');
+        }
+        function closeDlReqModal() { const m = document.getElementById('dl-req-modal'); if (m) m.classList.add('hidden'); }
+        function renderDlReqModalIfOpen() {
+            const m = document.getElementById('dl-req-modal');
+            if (m && !m.classList.contains('hidden')) renderDlReqModal();
+            const sec = document.getElementById('sec-sales-supply');
+            if (sec && !sec.classList.contains('hidden') && typeof renderSupplyCenter === 'function') renderSupplyCenter();
+        }
+        const DL_REQ_CHIPS = { pending: ['승인 대기', 'bg-amber-100 text-amber-800'], approved: ['승인 · 다운로드 가능', 'bg-green-100 text-green-700'],
+                               used: ['다운로드 완료', 'bg-gray-100 text-gray-600'], rejected: ['반려', 'bg-red-100 text-red-700'], expired: ['기한 지남', 'bg-gray-100 text-gray-500'] };
+        function renderDlReqModal() {
+            const body = document.getElementById('dl-req-body');
+            if (!body) return;
+            const list = dlReqVisible();
+            const t = v => v ? String(v).slice(0, 16).replace('T', ' ') : '';
+            body.innerHTML = list.length ? `<ul class="space-y-2">${list.map(r => {
+                const st = dlReqStatusOf(r), chip = DL_REQ_CHIPS[st] || [st, 'bg-gray-100'];
+                const btns = canDecideDlReq(r)
+                    ? `<button type="button" onclick="decideDlReq(${jsArg(r.id)}, true)" class="px-3 py-1.5 text-xs rounded bg-gray-800 text-white hover:bg-gray-900">승인</button>
+                       <button type="button" onclick="decideDlReq(${jsArg(r.id)}, false)" class="px-3 py-1.5 text-xs rounded border border-gray-300 text-gray-700 bg-white hover:bg-gray-50">반려</button>`
+                    : (r.by === currentUserName && st === 'approved'
+                        ? `<button type="button" onclick="downloadApprovedSupply(${jsArg(r.id)})" class="px-3 py-1.5 text-xs rounded bg-green-600 text-white hover:bg-green-700"><i class="fas fa-file-excel mr-1"></i>엑셀 다운로드</button>` : '');
+                return `<li class="dl-req-item border border-gray-200 rounded p-3" data-id="${escapeHtml(r.id)}">
+                        <div class="flex flex-wrap items-center gap-2">
+                            <span class="px-2 py-0.5 rounded-full text-xs font-medium ${chip[1]}">${chip[0]}</span>
+                            <b class="text-sm text-gray-800">[${escapeHtml(r.chName || r.ch)}] 거래처 엑셀</b>
+                            <span class="text-xs text-gray-500">${escapeHtml(r.by)}${deptNames[r.byDept] ? ' · ' + escapeHtml(deptNames[r.byDept]) : ''} · ${escapeHtml(t(r.at))}</span>
+                            <span class="ml-auto flex gap-1.5">${btns}</span>
+                        </div>
+                        <p class="text-xs text-gray-600 mt-1.5">사유: ${escapeHtml(r.reason || '')}</p>
+                        <p class="text-[11px] text-gray-400 mt-0.5">승인할 사람: ${escapeHtml((r.approvers || []).join(', ') || '-')}${r.decidedBy ? ` · 처리: ${escapeHtml(r.decidedBy)} ${escapeHtml(t(r.decidedAt))}` : ''}${r.note ? ` · 반려 사유: ${escapeHtml(r.note)}` : ''}${r.usedAt ? ` · 다운로드: ${escapeHtml(t(r.usedAt))} (${r.rows || 0}건)` : ''}</p>
+                    </li>`; }).join('')}</ul>`
+                : '<p class="py-10 text-center text-sm text-gray-400">승인 요청이 없습니다.</p>';
         }
 
         // ==================== 공통관리: 공급 단가표 ====================
