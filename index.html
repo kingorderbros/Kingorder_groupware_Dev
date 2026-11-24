@@ -30,7 +30,7 @@
     <script src="config/app-config.js"></script>
     <!-- 화면 버전 (2026-11-16) — 배포할 때마다 올립니다. 개발 · 운영 화면 아래에 "그룹웨어 v1.1.0 · 운영" 처럼 보입니다.
          groupware = 그룹웨어 화면 · calendar = 킹오더일정(?mode=calendar) -->
-    <script>window.KOB_VERSION = { groupware: '1.1.38', calendar: '1.0.8', date: '2026-11-24' };</script>
+    <script>window.KOB_VERSION = { groupware: '1.1.39', calendar: '1.0.8', date: '2026-11-24' };</script>
     <script>
         (function () {
             // manifest 는 **여기서 만들어 답니다.** (2026-09-05 고침)
@@ -7168,6 +7168,11 @@
             </div>
 
             <div class="p-6 space-y-4">
+                <!-- 확인 필요 — 무엇을 확인할지 · 항목별 확인 완료 (2026-11-24) -->
+                <div id="inbound-check-wrap" class="hidden border border-amber-200 rounded-lg overflow-hidden">
+                    <div id="inbound-check-head" class="px-3 py-2 border-b text-sm font-bold"></div>
+                    <div id="inbound-check-body" class="px-3 py-1"></div>
+                </div>
                 <!-- 원문 · 유입 정보 — 홈페이지 폼 · 메일 · 블로그 · 인스타 등에서 수집된 건만 (2026-10-08) -->
                 <div id="inbound-origin-wrap" class="hidden border border-emerald-200 rounded-lg overflow-hidden">
                     <div class="bg-emerald-50 px-3 py-2 border-b border-emerald-200 text-sm font-bold text-emerald-900"><i class="fas fa-plug mr-1"></i>원문·유입 정보 <span class="font-normal text-xs text-emerald-700/80 ml-1">수집 원본 (수정 불가)</span></div>
@@ -29289,9 +29294,11 @@ const QUOTE_TEMPLATES = [
             if (rs) rs.classList.toggle('hidden', !Object.keys(execListFilter).some(k => execListFilter[k]));
             const body = document.getElementById('exec-modal-rows');
             body.innerHTML = list.length ? list.map(i => {
+                const gd = execIssueGuide(i);
+                const tip = gd.map(g => `${g.title}: ${g.why} → ${g.steps[0] || ''}`).join('\n');
                 const flag = i.overdue > 0
-                    ? `<span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-700">지연 ${i.overdue}일</span>`
-                    : (i.issue ? `<span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800">${escapeHtml(i.issue)}</span>` : '');
+                    ? `<span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-700" title="${escapeHtml(tip)}">지연 ${i.overdue}일</span>`
+                    : (i.issue ? `<span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800" title="${escapeHtml(tip)}">${escapeHtml(i.issue)}</span>` : '');
                 return `
                 <tr onclick="openExecItemModal(${jsArg(i.kind)}, ${jsArg(String(i.id))})"
                     onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openExecItemModal(${jsArg(i.kind)}, ${jsArg(String(i.id))});}"
@@ -29304,7 +29311,7 @@ const QUOTE_TEMPLATES = [
                     <td class="px-3 py-2 whitespace-nowrap">${escapeHtml(i.owner || '미배정')}${i.from ? `<span class="block text-[11px] text-gray-400">요청 ${escapeHtml(i.from)}</span>` : ''}</td>
                     <td class="px-3 py-2 whitespace-nowrap text-gray-500">${escapeHtml(i.due || '-')}</td>
                     <td class="px-3 py-2 text-center whitespace-nowrap"><span class="px-2 py-0.5 rounded-full text-xs font-medium ${i.chip}">${escapeHtml(i.statusName || '-')}</span></td>
-                    <td class="px-3 py-2 whitespace-nowrap">${flag || '<span class="text-gray-300">-</span>'}</td>
+                    <td class="px-3 py-2">${flag ? `<span class="whitespace-nowrap">${flag}</span>${gd[0] ? `<span class="block text-[11px] text-gray-500 mt-0.5 min-w-[10rem] max-w-[16rem]">할 일: ${escapeHtml(gd[0].steps[0] || '')}</span>` : ''}` : '<span class="text-gray-300">-</span>'}</td>
                     <td class="px-3 py-2 text-center whitespace-nowrap text-gray-300"><i class="fas fa-chevron-right text-xs"></i></td>
                 </tr>${execListProgRowHtml(i)}`;
             }).join('') : (all.length ? '<tr><td colspan="9" class="px-3 py-10 text-center text-sm text-gray-400"><i class="fas fa-filter text-2xl block mb-2 text-gray-300"></i>조건에 맞는 건이 없습니다.</td></tr>' : '<tr><td colspan="9" class="px-3 py-10 text-center text-sm text-gray-400"><i class="fas fa-circle-check text-2xl block mb-2 text-green-300"></i>해당하는 건이 없습니다.</td></tr>');
@@ -29487,6 +29494,101 @@ const QUOTE_TEMPLATES = [
                 </div>`;
         }
 
+        // ==================== 문제 · 지연 처리 안내 (2026-11-24) ====================
+        // 다니엘님 "문제 있음은 어떤 문제인지, 확인 필요는 뭘 확인해야 할지 알려 주고, 문제를 해결하면 해당 건에서 빼야 함.
+        //          장기 미처리 22일이면 처리 액션을 알려 주고 처리할 수 있게 가이드를 줘"
+        //   · 문제 · 지연은 저장된 상태로 그때그때 계산합니다 — 원인을 처리(담당자 배정 · 상태 변경 · 진행 내역 입력 …)하면 다음 화면에서 저절로 빠집니다.
+        //   · 여기서는 문제마다 '무엇이 문제인지 · 할 일 · 바로 처리 단추' 를 만듭니다.
+        const EXEC_ISSUE_RULES = [
+            { re: /장기 미처리 (\d+)일/, title: m => `장기 미처리 ${m[1]}일`, why: m => `접수 후 ${m[1]}일 동안 완료되지 않았습니다 (기준 ${EXEC_STALE_DAYS}일).`,
+              steps: ['담당자에게 지금 상태를 확인합니다.', '처리 중이면 진행 내용을 기록하고 상태를 갱신합니다.', '이미 끝난 일이면 상태를 [완료]로 바꿉니다.', '진행할 수 없으면 [보류]로 바꾸고 사유를 적습니다 (보류 건으로 따로 표시됩니다).'], fix: '완료로 바꾸면' },
+            { re: /담당자 미배정|담당자 미지정/, title: () => '담당자 미배정', why: () => '접수되었지만 처리할 담당자가 정해지지 않았습니다.',
+              steps: ['원본 화면에서 담당자를 배정합니다.'], fix: '담당자를 배정하면' },
+            { re: /배정 보류/, title: () => '배정 보류', why: () => '담당자 배정이 보류되어 있습니다.',
+              steps: ['보류한 이유를 확인합니다.', '담당자를 배정하거나, 처리하지 않을 건이면 반려 · 취소합니다.'], fix: '담당자를 배정하면' },
+            { re: /^보류/, title: () => '보류', why: () => '진행이 보류되어 멈춰 있습니다.',
+              steps: ['보류 사유와 다시 시작할 시점을 확인합니다.', '다시 진행하면 상태를 [처리중]으로, 하지 않을 일이면 취소 · 완료로 정리합니다.'], fix: '보류를 풀면' },
+            { re: /거절됨/, title: () => '거절됨', why: () => '요청을 받은 부서가 거절했습니다.',
+              steps: ['거절 사유를 확인합니다.', '내용을 보완해 다시 요청하거나, 필요 없으면 요청을 취소합니다.'], fix: '다시 요청하거나 취소하면' },
+            { re: /일정 변경 요청 대기/, title: () => '일정 변경 요청 대기', why: () => '처리완료 예정일 변경 요청이 수락을 기다리고 있습니다.',
+              steps: ['요청한 사람이 변경 요청을 수락하거나 거절합니다.'], fix: '수락 · 거절하면' },
+            { re: /수락 대기 (\d+)일/, title: m => `수락 대기 ${m[1]}일`, why: m => `요청을 받은 쪽이 ${m[1]}일째 수락하지 않았습니다.`,
+              steps: ['받은 사람(부서)이 수락하거나 거절합니다.', '요청한 사람은 받는 쪽에 확인을 요청합니다.'], fix: '수락 · 거절하면' },
+            { re: /이관 반려/, title: () => '이관 반려', why: () => '다른 부서로 이관한 업무가 반려되었습니다.',
+              steps: ['반려 사유를 확인합니다.', '다시 이관하거나 직접 처리합니다.'], fix: '다시 이관하거나 처리하면' },
+            { re: /이관 확인 대기/, title: () => '이관 확인 대기', why: () => '이관받은 부서가 아직 확인하지 않았습니다.',
+              steps: ['이관받은 부서에서 업무를 확인하고 담당자를 배정합니다.'], fix: '이관받은 부서가 확인하면' },
+            { re: /문제 (\d+)건 미해결/, title: m => `문제 ${m[1]}건 미해결`, why: () => '진행 내역에 등록된 문제가 아직 해결되지 않았습니다.',
+              steps: ['[진행 내역 입력]에서 문제 내용을 확인합니다.', '해결한 내용을 입력해 문제를 해결 처리합니다.'], fix: '문제를 해결 처리하면', prog: true },
+            { re: /지연 사유 미입력/, title: () => '지연 사유 미입력', why: () => '완료 예정일이 지났는데 지연 사유가 없습니다.',
+              steps: ['[진행 내역 입력]에서 지연 사유와 새 완료 예정일을 입력합니다.', '이미 끝났으면 완료 내용을 입력합니다.'], fix: '지연 사유를 입력하면', prog: true },
+            { re: /지체 (\d+)일/, title: m => `지체 ${m[1]}일`, why: m => `${m[1]}일 동안 진행 내역이 입력되지 않았습니다.`,
+              steps: ['[진행 내역 입력]에서 오늘까지 진행한 내용을 입력합니다.'], fix: '진행 내역을 입력하면', prog: true },
+            { re: /미해결 이슈 (\d+)건/, title: m => `미해결 이슈 ${m[1]}건`, why: () => '프로젝트에 해결되지 않은 이슈가 있습니다.',
+              steps: ['프로젝트 화면에서 이슈를 확인합니다.', '조치한 뒤 이슈를 해결 처리합니다.'], fix: '이슈를 해결 처리하면' },
+            { re: /재시작 예정/, title: () => '작업 보류', why: x => `작업이 보류되어 있습니다 (${x.input}).`,
+              steps: ['재시작 예정일에 맞춰 보류를 풀고 진행합니다.'], fix: '보류를 풀면' },
+            { re: /선행 작업 대기/, title: () => '선행 작업 대기', why: () => '앞 작업이 끝나지 않아 시작할 수 없습니다.',
+              steps: ['선행 작업 담당자에게 일정을 확인합니다.', '먼저 시작해야 하면 조기 착수로 진행합니다.'], fix: '선행 작업이 끝나면' },
+            { re: /지연 사유 등록됨/, title: () => '일정 지연 (사유 등록됨)', why: () => '작업이 일정보다 늦어 지연 사유가 등록되어 있습니다.',
+              steps: ['등록된 사유와 새 일정을 확인합니다.', '작업을 완료하거나 일정을 다시 정합니다.'], fix: '완료하거나 일정을 다시 정하면' },
+            { re: /유효기한 경과/, title: () => '견적 유효기한 경과', why: () => '견적서의 유효기한이 지났습니다.',
+              steps: ['고객에게 결과를 확인합니다.', '결과에 따라 [수락] · [거절]로 바꾸거나 새 견적을 작성합니다.'], fix: '수락 · 거절로 바꾸면' },
+            { re: /반려 · 재요청/, title: () => '보완서류 반려', why: () => '제출한 보완서류가 반려되어 다시 요청되었습니다.',
+              steps: ['반려 사유를 확인합니다.', '영업 담당이 서류를 다시 업로드합니다.'], fix: '다시 업로드하면' },
+            { re: /중단 대상/, title: () => '추가 컨택 횟수 도달', why: () => '정한 횟수만큼 추가 컨택을 했지만 결과가 없습니다.',
+              steps: ['결과를 [실패](부재중 등)로 정리하거나,', '계속 진행하면 결과를 [진행중]으로 입력합니다.'], fix: '결과를 입력하면' },
+            { re: /배정 지연/, title: x => x.input, why: () => '인입 후 기준 시간(배정) 안에 담당 본부가 정해지지 않았습니다.',
+              steps: ['인바운드 상세에서 담당 본부 · 담당자를 배정합니다.'], fix: '배정하면' },
+            { re: /미컨택/, title: x => x.input, why: () => '배정 후 기준 시간 안에 고객에게 연락하지 않았습니다.',
+              steps: ['고객에게 연락한 뒤 컨택일(또는 추가 컨택)을 입력합니다.'], fix: '컨택일을 입력하면' }
+        ];
+        function execIssueGuide(i) {
+            const out = [];
+            const src = execOpenSourceJs(i);
+            const openBtn = src ? { label: '원본 화면에서 처리', js: `closeExecItemModal(); closeExecListModal(); ${src}`, main: true } : null;
+            const pt = (typeof execProgTarget === 'function') ? execProgTarget(i) : null;
+            const progBtn = pt ? { label: '진행 내역 입력', js: `openSalesProgress(${jsArg(pt.key)}, ${jsArg(String(pt.w.id))}, 'log')` } : null;
+            if (i.overdue > 0 && !i.done) out.push({ tone: 'red', title: `기한 ${i.overdue}일 지연`, why: `완료기한(${i.due || '-'})이 지났는데 끝나지 않았습니다.`,
+                steps: ['담당자에게 진행 상황을 확인합니다.', '끝난 일이면 완료로 바꿉니다.', '더 걸리면 지연 사유와 새 완료 예정일을 입력합니다.'], fix: '완료하거나 기한을 다시 정하면',
+                actions: [progBtn, openBtn].filter(Boolean) });
+            if (i.issue && !i.done) {
+                const rule = EXEC_ISSUE_RULES.find(r => r.re.test(i.issue));
+                const m = rule ? i.issue.match(rule.re) : null;
+                if (m) m.input = i.issue;
+                out.push(rule ? { tone: 'amber', title: rule.title(m), why: rule.why(m), steps: rule.steps, fix: rule.fix,
+                                  actions: (rule.prog ? [progBtn, openBtn] : [openBtn, progBtn]).filter(Boolean) }
+                              : { tone: 'amber', title: i.issue, why: '조치가 필요한 상태입니다.', steps: ['원본 화면에서 내용을 확인하고 처리합니다.'], fix: '처리하면', actions: [openBtn].filter(Boolean) });
+            }
+            // 기한 지연과 다른 문제가 함께 있으면 한 칸으로 (할 일은 더 구체적인 문제 쪽)
+            if (out.length === 2) {
+                const [d, x] = out;
+                return [{ tone: 'red', title: `${d.title} · ${x.title}`, why: `${d.why} ${x.why}`, steps: x.steps, fix: x.fix,
+                          actions: x.actions.concat(d.actions).filter((v, k, arr) => arr.findIndex(y => y.label === v.label) === k) }];
+            }
+            return out;
+        }
+        function execIssueGuideHtml(i) {
+            return execIssueGuide(i).map(g => {
+                const c = g.tone === 'red' ? { box: 'border-red-200 bg-red-50', t: 'text-red-800', s: 'text-red-900/80' } : { box: 'border-amber-200 bg-amber-50', t: 'text-amber-900', s: 'text-amber-900/80' };
+                // 넓은 화면은 한 줄에 세 칸(문제 · 할 일 · 단추)으로 — 상세 창이 한 화면에 들어가게
+                return `<div class="exec-issue-guide rounded border ${c.box} p-3 mb-3 grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)_auto] gap-x-4 gap-y-1.5">
+                        <div class="min-w-0">
+                            <p class="text-sm font-bold ${c.t}"><i class="fas fa-triangle-exclamation mr-1"></i>${escapeHtml(g.title)}</p>
+                            <p class="text-xs mt-1 ${c.s}"><b>무엇이 문제인지</b> · ${escapeHtml(g.why)}</p>
+                        </div>
+                        <div class="min-w-0">
+                            <p class="text-xs font-semibold ${c.t}">할 일</p>
+                            <ol class="text-xs ${c.s} list-decimal pl-5 space-y-0.5">${g.steps.map(x => `<li>${escapeHtml(x)}</li>`).join('')}</ol>
+                        </div>
+                        <div class="flex flex-wrap lg:flex-col lg:items-end items-center gap-1.5">
+                            ${g.actions.map(a => `<button type="button" onclick="${a.js}" class="px-3 py-1.5 text-xs rounded whitespace-nowrap ${a.main ? 'bg-gray-800 text-white hover:bg-gray-900' : 'border border-gray-300 bg-white text-gray-700 hover:bg-gray-50'}">${escapeHtml(a.label)}</button>`).join('')}
+                            <span class="text-[11px] ${c.s} lg:text-right lg:max-w-[11rem]"><i class="fas fa-circle-info mr-0.5"></i>${escapeHtml(g.fix)} 이 목록에서 저절로 빠집니다.</span>
+                        </div>
+                    </div>`;
+            }).join('');
+        }
+
         function openExecItemModal(kind, id) {
             const i = execFindItem(kind, id);
             if (!i) { alert('해당 건을 찾을 수 없습니다. 화면을 새로고침한 후 다시 열어 주세요.'); return; }
@@ -29503,15 +29605,14 @@ const QUOTE_TEMPLATES = [
             const rows = execRawRows(i);
             const goJs = execOpenSourceJs(i);
             document.getElementById('exec-item-body').innerHTML = `
+              ${execIssueGuideHtml(i)}
               <div class="grid grid-cols-1 lg:grid-cols-2 gap-3 lg:items-start">
               <div class="min-w-0">
-                ${(i.overdue > 0 || i.issue) ? `
-                <div class="rounded border ${i.overdue > 0 ? 'border-red-200 bg-red-50' : 'border-amber-200 bg-amber-50'} p-3 mb-3">
-                    <p class="text-sm font-bold ${i.overdue > 0 ? 'text-red-800' : 'text-amber-900'}">
-                        <i class="fas fa-triangle-exclamation mr-1"></i>${i.overdue > 0 ? `기한이 ${i.overdue}일 경과했습니다` : escapeHtml(i.issue)}
-                    </p>
-                    ${(i.overdue > 0 && i.issue) ? `<p class="text-xs mt-1 text-red-800/80">${escapeHtml(i.issue)}</p>` : ''}
-                    ${i.due ? `<p class="text-xs mt-1 ${i.overdue > 0 ? 'text-red-800/80' : 'text-amber-900/80'}">완료기한 ${escapeHtml(i.due)}</p>` : ''}
+                ${i.kind === 'inbound' && i.raw && inboundNeedsCheck(i.raw) ? `<div class="rounded border border-amber-200 bg-amber-50 p-3 mb-3">
+                    <p class="text-sm font-bold text-amber-900"><i class="fas fa-circle-question mr-1"></i>확인 필요 · ${escapeHtml(inboundCheckText(i.raw))}</p>
+                    <ul class="text-xs text-amber-900/80 list-disc pl-5 mt-1 space-y-0.5">${inboundOpenChecks(i.raw).map(x => `<li><b>${escapeHtml(x.name)}</b> — ${escapeHtml(x.guide)}</li>`).join('')}</ul>
+                    <div class="flex flex-wrap items-center gap-2 mt-2"><button type="button" onclick="closeExecItemModal(); closeExecListModal(); openInboundModal(${jsArg(String(i.id))})" class="px-3 py-1.5 text-xs rounded bg-gray-800 text-white hover:bg-gray-900">인바운드 상세에서 확인 완료</button>
+                        <span class="text-[11px] text-amber-900/80"><i class="fas fa-circle-info mr-0.5"></i>확인 완료하면 확인 필요에서 빠집니다.</span></div>
                 </div>` : ''}
 
                 <div class="rounded border border-gray-200 bg-gray-50 p-3">
@@ -29857,7 +29958,7 @@ const QUOTE_TEMPLATES = [
         function inboundColumns() {
             const cols = [
                 { label: '인입일자', get: r => r.inAt || r.inDate, cls: 'whitespace-nowrap text-gray-500' },
-                { label: '수집 채널', get: r => inboundChannelLabel(r), html: r => inboundChannelChip(r) + ((r.flags || []).length || r.dupOf ? ` <span class="text-amber-600" title="${escapeHtml((r.flags || []).join(' · '))}">⚠</span>` : '') },
+                { label: '수집 채널', get: r => inboundChannelLabel(r), html: r => inboundChannelChip(r) + (inboundNeedsCheck(r) ? ` <span class="text-amber-600" title="확인 필요: ${escapeHtml(inboundCheckText(r))}">⚠</span>` : '') },
                 { label: '인입 경로', get: r => inboundListText(r.routes), cls: 'whitespace-nowrap' },
                 { label: '게시판 서비스 유형', get: r => inboundListText(r.services) },
                 { label: '업체명', get: r => r.company, cls: 'whitespace-nowrap font-medium' },
@@ -30064,6 +30165,7 @@ const QUOTE_TEMPLATES = [
                 </div>`;
 
             renderInboundOrigin(d);     // 원문 · 유입 정보 (수집된 건만 · 2026-10-08)
+            renderInboundChecks(d);     // 확인 필요 항목 · 확인 완료 (2026-11-24)
             document.getElementById('inbound-vendor-body').innerHTML = `
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     ${text('인입일자', 'inDate', 'date', '', true)}
@@ -30572,11 +30674,97 @@ const QUOTE_TEMPLATES = [
         }
         // 확인 필요 — 인입 때 붙은 표시(연락처 확인 필요 · 문의내용 없음 · 재문의)가 있는 건. 결과가 영업수주 · 실패로 끝난 건은 뺍니다
         // (2026-11-24 다니엘님 "결과가 실패로 저장되어 있는데 확인 필요에 리스트업된 이유" — 표시는 기록으로 남기고 목록 · 숫자에서만 뺌)
+        // (2026-11-24 다니엘님 "확인 필요는 왜 나오는지, 어떤 걸 확인하라고 알려 주고 확인 완료하면 없애야지")
+        //   · 표시마다 무엇을 확인할지 안내(INB_CHECK_GUIDE), 상세 창에서 항목별 [확인 완료] — r.checks[항목] = { by, at }
+        //   · 연락처를 바르게 고치거나 문의 내용을 적으면 그 항목은 저절로 해제
+        //   · 확인되지 않은 항목이 남은 건만 '확인 필요' 로 셉니다
         function inboundNeedsCheck(r) {
             const res = (r.kob || {}).result;
             if (r.spam || res === '영업수주' || res === '실패') return false;
-            return (r.flags || []).length > 0 || !!r.dupOf;
+            return inboundOpenChecks(r).length > 0;
         }
+        const INB_CHECK_GUIDE = {
+            phone: { name: '연락처 확인 필요', guide: '연락처 형식이 맞지 않습니다(자릿수 · 번호 오류). 고객 연락처를 확인해 인입 정보의 연락처를 고친 뒤 저장해 주세요. 바르게 고치면 저절로 해제됩니다.' },
+            note:  { name: '문의내용 없음',   guide: '문의 내용이 비어 있습니다. 고객에게 문의 내용을 확인해 요청사항에 적은 뒤 저장해 주세요. 내용을 적으면 저절로 해제됩니다.' },
+            dup:   { name: '재문의',         guide: '최근 같은 연락처로 들어온 이전 건이 있습니다. 같은 고객인지, 이전 건의 담당자 · 결과와 겹치지 않는지 확인해 주세요.' }
+        };
+        function inbCheckKey(flag) {
+            const f = String(flag || '');
+            if (f === '연락처 확인 필요') return 'phone';
+            if (f === '문의내용 없음') return 'note';
+            if (f.indexOf('재문의') === 0) return 'dup';
+            return 'etc:' + f;
+        }
+        // 확인 항목 — [{ key, flag, name, guide, done: { by, at, auto } | null }]
+        function inboundCheckItems(r) {
+            const flags = (r.flags || []).slice();
+            if (r.dupOf && !flags.some(f => String(f).indexOf('재문의') === 0)) flags.push('재문의: ' + r.dupOf);
+            const seen = {};
+            return flags.map(flag => {
+                const key = inbCheckKey(flag);
+                if (seen[key]) return null;
+                seen[key] = 1;
+                const g = INB_CHECK_GUIDE[key] || { name: String(flag), guide: '표시된 내용을 확인해 주세요.' };
+                let auto = false;
+                if (key === 'phone') auto = !!r.phone && !inbPhoneLooksWrong(r.phone);
+                if (key === 'note') auto = !!String(r.requestNote || '').trim();
+                const done = (r.checks || {})[key] || (auto ? { auto: true } : null);
+                return { key, flag: String(flag), name: key === 'dup' && r.dupOf ? `재문의 (이전 건 ${r.dupOf})` : g.name, guide: g.guide, done };
+            }).filter(Boolean);
+        }
+        function inboundOpenChecks(r) { return inboundCheckItems(r).filter(x => !x.done); }
+        function inboundCheckText(r) { return inboundOpenChecks(r).map(x => x.name).join(' · '); }
+        function canConfirmInboundCheck() { return canSeeInboundKob() || canEditInboundVendor(); }
+        // 상세 창의 확인 필요 칸
+        function renderInboundChecks(d) {
+            const wrap = document.getElementById('inbound-check-wrap');
+            if (!wrap) return;
+            const rec = inboundEditId ? inboundRecords.find(x => x.id === inboundEditId) : null;
+            const items = rec ? inboundCheckItems(rec) : [];
+            wrap.classList.toggle('hidden', !items.length);
+            if (!items.length) return;
+            const open = items.filter(x => !x.done);
+            const can = canConfirmInboundCheck();
+            const res = (rec.kob || {}).result;
+            const ended = res === '영업수주' || res === '실패';
+            const t = v => v ? String(v).slice(0, 16).replace('T', ' ') : '';
+            document.getElementById('inbound-check-head').innerHTML = open.length
+                ? `<i class="fas fa-triangle-exclamation mr-1"></i>확인 필요 ${open.length}건 <span class="font-normal text-xs ml-1">${ended ? '결과가 ' + escapeHtml(res) + '(으)로 끝나 확인 필요 목록에서는 빠져 있습니다' : '아래 내용을 확인한 뒤 [확인 완료]를 클릭하면 확인 필요 목록에서 빠집니다'}</span>`
+                : `<i class="fas fa-circle-check mr-1"></i>확인 완료 <span class="font-normal text-xs ml-1">모든 항목을 확인했습니다</span>`;
+            document.getElementById('inbound-check-head').className = `px-3 py-2 border-b text-sm font-bold flex flex-wrap items-center gap-1 ${open.length ? 'bg-amber-50 border-amber-200 text-amber-900' : 'bg-green-50 border-green-200 text-green-800'}`;
+            document.getElementById('inbound-check-body').innerHTML = `<ul class="divide-y divide-gray-100">${items.map(x => `
+                <li class="inb-check-item py-2 flex flex-wrap items-start gap-2" data-key="${escapeHtml(x.key)}">
+                    <div class="flex-1 min-w-[12rem]">
+                        <p class="text-sm font-semibold ${x.done ? 'text-gray-400 line-through' : 'text-gray-800'}">${escapeHtml(x.name)}
+                            ${x.key === 'dup' && rec.dupOf ? `<button type="button" onclick="openInboundModal(${jsArg(rec.dupOf)})" class="ml-1 text-xs font-normal text-blue-600 hover:underline">이전 건 열기</button>` : ''}</p>
+                        <p class="text-xs ${x.done ? 'text-gray-400' : 'text-gray-600'} mt-0.5">${escapeHtml(x.guide)}</p>
+                        ${x.done ? `<p class="text-[11px] text-green-700 mt-0.5"><i class="fas fa-check mr-1"></i>${x.done.auto ? '수정되어 자동 해제' : `확인 완료 · ${escapeHtml(x.done.by || '')} · ${escapeHtml(t(x.done.at))}`}</p>` : ''}
+                    </div>
+                    ${can ? (x.done ? (x.done.auto ? '' : `<button type="button" onclick="undoInboundCheck(${jsArg(x.key)})" class="text-xs text-gray-500 hover:underline">되돌리기</button>`)
+                        : `<button type="button" onclick="confirmInboundCheck(${jsArg(x.key)})" class="px-3 py-1.5 text-xs rounded bg-gray-800 text-white hover:bg-gray-900 whitespace-nowrap"><i class="fas fa-check mr-1"></i>확인 완료</button>`) : ''}
+                </li>`).join('')}</ul>
+                ${can && open.length > 1 ? `<div class="text-right pt-2"><button type="button" onclick="confirmInboundCheck('*')" class="px-3 py-1.5 text-xs rounded border border-gray-300 bg-white text-gray-700 hover:bg-gray-50">모두 확인 완료</button></div>` : ''}`;
+        }
+        // 확인 완료 — 저장된 건에 바로 남기고(상세 창의 작성 중 내용에도 같이), 목록 · 숫자를 다시 그립니다
+        function setInboundCheck(key, val) {
+            const rec = inboundRecords.find(x => x.id === inboundEditId);
+            if (!rec || !canConfirmInboundCheck()) return;
+            const keys = key === '*' ? inboundOpenChecks(rec).map(x => x.key) : [key];
+            [rec, inboundDraft].forEach(o => {
+                if (!o) return;
+                o.checks = Object.assign({}, o.checks || {});
+                keys.forEach(k => { if (val) o.checks[k] = val; else delete o.checks[k]; });
+            });
+            saveInboundRecords();
+            renderInboundChecks(inboundDraft);
+            const sec = document.getElementById('sec-inbound-center');
+            if (sec && !sec.classList.contains('hidden')) renderInboundCenter();
+        }
+        function confirmInboundCheck(key) {
+            setInboundCheck(key, { by: currentUserName || '', at: new Date().toISOString() });
+            showAppToast('확인 완료로 처리했습니다.', 'green');
+        }
+        function undoInboundCheck(key) { setInboundCheck(key, null); }
         function inboundLive() { return inboundRecords.filter(r => !r.spam); }
 
         // 인바운드 담당자 후보 — 휴직자 · 퇴사자 제외 (2026-11-03), 기술영업본부 제외 (2026-11-10 다니엘님: 인바운드에서는 뺌)
@@ -30745,7 +30933,7 @@ const QUOTE_TEMPLATES = [
                                 <div class="flex items-center justify-between mt-1.5 text-[11px]"><span class="text-gray-500">${escapeHtml((r.kob || {}).owner || '')} ${(r.kob || {}).dept ? '' : ''}</span>
                                     <span class="${inboundStopped(r) ? 'text-rose-600 font-bold' : 'text-gray-400'}">${n ? '추가 ' + n + '회' : ''}</span></div>
                                 ${late ? `<p class="text-[11px] text-rose-600 font-semibold mt-1">${late}</p>` : ''}
-                                ${inboundNeedsCheck(r) ? `<p class="text-[11px] text-amber-700 mt-1 truncate">⚠ ${escapeHtml((r.flags || []).join(' · ') || '재문의')}</p>` : ''}
+                                ${inboundNeedsCheck(r) ? `<p class="text-[11px] text-amber-700 mt-1 truncate" title="상세 창에서 확인 후 [확인 완료]">⚠ 확인 필요: ${escapeHtml(inboundCheckText(r))}</p>` : ''}
                             </button>`;
                         }).join('') || '<p class="text-[11px] text-gray-400 text-center py-4">없음</p>'}${col.length > 60 ? `<p class="text-[11px] text-gray-400 text-center">외 ${col.length - 60}건은 인입 목록에서 확인</p>` : ''}</div></div>`;
                 }).join('')}</div>`;
