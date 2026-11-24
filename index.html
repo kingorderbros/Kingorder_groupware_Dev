@@ -30,7 +30,7 @@
     <script src="config/app-config.js"></script>
     <!-- 화면 버전 (2026-11-16) — 배포할 때마다 올립니다. 개발 · 운영 화면 아래에 "그룹웨어 v1.1.0 · 운영" 처럼 보입니다.
          groupware = 그룹웨어 화면 · calendar = 킹오더일정(?mode=calendar) -->
-    <script>window.KOB_VERSION = { groupware: '1.1.35', calendar: '1.0.8', date: '2026-11-24' };</script>
+    <script>window.KOB_VERSION = { groupware: '1.1.36', calendar: '1.0.8', date: '2026-11-24' };</script>
     <script>
         (function () {
             // manifest 는 **여기서 만들어 답니다.** (2026-09-05 고침)
@@ -28597,6 +28597,83 @@ const QUOTE_TEMPLATES = [
         const execLate = i => !i.done && i.overdue > 0;
         const execIssue = i => !i.done && !!i.issue;
 
+        // ---------- 본부 · 기능(메뉴) 나누기 (2026-11-24) ----------
+        const EXEC_NO_DEPT = '_none';
+        function execDeptKey(i, depts) { return (depts || allDeptIds()).indexOf(i.dept) > -1 ? i.dept : EXEC_NO_DEPT; }
+        function execDeptName(dp) { return dp === EXEC_NO_DEPT ? '본부 미지정' : (deptNames[dp] || dp); }
+        // 기능 = 그 건이 들어 있는 메뉴. 업무센터 업무는 업무유형 탭(AS유지보수 · 영업활동 등록 …)까지 나눕니다.
+        const EXEC_FN_FIXED = {
+            inbound:   { name: '인바운드',  order: 50, page: 'inbound-center' },
+            quote:     { name: '견적서',    order: 51, work: ['sales', 'quote'] },
+            paydoc:    { name: '보완서류',  order: 52, page: 'payment-work-center' },
+            collab:    { name: '협업요청',  order: 60, page: 'collab-center' },
+            directive: { name: '업무지시',  order: 61, page: 'collab-center' },
+            project:   { name: '프로젝트',  order: 70, page: 'project-center' },
+            wbs:       { name: 'WBS 작업',  order: 71, page: 'project-center' }
+        };
+        function execFnOf(i) {
+            if (i.kind === 'work') {
+                const d = wcDef(i.srcKey);
+                const types = (d && d.types) || [];
+                const ti = types.findIndex(t => t.id === i.srcType);
+                return { fn: `w:${i.srcKey}:${i.srcType || ''}`, name: ti > -1 ? types[ti].name : (i.kindName || '업무'), order: ti > -1 ? ti : 49, work: [i.srcKey, i.srcType || ''] };
+            }
+            const f = EXEC_FN_FIXED[i.kind] || { name: i.kindName || i.kind, order: 90 };
+            return Object.assign({ fn: i.kind }, f);
+        }
+        // 그 기능의 원본 화면을 여는 코드 (권한이 없으면 '')
+        function execFnOpenJs(f) {
+            if (f.work) return canSeePage(`${f.work[0]}-work-center`) ? `closeExecListModal(); openWorkFromNotice(${jsArg(f.work[0])}, ${jsArg(f.work[1])})` : '';
+            if (f.page) return canSeePage(f.page) ? `closeExecListModal(); navigate(${jsArg(f.page)}, document.getElementById(${jsArg('nav-' + f.page)}))` : '';
+            return '';
+        }
+        // 인바운드 '확인 필요' — 인바운드 화면과 같은 기준(inboundNeedsCheck · 영업수주 · 실패 제외)
+        function execInboundCheck(i) { return i.kind === 'inbound' && typeof inboundNeedsCheck === 'function' && inboundNeedsCheck(i.raw || {}); }
+        function execFnStats(list) {
+            const m = new Map();
+            list.forEach(i => {
+                const f = execFnOf(i);
+                if (!m.has(f.fn)) m.set(f.fn, Object.assign({ list: [] }, f));
+                m.get(f.fn).list.push(i);
+            });
+            return Array.from(m.values()).sort((a, b) => a.order - b.order || a.name.localeCompare(b.name, 'ko')).map(g => Object.assign(g, {
+                open: g.list.filter(execOpen).length, late: g.list.filter(execLate).length, issue: g.list.filter(execIssue).length,
+                done: g.list.filter(i => i.done).length, check: g.list.filter(execInboundCheck).length
+            }));
+        }
+        // 기능별 카드 — 현황판(③)과 본부 상세 팝업이 같은 카드를 씁니다. inModal 이면 팝업 목록을 그 기능으로 거릅니다.
+        function execFnCardsHtml(dp, list, inModal) {
+            return execFnStats(list).map(g => {
+                const pick = st => inModal ? `setExecListFn(${jsArg(g.fn)}, ${jsArg(st)})` : `openExecDeptFn(${jsArg(dp)}, ${jsArg(g.fn)}, ${jsArg(st)})`;
+                const n = (v, cls, label, st) => `<button type="button" onclick="event.stopPropagation(); ${pick(st)}" class="rounded px-0.5 hover:bg-white" title="${label} 건 보기"><span class="font-bold ${v ? cls : 'text-gray-300'}">${v}</span><span class="block text-[10px] text-gray-400">${label}</span></button>`;
+                const go = execFnOpenJs(g);
+                return `<div role="button" tabindex="0" data-fn="${escapeHtml(g.fn)}" onclick="${pick('')}" onkeydown="if(event.key==='Enter'){${pick('')}}"
+                        class="exec-fn-card cursor-pointer rounded border border-gray-200 bg-gray-50/60 p-2.5 hover:border-gray-400 hover:bg-white transition-colors">
+                        <div class="flex items-start justify-between gap-1">
+                            <p class="text-xs font-semibold text-gray-700 leading-tight">${escapeHtml(g.name)}</p>
+                            <span class="text-base font-bold text-gray-800 leading-none" title="전체">${g.list.length}</span>
+                        </div>
+                        <div class="grid grid-cols-4 gap-0.5 text-center text-sm mt-1.5">
+                            ${n(g.open, 'text-blue-600', '진행', 'open')}${n(g.late, 'text-red-600', '지연', 'late')}${n(g.issue, 'text-amber-600', '문제', 'issue')}${n(g.done, 'text-green-600', '완료', 'done')}
+                        </div>
+                        ${g.fn === 'inbound' ? `<button type="button" onclick="event.stopPropagation(); ${pick('check')}" class="mt-1 w-full text-left text-[11px] ${g.check ? 'text-amber-700 font-semibold' : 'text-gray-400'} hover:underline">확인 필요 ${g.check}건</button>` : ''}
+                        ${go ? `<button type="button" onclick="event.stopPropagation(); ${go}" class="mt-1 text-[11px] text-gray-500 hover:text-gray-800 hover:underline"><i class="fas fa-arrow-up-right-from-square mr-0.5"></i>메뉴 열기</button>` : ''}
+                    </div>`;
+            }).join('');
+        }
+        // 본부 팝업을 열고 기능 · 상태로 거릅니다
+        function openExecDeptFn(dp, fn, state) {
+            openExecListModal('d:' + dp);
+            if (fn || state) setExecListFn(fn, state);
+        }
+        // 'check' 는 인바운드 확인 필요 (상태 칸이 아니라 기능 거르기로 둡니다)
+        function setExecListFn(fn, state) {
+            if (state === 'check') { execListFilter.fn = 'inbound-check'; execListFilter.state = ''; }
+            else { execListFilter.fn = fn || ''; execListFilter.state = state || ''; }
+            renderExecListFilter();
+            renderExecListRows();
+        }
+
         // ---------- 문제·지연 묶음 ----------
         function execGroups() {
             const it = execItems;
@@ -28649,28 +28726,39 @@ const QUOTE_TEMPLATES = [
                 </button>`).join('');
 
             // 본부별 — 조직 마스터에 등록된 본부를 모두 보여 줍니다 (새 본부도 자동으로 들어옵니다)
+            // 2026-11-24 다니엘님 "각 본부 현황에 경영현황 숫자와 맞춰 카드 구성, 본부의 기능(메뉴)별 현황을 카드로, 서로 크로스 체크"
+            //   · ① 과 같은 목록(execItems)을 본부 → 기능(메뉴)으로 나눕니다. 본부가 없는 건은 '본부 미지정' 으로 모아 합계가 ① 과 같게
             const DEPTS = allDeptIds();
-            const deptCards = DEPTS.map(dp => {
-                const list = it.filter(i => i.dept === dp);
+            const deptKeys = DEPTS.concat(it.some(i => execDeptKey(i, DEPTS) === EXEC_NO_DEPT) ? [EXEC_NO_DEPT] : []);
+            const deptCards = deptKeys.map(dp => {
+                const list = it.filter(i => execDeptKey(i, DEPTS) === dp);
                 const open = list.filter(execOpen).length;
                 const late = list.filter(execLate).length;
                 const issue = list.filter(execIssue).length;
                 const done = list.filter(i => i.done).length;
                 const rate = list.length ? Math.round(done / list.length * 100) : 0;
+                const num = (n, cls, label, state) => `<button type="button" onclick="openExecDeptFn(${jsArg(dp)}, '', ${jsArg(state)})" class="text-center px-1 rounded hover:bg-gray-50">
+                        <p class="text-lg font-bold ${n ? cls : 'text-gray-300'}">${n}</p><p class="text-[11px] text-gray-400">${label}</p></button>`;
                 return `
-                <button type="button" onclick="openExecListModal('d:${dp}')" class="bg-white p-4 rounded-lg shadow-sm border border-gray-200 text-left hover:shadow-md transition-shadow">
-                    <div class="flex items-center justify-between mb-2">
-                        <p class="font-semibold text-gray-800">${escapeHtml(deptNames[dp] || dp)}</p>
-                        <span class="text-xs text-gray-400">완료율 ${rate}%</span>
+                <div class="exec-dept-panel bg-white p-4 rounded-lg shadow-sm border border-gray-200" data-dept="${escapeHtml(dp)}">
+                    <div class="flex flex-wrap items-center gap-x-4 gap-y-2 mb-3">
+                        <button type="button" onclick="openExecListModal('d:${escapeHtml(dp)}')" class="text-left min-w-[8rem]">
+                            <p class="font-semibold text-gray-800 hover:underline">${escapeHtml(execDeptName(dp))} <span class="text-xs font-normal text-gray-400">전체 ${list.length}건</span></p>
+                            <div class="w-32 bg-gray-100 rounded-full h-1.5 mt-1.5"><div class="bg-blue-500 h-1.5 rounded-full" style="width:${rate}%"></div></div>
+                            <p class="text-[11px] text-gray-400 mt-0.5">완료율 ${rate}%</p>
+                        </button>
+                        <div class="exec-dept-nums grid grid-cols-4 gap-1 ml-auto">
+                            ${num(open, 'text-blue-600', '진행중', 'open')}${num(late, 'text-red-600', '지연', 'late')}${num(issue, 'text-amber-600', '문제', 'issue')}${num(done, 'text-green-600', '완료', 'done')}
+                        </div>
                     </div>
-                    <div class="w-full bg-gray-100 rounded-full h-1.5 mb-3"><div class="bg-blue-500 h-1.5 rounded-full" style="width:${rate}%"></div></div>
-                    <div class="grid grid-cols-3 gap-1 text-center">
-                        <div><p class="text-lg font-bold text-blue-600">${open}</p><p class="text-[11px] text-gray-400">진행중</p></div>
-                        <div><p class="text-lg font-bold ${late ? 'text-red-600' : 'text-gray-300'}">${late}</p><p class="text-[11px] text-gray-400">지연</p></div>
-                        <div><p class="text-lg font-bold ${issue ? 'text-amber-600' : 'text-gray-300'}">${issue}</p><p class="text-[11px] text-gray-400">문제</p></div>
-                    </div>
-                </button>`;
+                    ${list.length ? `<div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-2">${execFnCardsHtml(dp, list, false)}</div>` : '<p class="text-xs text-gray-400 py-2">해당 건이 없습니다.</p>'}
+                </div>`;
             }).join('');
+            // 크로스 체크 — 본부 합계가 ① 한눈에 보기와 같은지
+            const sumBy = fnc => deptKeys.reduce((n, dp) => n + it.filter(i => execDeptKey(i, DEPTS) === dp && fnc(i)).length, 0);
+            const xc = [['진행중', sumBy(execOpen), openList.length], ['지연', sumBy(execLate), it.filter(execLate).length], ['문제', sumBy(execIssue), it.filter(execIssue).length]];
+            const xcOk = xc.every(x => x[1] === x[2]);
+            const deptCheck = `<p id="exec-dept-check" class="text-xs mb-2 ${xcOk ? 'text-green-700' : 'text-red-700 font-semibold'}"><i class="fas ${xcOk ? 'fa-circle-check' : 'fa-triangle-exclamation'} mr-1"></i>본부 합계 ${xc.map(x => `${x[0]} ${x[1]}`).join(' · ')} ${xcOk ? '= ① 한눈에 보기와 일치' : '≠ ① 한눈에 보기 (' + xc.map(x => `${x[0]} ${x[2]}`).join(' · ') + ')'}</p>`;
 
             host.innerHTML = `
                 <div class="mb-4 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-3">
@@ -28702,8 +28790,11 @@ const QUOTE_TEMPLATES = [
                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">${groupCards}</div>
 
                 <!-- ③ 본부별 -->
-                <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">③ 본부별 현황</p>
-                <div class="grid grid-cols-2 lg:grid-cols-3 gap-4 mb-6">${deptCards}</div>
+                <div class="flex flex-wrap items-baseline justify-between gap-x-3">
+                    <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">③ 본부별 현황 <span class="normal-case font-normal">· 기능(메뉴)별 카드를 클릭하면 해당 건 상세, [메뉴 열기]로 원본 화면과 대조</span></p>
+                    ${deptCheck}
+                </div>
+                <div class="grid grid-cols-1 gap-3 mb-6">${deptCards}</div>
 
                 <!-- ④ 직원별 -->
                 <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">④ 직원별 처리 현황</p>
@@ -29010,10 +29101,13 @@ const QUOTE_TEMPLATES = [
             }
             else if (view.indexOf('d:') === 0) {
                 const dp = view.slice(2);
-                eyebrow = '③ 본부별 현황'; title = `${deptNames[dp] || dp} 현황`;
-                list = execItems.filter(i => i.dept === dp);
-                sub = `진행중 ${list.filter(execOpen).length}건 · 지연 ${list.filter(execLate).length}건 · 문제 ${list.filter(execIssue).length}건`
-                    + '  (해당 본부에 배정된 업무 전체, 담당자 미지정 건 포함)';
+                const depts = allDeptIds();
+                eyebrow = '③ 본부별 현황'; title = `${execDeptName(dp)} 현황`;
+                list = execItems.filter(i => execDeptKey(i, depts) === dp);
+                sub = `전체 ${list.length}건 · 진행중 ${list.filter(execOpen).length}건 · 지연 ${list.filter(execLate).length}건 · 문제 ${list.filter(execIssue).length}건 · 완료 ${list.filter(i => i.done).length}건`
+                    + (dp === EXEC_NO_DEPT ? '  (본부가 지정되지 않은 건)' : '  (해당 본부에 배정된 업무 전체, 담당자 미지정 건 포함)');
+                // 기능(메뉴)별 카드 — 누르면 아래 목록을 그 기능으로 거릅니다 (2026-11-24)
+                if (list.length) extra = `<div id="exec-fn-cards" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 mb-3">${execFnCardsHtml(dp, list, true)}</div>`;
             }
             else if (view.indexOf('sd:') === 0) {
                 const dp = view.slice(3);
@@ -29093,7 +29187,7 @@ const QUOTE_TEMPLATES = [
             document.getElementById('exec-modal-extra').innerHTML = extra;
 
             // 목록 창 안 거르기 (2026-11-20 다니엘님 "한눈에 보기에서 필터링을 넣어서 볼 수 있게") — 다른 카드를 열면 처음부터
-            if (!execListState || execListState.view !== view) execListFilter = { kind: '', dept: '', owner: '', state: '', q: '' };
+            if (!execListState || execListState.view !== view) execListFilter = { kind: '', dept: '', owner: '', state: '', q: '', fn: '' };
             execListState = { view, list };
             renderExecListFilter();
             renderExecListRows();
@@ -29108,6 +29202,11 @@ const QUOTE_TEMPLATES = [
                         <p class="text-[11px] text-gray-500">${label}</p><p class="text-xl font-bold ${n ? cls : 'text-gray-300'} mt-0.5">${n}</p></button>`;
         }
         function markExecStateBoxes() {
+            const fn = execListFilter.fn === 'inbound-check' ? 'inbound' : (execListFilter.fn || '');
+            document.querySelectorAll('#exec-modal-extra .exec-fn-card').forEach(b => {
+                const on = !!fn && b.getAttribute('data-fn') === fn;
+                b.classList.toggle('ring-2', on); b.classList.toggle('ring-gray-800', on); b.classList.toggle('bg-white', on);
+            });
             const cur = execListFilter.state || '';
             document.querySelectorAll('#exec-modal-extra .exec-state-box').forEach(b => {
                 const on = b.getAttribute('data-exec-state') === cur;
@@ -29118,13 +29217,15 @@ const QUOTE_TEMPLATES = [
 
         // ---------- 목록 창 안 거르기 (구분 · 본부 · 담당자 · 상태 · 검색어) ----------
         let execListState = null;   // { view, list } — 카드에서 고른 목록 (거르기 전)
-        let execListFilter = { kind: '', dept: '', owner: '', state: '', q: '' };
+        let execListFilter = { kind: '', dept: '', owner: '', state: '', q: '', fn: '' };
         const EXEC_LIST_STATES = [['', '전체 상태'], ['open', '진행 중'], ['late', '기한 지연'], ['issue', '문제 있음'], ['done', '완료']];
         function execListFiltered() {
             const f = execListFilter;
             const norm = v => String(v || '').replace(/\s+/g, '').toLowerCase();
             const q = norm(f.q);
             return ((execListState && execListState.list) || []).filter(i => {
+                if (f.fn === 'inbound-check') { if (!execInboundCheck(i)) return false; }
+                else if (f.fn && execFnOf(i).fn !== f.fn) return false;
                 if (f.kind && i.kindName !== f.kind) return false;
                 if (f.dept && i.dept !== f.dept) return false;
                 if (f.owner && (i.owner || '미배정') !== f.owner) return false;
@@ -29143,7 +29244,7 @@ const QUOTE_TEMPLATES = [
             renderExecListRows();
         }
         function resetExecListFilter() {
-            execListFilter = { kind: '', dept: '', owner: '', state: '', q: '' };
+            execListFilter = { kind: '', dept: '', owner: '', state: '', q: '', fn: '' };
             renderExecListFilter();
             renderExecListRows();
         }
