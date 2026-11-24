@@ -30,7 +30,7 @@
     <script src="config/app-config.js"></script>
     <!-- 화면 버전 (2026-11-16) — 배포할 때마다 올립니다. 개발 · 운영 화면 아래에 "그룹웨어 v1.1.0 · 운영" 처럼 보입니다.
          groupware = 그룹웨어 화면 · calendar = 킹오더일정(?mode=calendar) -->
-    <script>window.KOB_VERSION = { groupware: '1.1.33', calendar: '1.0.8', date: '2026-11-24' };</script>
+    <script>window.KOB_VERSION = { groupware: '1.1.34', calendar: '1.0.8', date: '2026-11-24' };</script>
     <script>
         (function () {
             // manifest 는 **여기서 만들어 답니다.** (2026-09-05 고침)
@@ -43550,7 +43550,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                     { id: 'phone',        label: '사업장 연락처', type: 'text', table: true },
                     { id: 'pg',           label: '계약 PG명',    type: 'select', table: true, options: ['갤럭시아', '헥토', '기타'],
                       chip: { '갤럭시아': 'bg-indigo-100 text-indigo-700', '헥토': 'bg-purple-100 text-purple-700' } },
-                    { id: 'fee',          label: '가맹점 수수료', type: 'number', table: true, pct: true, step: '0.001' },
+                    { id: 'fee',          label: '가맹점 수수료', type: 'number', table: true, pct: true, step: '0.001', feeSecret: true },
                     { id: 'cycle',        label: '정산 주기',    type: 'select', table: true, options: ['D+1', 'D+2', 'D+3', '기타'] },
                     { id: 'equipment',    label: '제공 장비 대수', type: 'text', table: true, wide: true },
                     { id: 'memo',         label: '특이사항',      type: 'textarea', table: false, wide: true }
@@ -43566,7 +43566,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                     { id: 'program',      label: '프로그램',    type: 'select', table: true, options: ['아이리젠', '토마토', '기타'],
                       chip: { '아이리젠': 'bg-emerald-100 text-emerald-700', '토마토': 'bg-red-100 text-red-700' } },
                     { id: 'cycle',        label: '정산주기',    type: 'select', table: true, options: ['D+1', 'D+2', 'D+3'] },
-                    { id: 'fee',          label: '수수료',      type: 'number', table: true, pct: true, step: '0.001' },
+                    { id: 'fee',          label: '수수료',      type: 'number', table: true, pct: true, step: '0.001', feeSecret: true },
                     { id: 'ali',          label: '알리위챗 접수', type: 'select', table: true, options: ['O', 'X'] },
                     { id: 'esl',          label: 'ESL 사용여부', type: 'select', table: true, options: ['O', 'X', '미정'] },
                     { id: 'doc',          label: '서류설명',    type: 'select', table: true, options: ['O', 'X'] },
@@ -43585,6 +43585,14 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
         function supplyDef(ch) { return SUPPLY_CHANNELS[ch] || SUPPLY_CHANNELS.franchise; }
         function supplyFields(ch) { return supplyDef(ch).fields; }
         function supplyTableFields(ch) { return supplyFields(ch).filter(f => f.table); }
+        // 가맹점별 수수료는 본부장급 이상(본부장 · 부장 · 대표급 · 관리자)만 봅니다 — 팀장급 · 매니저급은 *** 로 표시
+        //   (2026-11-24 다니엘님 "가맹점별 수수료는 본부장급만 볼 수 있게, 본부장 이하는 * 로 표시")
+        const FEE_MASK = '***';
+        function canSeeMerchantFee() {
+            const c = levelClass(currentUserLevel);
+            return c === 'head' || c === 'exec' || c === 'admin';
+        }
+        function supplyFeeHidden(f) { return !!(f && f.feeSecret) && !canSeeMerchantFee(); }
 
         // ---------- 저장 (2026-09-17) ----------
         // 공급내역은 Supabase 'supplies' 표에 한 건 = 한 줄로 둡니다 (js/kob-db.js).
@@ -43659,7 +43667,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                 if (f.owner && (r.owner || '') !== f.owner) return false;
                 if (f.v1 && ff[0] && String(r[ff[0].id] || '') !== f.v1) return false;
                 if (f.v2 && ff[1] && String(r[ff[1].id] || '') !== f.v2) return false;
-                if (q && !norm(supplyFields(ch).map(x => r[x.id]).join(' ')).includes(q)) return false;
+                if (q && !norm(supplyFields(ch).filter(x => !supplyFeeHidden(x)).map(x => r[x.id]).join(' ')).includes(q)) return false;   // 가려진 수수료로는 검색되지 않게
                 return true;
             });
         }
@@ -43676,6 +43684,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
         function supplyCellHtml(r, f) {
             const v = r[f.id];
             if (v === '' || v === null || v === undefined) return '<span class="text-gray-300">-</span>';
+            if (supplyFeeHidden(f)) return `<span class="text-gray-400 tracking-widest" title="본부장급 이상만 조회할 수 있습니다">${FEE_MASK}</span>`;
             if (f.pct) return `<span class="text-indigo-800 font-medium">${v}%</span>`;
             if (f.num) return `<span class="tabular-nums">${Number(v).toLocaleString('en-US')}</span>`;
             if (f.chip && f.chip[v]) return `<span class="px-2 py-0.5 rounded-full text-xs font-medium ${f.chip[v]}">${escapeHtml(String(v))}</span>`;
@@ -43802,6 +43811,9 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                         + (f.options || []).map(o => `<option value="${escapeHtml(o)}" ${String(v) === o ? 'selected' : ''}>${escapeHtml(o)}</option>`).join('') + '</select>';
                 } else if (f.type === 'textarea') {
                     input = `<textarea id="sup-${f.id}" rows="3" class="${cls}">${escapeHtml(String(v))}</textarea>`;
+                } else if (supplyFeeHidden(f)) {
+                    // 값은 화면에 싣지 않습니다 — 저장할 때 원래 값을 그대로 둡니다 (submitSupply)
+                    input = `<input type="text" id="sup-${f.id}" value="${(v === '' || v === null) ? '' : FEE_MASK}" disabled title="본부장급 이상만 조회 · 수정할 수 있습니다" class="${cls} bg-gray-100 text-gray-400 tracking-widest" />`;
                 } else if (f.type === 'number') {
                     input = `<div class="relative"><input type="number" step="${f.step || '1'}" min="0" id="sup-${f.id}" value="${escapeHtml(String(v))}" class="${cls}${f.pct ? ' pr-6 text-right' : ''}" />${f.pct ? '<span class="absolute right-2 top-2.5 text-xs text-gray-400">%</span>' : ''}</div>`;
                 } else {
@@ -43838,6 +43850,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             const data = { channel: ch, partnerId: (document.getElementById('sup-partnerId') || {}).value || '' };
             let bad = null;
             def.fields.forEach(f => {
+                if (supplyFeeHidden(f)) { data[f.id] = rec && rec[f.id] !== undefined ? rec[f.id] : ''; return; }   // 가려진 수수료는 원래 값 유지
                 const el = document.getElementById('sup-' + f.id);
                 let v = el ? (el.value || '').trim() : '';
                 if (f.type === 'number' && v !== '') v = Number(v);
@@ -43873,7 +43886,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             const rows = [
                 [`${def.sheet} (${list.length}건 · ${today} 기준)`],
                 def.fields.map(f => f.label + (f.pct ? '(%)' : '')),
-                ...list.map(r => def.fields.map(f => (r[f.id] === undefined || r[f.id] === null) ? '' : r[f.id]))
+                ...list.map(r => def.fields.map(f => (r[f.id] === undefined || r[f.id] === null || r[f.id] === '') ? '' : (supplyFeeHidden(f) ? FEE_MASK : r[f.id])))
             ];
             downloadBlobAs(buildXlsxBlob(rows, def.name), `거래처관리_${def.name}_${today.replace(/-/g, '')}.xlsx`);
         }
