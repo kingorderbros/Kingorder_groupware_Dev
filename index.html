@@ -30,7 +30,7 @@
     <script src="config/app-config.js"></script>
     <!-- 화면 버전 (2026-11-16) — 배포할 때마다 올립니다. 개발 · 운영 화면 아래에 "그룹웨어 v1.1.0 · 운영" 처럼 보입니다.
          groupware = 그룹웨어 화면 · calendar = 킹오더일정(?mode=calendar) -->
-    <script>window.KOB_VERSION = { groupware: '1.1.36', calendar: '1.0.8', date: '2026-11-24' };</script>
+    <script>window.KOB_VERSION = { groupware: '1.1.37', calendar: '1.0.8', date: '2026-11-24' };</script>
     <script>
         (function () {
             // manifest 는 **여기서 만들어 답니다.** (2026-09-05 고침)
@@ -43837,8 +43837,8 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                     </div>
                     <div class="flex flex-wrap gap-2">
                         <button onclick="openSupplyModal()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded text-sm transition-colors whitespace-nowrap"><i class="fas fa-plus mr-1"></i>거래처 등록</button>
-                        <button onclick="downloadSupplyXlsx()" class="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded text-sm transition-colors whitespace-nowrap"><i class="fas fa-file-excel mr-1"></i>엑셀 다운로드${supplyHasSecret(ch) && !canSeeMerchantFee() ? ' <span class="text-[11px] opacity-80">(승인 필요)</span>' : ''}</button>
-                        ${(supplyHasSecret(ch) || dlReqPendingForMe() || dlReqVisible().length) ? `<button onclick="openDlReqModal()" class="bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 px-3 py-1.5 rounded text-sm transition-colors whitespace-nowrap"><i class="fas fa-user-check mr-1"></i>다운로드 승인${dlReqPendingForMe() ? ` <span class="ml-1 px-1.5 rounded-full bg-red-600 text-white text-[11px]">${dlReqPendingForMe()}</span>` : ''}</button>` : ''}
+                        <button onclick="downloadSupplyXlsx()" class="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded text-sm transition-colors whitespace-nowrap"><i class="fas fa-file-excel mr-1"></i>엑셀 다운로드${supplyDlBtnLabel(ch)}</button>
+                        ${supplyDlReqBtnHtml(ch)}
                     </div>
                 </div>
 
@@ -44000,11 +44000,14 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                 ...list.map(r => def.fields.map(f => (r[f.id] === undefined || r[f.id] === null || r[f.id] === '') ? '' : ((f.feeSecret && !showFee) ? FEE_MASK : r[f.id])))
             ];
             downloadBlobAs(buildXlsxBlob(rows, def.name), `거래처관리_${def.name}_${today.replace(/-/g, '')}.xlsx`);
-            if (req) {   // 승인 1건 = 다운로드 1회
-                req.status = 'used'; req.usedAt = new Date().toISOString(); req.rows = list.length;
-                saveDlReq(req); renderDlReqModalIfOpen();
-                showAppToast('승인받은 엑셀을 다운로드했습니다. 다시 받으려면 새로 승인을 요청해 주세요.', 'blue');
-            }
+            markDlReqUsed(req, list.length);
+        }
+        // 승인 1건 = 다운로드 1회
+        function markDlReqUsed(req, rows) {
+            if (!req) return;
+            req.status = 'used'; req.usedAt = new Date().toISOString(); req.rows = rows;
+            saveDlReq(req); renderDlReqModalIfOpen();
+            showAppToast('승인받은 엑셀을 다운로드했습니다. 다시 받으려면 새로 승인을 요청해 주세요.', 'blue');
         }
 
         // ==================== 중요정보 엑셀 다운로드 승인 (2026-11-24) ====================
@@ -44015,7 +44018,16 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
         //     → 승인되면 요청자가 24시간 안에 1회 다운로드(수수료 포함), 반려되면 사유와 함께 알림
         const DL_REQ_KEY = 'gwDownloadRequests.v1';
         const DL_REQ_HOURS = 24;
-        function supplyHasSecret(ch) { return supplyFields(ch).some(f => f.feeSecret); }
+        // 파트너사(제공 PG 수수료) · 지급명세(가맹점수수료)도 대상 (2026-11-24 다니엘님 "제안대로")
+        const SUPPLY_SECRET_CUSTOM = ['partner', 'payout'];
+        function supplyHasSecret(ch) { return SUPPLY_SECRET_CUSTOM.indexOf(ch) > -1 || supplyFields(ch).some(f => f.feeSecret); }
+        // 승인 버튼 · 엑셀 단추 문구 — 채널마다 머리 줄이 따로라 같은 조각을 씁니다
+        function supplyDlBtnLabel(ch) { return supplyHasSecret(ch) && !canSeeMerchantFee() ? ' <span class="text-[11px] opacity-80">(승인 필요)</span>' : ''; }
+        function supplyDlReqBtnHtml(ch) {
+            if (!(supplyHasSecret(ch) || dlReqPendingForMe() || dlReqVisible().length)) return '';
+            const n = dlReqPendingForMe();
+            return `<button onclick="openDlReqModal()" class="bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 px-3 py-1.5 rounded text-sm transition-colors whitespace-nowrap"><i class="fas fa-user-check mr-1"></i>다운로드 승인${n ? ` <span class="ml-1 px-1.5 rounded-full bg-red-600 text-white text-[11px]">${n}</span>` : ''}</button>`;
+        }
         function dlReqList() { return (loadJsonStore(DL_REQ_KEY, []) || []).filter(x => x && x.id); }
         function saveDlReq(req) {
             const list = dlReqList();   // 저장 직전에 다시 읽고 한 건만 바꿉니다
@@ -44051,7 +44063,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
         function requestSupplyDownload(ch) {
             const def = supplyDef(ch);
             const approvers = dlApproverNames(currentUserDept);
-            const reason = prompt(`[${def.name}] 거래처 목록은 가맹점별 수수료가 포함된 중요정보입니다.\n엑셀 다운로드는 본부장 승인 후 가능합니다.\n\n승인할 사람: ${approvers.join(', ') || '(없음)'}\n\n다운로드 사유를 입력해 주세요.`, '');
+            const reason = prompt(`[${def.name}] 자료는 수수료가 포함된 중요정보입니다.\n엑셀 다운로드는 본부장 승인 후 가능합니다.\n\n승인할 사람: ${approvers.join(', ') || '(없음)'}\n\n다운로드 사유를 입력해 주세요.`, '');
             if (reason === null) return null;
             if (!reason.trim()) { alert('다운로드 사유를 입력해 주세요.'); return null; }
             if (!approvers.length) { alert('승인할 본부장급 직원이 없습니다. 관리자에게 문의해 주세요.'); return null; }
@@ -44091,6 +44103,8 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             const r = dlReqList().find(x => x.id === id);
             if (!r || r.by !== currentUserName || dlReqStatusOf(r) !== 'approved') { alert('다운로드할 수 있는 승인 건이 아닙니다.'); renderDlReqModalIfOpen(); return; }
             if (!canSeePage('supply-' + r.ch)) { alert('해당 거래처 채널을 볼 권한이 없습니다.'); return; }
+            if (r.ch === 'partner') { downloadPartnersXlsx(r.id); return; }
+            if (r.ch === 'payout') { downloadPayoutXlsx(r.id); return; }
             ensureSuppliesLoaded();
             if (supplyChannel !== r.ch) { supplyChannel = r.ch; supplyFilter = { q: '', owner: '', v1: '', v2: '' }; }
             downloadSupplyXlsx(r.id);
@@ -45333,7 +45347,8 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                     <div class="flex flex-wrap gap-2">
                         <button onclick="goPartnerRegistry()" class="bg-white border border-gray-300 text-gray-700 px-3 py-1.5 rounded text-sm hover:bg-gray-50 transition-colors whitespace-nowrap"><i class="fas fa-address-book mr-1"></i>업체 관리</button>
                         <button onclick="openPartnerImport()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded text-sm transition-colors whitespace-nowrap" title="파트너사별 공급현황 시트(거래 품목 · PG 수수료 · 정산주기 …)를 업로드합니다"><i class="fas fa-file-arrow-up mr-1"></i>거래 조건 엑셀 업로드</button>
-                        <button onclick="downloadPartnersXlsx()" class="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded text-sm transition-colors whitespace-nowrap"><i class="fas fa-file-excel mr-1"></i>엑셀 다운로드</button>
+                        <button onclick="downloadPartnersXlsx()" class="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded text-sm transition-colors whitespace-nowrap"><i class="fas fa-file-excel mr-1"></i>엑셀 다운로드${supplyDlBtnLabel('partner')}</button>
+                        ${supplyDlReqBtnHtml('partner')}
                     </div>
                 </div>
 
@@ -45424,6 +45439,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                 const last = pgFeeLatest(p);
                 const feeCells = PARTNER_FEE_GRADES.map(g => {
                     const v = partnerFee(p, g.key);
+                    if (v !== '' && !canSeeMerchantFee()) return `<td class="px-2 py-2 text-right whitespace-nowrap bg-indigo-50/20 text-gray-400 tracking-widest" title="본부장급 이상만 조회할 수 있습니다">${FEE_MASK}</td>`;
                     return `<td class="px-2 py-2 text-right whitespace-nowrap bg-indigo-50/20 ${v === '' ? 'text-gray-300' : 'text-indigo-800 font-medium'}">${v === '' ? (none ? '-' : '·') : v + '%'}</td>`;
                 }).join('');
                 return `
@@ -45484,6 +45500,15 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             renderTradeFeeInputs(feeVals);
             document.getElementById('trade-fee-na').checked = partnerFeeNone(p);
             onTradeFeeNaChange();
+            // 본부장급 미만 — 수수료 칸은 *** 로 막고, '해당사항 없음' 도 바꾸지 못하게 (저장할 때 원래 값 유지)
+            const feeLock = !canSeeMerchantFee();
+            document.getElementById('trade-fee-na').disabled = feeLock;
+            if (feeLock) PARTNER_FEE_GRADES.forEach(g => {
+                const el = document.getElementById('trade-fee-' + g.key);
+                if (!el) return;
+                el.type = 'text'; el.value = feeVals[g.key] === '' ? '' : FEE_MASK; el.disabled = true;
+                el.title = '본부장급 이상만 조회 · 수정할 수 있습니다'; el.classList.add('bg-gray-100', 'text-gray-400', 'tracking-widest');
+            });
 
             renderPartnerPgFee(p);
             document.getElementById('trade-modal').classList.remove('hidden');
@@ -45534,6 +45559,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             const na = document.getElementById('trade-fee-na').checked;
             const fee = {};
             PARTNER_FEE_GRADES.forEach(g => {
+                if (!canSeeMerchantFee()) { fee[g.key] = partnerFee(p, g.key); return; }   // 가려진 수수료는 원래 값 유지
                 const raw = na ? '' : val('trade-fee-' + g.key);
                 fee[g.key] = raw === '' ? '' : Number(raw);
             });
@@ -47425,7 +47451,8 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                         <button onclick="openPayoutRowModal()" class="bg-white border border-violet-300 text-violet-700 hover:bg-violet-50 px-3 py-1.5 rounded text-sm transition-colors whitespace-nowrap"><i class="fas fa-plus mr-1"></i>건별 등록</button>
                         <button onclick="openPayoutBulkModal()" class="bg-white border border-violet-300 text-violet-700 hover:bg-violet-50 px-3 py-1.5 rounded text-sm transition-colors whitespace-nowrap"><i class="fas fa-table-list mr-1"></i>다중건 등록</button>
                         <button onclick="openPayoutImport()" class="bg-violet-600 hover:bg-violet-700 text-white px-3 py-1.5 rounded text-sm transition-colors whitespace-nowrap"><i class="fas fa-file-arrow-up mr-1"></i>월별 엑셀 업로드</button>
-                        <button onclick="downloadPayoutXlsx()" class="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded text-sm transition-colors whitespace-nowrap"><i class="fas fa-file-excel mr-1"></i>엑셀 다운로드</button>
+                        <button onclick="downloadPayoutXlsx()" class="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded text-sm transition-colors whitespace-nowrap"><i class="fas fa-file-excel mr-1"></i>엑셀 다운로드${supplyDlBtnLabel('payout')}</button>
+                        ${supplyDlReqBtnHtml('payout')}
                     </div>
                 </div>
 
@@ -47515,7 +47542,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                                     <td class="px-2 py-2 text-center" colspan="8">합계 · ${list.length}건</td>
                                     <td class="px-2 py-2 text-right">${t.cardCount.toLocaleString('en-US')}</td>
                                     <td class="px-2 py-2 text-right">${formatKRW(t.cardAmount)}</td>
-                                    <td class="px-2 py-2 text-right">${formatKRW(t.merchantFee)}</td>
+                                    <td class="px-2 py-2 text-right">${canSeeMerchantFee() ? formatKRW(t.merchantFee) : `<span class="text-gray-400 tracking-widest">${FEE_MASK}</span>`}</td>
                                     <td class="px-2 py-2 text-right">${formatKRW(t.fee)}</td>
                                     <td class="px-2 py-2 text-right">${formatKRW(t.vat)}</td>
                                     <td class="px-2 py-2 text-right">${formatKRW(t.total)}</td>
@@ -47558,6 +47585,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                         return `<td class="px-2 py-2 text-center whitespace-nowrap bg-violet-50/30">${r.cycle ? `<span class="px-1.5 py-0.5 text-[10px] rounded bg-violet-100 text-violet-700 font-semibold">${escapeHtml(r.cycle)}</span>` : '<span class="text-gray-300">-</span>'}</td>`;
                     }
                     const v = r[c.key];
+                    if (c.key === 'merchantFee' && !canSeeMerchantFee()) return `<td class="px-2 py-2 text-right whitespace-nowrap text-gray-400 tracking-widest" title="본부장급 이상만 조회할 수 있습니다">${FEE_MASK}</td>`;
                     if (c.num) {
                         const n = Number(v) || 0;
                         return `<td class="px-2 py-2 text-right whitespace-nowrap ${c.strong ? 'font-semibold text-gray-800' : (n ? 'text-gray-700' : 'text-gray-300')}">${c.money ? formatKRW(n) : n.toLocaleString('en-US')}</td>`;
@@ -47607,7 +47635,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                         <div class="p-3 text-sm">
                             <div class="flex justify-between py-1 border-b border-gray-50"><span class="text-gray-500">신용카드 건수</span><span class="text-gray-700">${(Number(r.cardCount) || 0).toLocaleString('en-US')}건</span></div>
                             ${money('신용카드 금액', r.cardAmount)}
-                            ${money('가맹점수수료', r.merchantFee)}
+                            ${canSeeMerchantFee() ? money('가맹점수수료', r.merchantFee) : `<div class="flex justify-between py-1 border-b border-gray-50"><span class="text-gray-500">가맹점수수료</span><span class="text-gray-400 tracking-widest" title="본부장급 이상만 조회할 수 있습니다">${FEE_MASK}</span></div>`}
                             ${money('수수료', r.fee)}
                             ${money('부가세', r.vat)}
                             ${money('합계', r.total, true)}
@@ -47642,9 +47670,11 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
         function closePayoutDetail() { document.getElementById('payout-detail-modal').classList.add('hidden'); }
 
         // ---------- 엑셀 내려받기 (원본 순서 + 정산주기 열) ----------
-        function downloadPayoutXlsx() {
+        function downloadPayoutXlsx(approvedReqId) {
             const list = payoutFiltered();
             if (!list.length) { alert('다운로드할 지급명세가 없습니다.'); return; }
+            const req = supplyDlGate('payout', approvedReqId);   // 가맹점수수료 — 본부장급 미만은 승인 후 1회
+            if (req === false) return;
             const ym = payoutCurrentMonth();
             const head = PAYOUT_TABLE_COLS.map(c => c.label);
             const rows = [
@@ -47659,6 +47689,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             const t = payoutTotals(list);
             rows.push(PAYOUT_TABLE_COLS.map(c => c.num ? (t[c.key] || 0) : (c.key === '__name' ? '합계' : '')));
             downloadBlobAs(buildXlsxBlob(rows, '지급보고서'), `킹오더_지급보고서_${ym.replace('-', '')}.xlsx`);
+            markDlReqUsed(req, list.length);
         }
 
 
@@ -47760,6 +47791,15 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             set('payout-row-feemethod', r ? r.feeMethod : d.feeMethod);
             ['cardCount', 'cardAmount', 'merchantFee', 'fee', 'vat', 'subSettle', 'hold', 'holdRelease', 'adjust']
                 .forEach(k => set('payout-row-' + k, r ? (Number(r[k]) || 0) : 0));
+            // 가맹점수수료 — 본부장급 미만은 *** 로 막습니다 (저장할 때 원래 값 유지 · readPayoutRowForm)
+            const mf = document.getElementById('payout-row-merchantFee');
+            if (mf) {
+                const lock = !canSeeMerchantFee();
+                mf.type = lock ? 'text' : 'number'; mf.disabled = lock;
+                if (lock) mf.value = (r && Number(r.merchantFee)) ? FEE_MASK : '0';
+                mf.classList.toggle('bg-gray-100', lock); mf.classList.toggle('text-gray-400', lock);
+                mf.title = lock ? '본부장급 이상만 조회 · 수정할 수 있습니다' : '';
+            }
             set('payout-row-invoicedate', r ? r.invoiceDate : '');
             set('payout-row-confirmed', r ? (r.confirmed || '미확정') : '미확정');
             onPayoutRowChange();
@@ -47780,6 +47820,10 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                 fee: n('fee'), vat: n('vat'),
                 subSettle: n('subSettle'), hold: n('hold'), holdRelease: n('holdRelease'), adjust: n('adjust')
             };
+            if (!canSeeMerchantFee()) {   // 가려진 가맹점수수료는 원래 값 유지
+                const cur = payoutRowEditId ? payoutRecords.find(r => r.id === payoutRowEditId) : null;
+                o.merchantFee = cur ? (Number(cur.merchantFee) || 0) : 0;
+            }
             return o;
         }
         // 입력할 때마다 계층·단계·합계·지급액을 미리 보여 줍니다
@@ -49012,9 +49056,11 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
         }
 
         // ---------- 엑셀 (시트와 같은 순서 — 등록 정보 + 거래 조건을 함께) ----------
-        function downloadPartnersXlsx() {
+        function downloadPartnersXlsx(approvedReqId) {
             const list = (supplyChannel === 'partner' && document.getElementById('trade-rows')) ? tradeFiltered() : tradePartners();
             if (!list.length) { alert('다운로드할 파트너사가 없습니다.'); return; }
+            const req = supplyDlGate('partner', approvedReqId);   // 제공 PG 수수료 — 본부장급 미만은 승인 후 1회
+            if (req === false) return;
             const today = ymd(new Date());
             const head = ['구분', '계약 법인', '파트너사', '사업자 구분', '계약서 작성 여부', '거래 품목']
                 .concat(PARTNER_FEE_GRADES.map(g => `제공 PG 수수료 ${g.name}(%)`))
@@ -49030,6 +49076,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                     .concat([p.cycle || '', p.contact || '', p.phone || '', p.owner || '', p.subOwner || '', p.status || '', p.memo || '']))
             ];
             downloadBlobAs(buildXlsxBlob(rows, '파트너사별공급현황'), `파트너사별_공급현황_${today.replace(/-/g, '')}.xlsx`);
+            markDlReqUsed(req, list.length);
         }
 
         // 예전 이름 — 업체 지우기로 이어 줍니다 (2026-10-05)
