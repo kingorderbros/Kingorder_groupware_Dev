@@ -30,7 +30,7 @@
     <script src="config/app-config.js"></script>
     <!-- 화면 버전 (2026-11-16) — 배포할 때마다 올립니다. 개발 · 운영 화면 아래에 "그룹웨어 v1.1.0 · 운영" 처럼 보입니다.
          groupware = 그룹웨어 화면 · calendar = 킹오더일정(?mode=calendar) -->
-    <script>window.KOB_VERSION = { groupware: '1.1.32', calendar: '1.0.8', date: '2026-11-24' };</script>
+    <script>window.KOB_VERSION = { groupware: '1.1.33', calendar: '1.0.8', date: '2026-11-24' };</script>
     <script>
         (function () {
             // manifest 는 **여기서 만들어 답니다.** (2026-09-05 고침)
@@ -7199,22 +7199,25 @@
          위쪽에 요약 칩, 아래에 항목 표가 오고, 항목은 execCollectItems() 가 만든 같은 모양입니다. -->
     <!-- ==================== 경영 현황판 · 건별 상세 (2026-09-05) ====================
          목록에서 한 줄을 누르면 열립니다. 목록 팝업 위에 겹쳐 뜨도록 z 를 한 단계 높였습니다. -->
-    <div id="exec-item-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-start justify-center z-[60] p-4 overflow-y-auto">
-        <div class="bg-white w-full max-w-3xl my-8 rounded-lg shadow-xl">
-            <div class="flex justify-between items-start gap-2 px-5 py-4 border-b border-gray-100">
+    <!-- 2026-11-24 다니엘님 "팝업 상세 화면을 한 화면에 다 나올 수 있게" — 창 높이 안에 고정, 넓은 화면은 왼쪽(문제·요약·진행 내역) · 오른쪽(원본 내용) 두 칸 -->
+    <div id="exec-item-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-2 sm:p-4">
+        <div class="bg-white w-full max-w-6xl max-h-full rounded-lg shadow-xl flex flex-col min-h-0">
+            <div class="flex justify-between items-start gap-2 px-5 py-3 border-b border-gray-100 shrink-0">
                 <div class="min-w-0">
                     <p id="exec-item-eyebrow" class="text-xs font-semibold text-amber-700"></p>
                     <h3 id="exec-item-title" class="text-lg font-bold text-gray-800 break-words"></h3>
                 </div>
                 <button type="button" onclick="closeExecItemModal()" class="shrink-0 text-gray-400 hover:text-gray-600"><i class="fas fa-times"></i></button>
             </div>
-            <div id="exec-item-body" class="p-5"></div>
+            <div id="exec-item-body" class="p-4 flex-1 min-h-0 overflow-y-auto"></div>
+            <div id="exec-item-foot" class="flex flex-wrap items-center justify-end gap-2 px-4 py-3 border-t border-gray-100 bg-gray-50 rounded-b-lg shrink-0"></div>
         </div>
     </div>
 
-    <div id="exec-list-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-start justify-center z-50 p-4 overflow-y-auto">
-        <div class="bg-white w-full max-w-5xl rounded-lg shadow-xl my-4">
-            <div class="flex justify-between items-start px-6 py-4 border-b border-gray-200 sticky top-0 bg-white rounded-t-lg z-10">
+    <!-- 2026-11-24 창 높이 안에 고정 — 위쪽(제목·거르기·요약 카드)은 그대로, 표만 남은 높이 안에서 넘겨 봅니다 -->
+    <div id="exec-list-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 sm:p-4">
+        <div class="bg-white w-full max-w-6xl h-full rounded-lg shadow-xl flex flex-col min-h-0 overflow-y-auto">
+            <div class="flex justify-between items-start px-6 py-3 border-b border-gray-200 bg-white rounded-t-lg shrink-0">
                 <div class="min-w-0">
                     <p id="exec-modal-eyebrow" class="text-xs font-semibold text-amber-700"></p>
                     <h3 id="exec-modal-title" class="text-lg font-bold text-gray-800 truncate"></h3>
@@ -7222,15 +7225,15 @@
                 </div>
                 <button type="button" onclick="closeExecListModal()" class="text-gray-400 hover:text-gray-600 shrink-0"><i class="fas fa-times"></i></button>
             </div>
-            <div class="px-6 pt-4">
+            <div class="px-6 pt-3 shrink-0 max-h-[45%] overflow-y-auto">
                 <div id="exec-modal-chips" class="flex flex-wrap items-center gap-1.5 mb-2"></div>
                 <div id="exec-modal-filter" class="mb-3"></div>
                 <p id="exec-modal-hint" class="hidden text-xs text-gray-400 mb-3"><i class="fas fa-hand-pointer mr-1"></i>행을 클릭하면 해당 건의 <b>상세 내용</b>이 표시됩니다.</p>
                 <div id="exec-modal-extra"></div>
             </div>
-            <div class="px-6 pb-6">
-                <div class="border border-gray-200 rounded-lg overflow-hidden">
-                    <div class="overflow-x-auto max-h-[52vh] overflow-y-auto">
+            <div class="px-6 pb-3 flex-1 min-h-[220px] flex flex-col">
+                <div class="border border-gray-200 rounded-lg overflow-hidden flex-1 min-h-0 flex flex-col">
+                    <div class="overflow-auto flex-1 min-h-0">
                         <table class="w-full text-left border-collapse text-sm min-w-[900px]">
                             <thead class="sticky top-0 bg-gray-50 z-10">
                                 <tr class="text-gray-500 text-xs border-b border-gray-200">
@@ -7250,7 +7253,7 @@
                     </div>
                 </div>
             </div>
-            <div class="flex justify-end gap-2 px-6 py-4 border-t border-gray-200 bg-gray-50 rounded-b-lg sticky bottom-0">
+            <div class="flex justify-end gap-2 px-6 py-2.5 border-t border-gray-200 bg-gray-50 rounded-b-lg shrink-0">
                 <button type="button" onclick="closeExecListModal()" class="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition-colors text-sm">닫기</button>
             </div>
         </div>
@@ -29391,6 +29394,8 @@ const QUOTE_TEMPLATES = [
             const rows = execRawRows(i);
             const goJs = execOpenSourceJs(i);
             document.getElementById('exec-item-body').innerHTML = `
+              <div class="grid grid-cols-1 lg:grid-cols-2 gap-3 lg:items-start">
+              <div class="min-w-0">
                 ${(i.overdue > 0 || i.issue) ? `
                 <div class="rounded border ${i.overdue > 0 ? 'border-red-200 bg-red-50' : 'border-amber-200 bg-amber-50'} p-3 mb-3">
                     <p class="text-sm font-bold ${i.overdue > 0 ? 'text-red-800' : 'text-amber-900'}">
@@ -29420,8 +29425,9 @@ const QUOTE_TEMPLATES = [
                     </div>` : ''}
                 </div>
                 ${execProgHtml(i)}
+              </div>
 
-                <div class="mt-3 rounded border border-gray-200">
+                <div class="rounded border border-gray-200 min-w-0">
                     <p class="px-3 py-2 border-b border-gray-100 bg-gray-50 text-sm font-bold text-gray-700">
                         <i class="fas fa-list mr-1 text-gray-400"></i>원본에 기재된 내용
                         <span class="font-normal text-gray-400">${rows.length}개 항목</span>
@@ -29429,16 +29435,17 @@ const QUOTE_TEMPLATES = [
                     ${rows.length ? `<table class="w-full text-sm">
                         <tbody>${rows.map(x => `
                             <tr class="border-b border-gray-50 last:border-0">
-                                <td class="px-3 py-2 w-32 align-top text-gray-500 whitespace-nowrap">${escapeHtml(x.k)}</td>
-                                <td class="px-3 py-2 text-gray-800 whitespace-pre-wrap break-words">${escapeHtml(x.v)}</td>
+                                <td class="px-3 py-1.5 w-32 align-top text-gray-500 whitespace-nowrap">${escapeHtml(x.k)}</td>
+                                <td class="px-3 py-1.5 text-gray-800 whitespace-pre-wrap break-words">${escapeHtml(x.v)}</td>
                             </tr>`).join('')}</tbody>
                     </table>` : '<p class="px-3 py-6 text-sm text-gray-400 text-center">추가로 기재된 내용이 없습니다.</p>'}
                 </div>
-
-                <div class="mt-4 flex flex-wrap items-center justify-end gap-2">
+              </div>`;
+            // 단추는 아래 칸에 고정 — 내용이 길어도 항상 보입니다
+            document.getElementById('exec-item-foot').innerHTML = `
                     ${goJs ? `<button type="button" onclick="closeExecItemModal(); closeExecListModal(); ${goJs}" class="mr-auto px-3 py-2 text-sm rounded bg-amber-500 text-white hover:bg-amber-600 transition-colors"><i class="fas fa-arrow-up-right-from-square mr-1"></i>원본 화면에서 열기</button>` : ''}
-                    <button type="button" onclick="closeExecItemModal()" class="px-4 py-2 text-sm bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition-colors">닫기</button>
-                </div>`;
+                    <button type="button" onclick="closeExecItemModal()" class="px-4 py-2 text-sm bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition-colors">닫기</button>`;
+            document.getElementById('exec-item-body').scrollTop = 0;
 
             document.getElementById('exec-item-modal').classList.remove('hidden');
         }
