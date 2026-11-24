@@ -30,7 +30,7 @@
     <script src="config/app-config.js"></script>
     <!-- 화면 버전 (2026-11-16) — 배포할 때마다 올립니다. 개발 · 운영 화면 아래에 "그룹웨어 v1.1.0 · 운영" 처럼 보입니다.
          groupware = 그룹웨어 화면 · calendar = 킹오더일정(?mode=calendar) -->
-    <script>window.KOB_VERSION = { groupware: '1.1.28', calendar: '1.0.6', date: '2026-11-23' };</script>
+    <script>window.KOB_VERSION = { groupware: '1.1.29', calendar: '1.0.6', date: '2026-11-24' };</script>
     <script>
         (function () {
             // manifest 는 **여기서 만들어 답니다.** (2026-09-05 고침)
@@ -11635,7 +11635,7 @@ const QUOTE_TEMPLATES = [
                             { id: 'partner-center-it', name: 'IT본부 (개발요청)' }
                         ]
                     },
-                    { id: 'exec-center', name: '경영 현황판', note: '대표이사·관리자만' }
+                    { id: 'exec-center', name: '경영 현황판', note: '켜 준 그룹은 직급과 관계없이 조회' }
                 ]
             },
             {
@@ -12136,7 +12136,8 @@ const QUOTE_TEMPLATES = [
             const showDeptHeader = !externalUser && allowedPageIds.some(p => !nonDeptPages.includes(p));
             document.getElementById('nav-dept-header').classList.toggle('hidden', !showDeptHeader);
             // 경영 현황판: 권한 + 대표/관리자 직책일 때만 (본부장 이하에게는 보이지 않습니다)
-            document.getElementById('nav-exec-center').classList.toggle('hidden', !isAllowed('exec-center') || !isExecLevel(currentUserLevel, currentUserDept));
+            // 경영 현황판 — 권한 관리에서 켜 준 사람은 직급과 관계없이 봅니다 (2026-11-24 다니엘님 "모든 직원이 볼 수 있게", 예전엔 대표급 · 관리자만)
+            document.getElementById('nav-exec-center').classList.toggle('hidden', !isAllowed('exec-center'));
             document.getElementById('nav-inbound-center').classList.toggle('hidden', !isAllowed('inbound-center'));
             // 파트너센터 — 본부별 접수함 중 하나라도 권한이 있으면 상위 메뉴가 보입니다
             const seesPcSales = isAllowed('partner-center-sales');
@@ -13890,8 +13891,8 @@ const QUOTE_TEMPLATES = [
                 return;
             }
             // 경영 현황판은 대표·관리자만 (직접 호출 차단)
-            if (sectionId === 'exec-center' && !(canSeePage('exec-center') && isExecLevel(currentUserLevel))) {
-                alert('경영 현황판은 대표이사·관리자만 조회할 수 있습니다.');
+            if (sectionId === 'exec-center' && !canSeePage('exec-center')) {
+                alert('경영 현황판 조회 권한이 없습니다. 관리자에게 권한을 요청해 주세요.');
                 return;
             }
             // 팀 통합현황은 메뉴 권한 + 팀장/본부장 직책일 때만 (직접 호출 차단)
@@ -28472,12 +28473,15 @@ const QUOTE_TEMPLATES = [
             });
 
             // ⑥ 인바운드
-            (typeof inboundRecords !== 'undefined' ? inboundRecords : []).forEach(r => {
+            // 인바운드 화면(현황판)과 같은 기준으로 셉니다 (2026-11-24 다니엘님 "인바운드에서는 미처리가 안 뜨는데 현황판에는 문제 건으로 보임")
+            //   · 스팸 제외 · 컨택 = 컨택일 또는 추가 컨택 기록 · 결과(진행중 · 보류)가 입력된 건은 처리 중
+            //   · 배정 · 1차 컨택은 인바운드 규칙의 기준 시간(배정 30분 · 컨택 120분)이 지나야 '기준 초과'
+            (typeof inboundLive === 'function' ? inboundLive() : (typeof inboundRecords !== 'undefined' ? inboundRecords : [])).forEach(r => {
                 const k = r.kob || {};
                 const done = k.result === '영업수주' || k.result === '실패';
                 let issue = '';
-                if (inboundStopped(r) && !done) issue = `추가컨택 ${inboundExtraCount(r)}회 · 중단 대상`;
-                else if (!k.contactAt) issue = '인입 후 미컨택';
+                if (!k.result && inboundStopped(r)) issue = `추가컨택 ${inboundExtraCount(r)}회 · 중단 대상`;
+                else { const lt = inboundLate(r); if (lt) issue = lt; }
                 // 영업본부 건 진행 내역 — 완료 예정일 · 문제 · 지체 (2026-11-19)
                 const sp = inboundProgOn(r) ? salesProgState(inboundProgView(r)) : null;
                 if (sp && !done && !issue) {
