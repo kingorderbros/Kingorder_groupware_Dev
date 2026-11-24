@@ -20502,7 +20502,9 @@ const QUOTE_TEMPLATES = [
             let sum = 0;
             CALM_STICK.forEach(([k, id]) => {
                 const el = document.getElementById(id);
-                const h = el && el.offsetParent !== null && getComputedStyle(el).display !== 'none' ? el.getBoundingClientRect().height : 0;
+                // 필터 줄은 열려 있을 때(calm-filters-open)만 고정되므로 그때만 셉니다
+                const pinned = k !== 'filt' || (document.getElementById('sec-calendar-center') || { classList: { contains: () => false } }).classList.contains('calm-filters-open');
+                const h = pinned && el && el.offsetParent !== null && getComputedStyle(el).display !== 'none' ? el.getBoundingClientRect().height : 0;
                 root.setProperty('--calm-h-' + k, h + 'px'); sum += h;
             });
             return sum;
