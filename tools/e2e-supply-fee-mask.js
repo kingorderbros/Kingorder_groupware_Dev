@@ -1,5 +1,5 @@
 // 사용법: node tools/e2e-supply-fee-mask.js   (맥 크롬 헤드리스 · npm run check 에는 넣지 않음)
-// 2026-11-24 — 거래처 관리 가맹점별 수수료(병원·기타 PG '가맹점 수수료' · 약국 '수수료')는 본부장급 이상만, 팀장급 · 매니저급은 *** (표 · 상세 창 · 검색 · 엑셀), 저장해도 원래 값 유지
+// 2026-11-24 — 거래처 관리 가맹점별 수수료(병원·기타 PG '가맹점 수수료' · 약국 '수수료')는 본부장급 이상만, 팀장급 · 매니저급은 *** (표 · 상세 창 · 검색), 엑셀은 본부장 승인 필요, 저장해도 원래 값 유지
 const http=require('http'),fs=require('fs'),path=require('path'),pp=require('puppeteer-core');const ROOT=path.join(__dirname,'..');
 const srv=http.createServer((q,r)=>{let p=decodeURIComponent(q.url.split('?')[0]);if(p==='/')p='/index.html';if(p==='/config/app-config.js'){r.writeHead(200);return r.end("window.KOB_CONFIG={env:'dev',supabaseUrl:'',supabaseAnonKey:'',apiBase:''};");}
  if(p.startsWith('/api/')){r.writeHead(404);return r.end('{}');}
@@ -18,7 +18,7 @@ srv.listen(8883,async()=>{const br=await pp.launch({executablePath:'/Application
    const pf=supplyFields('pg').find(f=>f.id==='fee'),hf=supplyFields('pharmacy').find(f=>f.id==='fee');
    o.pgCell=supplyCellHtml(supplyRecords.find(x=>x.id==='SP-901'),pf);o.phCell=supplyCellHtml(supplyRecords.find(x=>x.id==='SP-902'),hf);
    supplyChannel='pg';supplyFilter={q:'2.345',owner:'',v1:'',v2:''};o.search=supplyFiltered().length;supplyFilter={q:'',owner:'',v1:'',v2:''};
-   downloadSupplyXlsx();const row=lastRows.find(x=>x[1]==='시험병원'||x.includes('시험병원'));o.xls=row?row[pf?supplyFields('pg').indexOf(pf):0]:null;
+   lastRows=null;window.prompt=()=>null;downloadSupplyXlsx();closeDlReqModal&&closeDlReqModal();const row=lastRows&&lastRows.find(x=>x[1]==='시험병원'||x.includes('시험병원'));o.xls=row?row[pf?supplyFields('pg').indexOf(pf):0]:null;
    openSupplyModal('SP-901');const el=document.getElementById('sup-fee');o.input={type:el.type,value:el.value,disabled:el.disabled};
    document.getElementById('sup-cycle').value='D+2';submitSupply({preventDefault(){}});o.after=supplyRecords.find(x=>x.id==='SP-901').fee;o.cycle=supplyRecords.find(x=>x.id==='SP-901').cycle;
    o.can=canSeeMerchantFee();out[lv]=o;}
@@ -33,7 +33,7 @@ srv.listen(8883,async()=>{const br=await pp.launch({executablePath:'/Application
   } else {
    ok(!o.can&&o.pgCell.includes('***')&&!o.pgCell.includes('2.345')&&o.phCell.includes('***')&&!o.phCell.includes('1.5'),`${lv} 표 수수료 ***`,o);
    ok(o.search===0,`${lv} 수수료 값으로 검색 안 됨`,o.search);
-   ok(o.xls==='***',`${lv} 엑셀 수수료 ***`,o.xls);
+   ok(o.xls===null||o.xls===undefined,`${lv} 엑셀은 승인 없이 받지 못함 (승인 요청 · 별도 시험 e2e-supply-dl-approval)`,o.xls);
    ok(o.input.value==='***'&&o.input.disabled,`${lv} 상세 창 수수료 *** · 입력 막힘`,o.input);
   }
   ok(o.after===2.345&&o.cycle==='D+2',`${lv} 저장 후 수수료 원래 값 유지 · 다른 칸은 저장`,o);
