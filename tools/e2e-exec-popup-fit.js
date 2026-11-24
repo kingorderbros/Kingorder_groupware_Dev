@@ -23,7 +23,7 @@ srv.listen(8882,async()=>{const br=await pp.launch({executablePath:'/Application
    const tbl=document.querySelector('#exec-modal-rows').closest('.overflow-auto');list.tableScrolls=tbl.scrollHeight>tbl.clientHeight;list.tableH=tbl.clientHeight;
    document.querySelector('#exec-modal-rows tr[onclick]').click();await sleep(60);
    const item=fit('exec-item-modal','#exec-item-foot button:last-child');
-   const cols=[...document.querySelectorAll('#exec-item-body > .grid > *')].map(e=>Math.round(e.getBoundingClientRect().left));item.twoCols=cols.length===2&&cols[0]!==cols[1];
+   const cols=[...document.querySelectorAll('#exec-item-body > .grid:not(.exec-issue-guide) > *')].map(e=>Math.round(e.getBoundingClientRect().left));item.twoCols=cols.length===2&&cols[0]!==cols[1];
    const body=document.getElementById('exec-item-body');item.bodyScroll=body.scrollHeight>body.clientHeight;
    item.goBtn=!!document.querySelector('#exec-item-foot button.bg-amber-500');
    return {list,item};});
