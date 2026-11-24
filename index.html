@@ -30,7 +30,7 @@
     <script src="config/app-config.js"></script>
     <!-- 화면 버전 (2026-11-16) — 배포할 때마다 올립니다. 개발 · 운영 화면 아래에 "그룹웨어 v1.1.0 · 운영" 처럼 보입니다.
          groupware = 그룹웨어 화면 · calendar = 킹오더일정(?mode=calendar) -->
-    <script>window.KOB_VERSION = { groupware: '1.1.30', calendar: '1.0.7', date: '2026-11-24' };</script>
+    <script>window.KOB_VERSION = { groupware: '1.1.31', calendar: '1.0.8', date: '2026-11-24' };</script>
     <script>
         (function () {
             // manifest 는 **여기서 만들어 답니다.** (2026-09-05 고침)
@@ -126,7 +126,7 @@
         html[data-mode="calendar"]:has(#app-view:not(.hidden)), html[data-mode="calendar"]:has(#app-view:not(.hidden)) body { height: 100%; overflow: hidden; overscroll-behavior: none; }
         html[data-mode="calendar"] #app-view { height: 100vh; height: 100dvh; }
         html[data-mode="calendar"] #app-view > main { height: 100%; }
-        html[data-mode="calendar"] #main-scroll { overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+        html[data-mode="calendar"] #main-scroll { overscroll-behavior: contain; -webkit-overflow-scrolling: touch; overflow-x: hidden; }   /* 페이지 자체는 옆으로 밀리지 않게 (11/24) */
         html[data-mode="calendar"] #calm-top { display: block; position: sticky; top: 0; z-index: 12; background: #1e293b; color: #fff; padding: 10px 14px; padding-top: calc(10px + env(safe-area-inset-top, 0px)); }
         html[data-mode="calendar"] .calm-top-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
         html[data-mode="calendar"] .calm-brand { font-weight: 800; font-size: 17px; letter-spacing: -.01em; }
@@ -159,7 +159,8 @@
         html[data-mode="calendar"] #sec-calendar-center > .bg-white.rounded-lg { border-radius: 0; border-width: 0; box-shadow: none; }
         /* 위쪽 고정 (11/24 다니엘님 — '2026년 11월' 줄까지 일정과 같이 올라가 몇 월 · 어떤 캘린더인지 안 보이던 것)
            머리 줄(#calm-top) 아래로 필터(열었을 때) · 캘린더 줄 · 월 줄 · 요일 줄을 차례로 붙이고, 높이는 calmSyncStick() 이 --calm-h-* 로 넣습니다 */
-        html[data-mode="calendar"] #sec-calendar-center > .bg-white.rounded-lg { overflow: visible; }
+        /* 캘린더 줄(#calendar-legend)도 흰 바탕 · 둥근 모서리라 이 규칙에 걸려 옆으로 넘기기가 꺼지고 페이지째 옆으로 밀렸습니다 — 캘린더 줄은 뺍니다 (11/24 다니엘님 "휴대폰 화면에서 옆으로 퍼졌어") */
+        html[data-mode="calendar"] #sec-calendar-center > .bg-white.rounded-lg:not(#calendar-legend) { overflow: visible; }
         html[data-mode="calendar"] #sec-calendar-center.calm-filters-open #cal-head { position: sticky; top: var(--calm-h-top, 0px); z-index: 11; }
         html[data-mode="calendar"] #calendar-legend { position: sticky; top: calc(var(--calm-h-top, 0px) + var(--calm-h-filt, 0px)); z-index: 11; }
         html[data-mode="calendar"] #cal-nav-bar { position: sticky; top: calc(var(--calm-h-top, 0px) + var(--calm-h-filt, 0px) + var(--calm-h-leg, 0px)); z-index: 10; padding-top: 8px; padding-bottom: 8px; }
