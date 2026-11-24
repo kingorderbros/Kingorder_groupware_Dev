@@ -18676,11 +18676,14 @@ const QUOTE_TEMPLATES = [
         }
         // 카드 클릭 — 경영현황판의 영업본부 상세 팝업을 '진행중' 으로 거른 상태로 엽니다 (현황판 공통 필터는 적용하지 않음)
         function openSalesOpenWorks() {
+            // 팝업은 연 순간의 목록을 따로 들고 있으므로, 연 뒤에는 현황판 필터 · 걸러진 목록을 원래대로 돌려놓습니다
+            //   (execAllItems 는 원래 거르기 전 전체라 새로 모은 값 그대로 — 행 상세가 여기서 찾습니다)
             const saved = execFilter;
             execFilter = { kind: '', dept: '', owner: '', state: '', from: '', to: '', q: '' };
             execAllItems = execCollectItems();
             execItems = execAllItems;
-            try { openExecDeptFn('sales', '', 'open'); } finally { execFilter = saved; }
+            try { openExecDeptFn('sales', '', 'open'); }
+            finally { execFilter = saved; execItems = execApplyFilter(execAllItems); }
         }
         function renderSalesDashboard() {
             const set = (id, v) => { const el = document.getElementById(id); if (el) el.innerText = v; };

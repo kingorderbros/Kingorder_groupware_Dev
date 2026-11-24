@@ -31,7 +31,8 @@ srv.listen(8892,async()=>{const br=await pp.launch({executablePath:'/Application
    document.getElementById('sdash-open-cases').closest('[onclick]').click();await sleep(30);
    o.popupOpen=!document.getElementById('exec-list-modal').classList.contains('hidden');
    o.rows=[...document.querySelectorAll('#exec-modal-rows tr[onclick]')].filter(t=>!t.classList.contains('exec-prog-row')&&t.children.length>=9).map(t=>t.children[1].textContent.trim()).sort().join(',');
-   o.title=document.getElementById('exec-modal-title').textContent;o.state=execListFilter.state;o.filterKept=execFilter.kind;
+   o.title=document.getElementById('exec-modal-title').textContent;o.state=execListFilter.state;o.filterKept=execFilter.kind;o.itemsKept=execItems.every(i=>i.kindName==='협업요청');
+   const firstRow=[...document.querySelectorAll('#exec-modal-rows tr[onclick]')].find(t=>t.children.length>=9&&t.children[1].textContent.trim()==='S-1');firstRow.click();await sleep(20);o.detail=!document.getElementById('exec-item-modal').classList.contains('hidden');closeExecItemModal();
    closeExecListModal();
    // 경영현황판 ③ 영업본부 진행중과 같음
    resetExecFilter();navigate('exec-center',document.getElementById('nav-exec-center'));await sleep(120);
@@ -42,7 +43,8 @@ srv.listen(8892,async()=>{const br=await pp.launch({executablePath:'/Application
   ok(r.expected==='CR-1,IB-1,S-1,S-2,S-3','기준 목록',r.expected);
   ok(r.execOpen===5,'경영현황판 ③ 영업본부 진행중과 같음',r.execOpen);
   ok(r.popupOpen&&r.rows===r.expected&&r.state==='open'&&r.title.includes('영업본부'),'클릭 → 영업본부 진행중 목록',r);
-  ok(r.filterKept==='협업요청','경영현황판 필터는 그대로 둠',r.filterKept);
+  ok(r.filterKept==='협업요청'&&r.itemsKept,'경영현황판 필터 · 걸러진 목록은 그대로 둠',r);
+  ok(r.detail,'팝업 행 클릭 → 상세 (필터와 다른 종류도)');
   ok(r.sub.includes('경영현황판 기준'),'설명 줄',r.sub);
   await pg.close();
  }
