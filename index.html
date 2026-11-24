@@ -30,7 +30,7 @@
     <script src="config/app-config.js"></script>
     <!-- 화면 버전 (2026-11-16) — 배포할 때마다 올립니다. 개발 · 운영 화면 아래에 "그룹웨어 v1.1.0 · 운영" 처럼 보입니다.
          groupware = 그룹웨어 화면 · calendar = 킹오더일정(?mode=calendar) -->
-    <script>window.KOB_VERSION = { groupware: '1.1.29', calendar: '1.0.6', date: '2026-11-24' };</script>
+    <script>window.KOB_VERSION = { groupware: '1.1.30', calendar: '1.0.7', date: '2026-11-24' };</script>
     <script>
         (function () {
             // manifest 는 **여기서 만들어 답니다.** (2026-09-05 고침)
@@ -157,6 +157,14 @@
         .calm-fs-note { margin: 0 16px 10px; font-size: 12px; color: #94a3b8; }
         html[data-mode="calendar"] #calendar-legend > * { flex-shrink: 0; }
         html[data-mode="calendar"] #sec-calendar-center > .bg-white.rounded-lg { border-radius: 0; border-width: 0; box-shadow: none; }
+        /* 위쪽 고정 (11/24 다니엘님 — '2026년 11월' 줄까지 일정과 같이 올라가 몇 월 · 어떤 캘린더인지 안 보이던 것)
+           머리 줄(#calm-top) 아래로 필터(열었을 때) · 캘린더 줄 · 월 줄 · 요일 줄을 차례로 붙이고, 높이는 calmSyncStick() 이 --calm-h-* 로 넣습니다 */
+        html[data-mode="calendar"] #sec-calendar-center > .bg-white.rounded-lg { overflow: visible; }
+        html[data-mode="calendar"] #sec-calendar-center.calm-filters-open #cal-head { position: sticky; top: var(--calm-h-top, 0px); z-index: 11; }
+        html[data-mode="calendar"] #calendar-legend { position: sticky; top: calc(var(--calm-h-top, 0px) + var(--calm-h-filt, 0px)); z-index: 11; }
+        html[data-mode="calendar"] #cal-nav-bar { position: sticky; top: calc(var(--calm-h-top, 0px) + var(--calm-h-filt, 0px) + var(--calm-h-leg, 0px)); z-index: 10; padding-top: 8px; padding-bottom: 8px; }
+        html[data-mode="calendar"] #cal-day-header { position: sticky; top: calc(var(--calm-h-top, 0px) + var(--calm-h-filt, 0px) + var(--calm-h-leg, 0px) + var(--calm-h-nav, 0px)); z-index: 10; }
+        html[data-mode="calendar"] .calm-day { top: calc(var(--calm-h-top, 0px) + var(--calm-h-filt, 0px) + var(--calm-h-leg, 0px) + var(--calm-h-nav, 0px) + var(--calm-h-wk, 0px)); }
         html[data-mode="calendar"] #calm-bar { display: flex; position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; background: #fff; border-top: 1px solid #e5e7eb; padding: 4px 6px calc(4px + env(safe-area-inset-bottom, 0px)); justify-content: space-around; align-items: center; }
         html[data-mode="calendar"] #calm-bar button { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 11px; color: #64748b; padding: 6px 0; min-height: 48px; justify-content: center; }
         html[data-mode="calendar"] #calm-bar button i { font-size: 18px; }
@@ -3921,7 +3929,7 @@
                     </div>
                     <div class="bg-white rounded-lg shadow-sm overflow-hidden border border-gray-200">
                         <!-- 캘린더 헤더 -->
-                        <div class="flex items-center justify-between p-4 border-b border-gray-200 bg-gray-50">
+                        <div id="cal-nav-bar" class="flex items-center justify-between p-4 border-b border-gray-200 bg-gray-50">
                             <button onclick="changeDate(-1)" class="p-1 text-gray-500 hover:text-gray-800"><i class="fas fa-chevron-left"></i></button>
                             <div class="flex items-center gap-2">
                                 <h4 id="cal-month-year" class="text-lg font-bold text-gray-800"></h4>
@@ -12359,7 +12367,7 @@ const QUOTE_TEMPLATES = [
             
             // 새로고침이면 보던 화면으로, 아니면 접근 가능한 첫 번째 메뉴로 자동 이동
             const availableMenus = document.querySelectorAll('.nav-item:not(.hidden)');
-            if (isCalendarMode()) { navigate('calendar-center', document.getElementById('nav-calendar-center')); calmApplyFilterPrefs(); calmApplyLab(); calmSyncBar(); scrollCalendarToToday(); }   // 킹오더일정 — 언제나 일정 화면
+            if (isCalendarMode()) { navigate('calendar-center', document.getElementById('nav-calendar-center')); calmApplyFilterPrefs(); calmApplyLab(); calmSyncBar(); calmInitStick(); scrollCalendarToToday(); }   // 킹오더일정 — 언제나 일정 화면
             else if (restoreLastPage()) { /* 보던 화면 그대로 */ }
             else if (availableMenus.length > 0) {
                 const firstMenu = availableMenus[0];
@@ -20487,6 +20495,28 @@ const QUOTE_TEMPLATES = [
         }
         // 킹오더일정 — el 을 위 머리 줄(#calm-top, 일정 칸 위에 붙어 있음) 바로 아래에 맞춥니다 (11/17)
         //   scrollIntoView('start') 는 머리 줄 밑에 가려지고, 날짜 줄은 위에 붙는(sticky) 줄이라 지금 보이는 위치 대신 원래 자리를 잽니다
+        // 위쪽 고정 줄 높이 (11/24) — 머리 줄 · 필터 · 캘린더 줄 · 월 줄 · 요일 줄. 보이지 않는 줄은 0
+        const CALM_STICK = [['top', 'calm-top'], ['filt', 'cal-head'], ['leg', 'calendar-legend'], ['nav', 'cal-nav-bar'], ['wk', 'cal-day-header']];
+        function calmSyncStick() {
+            if (!isCalendarMode()) return 0;
+            const root = document.documentElement.style;
+            let sum = 0;
+            CALM_STICK.forEach(([k, id]) => {
+                const el = document.getElementById(id);
+                // 필터 줄은 열려 있을 때(calm-filters-open)만 고정되므로 그때만 셉니다
+                const pinned = k !== 'filt' || (document.getElementById('sec-calendar-center') || { classList: { contains: () => false } }).classList.contains('calm-filters-open');
+                const h = pinned && el && el.offsetParent !== null && getComputedStyle(el).display !== 'none' ? el.getBoundingClientRect().height : 0;
+                root.setProperty('--calm-h-' + k, h + 'px'); sum += h;
+            });
+            return sum;
+        }
+        let calmStickObs = null;
+        function calmInitStick() {
+            if (!isCalendarMode() || calmStickObs || typeof ResizeObserver === 'undefined') { calmSyncStick(); return; }
+            calmStickObs = new ResizeObserver(() => calmSyncStick());
+            CALM_STICK.forEach(([, id]) => { const el = document.getElementById(id); if (el) calmStickObs.observe(el); });
+            calmSyncStick();
+        }
         function calmScrollToTop(el, behavior) {
             let sc = el.parentElement;
             while (sc && !(/(auto|scroll)/.test(getComputedStyle(sc).overflowY) && sc.scrollHeight > sc.clientHeight)) sc = sc.parentElement;
@@ -20496,7 +20526,8 @@ const QUOTE_TEMPLATES = [
             el.style.position = pos;
             const bar = document.getElementById('calm-top');
             const scTop = sc.getBoundingClientRect().top;
-            const barH = bar && bar.offsetParent !== null && sc.contains(bar) ? Math.max(0, bar.getBoundingClientRect().bottom - scTop) : 0;
+            // 머리 줄부터 요일 줄까지 고정된 줄 전체 높이 (11/24) — 그 아래에 맞춥니다
+            const barH = bar && bar.offsetParent !== null && sc.contains(bar) ? calmSyncStick() : 0;
             sc.scrollTo({ top: Math.max(0, sc.scrollTop + elTop - scTop - barH), behavior: behavior || 'smooth' });
         }
         function calmMarkAllSeen() {
