@@ -48,6 +48,12 @@ srv.listen(8894,async()=>{const br=await pp.launch({executablePath:'/Application
   const dl=[...document.querySelectorAll('#dl-req-body button')].find(b=>b.textContent.includes('엑셀 다운로드'));o.leaderBtn=!!dl;
   files=[];dl.click();await sleep(80);
   o.file=files[0]?rowOf(files[0])[feeIdx(files[0])]:null;o.used=db.reqs[0].status;closeDlReqModal();
+  // 자료가 없는 채널(약국) — 승인받았어도 목록이 비면 받기를 부르지 않아 승인이 그대로 남음
+  const rp=await rpc('fee_dl_request',{p_ch:'pharmacy',p_chname:'약국',p_reason:'약국 정리',p_approvers:['박본부']});
+  as(H);await rpc('fee_dl_decide',{p_id:rp.id,p_approve:true,p_note:''});as(L);await refreshDlReqs();
+  window.__alerts=[];const fetchBefore=db.calls.filter(c=>c==='fee_dl_fetch').length;downloadApprovedSupply(rp.id);await sleep(80);
+  o.emptyKept={st:rp.status,alert:(window.__alerts||[]).join('|'),fetched:db.calls.filter(c=>c==='fee_dl_fetch').length-fetchBefore};
+  promptAns='월말 보고';setSupplyChannel('pg');await sleep(30);
   // 두 번째는 다시 요청
   files=[];promptAns=null;downloadSupplyXlsx();await sleep(60);o.secondNoFile=files.length===0;closeDlReqModal();
   // 본부장 — 값을 못 받은 '***' 상태에서 수정해도 수수료 보존
@@ -76,6 +82,7 @@ srv.listen(8894,async()=>{const br=await pp.launch({executablePath:'/Application
  ok(r.headSeesApprove&&r.afterDecide==='approved'&&r.notiLead,'본부장 승인 → 데이터베이스 승인 · 팀장 알림',r);
  ok(r.leaderBtn&&r.file===2.345,'팀장 승인 다운로드 — 화면 값(***)이 아닌 데이터베이스가 준 값',r);
  ok(r.used==='used','받으면 사용 처리');
+ ok(r.emptyKept.st==='approved'&&r.emptyKept.fetched===0&&/승인은 그대로/.test(r.emptyKept.alert),'목록이 비면 받기를 부르지 않음 — 승인 그대로',r.emptyKept);
  ok(r.secondNoFile,'두 번째는 다시 승인 요청');
  ok(r.headMaskInput.v==='***'&&r.headMaskInput.dis&&r.headSavedFee==='***','본부장도 값을 못 받은 상태면 칸 막고 *** 그대로 저장 (서버 값 보존)',r);
  ok(r.headFile===2.345&&r.headDlLog===1,'본부장 바로 다운로드 + 다운로드 기록',r);

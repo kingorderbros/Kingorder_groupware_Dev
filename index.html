@@ -44305,7 +44305,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             if (!reason.trim()) { alert('다운로드 사유를 입력해 주세요.'); return null; }
             if (!approvers.length) { alert('승인할 본부장급 직원이 없습니다. 관리자에게 문의해 주세요.'); return null; }
             const now = new Date();
-            const notify = req => approvers.forEach(name => pushNotification({
+            const notify = req => ((req.approvers && req.approvers.length) ? req.approvers : approvers).forEach(name => pushNotification({
                 id: 'cnoti_' + collabNotiIdCounter++, type: 'download-request', ticketId: '', projectId: '', dlReqId: req.id,
                 title: `[${def.name}] 거래처 엑셀`, toUser: name, toDept: '', toTeam: '',
                 detail: `요청: ${req.by}${deptNames[req.byDept] ? ' (' + deptNames[req.byDept] + ')' : ''} · 사유: ${req.reason}`, date: ymd(now)
@@ -44359,9 +44359,23 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             if (!r || r.by !== currentUserName || dlReqStatusOf(r) !== 'approved') { alert('다운로드할 수 있는 승인 건이 아닙니다.'); renderDlReqModalIfOpen(); return; }
             if (!canSeePage('supply-' + r.ch)) { alert('해당 거래처 채널을 볼 권한이 없습니다.'); return; }
             if (dlServerMode() && !dlFeeOverride) {
-                // 데이터베이스가 승인 · 기한 · 1회를 확인하고 그 자료의 수수료를 돌려줍니다 (받으면 사용 처리)
-                kobDb.rpc('fee_dl_fetch', { p_id: r.id, p_rows: null })
-                    .then(map => {
+                // 받으면 바로 사용 처리되므로, 자료를 먼저 다 받아 놓고 목록이 비어 있지 않은지 확인한 뒤 부릅니다 (검토 반영)
+                const prep = async () => {
+                    if (r.ch === 'payout') { await kobDb.load('settlements'); reloadPayoutsFromDb(); return payoutFiltered().length; }
+                    if (r.ch === 'partner') return ((supplyChannel === 'partner' && document.getElementById('trade-rows')) ? tradeFiltered() : tradePartners()).length;
+                    await kobDb.load('supplies'); reloadSuppliesFromDb();
+                    if (supplyChannel !== r.ch) { supplyChannel = r.ch; supplyFilter = { q: '', owner: '', v1: '', v2: '' }; }
+                    return supplyFiltered().length;
+                };
+                prep()
+                    .then(n => {
+                        if (!n) { alert('다운로드할 자료가 없습니다. 승인은 그대로 남아 있습니다.'); return null; }
+                        // 데이터베이스가 승인 · 기한 · 1회를 확인하고 그 자료의 수수료를 돌려줍니다 (받으면 사용 처리)
+                        return kobDb.rpc('fee_dl_fetch', { p_id: r.id, p_rows: n }).then(map => ({ map }));
+                    })
+                    .then(res => {
+                        if (!res) return;
+                        const map = res.map;
                         dlFeeOverride = { ch: r.ch, map: map || {}, req: r };
                         try { downloadApprovedSupply(id); } finally { dlFeeOverride = null; }
                         refreshDlReqs();

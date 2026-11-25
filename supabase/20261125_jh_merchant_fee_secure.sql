@@ -23,32 +23,49 @@
 -- ============================================================================
 
 -- ---------- 0. 본부장급 이상인가 ----------
--- 직원 기록의 level = 직급 id(rk_…) 또는 예전 등급 이름. 직급 목록(gwOrgRanks.v1)의 cls 로 등급을 봅니다.
-create or replace function public.kob_caller_fee_cls() returns text
+-- 직원 기록의 level = 직급 id(rk_…) 또는 예전 등급 이름. 직급 목록(gwOrgRanks.v1)으로 등급(cls)을 봅니다.
+-- 화면(normalizeRanks)과 같은 규칙: 문자열 · {name, level} 예전 모양도 받고, id 가 없으면 기본 직급표에서 이름으로 찾습니다.
+create or replace function public.kob_rank_default() returns jsonb
+language sql immutable as $$
+    select '[{"id":"rk_ceo","name":"대표이사","cls":"exec"},{"id":"rk_evp","name":"전무","cls":"exec"},{"id":"rk_svp","name":"상무","cls":"exec"},
+             {"id":"rk_dir","name":"이사","cls":"exec"},{"id":"rk_gm","name":"부장","cls":"head"},{"id":"rk_head","name":"본부장","cls":"head"},
+             {"id":"rk_leader","name":"팀장","cls":"leader"},{"id":"rk_manager","name":"매니저","cls":"manager"},{"id":"rk_part","name":"파트장","cls":"leader"}]'::jsonb
+$$;
+-- 직급 목록 → (id, cls) — 목록이 없거나 배열이 아니면 기본 직급표
+create or replace function public.kob_rank_map(v jsonb) returns table (id text, cls text)
+language sql stable as $$
+    with src as (
+        select e from jsonb_array_elements(case when jsonb_typeof(v) = 'array' and jsonb_array_length(v) > 0 then v else public.kob_rank_default() end) e
+    ), norm as (
+        select case when jsonb_typeof(e) = 'string' then e #>> '{}' else coalesce(e ->> 'name', '') end as name,
+               case when jsonb_typeof(e) = 'object' then nullif(e ->> 'id', '') end as rid,
+               case when jsonb_typeof(e) = 'object' then coalesce(nullif(e ->> 'cls', ''), nullif(e ->> 'level', '')) end as rcls
+          from src
+    )
+    select coalesce(n.rid, d ->> 'id') as id,
+           case when n.rcls in ('manager', 'leader', 'head', 'exec') then n.rcls else coalesce(d ->> 'cls', 'manager') end as cls
+      from norm n
+      left join lateral (select x from jsonb_array_elements(public.kob_rank_default()) x where x ->> 'name' = trim(n.name) limit 1) dd(d) on true
+     where trim(n.name) <> '' and coalesce(n.rid, d ->> 'id') is not null
+$$;
+-- 직원 기록 하나의 수수료 등급 — 'admin' · 'exec' · 'head' 또는 null
+create or replace function public.kob_user_fee_cls(u jsonb) returns text
 language plpgsql stable security definer set search_path = public as $$
 declare
-    me jsonb := public.kob_caller();
     lv text;
-    cls text;
-    ranks jsonb;
+    c text;
 begin
-    if me is null then return null; end if;
-    if public.kob_user_is_admin(me) then return 'admin'; end if;
-    lv := coalesce(me ->> 'level', '');
+    if u is null or coalesce(u ->> 'resigned', 'false') = 'true' then return null; end if;
+    if public.kob_user_is_admin(u) then return 'admin'; end if;
+    lv := coalesce(u ->> 'level', '');
     if lv in ('head', 'exec') then return lv; end if;
-    select value into ranks from public.app_store where key = 'gwOrgRanks.v1';
-    if jsonb_typeof(ranks) = 'array' then
-        select r ->> 'cls' into cls
-          from jsonb_array_elements(ranks) r
-         where jsonb_typeof(r) = 'object' and r ->> 'id' = lv
-         limit 1;
-    end if;
-    if cls is null then   -- 직급 목록이 없거나 예전 모양 — 기본 직급표
-        cls := case when lv in ('rk_ceo', 'rk_evp', 'rk_svp', 'rk_dir') then 'exec'
-                    when lv in ('rk_gm', 'rk_head') then 'head' else null end;
-    end if;
-    return case when cls in ('head', 'exec') then cls else null end;
+    select m.cls into c from public.kob_rank_map((select value from public.app_store where key = 'gwOrgRanks.v1')) m where m.id = lv limit 1;
+    return case when c in ('head', 'exec') then c else null end;
 end $$;
+create or replace function public.kob_caller_fee_cls() returns text
+language sql stable security definer set search_path = public as $$
+    select public.kob_user_fee_cls(public.kob_caller())
+$$;
 
 create or replace function public.kob_caller_sees_fee() returns boolean
 language sql stable security definer set search_path = public as $$
@@ -121,7 +138,13 @@ begin
         elsif allowed then
             nxt := '{}'::jsonb;                     -- 객체가 아니면(빈 값) 모두 지움
         else
-            nxt := cur;                             -- 권한 없음 — 원래 값 유지
+            -- 권한 없음 — 있던 등급은 그대로, 값이 없던 등급만 새로 넣을 수 있음 (엑셀 업로드 · 새 업체)
+            nxt := cur;
+            if jsonb_typeof(nv) = 'object' then
+                for k, v in select * from jsonb_each(nv) loop
+                    if not (cur ? k) and v not in ('"***"'::jsonb, '""'::jsonb, 'null'::jsonb) then nxt := nxt || jsonb_build_object(k, v); end if;
+                end loop;
+            end if;
         end if;
         select coalesce(jsonb_object_agg(e.key, '***'), '{}'::jsonb) into mask from jsonb_each(nxt) e;
         if nxt = '{}'::jsonb then
@@ -138,8 +161,10 @@ begin
             if nv = '"***"'::jsonb then nxt := cur;
             elsif nv is null or nv = 'null'::jsonb or nv = '""'::jsonb then nxt := null;
             else nxt := nv; end if;
+        elsif cur is null and nv is not null and nv not in ('"***"'::jsonb, '""'::jsonb, 'null'::jsonb) then
+            nxt := nv;      -- 권한 없음 — 값이 없던 칸에 새로 넣는 것만 (엑셀 업로드 · 새 줄). 읽을 수는 없음
         else
-            nxt := cur;
+            nxt := cur;     -- 권한 없음 — 있던 값은 바꾸거나 지우지 못함
         end if;
         mask := case when nxt is null or nxt = 'null'::jsonb or nxt = '""'::jsonb then '""'::jsonb else '"***"'::jsonb end;
         if mask = '""'::jsonb then
@@ -245,8 +270,8 @@ revoke all on function public.kob_fee_log_add(text, text, integer, text) from pu
 create or replace function public.fee_log(p_action text, p_ch text, p_rows integer default null, p_detail text default null) returns void
 language plpgsql security definer set search_path = public as $$
 begin
-    if not public.kob_is_staff() then raise exception 'KOB_FEE: 직원만 기록할 수 있습니다.' using errcode = '42501'; end if;
-    if p_action not in ('view', 'download') then raise exception 'KOB_FEE: 알 수 없는 기록입니다.' using errcode = '22023'; end if;
+    if not public.kob_caller_sees_fee() then raise exception 'KOB_FEE: 본부장급 이상만 기록할 수 있습니다.' using errcode = '42501'; end if;
+    if p_action not in ('view', 'download') or p_ch not in ('pg', 'pharmacy', 'partner', 'payout') then raise exception 'KOB_FEE: 알 수 없는 기록입니다.' using errcode = '22023'; end if;
     perform public.kob_fee_log_add(p_action, p_ch, p_rows, p_detail);
 end $$;
 
@@ -257,6 +282,7 @@ declare
     me jsonb := public.kob_caller();
     em text := lower(coalesce(auth.jwt() ->> 'email', ''));
     r public.fee_download_requests;
+    ap jsonb;
 begin
     if me is null then raise exception 'KOB_FEE: 직원만 요청할 수 있습니다.' using errcode = '42501'; end if;
     if p_ch not in ('pg', 'pharmacy', 'partner', 'payout') then raise exception 'KOB_FEE: 알 수 없는 자료입니다.' using errcode = '22023'; end if;
@@ -264,10 +290,21 @@ begin
     select * into r from public.fee_download_requests
      where lower(by_email) = em and ch = p_ch and status = 'pending' limit 1;
     if found then return r; end if;
+    -- 승인자는 데이터베이스가 정합니다 (화면이 보낸 p_approvers 는 쓰지 않음): 같은 본부 본부장급, 없으면 본부장급 이상 전원 · 관리자
+    select coalesce(jsonb_agg(distinct u ->> 'name'), '[]'::jsonb) into ap
+      from public.app_store s, jsonb_array_elements(case when jsonb_typeof(s.value) = 'array' then s.value else '[]'::jsonb end) u
+     where s.key = 'gwUsers.v1' and coalesce(u ->> 'name', '') <> '' and lower(coalesce(u ->> 'email', '')) <> em
+       and coalesce(u ->> 'dept', '') = coalesce(me ->> 'dept', '') and public.kob_user_fee_cls(u) = 'head';
+    if ap = '[]'::jsonb then
+        select coalesce(jsonb_agg(distinct u ->> 'name'), '[]'::jsonb) into ap
+          from public.app_store s, jsonb_array_elements(case when jsonb_typeof(s.value) = 'array' then s.value else '[]'::jsonb end) u
+         where s.key = 'gwUsers.v1' and coalesce(u ->> 'name', '') <> '' and lower(coalesce(u ->> 'email', '')) <> em
+           and public.kob_user_fee_cls(u) is not null;
+    end if;
+    if ap = '[]'::jsonb then raise exception 'KOB_FEE: 승인할 본부장급 직원이 없습니다. 관리자에게 문의해 주세요.' using errcode = '22023'; end if;
     insert into public.fee_download_requests (id, ch, chname, reason, by_email, by_name, by_dept, approvers)
     values ('DLR-' || to_char(clock_timestamp(), 'YYYYMMDDHH24MISSMS') || floor(random() * 1000)::int,
-            p_ch, p_chname, left(trim(p_reason), 500), em, me ->> 'name', me ->> 'dept',
-            case when jsonb_typeof(p_approvers) = 'array' then p_approvers else '[]'::jsonb end)
+            p_ch, p_chname, left(trim(p_reason), 500), em, me ->> 'name', me ->> 'dept', ap)
     returning * into r;
     perform public.kob_fee_log_add('request', p_ch, null, r.id || ' · ' || r.reason);
     return r;
@@ -320,8 +357,8 @@ begin
     else
         select coalesce(jsonb_object_agg(m.row_id, m.value), '{}'::jsonb) into out from public.merchant_fees m where m.tbl = 'settlements';
     end if;
-    update public.fee_download_requests set status = 'used', used_at = now(), rows_n = p_rows where id = p_id;
-    perform public.kob_fee_log_add('download', r.ch, p_rows, r.id || ' · 승인 ' || coalesce(r.decided_by, ''));
+    update public.fee_download_requests set status = 'used', used_at = now(), rows_n = coalesce(p_rows, (select count(*)::int from jsonb_object_keys(out))) where id = p_id;
+    perform public.kob_fee_log_add('download', r.ch, coalesce(p_rows, (select count(*)::int from jsonb_object_keys(out))), r.id || ' · 승인 ' || coalesce(r.decided_by, ''));
     return out;
 end $$;
 
@@ -344,28 +381,33 @@ grant execute on function public.fee_log_list(integer) to authenticated;
 grant execute on function public.kob_caller_sees_fee() to authenticated;
 
 -- ---------- 5. 직급 등급(cls) 변경은 관리자 · 조직도 관리 권한만 ----------
+-- 실제로 쓰이는 등급표(kob_rank_map — 없거나 배열이 아니면 기본 직급표)를 저장 전 · 후로 비교합니다.
+-- 지우기 · 배열 아닌 값으로 덮기 · 지운 뒤 새로 넣기 모두 같은 기준으로 막힙니다.
 -- security invoker — 요청한 사람의 역할로 돕니다 (schema-v8 과 같은 이유)
 create or replace function public.kob_org_ranks_guard() returns trigger
 language plpgsql security invoker set search_path = public as $$
 declare
+    k text := coalesce(new.key, old.key);
     oldv jsonb;
+    newv jsonb := case when tg_op = 'DELETE' then null else new.value end;
     changed boolean;
 begin
-    if coalesce(auth.role(), '') = 'service_role' or current_user in ('postgres', 'supabase_admin', 'service_role') then return new; end if;
-    if new.key <> 'gwOrgRanks.v1' then return new; end if;
-    select value into oldv from public.app_store where key = new.key;
-    if oldv is null then return new; end if;
-    with o as (select r ->> 'id' id, r ->> 'cls' cls from jsonb_array_elements(case when jsonb_typeof(oldv) = 'array' then oldv else '[]'::jsonb end) r where jsonb_typeof(r) = 'object'),
-         n as (select r ->> 'id' id, r ->> 'cls' cls from jsonb_array_elements(case when jsonb_typeof(new.value) = 'array' then new.value else '[]'::jsonb end) r where jsonb_typeof(r) = 'object')
-    select exists (select 1 from n left join o on o.id = n.id where n.cls is distinct from o.cls and (o.id is not null or n.cls in ('head', 'exec')))
-      into changed;
+    if coalesce(current_setting('request.jwt.claims', true), '') = '' or coalesce(auth.role(), '') = 'service_role' then
+        return case when tg_op = 'DELETE' then old else new end;
+    end if;
+    if k <> 'gwOrgRanks.v1' then return case when tg_op = 'DELETE' then old else new end; end if;
+    oldv := case when tg_op = 'INSERT' then (select value from public.app_store where key = k) else old.value end;
+    select exists (
+        select 1 from public.kob_rank_map(newv) n full outer join public.kob_rank_map(oldv) o on o.id = n.id
+         where n.cls is distinct from o.cls
+    ) into changed;
     if changed and not (public.kob_user_is_admin(public.kob_caller()) or public.kob_caller_can('management-org')) then
         raise exception 'KOB_PRIV: 직급의 권한 등급은 관리자 · 조직도 관리 권한이 있어야 바꿀 수 있습니다.' using errcode = '42501';
     end if;
-    return new;
+    return case when tg_op = 'DELETE' then old else new end;
 end $$;
 drop trigger if exists trg_kob_org_ranks_guard on public.app_store;
-create trigger trg_kob_org_ranks_guard before insert or update on public.app_store
+create trigger trg_kob_org_ranks_guard before insert or update or delete on public.app_store
     for each row execute function public.kob_org_ranks_guard();
 
 -- ---------- 확인 ----------

@@ -74,7 +74,7 @@ x = await as('lead@x.kr', sel(`update public.supplies set data = jsonb_set(data,
 ok(x[0] && x[0].data.fee==='***' && x[0].data.memo==='팀장 수정', '팀장 수정 — 다른 칸은 저장, 수수료는 무시', x);
 ok((await db.query(`select value from public.merchant_fees where id='supplies:SP-1'`)).rows[0].value.fee===2.345, '수수료 원래 값 유지');
 x = await as('lead@x.kr', sel(`update public.customers set data = jsonb_set(data,'{fee}','{"g1":"***","g3":"***","g2":5}') where id='c1' returning data`));
-ok(JSON.stringify((await db.query(`select value from public.merchant_fees where id='customers:c1'`)).rows[0].value.fee)==='{"g1":1.1,"g3":2.2}', '팀장이 등급 추가해도 무시');
+ok(JSON.stringify((await db.query(`select value from public.merchant_fees where id='customers:c1'`)).rows[0].value.fee)==='{"g1":1.1,"g2":5,"g3":2.2}', '팀장 — 있던 등급(g1 · g3) 값은 그대로, 값이 없던 등급(g2)만 새로 넣음');
 // 팀장이 직접 merchant_fees 쓰기
 x = await as('lead@x.kr', sel(`insert into public.merchant_fees(id,tbl,row_id,value) values ('x','supplies','SP-9','{}') returning id`));
 ok(x.error, '팀장 merchant_fees 직접 쓰기 막힘', x);
@@ -87,7 +87,18 @@ x = await as('head@x.kr', sel(`update public.supplies set data = jsonb_set(data,
 ok(x[0].data.fee==='' && (await db.query(`select count(*)::int n from public.merchant_fees where id='supplies:SP-2'`)).rows[0].n===0, '본부장이 비우면 별도 표에서도 삭제');
 // 새 줄 (팀장 · 본부장)
 x = await as('lead@x.kr', sel(`insert into public.supplies(id,data) values ('SP-5','{"id":"SP-5","channel":"pg","fee":7}') returning data`));
-ok(x[0].data.fee==='' && (await db.query(`select count(*)::int n from public.merchant_fees where id='supplies:SP-5'`)).rows[0].n===0, '팀장이 새로 넣은 수수료는 저장 안 됨', x);
+ok(x[0].data.fee==='***' && (await db.query(`select value from public.merchant_fees where id='supplies:SP-5'`)).rows[0].value.fee===7, '팀장이 새로 넣은 수수료(엑셀 업로드 · 새 줄)는 저장 — 읽기만 못 함', x);
+x = await as('lead@x.kr', sel(`update public.supplies set data = jsonb_set(data,'{fee}','1') where id='SP-5' returning data`));
+ok((await db.query(`select value from public.merchant_fees where id='supplies:SP-5'`)).rows[0].value.fee===7, '팀장은 있던 값을 바꾸지 못함');
+x = await as('lead@x.kr', sel(`update public.supplies set data = jsonb_set(data,'{fee}','""') where id='SP-5' returning data`));
+ok((await db.query(`select value from public.merchant_fees where id='supplies:SP-5'`)).rows[0].value.fee===7 && x[0].data.fee==='***', '팀장은 있던 값을 지우지 못함', x);
+x = await as('lead@x.kr', sel(`insert into public.settlements(id,data) values ('py9','{"id":"py9","merchantFee":777}') returning data`));
+ok((await db.query(`select value from public.merchant_fees where id='settlements:py9'`)).rows[0].value.merchantFee===777, '팀장 지급명세 업로드 새 줄 저장');
+const before = (await db.query(`select value from public.merchant_fees where id='customers:c1'`)).rows[0].value.fee;
+x = await as('lead@x.kr', sel(`update public.customers set data = jsonb_set(data,'{fee}','{"g1":9,"g9":3}') where id='c1' returning data`));
+const after = (await db.query(`select value from public.merchant_fees where id='customers:c1'`)).rows[0].value.fee;
+ok(after.g1===before.g1 && after.g9===3 && Object.keys(after).length===Object.keys(before).length+1, '팀장 — 있던 등급은 그대로(빠뜨려도 지워지지 않음), 없던 등급만 추가', { before, after });
+await db.query(`update public.customers set data = jsonb_set(data,'{fee}','{"g1":1.1,"g3":2.2}')`);
 x = await as('head@x.kr', sel(`insert into public.supplies(id,data) values ('SP-6','{"id":"SP-6","channel":"pg","fee":8}') returning data`));
 ok(x[0].data.fee==='***' && (await db.query(`select value from public.merchant_fees where id='supplies:SP-6'`)).rows[0].value.fee===8, '본부장 새 줄 수수료 저장');
 // 삭제 → 별도 표도
@@ -95,8 +106,8 @@ x = await as('head@x.kr', sel(`delete from public.supplies where id='SP-6' retur
 ok((await db.query(`select count(*)::int n from public.merchant_fees where id='supplies:SP-6'`)).rows[0].n===0, '줄을 지우면 수수료도 삭제');
 // ---- 승인 흐름 ----
 x = await as('lead@x.kr', sel(`select * from public.fee_dl_fetch('nope')`)); ok(x.error, '없는 요청 받기 막힘');
-x = await as('lead@x.kr', sel(`select * from public.fee_dl_request('pg','병원·기타 PG','월말 보고','["박본부"]'::jsonb)`));
-const rid = x[0] && x[0].id; ok(rid && x[0].status==='pending', '팀장 승인 요청', x);
+x = await as('lead@x.kr', sel(`select * from public.fee_dl_request('pg','병원·기타 PG','월말 보고','["최본부"]'::jsonb)`));
+const rid = x[0] && x[0].id; ok(rid && x[0].status==='pending' && JSON.stringify(x[0].approvers)==='["박본부"]', '팀장 승인 요청 — 승인자는 데이터베이스가 정함 (위조한 최본부 무시 → 같은 본부 박본부)', x);
 x = await as('lead@x.kr', sel(`select * from public.fee_dl_request('pg','병원·기타 PG','또','["박본부"]'::jsonb)`)); ok(x[0].id===rid, '대기 중 다시 요청 → 같은 요청');
 x = await as('lead@x.kr', sel(`select public.fee_dl_fetch($1) v`, [rid])); ok(x.error && /승인된 요청이 아닙니다/.test(x.error), '승인 전 받기 막힘', x);
 x = await as('lead@x.kr', sel(`select * from public.fee_dl_decide($1, true)`, [rid])); ok(x.error, '요청자 본인 승인 막힘');
@@ -104,9 +115,10 @@ x = await as('head2@x.kr', sel(`select * from public.fee_dl_decide($1, true)`, [
 x = await as('head@x.kr', sel(`select * from public.fee_dl_decide($1, false)`, [rid])); ok(x.error && /반려 사유/.test(x.error), '반려 사유 없으면 막힘');
 x = await as('head@x.kr', sel(`select * from public.fee_dl_decide($1, true)`, [rid])); ok(x[0] && x[0].status==='approved', '같은 본부 본부장 승인', x);
 x = await as('head2@x.kr', sel(`select public.fee_dl_fetch($1) v`, [rid])); ok(x.error, '남의 승인으로 받기 막힘');
-x = await as('lead@x.kr', sel(`select public.fee_dl_fetch($1, 3) v`, [rid]));
+x = await as('lead@x.kr', sel(`select public.fee_dl_fetch($1) v`, [rid]));
 ok(x[0] && x[0].v && x[0].v['SP-1'] && x[0].v['SP-1'].fee===3.1 && !x[0].v['c1'], '승인 후 받기 — pg 채널 수수료만', x);
 x = await as('lead@x.kr', sel(`select public.fee_dl_fetch($1) v`, [rid])); ok(x.error && /used/.test(x.error), '두 번째는 막힘', x);
+ok((await db.query(`select rows_n from public.fee_download_requests where id=$1`, [rid])).rows[0].rows_n>=1, '받은 건수 기록 (화면이 안 보내면 데이터베이스가 셈)');
 // 24시간 지남
 x = await as('lead@x.kr', sel(`select * from public.fee_dl_request('payout','지급명세','정산','["박본부"]'::jsonb)`)); const rid2 = x[0].id;
 await as('head@x.kr', sel(`select * from public.fee_dl_decide($1, true)`, [rid2]));
@@ -123,6 +135,8 @@ x = await as('lead@x.kr', sel(`update public.fee_download_requests set status='a
 // 기록
 x = await as('head@x.kr', sel(`select public.fee_log('view','pg', null, null)`)); ok(!x.error, '본부장 열람 기록');
 x = await as('lead@x.kr', sel(`select public.fee_log('approve','pg', null, null)`)); ok(x.error, '직원이 승인 기록 위조 막힘');
+x = await as('lead@x.kr', sel(`select public.fee_log('download','payout', 9999, '가짜')`)); ok(x.error, '본부장급 미만은 다운로드 기록 위조 막힘', x);
+x = await as('head@x.kr', sel(`select public.fee_log('download','zzz', 1, null)`)); ok(x.error, '없는 자료 이름 기록 막힘');
 x = await as('lead@x.kr', sel(`select * from public.fee_access_log`)); ok(x.length===0, '팀장은 기록 못 봄');
 x = await as('lead@x.kr', sel(`select * from public.fee_log_list(10)`)); ok(x.error, '팀장 기록 목록 막힘');
 x = await as('admin@x.kr', sel(`select action from public.fee_log_list(100)`)); ok(x.length>=8 && x.some(r=>r.action==='download') && x.some(r=>r.action==='approve') && x.some(r=>r.action==='request') && x.some(r=>r.action==='view'), '관리자는 기록 보임 (요청·승인·다운로드·열람)', x.map(r=>r.action));
@@ -133,6 +147,17 @@ x = await as('lead@x.kr', sel(`update public.app_store set value='[{"id":"rk_ceo
 ok(!x.error && x.length===1, '이름만 바꾸는 것은 그대로', x);
 x = await as('admin@x.kr', sel(`update public.app_store set value='[{"id":"rk_ceo","name":"대표","cls":"exec"},{"id":"rk_head","name":"본부장","cls":"head"},{"id":"rk_leader","name":"팀장님","cls":"head"}]' where key='gwOrgRanks.v1' returning key`));
 ok(!x.error, '관리자는 등급 변경 가능', x);
+x = await as('lead@x.kr', sel(`delete from public.app_store where key='gwOrgRanks.v1' returning key`));
+ok(x.error && /권한 등급/.test(x.error), '팀장이 직급 목록 지우기 막힘 (지운 뒤 다시 넣는 우회)', x);
+x = await as('lead@x.kr', sel(`update public.app_store set value='{}'::jsonb where key='gwOrgRanks.v1' returning key`));
+ok(x.error && /권한 등급/.test(x.error), '팀장이 배열 아닌 값으로 덮기 막힘', x);
+// 직급 목록이 예전 모양 ({name, level} · 문자열)이어도 화면과 같은 판단
+await db.query(`update public.app_store set value='[{"name":"본부장","level":"head"},"팀장",{"name":"대표이사"}]' where key='gwOrgRanks.v1'`);
+x = await as('head@x.kr', sel(`select public.kob_caller_sees_fee() v`)); ok(x[0].v===true, '예전 모양 직급 목록 — 본부장 인식', x);
+x = await as('lead@x.kr', sel(`select public.kob_caller_sees_fee() v`)); ok(x[0].v===false, '예전 모양 — 팀장은 아님');
+x = await as('ceo@x.kr', sel(`select public.kob_caller_sees_fee() v`)); ok(x[0].v===true, '예전 모양 — 대표이사(이름으로 기본 등급)');
+x = await as('lead@x.kr', sel(`update public.app_store set value='[{"name":"본부장","level":"head"},"팀장",{"name":"대표이사"}]' where key='gwOrgRanks.v1' returning key`));
+ok(!x.error, '같은 값 다시 저장은 그대로', x);
 // 여러 번 실행해도 괜찮은지
 const e2 = await ex(FEE_SQL); ok(!e2, '다시 실행해도 오류 없음', e2);
 ok((await db.query(`select count(*)::int n from public.zz_backup_fee_20261125`)).rows[0].n===4, '다시 실행해도 백업은 처음 값 그대로');
