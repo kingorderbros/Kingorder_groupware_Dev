@@ -2613,9 +2613,11 @@
                             <p class="text-sm font-medium text-gray-500"><i class="fas fa-handshake mr-1 text-green-400"></i>거래 고객</p>
                             <h3 id="sdash-trade-customers" class="text-2xl font-bold text-gray-800 mt-2">0개</h3>
                         </div>
-                        <div onclick="setCaseFilter('pending'); navigate('sales-consulting', document.getElementById('nav-sales-work-center'))" class="bg-white p-5 rounded-lg shadow-sm border-t-4 border-red-500 cursor-pointer hover:shadow-md transition-shadow">
-                            <p class="text-sm font-medium text-gray-500"><i class="fas fa-comments mr-1 text-red-400"></i>미처리 상담</p>
+                        <!-- 2026-11-24 다니엘님 "미처리 상담은 상담만 세지 말고 영업본부 전체 업무 미처리, 경영현황판과 동일하게" -->
+                        <div onclick="openSalesOpenWorks()" class="bg-white p-5 rounded-lg shadow-sm border-t-4 border-red-500 cursor-pointer hover:shadow-md transition-shadow">
+                            <p class="text-sm font-medium text-gray-500"><i class="fas fa-list-check mr-1 text-red-400"></i>미처리 업무</p>
                             <h3 id="sdash-open-cases" class="text-2xl font-bold text-gray-800 mt-2">0건</h3>
+                            <p id="sdash-open-sub" class="text-[11px] text-gray-400 mt-0.5">영업본부 전체 · 경영현황판 기준</p>
                         </div>
                         <div onclick="navigate('calendar-center', document.getElementById('nav-calendar-center'))" class="bg-white p-5 rounded-lg shadow-sm border-t-4 border-blue-500 cursor-pointer hover:shadow-md transition-shadow">
                             <p class="text-sm font-medium text-gray-500"><i class="fas fa-calendar-day mr-1 text-blue-400"></i>오늘 일정</p>
@@ -18668,11 +18670,25 @@ const QUOTE_TEMPLATES = [
                 </div>`;
         }
 
+        // 영업본부 미처리 업무 — 경영현황판과 같은 목록(execCollectItems)에서 본부가 영업본부이고 끝나지 않은 건
+        function salesOpenWorkItems() {
+            return execCollectItems().filter(i => execDeptKey(i) === 'sales' && execOpen(i));
+        }
+        // 카드 클릭 — 경영현황판의 영업본부 상세 팝업을 '진행중' 으로 거른 상태로 엽니다 (현황판 공통 필터는 적용하지 않음)
+        function openSalesOpenWorks() {
+            // 팝업은 연 순간의 목록을 따로 들고 있으므로, 연 뒤에는 현황판 필터 · 걸러진 목록을 원래대로 돌려놓습니다
+            //   (execAllItems 는 원래 거르기 전 전체라 새로 모은 값 그대로 — 행 상세가 여기서 찾습니다)
+            const saved = execFilter;
+            execFilter = { kind: '', dept: '', owner: '', state: '', from: '', to: '', q: '' };
+            execAllItems = execCollectItems();
+            execItems = execAllItems;
+            try { openExecDeptFn('sales', '', 'open'); }
+            finally { execFilter = saved; execItems = execApplyFilter(execAllItems); }
+        }
         function renderSalesDashboard() {
             const set = (id, v) => { const el = document.getElementById(id); if (el) el.innerText = v; };
             const qs = (typeof quotes !== 'undefined' ? quotes : []);
             const ctrs = (typeof contracts !== 'undefined' ? contracts : []);
-            const cs = (typeof cases !== 'undefined' ? cases : []);
 
             // --- 견적 ---
             const sentQuotes = qs.filter(q => q.status === '발송').length;
@@ -18692,8 +18708,10 @@ const QUOTE_TEMPLATES = [
             set('sdash-customers', `${customers.length}개`);
             set('sdash-trade-customers', `${customers.filter(c => c.type === '거래고객').length}개`);
 
-            // --- 상담 (미처리: 처리완료 외) ---
-            set('sdash-open-cases', `${cs.filter(c => !c.completed).length}건`);
+            // --- 미처리 업무 — 경영현황판 ③ 영업본부 '진행중' 과 같은 목록 · 같은 기준 (2026-11-24) ---
+            const sOpen = salesOpenWorkItems();
+            set('sdash-open-cases', `${sOpen.length}건`);
+            set('sdash-open-sub', `영업본부 전체 · 경영현황판 기준 · 지연 ${sOpen.filter(execLate).length} · 문제 ${sOpen.filter(execIssue).length}`);
 
             // --- 오늘 일정 ---
             const today = ymd(new Date());
