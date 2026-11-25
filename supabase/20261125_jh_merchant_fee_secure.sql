@@ -96,6 +96,18 @@ do $$ begin
     end if;
 end $$;
 
+-- 기록 표 (아래 트리거도 씁니다)
+create table if not exists public.fee_access_log (
+    id      bigserial primary key,
+    at      timestamptz not null default now(),
+    email   text,
+    name    text,
+    action  text not null,       -- view · download · request · approve · reject
+    ch      text,
+    rows_n  integer,
+    detail  text
+);
+
 -- ---------- 2. 저장할 때 수수료를 옮기는 트리거 ----------
 create or replace function public.kob_fee_field(t text) returns text
 language sql immutable as $$
@@ -166,6 +178,7 @@ begin
         else
             nxt := cur;     -- 권한 없음 — 있던 값은 바꾸거나 지우지 못함
         end if;
+        if tg_table_name = 'settlements' and nxt = '0'::jsonb then nxt := null; end if;   -- 지급명세 0원은 '값 없음'
         mask := case when nxt is null or nxt = 'null'::jsonb or nxt = '""'::jsonb then '""'::jsonb else '"***"'::jsonb end;
         if mask = '""'::jsonb then
             delete from public.merchant_fees where id = fid;
@@ -175,6 +188,13 @@ begin
             on conflict (id) do update set value = excluded.value, updated_at = now(), updated_by = excluded.updated_by
             where public.merchant_fees.value is distinct from excluded.value;
         end if;
+    end if;
+    -- 본부장급 미만이 수수료를 새로 저장한 경우(엑셀 업로드 · 새 줄) 기록 — 업로드 한 번에 줄이 많아 10분에 한 번으로 묶습니다
+    if not allowed and nxt is distinct from cur
+       and not exists (select 1 from public.fee_access_log l where l.action = 'upload' and l.ch = tg_table_name
+                        and lower(coalesce(l.email, '')) = lower(coalesce(auth.jwt() ->> 'email', '')) and l.at > now() - interval '10 minutes') then
+        insert into public.fee_access_log (email, name, action, ch, detail)
+        values (auth.jwt() ->> 'email', public.kob_caller() ->> 'name', 'upload', tg_table_name, '본부장급 미만 수수료 저장 (엑셀 업로드 · 새 줄) · 첫 줄 ' || new.id);
     end if;
     new.data := jsonb_set(new.data, array[f], mask);
     return new;
@@ -236,24 +256,16 @@ create table if not exists public.fee_download_requests (
     note        text,
     used_at     timestamptz,
     rows_n      integer,
+    scope       text,                          -- 지급명세는 지급월(YYYY-MM) — 받기는 이 범위만
     created_at  timestamptz not null default now()
 );
+alter table public.fee_download_requests add column if not exists scope text;
 alter table public.fee_download_requests enable row level security;
 drop policy if exists "fee_dl read" on public.fee_download_requests;
 create policy "fee_dl read" on public.fee_download_requests for select to authenticated
     using (lower(by_email) = lower(coalesce(auth.jwt() ->> 'email', '')) or public.kob_caller_sees_fee());
 -- 쓰기는 아래 함수로만
 
-create table if not exists public.fee_access_log (
-    id      bigserial primary key,
-    at      timestamptz not null default now(),
-    email   text,
-    name    text,
-    action  text not null,       -- view · download · request · approve · reject
-    ch      text,
-    rows_n  integer,
-    detail  text
-);
 alter table public.fee_access_log enable row level security;
 drop policy if exists "fee_log admin read" on public.fee_access_log;
 create policy "fee_log admin read" on public.fee_access_log for select to authenticated
@@ -276,7 +288,8 @@ begin
 end $$;
 
 -- 승인 요청
-create or replace function public.fee_dl_request(p_ch text, p_chname text, p_reason text, p_approvers jsonb) returns public.fee_download_requests
+drop function if exists public.fee_dl_request(text, text, text, jsonb);   -- 예전 4칸 모양 (범위 칸 추가 전)
+create or replace function public.fee_dl_request(p_ch text, p_chname text, p_reason text, p_approvers jsonb, p_scope text default null) returns public.fee_download_requests
 language plpgsql security definer set search_path = public as $$
 declare
     me jsonb := public.kob_caller();
@@ -287,8 +300,9 @@ begin
     if me is null then raise exception 'KOB_FEE: 직원만 요청할 수 있습니다.' using errcode = '42501'; end if;
     if p_ch not in ('pg', 'pharmacy', 'partner', 'payout') then raise exception 'KOB_FEE: 알 수 없는 자료입니다.' using errcode = '22023'; end if;
     if coalesce(trim(p_reason), '') = '' then raise exception 'KOB_FEE: 사유를 입력해 주세요.' using errcode = '22023'; end if;
+    if p_ch = 'payout' and coalesce(p_scope, '') !~ '^\d{4}-\d{2}$' then raise exception 'KOB_FEE: 지급월을 선택해 주세요.' using errcode = '22023'; end if;
     select * into r from public.fee_download_requests
-     where lower(by_email) = em and ch = p_ch and status = 'pending' limit 1;
+     where lower(by_email) = em and ch = p_ch and status = 'pending' and coalesce(scope, '') = coalesce(case when p_ch = 'payout' then p_scope end, '') limit 1;
     if found then return r; end if;
     -- 승인자는 데이터베이스가 정합니다 (화면이 보낸 p_approvers 는 쓰지 않음): 같은 본부 본부장급, 없으면 본부장급 이상 전원 · 관리자
     select coalesce(jsonb_agg(distinct u ->> 'name'), '[]'::jsonb) into ap
@@ -302,9 +316,9 @@ begin
            and public.kob_user_fee_cls(u) is not null;
     end if;
     if ap = '[]'::jsonb then raise exception 'KOB_FEE: 승인할 본부장급 직원이 없습니다. 관리자에게 문의해 주세요.' using errcode = '22023'; end if;
-    insert into public.fee_download_requests (id, ch, chname, reason, by_email, by_name, by_dept, approvers)
+    insert into public.fee_download_requests (id, ch, chname, reason, by_email, by_name, by_dept, approvers, scope)
     values ('DLR-' || to_char(clock_timestamp(), 'YYYYMMDDHH24MISSMS') || floor(random() * 1000)::int,
-            p_ch, p_chname, left(trim(p_reason), 500), em, me ->> 'name', me ->> 'dept', ap)
+            p_ch, p_chname, left(trim(p_reason), 500), em, me ->> 'name', me ->> 'dept', ap, case when p_ch = 'payout' then p_scope end)
     returning * into r;
     perform public.kob_fee_log_add('request', p_ch, null, r.id || ' · ' || r.reason);
     return r;
@@ -355,7 +369,9 @@ begin
     elsif r.ch = 'partner' then
         select coalesce(jsonb_object_agg(m.row_id, m.value), '{}'::jsonb) into out from public.merchant_fees m where m.tbl = 'customers';
     else
-        select coalesce(jsonb_object_agg(m.row_id, m.value), '{}'::jsonb) into out from public.merchant_fees m where m.tbl = 'settlements';
+        select coalesce(jsonb_object_agg(m.row_id, m.value), '{}'::jsonb) into out
+          from public.merchant_fees m join public.settlements t on t.id = m.row_id
+         where m.tbl = 'settlements' and t.data ->> 'ym' = r.scope;      -- 승인받은 지급월만
     end if;
     update public.fee_download_requests set status = 'used', used_at = now(), rows_n = coalesce(p_rows, (select count(*)::int from jsonb_object_keys(out))) where id = p_id;
     perform public.kob_fee_log_add('download', r.ch, coalesce(p_rows, (select count(*)::int from jsonb_object_keys(out))), r.id || ' · 승인 ' || coalesce(r.decided_by, ''));
@@ -374,7 +390,7 @@ end $$;
 grant select on public.merchant_fees, public.fee_download_requests, public.fee_access_log to authenticated;
 revoke insert, update, delete on public.merchant_fees, public.fee_download_requests, public.fee_access_log from anon, authenticated;
 grant execute on function public.fee_log(text, text, integer, text) to authenticated;
-grant execute on function public.fee_dl_request(text, text, text, jsonb) to authenticated;
+grant execute on function public.fee_dl_request(text, text, text, jsonb, text) to authenticated;
 grant execute on function public.fee_dl_decide(text, boolean, text) to authenticated;
 grant execute on function public.fee_dl_fetch(text, integer) to authenticated;
 grant execute on function public.fee_log_list(integer) to authenticated;
@@ -427,10 +443,14 @@ do $$ declare t text; begin
         execute format('drop trigger if exists trg_kob_fee_drop on public.%I', t);
     end loop;
 end $$;
-update public.supplies    s set data = jsonb_set(s.data, '{fee}', b.value)         from public.zz_backup_fee_20261125 b where b.tbl = 'supplies'    and b.id = s.id;
-update public.customers   c set data = jsonb_set(c.data, '{fee}', b.value)         from public.zz_backup_fee_20261125 b where b.tbl = 'customers'   and b.id = c.id;
-update public.settlements s set data = jsonb_set(s.data, '{merchantFee}', b.value) from public.zz_backup_fee_20261125 b where b.tbl = 'settlements' and b.id = s.id;
--- 백업 뒤에 바뀐 값은 merchant_fees 에 있습니다 — 필요하면 위 세 줄 대신 merchant_fees 의 value 로 돌려놓습니다.
+-- 지금 값(merchant_fees)을 먼저 돌려놓고, 거기 없는 줄만 백업 값으로
+update public.supplies    t set data = jsonb_set(t.data, '{fee}', m.value -> 'fee')                 from public.merchant_fees m where m.id = 'supplies:' || t.id;
+update public.customers   t set data = jsonb_set(t.data, '{fee}', m.value -> 'fee')                 from public.merchant_fees m where m.id = 'customers:' || t.id;
+update public.settlements t set data = jsonb_set(t.data, '{merchantFee}', m.value -> 'merchantFee') from public.merchant_fees m where m.id = 'settlements:' || t.id;
+update public.supplies    t set data = jsonb_set(t.data, '{fee}', b.value)         from public.zz_backup_fee_20261125 b where b.tbl = 'supplies'    and b.id = t.id and not exists (select 1 from public.merchant_fees m where m.id = 'supplies:' || t.id);
+update public.customers   t set data = jsonb_set(t.data, '{fee}', b.value)         from public.zz_backup_fee_20261125 b where b.tbl = 'customers'   and b.id = t.id and not exists (select 1 from public.merchant_fees m where m.id = 'customers:' || t.id);
+update public.settlements t set data = jsonb_set(t.data, '{merchantFee}', b.value) from public.zz_backup_fee_20261125 b where b.tbl = 'settlements' and b.id = t.id and not exists (select 1 from public.merchant_fees m where m.id = 'settlements:' || t.id);
+-- 값이 없던 줄의 '***' · '' 표시는 화면에서 빈 값으로 보입니다
 drop trigger if exists trg_kob_org_ranks_guard on public.app_store;
 */
 -- 화면에서 이상 없음을 확인한 뒤(1~2주) 백업 표를 지웁니다:  drop table public.zz_backup_fee_20261125;

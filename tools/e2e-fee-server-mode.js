@@ -18,7 +18,7 @@ srv.listen(8894,async()=>{const br=await pp.launch({executablePath:'/Application
   const me=()=>localUsers.find(u=>u.name===currentUserName);
   const rpc=async(n,a)=>{db.calls.push(n);const u=me();const cls=levelClass(u.level);const sees=['head','exec','admin'].includes(cls);
    if(n==='fee_log'){db.log.push({action:a.p_action,ch:a.p_ch,name:u.name,at:new Date().toISOString(),rows_n:a.p_rows});return null;}
-   if(n==='fee_dl_request'){let x=db.reqs.find(q=>q.by_email===u.email&&q.ch===a.p_ch&&q.status==='pending');if(x)return x;x={id:'DLR-'+(db.reqs.length+1),ch:a.p_ch,chname:a.p_chname,reason:a.p_reason,by_email:u.email,by_name:u.name,by_dept:u.dept,approvers:a.p_approvers,status:'pending',created_at:new Date().toISOString()};db.reqs.push(x);db.log.push({action:'request',ch:a.p_ch,name:u.name});return x;}
+   if(n==='fee_dl_request'){db.lastScope=a.p_scope;let x=db.reqs.find(q=>q.by_email===u.email&&q.ch===a.p_ch&&q.status==='pending'&&(q.scope||'')===(a.p_ch==='payout'?a.p_scope:'')||(q.scope===undefined&&false));if(x)return x;x={id:'DLR-'+(db.reqs.length+1),ch:a.p_ch,chname:a.p_chname,reason:a.p_reason,by_email:u.email,by_name:u.name,by_dept:u.dept,approvers:a.p_approvers,status:'pending',scope:a.p_ch==='payout'?a.p_scope:'',created_at:new Date().toISOString()};db.reqs.push(x);db.log.push({action:'request',ch:a.p_ch,name:u.name});return x;}
    if(n==='fee_dl_decide'){const x=db.reqs.find(q=>q.id===a.p_id);if(!sees)throw new Error('KOB_FEE: 본부장급 이상만 승인할 수 있습니다.');if(x.by_email===u.email)throw new Error('KOB_FEE: 본인 요청은 승인할 수 없습니다.');if(cls==='head'&&!x.approvers.includes(u.name))throw new Error('KOB_FEE: 지정된 승인자만 승인할 수 있습니다.');x.status=a.p_approve?'approved':'rejected';x.decided_by=u.name;x.decided_at=new Date().toISOString();x.note=a.p_note;db.log.push({action:a.p_approve?'approve':'reject',ch:x.ch,name:u.name});return x;}
    if(n==='fee_dl_fetch'){const x=db.reqs.find(q=>q.id===a.p_id);if(!x||x.by_email!==u.email)throw new Error('KOB_FEE: 본인 요청만 받을 수 있습니다.');if(x.status!=='approved')throw new Error('KOB_FEE: 승인된 요청이 아닙니다 (상태: '+x.status+').');x.status='used';x.used_at=new Date().toISOString();db.log.push({action:'download',ch:x.ch,name:u.name});return FEES[x.ch];}
    if(n==='fee_log_list'){if(cls!=='admin')throw new Error('KOB_FEE: 관리자만 볼 수 있습니다.');return db.log.slice().reverse();}
@@ -54,6 +54,16 @@ srv.listen(8894,async()=>{const br=await pp.launch({executablePath:'/Application
   window.__alerts=[];const fetchBefore=db.calls.filter(c=>c==='fee_dl_fetch').length;downloadApprovedSupply(rp.id);await sleep(80);
   o.emptyKept={st:rp.status,alert:(window.__alerts||[]).join('|'),fetched:db.calls.filter(c=>c==='fee_dl_fetch').length-fetchBefore};
   promptAns='월말 보고';setSupplyChannel('pg');await sleep(30);
+  // 다른 PC 에서 승인된 뒤(화면 목록은 오래됨) 거래처 화면의 [엑셀 다운로드] → 최신 목록을 받아 바로 다운로드
+  promptAns='재요청';files=[];downloadSupplyXlsx();await sleep(60);const r2=db.reqs.filter(q=>q.ch==='pg').pop();
+  r2.status='approved';r2.decided_by='박본부';r2.decided_at=new Date().toISOString();   // 화면 목록에는 아직 대기
+  files=[];downloadSupplyXlsx();await sleep(100);o.staleOk={file:files.length,st:r2.status};closeDlReqModal();
+  // 지급명세 요청에 지급월
+  ensurePayoutsLoaded();await sleep(60);payoutMonth=payoutCurrentMonth()||'2026-11';payoutRecords.push(makePayoutRecord({ym:payoutMonth,pathRaw:'월업체(D+1)',merchantFee:'***',fee:1,vat:0,cardCount:1,cardAmount:1}));savePayouts();
+  setSupplyChannel('payout');await sleep(40);promptAns='정산';downloadPayoutXlsx();await sleep(80);o.payoutScope=db.lastScope;o.payoutMonth=payoutMonth;closeDlReqModal();setSupplyChannel('pg');await sleep(30);
+  // 화면 뒤에서 다시 그릴 때는 열람 기록 없음
+  as(H);const vb=db.log.filter(x=>x.action==='view').length;navigate('dashboard-personal',document.getElementById('nav-dashboard-personal'));await sleep(40);feeViewLogged.pharmacy=0;supplyChannel='pharmacy';renderSupplyCenter();await sleep(20);
+  o.hiddenNoView=db.log.filter(x=>x.action==='view').length===vb;navigate('sales-supply',document.getElementById('nav-sales-supply'));await sleep(40);setSupplyChannel('pg');as(L);
   // 두 번째는 다시 요청
   files=[];promptAns=null;downloadSupplyXlsx();await sleep(60);o.secondNoFile=files.length===0;closeDlReqModal();
   // 본부장 — 값을 못 받은 '***' 상태에서 수정해도 수수료 보존
@@ -63,7 +73,7 @@ srv.listen(8894,async()=>{const br=await pp.launch({executablePath:'/Application
   supplyRecords.find(x=>x.id==='SP-901').fee=2.345;files=[];downloadSupplyXlsx();await sleep(30);
   o.headFile=files[0]?rowOf(files[0])[feeIdx(files[0])]:null;o.headDlLog=db.log.filter(x=>x.action==='download'&&x.name==='박본부').length;
   o.headViewLog=db.log.filter(x=>x.action==='view'&&x.name==='박본부').length;
-  setSupplyChannel('pharmacy');await sleep(30);setSupplyChannel('pg');await sleep(30);o.headViewLog2=db.log.filter(x=>x.action==='view'&&x.name==='박본부').length;
+  setSupplyChannel('pharmacy');await sleep(30);setSupplyChannel('pg');await sleep(30);o.headViewLog2=db.log.filter(x=>x.action==='view'&&x.name==='박본부').length;const hv=db.log.filter(x=>x.action==='view'&&x.name==='박본부').map(x=>x.ch);o.headViewChs={n:hv.length,uniq:new Set(hv).size,pg:hv.includes('pg'),ph:hv.includes('pharmacy')};
   // 지급명세 — '***' 행 보호 (본부장)
   ensurePayoutsLoaded();await sleep(80);const ym=payoutCurrentMonth()||'2026-11';
   payoutRecords.push(makePayoutRecord({ym,pathRaw:'시험업체(D+1)',merchantFee:'***',fee:1000,vat:100,cardCount:1,cardAmount:10000}));savePayouts();payoutMonth=ym;const pr=payoutRecords[payoutRecords.length-1];
@@ -84,9 +94,12 @@ srv.listen(8894,async()=>{const br=await pp.launch({executablePath:'/Application
  ok(r.used==='used','받으면 사용 처리');
  ok(r.emptyKept.st==='approved'&&r.emptyKept.fetched===0&&/승인은 그대로/.test(r.emptyKept.alert),'목록이 비면 받기를 부르지 않음 — 승인 그대로',r.emptyKept);
  ok(r.secondNoFile,'두 번째는 다시 승인 요청');
+ ok(r.staleOk.file===1&&r.staleOk.st==='used','다른 PC 승인 뒤 화면 목록이 오래돼도 [엑셀 다운로드]로 바로 받음',r.staleOk);
+ ok(r.payoutScope&&r.payoutScope===r.payoutMonth,'지급명세 요청에 지금 보는 지급월',r);
+ ok(r.hiddenNoView,'화면 뒤에서 다시 그릴 때는 열람 기록 안 남김');
  ok(r.headMaskInput.v==='***'&&r.headMaskInput.dis&&r.headSavedFee==='***','본부장도 값을 못 받은 상태면 칸 막고 *** 그대로 저장 (서버 값 보존)',r);
  ok(r.headFile===2.345&&r.headDlLog===1,'본부장 바로 다운로드 + 다운로드 기록',r);
- ok(r.headViewLog===1&&r.headViewLog2===2,'본부장 열람 기록 (채널마다 한 번)',r);
+ ok(r.headViewChs.n===r.headViewChs.uniq&&r.headViewChs.pg&&r.headViewChs.ph,'본부장 열람 기록 (채널마다 한 번)',r.headViewChs);
  ok(r.payoutMaskKept==='***'&&r.payoutInput.v==='***'&&r.payoutInput.dis&&r.payoutAfter==='***','지급명세 *** 행 — 수정해도 *** 유지 (0으로 덮지 않음)',r);
  ok(r.adminLogBtn&&/다운로드/.test(r.adminLog)&&/승인/.test(r.adminLog)&&/열람/.test(r.adminLog),'관리자 기록 보기',r.adminLog.slice(0,200));
  ok(r.leaderNoLogBtn,'팀장은 기록 보기 없음');

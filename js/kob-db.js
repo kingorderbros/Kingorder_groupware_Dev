@@ -111,7 +111,7 @@
             if (val === '' || val === null || val === undefined) fees.delete(key); else fees.set(key, { [f]: val });
         }
     }
-    async function fetchFees() {
+    async function fetchFees(silent) {
         if (mode !== 'supabase' || !authed) return;
         const rows = [];
         for (let from = 0; ; from += PAGE) {
@@ -123,7 +123,7 @@
         fees.clear();
         rows.forEach(r => fees.set(r.id, r.value || {}));
         feesLoaded = true;
-        fire('kob-db-change', { table: null, id: null, reason: 'fees' });
+        if (!silent) fire('kob-db-change', { table: null, id: null, reason: 'fees' });   // reloadAll 은 뒤에서 한 번만 알림
         if (!feesWatching) {
             feesWatching = true;
             try {
@@ -310,7 +310,7 @@
     async function reloadAll(reason) {
         const list = Array.from(new Set(PRELOAD.concat(Array.from(loaded))));
         await fetchMany(list);
-        await fetchFees();
+        await fetchFees(true);
         fire('kob-db-change', { table: null, id: null, reason });
     }
 
@@ -349,7 +349,7 @@
         /** 한 건 — 동기. 없으면 null */
         get(t, id) { const e = tbl(t).get(String(id)); return e ? feeMerge(t, String(id), clone(e.data)) : null; },
 
-        /** 수수료를 받아 왔는지 (본부장급 이상 · 서버 모드) */
+        /** 수수료 받기를 마쳤는지 — 권한이 없으면 0줄로 마칩니다. '값을 가졌는지' 는 화면 값이 '***' 인지로 봅니다 */
         get feesLoaded() { return mode !== 'supabase' ? true : feesLoaded; },
         /** 수수료 다시 받기 */
         reloadFees() { return fetchFees(); },
