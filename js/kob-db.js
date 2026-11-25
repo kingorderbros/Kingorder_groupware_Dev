@@ -70,6 +70,76 @@
     const clone = (v) => (v == null ? v : JSON.parse(JSON.stringify(v)));
     const wait = (ms) => new Promise(r => setTimeout(r, ms));
 
+    // ---------- 가맹점별 수수료 (2026-11-25 보안 1단계 · supabase/20261125_jh_merchant_fee_secure.sql) ----------
+    // 수수료 값은 별도 표 merchant_fees 에 있고 본부장급 이상만 읽힙니다. 원래 표에는 '***'(값 있음) · '' 표시만 옵니다.
+    // 여기서 받아 온 값을 화면에 줄 때 겹쳐 줍니다 — 화면 코드는 예전처럼 r.fee · p.fee[등급] · r.merchantFee 를 봅니다.
+    // 저장은 그대로 원래 표에 보내면 데이터베이스(트리거)가 수수료를 옮깁니다. 로컬 모드에서는 하지 않습니다.
+    const FEE_FIELDS = { supplies: 'fee', customers: 'fee', settlements: 'merchantFee' };
+    const FEE_MASK = '***';
+    const fees = new Map();            // '표:줄 id' → { fee | merchantFee }
+    let feesLoaded = false, feesWatching = false;
+    function feeMerge(t, id, data) {
+        const f = FEE_FIELDS[t];
+        if (!f || mode !== 'supabase' || !data) return data;
+        const v = fees.get(t + ':' + id);
+        if (!v || !(f in v)) return data;
+        if (t === 'customers') {
+            const base = (data[f] && typeof data[f] === 'object') ? data[f] : {};
+            data[f] = Object.assign({}, base, v[f] || {});
+        } else {
+            data[f] = v[f];
+        }
+        return data;
+    }
+    // 내가 저장한 실제 값을 바로 기억 — 원래 표의 변경이 '***' 로 되돌아와도 겹쳐 보이게
+    function feeRemember(t, id, row) {
+        const f = FEE_FIELDS[t];
+        if (!f || mode !== 'supabase' || !row || !(f in row)) return;
+        const key = t + ':' + id, prev = (fees.get(key) || {})[f];
+        const val = row[f];
+        if (t === 'customers') {
+            if (!val || typeof val !== 'object') return;
+            const nxt = {};
+            Object.keys(val).forEach(k => {
+                const x = val[k];
+                if (x === FEE_MASK) { if (prev && prev[k] !== undefined) nxt[k] = prev[k]; }
+                else if (x !== '' && x !== null && x !== undefined) nxt[k] = x;
+            });
+            if (Object.keys(nxt).length) fees.set(key, { [f]: nxt }); else if (prev) fees.delete(key);
+        } else {
+            if (val === FEE_MASK) return;
+            if (val === '' || val === null || val === undefined) fees.delete(key); else fees.set(key, { [f]: val });
+        }
+    }
+    async function fetchFees(silent) {
+        if (mode !== 'supabase' || !authed) return;
+        const rows = [];
+        for (let from = 0; ; from += PAGE) {
+            const { data, error } = await client.from('merchant_fees').select('id,value').order('id', { ascending: true }).range(from, from + PAGE - 1);
+            if (error) { console.warn('[kob-db] 수수료를 받지 못했습니다 (권한 없음 또는 표 없음):', error.message || error); return; }
+            (data || []).forEach(r => rows.push(r));
+            if (!data || data.length < PAGE) break;
+        }
+        fees.clear();
+        rows.forEach(r => fees.set(r.id, r.value || {}));
+        feesLoaded = true;
+        if (!silent) fire('kob-db-change', { table: null, id: null, reason: 'fees' });   // reloadAll 은 뒤에서 한 번만 알림
+        if (!feesWatching) {
+            feesWatching = true;
+            try {
+                client.channel('db:merchant_fees')
+                    .on('postgres_changes', { event: '*', schema: 'public', table: 'merchant_fees' }, (p) => {
+                        const id = (p.new && p.new.id) || (p.old && p.old.id);
+                        if (!id) return;
+                        if (p.eventType === 'DELETE') fees.delete(id); else fees.set(id, (p.new && p.new.value) || {});
+                        const i = id.indexOf(':');
+                        fire('kob-db-change', { table: id.slice(0, i), id: id.slice(i + 1), reason: 'remote' });
+                    })
+                    .subscribe();
+            } catch (e) { console.warn('[kob-db] 수수료 실시간 구독 실패:', e); }
+        }
+    }
+
     function fire(name, detail) {
         try { window.dispatchEvent(new CustomEvent(name, { detail })); } catch (e) { /* 아주 옛 브라우저 */ }
     }
@@ -240,6 +310,7 @@
     async function reloadAll(reason) {
         const list = Array.from(new Set(PRELOAD.concat(Array.from(loaded))));
         await fetchMany(list);
+        await fetchFees(true);
         fire('kob-db-change', { table: null, id: null, reason });
     }
 
@@ -255,6 +326,7 @@
                 } else {
                     store.forEach(m => m.clear());          // 다음 사람이 앞사람 자료를 보지 못하게
                     loaded.clear();
+                    fees.clear(); feesLoaded = false;
                     fire('kob-db-change', { table: null, id: null, reason: 'signout' });
                 }
             });
@@ -272,10 +344,33 @@
         ready(t) { return loaded.has(t); },
 
         /** 목록 — 동기. 화면이 마음대로 고쳐도 원본이 상하지 않도록 사본을 줍니다. */
-        rows(t) { return Array.from(tbl(t).values()).map(e => clone(e.data)); },
+        rows(t) { return Array.from(tbl(t).entries()).map(([id, e]) => feeMerge(t, id, clone(e.data))); },
 
         /** 한 건 — 동기. 없으면 null */
-        get(t, id) { const e = tbl(t).get(String(id)); return e ? clone(e.data) : null; },
+        get(t, id) { const e = tbl(t).get(String(id)); return e ? feeMerge(t, String(id), clone(e.data)) : null; },
+
+        /** 수수료 받기를 마쳤는지 — 권한이 없으면 0줄로 마칩니다. '값을 가졌는지' 는 화면 값이 '***' 인지로 봅니다 */
+        get feesLoaded() { return mode !== 'supabase' ? true : feesLoaded; },
+        /** 수수료 다시 받기 */
+        reloadFees() { return fetchFees(); },
+        /** 데이터베이스 함수 부르기 (수수료 승인 · 기록) — 로컬 모드에서는 쓰지 않습니다 */
+        async rpc(name, args) {
+            if (mode !== 'supabase') throw new Error('로컬 모드에서는 쓸 수 없습니다: ' + name);
+            const { data, error } = await client.rpc(name, args || {});
+            if (error) throw error;
+            return data;
+        },
+        /** 표 읽기 (정렬 · 개수 제한) — 수수료 승인 요청 목록 등 */
+        async list(t, opts) {
+            if (mode !== 'supabase') return [];
+            const o = opts || {};
+            let qb = client.from(t).select(o.select || '*');
+            if (o.order) qb = qb.order(o.order, { ascending: !!o.asc });
+            if (o.limit) qb = qb.limit(o.limit);
+            const { data, error } = await qb;
+            if (error) throw error;
+            return data || [];
+        },
 
         /** 몇 건인지 — 동기 */
         count(t) { return tbl(t).size; },
@@ -309,6 +404,7 @@
                 if (nm) row.regBy = nm;
             }
             m.set(id, { data: clone(row), rev: prev ? prev.rev : 0 });
+            feeRemember(t, id, row);
             fire('kob-db-change', { table: t, id, reason: 'local' });
             return queue(t + ':' + id, () => pushRow(t, id, isNew));
         },
@@ -376,6 +472,7 @@
             failedTables.forEach(t => loaded.delete(t));
             PRELOAD.forEach(t => { if (!failedTables.includes(t)) watch(t); });
             if (failedTables.length) fire('kob-db-error', { table: failedTables.join(', '), message: '데이터를 불러올 수 없습니다.' });
+            if (authed) await fetchFees();    // 본부장급 이상만 받아집니다 (그 밖에는 0줄)
             hookAuth();                       // 로그인이 끝나면 다시 받아 옵니다
 
             // 못 보낸 것이 있으면 창을 닫기 전에 한 번 더 시도합니다.
