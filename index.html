@@ -30,7 +30,7 @@
     <script src="config/app-config.js"></script>
     <!-- 화면 버전 (2026-11-16) — 배포할 때마다 올립니다. 개발 · 운영 화면 아래에 "그룹웨어 v1.1.0 · 운영" 처럼 보입니다.
          groupware = 그룹웨어 화면 · calendar = 킹오더일정(?mode=calendar) -->
-    <script>window.KOB_VERSION = { groupware: '1.1.41', calendar: '1.0.8', date: '2026-11-25' };</script>
+    <script>window.KOB_VERSION = { groupware: '1.1.42', calendar: '1.0.8', date: '2026-11-25' };</script>
     <script>
         (function () {
             // manifest 는 **여기서 만들어 답니다.** (2026-09-05 고침)
@@ -2624,6 +2624,10 @@
                             <h3 id="sdash-today-schedule" class="text-2xl font-bold text-gray-800 mt-2">0건</h3>
                         </div>
                     </div>
+
+                    <!-- 기능별 현황 — 경영현황판 ③ 영업본부 칸과 같은 합계 · 카드 (2026-11-25). renderSalesExecPanel() 이 그립니다 -->
+                    <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">기능별 현황 <span class="normal-case font-normal">· 경영현황판 영업본부와 같은 기준</span></p>
+                    <div id="sdash-exec-panel" class="bg-white p-4 rounded-lg shadow-sm border border-gray-200 mb-6"></div>
 
                     <!-- 갱신 임박 계약 -->
                     <div class="grid grid-cols-1 gap-6">
@@ -18675,15 +18679,40 @@ const QUOTE_TEMPLATES = [
             return execCollectItems().filter(i => execDeptKey(i) === 'sales' && execOpen(i));
         }
         // 카드 클릭 — 경영현황판의 영업본부 상세 팝업을 '진행중' 으로 거른 상태로 엽니다 (현황판 공통 필터는 적용하지 않음)
-        function openSalesOpenWorks() {
+        function openSalesOpenWorks() { openSalesExecFn('', 'open'); }
+        // 영업본부 현황의 기능별 카드 · 합계 클릭 — 경영현황판 영업본부 상세 팝업을 그 기능 · 상태로 거른 상태로 엽니다
+        function openSalesExecFn(fn, state) {
             // 팝업은 연 순간의 목록을 따로 들고 있으므로, 연 뒤에는 현황판 필터 · 걸러진 목록을 원래대로 돌려놓습니다
             //   (execAllItems 는 원래 거르기 전 전체라 새로 모은 값 그대로 — 행 상세가 여기서 찾습니다)
             const saved = execFilter;
             execFilter = { kind: '', dept: '', owner: '', state: '', from: '', to: '', q: '' };
             execAllItems = execCollectItems();
             execItems = execAllItems;
-            try { openExecDeptFn('sales', '', 'open'); }
+            try { openExecDeptFn('sales', fn || '', state || ''); }
             finally { execFilter = saved; execItems = execApplyFilter(execAllItems); }
+        }
+        // 영업본부 현황 — 경영현황판 ③ 영업본부 칸과 같은 합계 · 기능별 카드 (2026-11-25 다니엘님 "영업본부 현황과 경영현황판 영업본부 동일하게")
+        function renderSalesExecPanel() {
+            const host = document.getElementById('sdash-exec-panel');
+            if (!host) return;
+            const list = execCollectItems().filter(i => execDeptKey(i) === 'sales');
+            const open = list.filter(execOpen).length, late = list.filter(execLate).length;
+            const issue = list.filter(execIssue).length, done = list.filter(i => i.done).length;
+            const rate = list.length ? Math.round(done / list.length * 100) : 0;
+            const num = (n, cls, label, st) => `<button type="button" data-st="${st}" onclick="openSalesExecFn('', ${jsArg(st)})" class="text-center px-1 rounded hover:bg-gray-50">
+                    <p class="text-lg font-bold ${n ? cls : 'text-gray-300'}">${n}</p><p class="text-[11px] text-gray-400">${label}</p></button>`;
+            host.innerHTML = `
+                <div class="flex flex-wrap items-center gap-x-4 gap-y-2 mb-3">
+                    <button type="button" onclick="openSalesExecFn('', '')" class="text-left min-w-[8rem]">
+                        <p class="font-semibold text-gray-800 hover:underline">영업본부 <span id="sdash-exec-total" class="text-xs font-normal text-gray-400">전체 ${list.length}건</span></p>
+                        <div class="w-32 bg-gray-100 rounded-full h-1.5 mt-1.5"><div class="bg-blue-500 h-1.5 rounded-full" style="width:${rate}%"></div></div>
+                        <p class="text-[11px] text-gray-400 mt-0.5">완료율 ${rate}%</p>
+                    </button>
+                    <div class="grid grid-cols-4 gap-1 ml-auto">
+                        ${num(open, 'text-blue-600', '진행중', 'open')}${num(late, 'text-red-600', '지연', 'late')}${num(issue, 'text-amber-600', '문제', 'issue')}${num(done, 'text-green-600', '완료', 'done')}
+                    </div>
+                </div>
+                ${list.length ? `<div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-2">${execFnCardsHtml('sales', list, false, 'openSalesExecFn')}</div>` : '<p class="text-xs text-gray-400 py-2">해당 건이 없습니다.</p>'}`;
         }
         function renderSalesDashboard() {
             const set = (id, v) => { const el = document.getElementById(id); if (el) el.innerText = v; };
@@ -18712,6 +18741,7 @@ const QUOTE_TEMPLATES = [
             const sOpen = salesOpenWorkItems();
             set('sdash-open-cases', `${sOpen.length}건`);
             set('sdash-open-sub', `영업본부 전체 · 경영현황판 기준 · 지연 ${sOpen.filter(execLate).length} · 문제 ${sOpen.filter(execIssue).length}`);
+            renderSalesExecPanel();
 
             // --- 오늘 일정 ---
             const today = ymd(new Date());
@@ -28668,9 +28698,12 @@ const QUOTE_TEMPLATES = [
             }));
         }
         // 기능별 카드 — 현황판(③)과 본부 상세 팝업이 같은 카드를 씁니다. inModal 이면 팝업 목록을 그 기능으로 거릅니다.
-        function execFnCardsHtml(dp, list, inModal) {
+        //   opener — 다른 화면(영업본부 현황)에서 쓸 때 카드 클릭으로 부를 함수 이름 (opener(fn, state))
+        function execFnCardsHtml(dp, list, inModal, opener) {
             return execFnStats(list).map(g => {
-                const pick = st => inModal ? `setExecListFn(${jsArg(g.fn)}, ${jsArg(st)})` : `openExecDeptFn(${jsArg(dp)}, ${jsArg(g.fn)}, ${jsArg(st)})`;
+                const pick = st => inModal ? `setExecListFn(${jsArg(g.fn)}, ${jsArg(st)})`
+                    : opener ? `${opener}(${jsArg(g.fn)}, ${jsArg(st)})`
+                    : `openExecDeptFn(${jsArg(dp)}, ${jsArg(g.fn)}, ${jsArg(st)})`;
                 const n = (v, cls, label, st) => `<button type="button" onclick="event.stopPropagation(); ${pick(st)}" class="rounded px-0.5 hover:bg-white" title="${label} 건 보기"><span class="font-bold ${v ? cls : 'text-gray-300'}">${v}</span><span class="block text-[10px] text-gray-400">${label}</span></button>`;
                 const go = execFnOpenJs(g);
                 return `<div role="button" tabindex="0" data-fn="${escapeHtml(g.fn)}" onclick="${pick('')}" onkeydown="if(event.key==='Enter'){${pick('')}}"
