@@ -30,7 +30,7 @@
     <script src="config/app-config.js"></script>
     <!-- 화면 버전 (2026-11-16) — 배포할 때마다 올립니다. 개발 · 운영 화면 아래에 "그룹웨어 v1.1.0 · 운영" 처럼 보입니다.
          groupware = 그룹웨어 화면 · calendar = 킹오더일정(?mode=calendar) -->
-    <script>window.KOB_VERSION = { groupware: '1.1.39', calendar: '1.0.8', date: '2026-11-24' };</script>
+    <script>window.KOB_VERSION = { groupware: '1.1.41', calendar: '1.0.8', date: '2026-11-25' };</script>
     <script>
         (function () {
             // manifest 는 **여기서 만들어 답니다.** (2026-09-05 고침)
@@ -43889,7 +43889,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             const c = levelClass(currentUserLevel);
             return c === 'head' || c === 'exec' || c === 'admin';
         }
-        function supplyFeeHidden(f) { return !!(f && f.feeSecret) && !canSeeMerchantFee(); }
+        function supplyFeeHidden(f, rec) { return !!(f && f.feeSecret) && (!canSeeMerchantFee() || (!!rec && rec[f.id] === FEE_MASK)); }
 
         // ---------- 저장 (2026-09-17) ----------
         // 공급내역은 Supabase 'supplies' 표에 한 건 = 한 줄로 둡니다 (js/kob-db.js).
@@ -43981,7 +43981,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
         function supplyCellHtml(r, f) {
             const v = r[f.id];
             if (v === '' || v === null || v === undefined) return '<span class="text-gray-300">-</span>';
-            if (supplyFeeHidden(f)) return `<span class="text-gray-400 tracking-widest" title="본부장급 이상만 조회할 수 있습니다">${FEE_MASK}</span>`;
+            if (supplyFeeHidden(f, r)) return `<span class="text-gray-400 tracking-widest" title="본부장급 이상만 조회할 수 있습니다">${FEE_MASK}</span>`;
             if (f.pct) return `<span class="text-indigo-800 font-medium">${v}%</span>`;
             if (f.num) return `<span class="tabular-nums">${Number(v).toLocaleString('en-US')}</span>`;
             if (f.chip && f.chip[v]) return `<span class="px-2 py-0.5 rounded-full text-xs font-medium ${f.chip[v]}">${escapeHtml(String(v))}</span>`;
@@ -44001,6 +44001,8 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             }
             if (okChannels.indexOf(supplyChannel) < 0) supplyChannel = okChannels[0];
             const ch = supplyChannel, def = supplyDef(ch);
+            feeLogView(ch);                                                       // 본부장급 수수료 열람 기록 (채널마다 한 번 · 2026-11-25)
+            if (dlServerMode() && !dlReqLoadedOnce) { dlReqLoadedOnce = true; refreshDlReqs(); }
             if (def.custom) { (def.render || renderPartnerTradeCenter)(host); return; }   // 파트너사·지급명세는 데이터가 달라 따로 그립니다
             const all = supplyOf(ch);
             const list = supplyFiltered();
@@ -44109,7 +44111,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                         + (f.options || []).map(o => `<option value="${escapeHtml(o)}" ${String(v) === o ? 'selected' : ''}>${escapeHtml(o)}</option>`).join('') + '</select>';
                 } else if (f.type === 'textarea') {
                     input = `<textarea id="sup-${f.id}" rows="3" class="${cls}">${escapeHtml(String(v))}</textarea>`;
-                } else if (supplyFeeHidden(f)) {
+                } else if (supplyFeeHidden(f, rec)) {
                     // 값은 화면에 싣지 않습니다 — 저장할 때 원래 값을 그대로 둡니다 (submitSupply)
                     input = `<input type="text" id="sup-${f.id}" value="${(v === '' || v === null) ? '' : FEE_MASK}" disabled title="본부장급 이상만 조회 · 수정할 수 있습니다" class="${cls} bg-gray-100 text-gray-400 tracking-widest" />`;
                 } else if (f.type === 'number') {
@@ -44148,7 +44150,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             const data = { channel: ch, partnerId: (document.getElementById('sup-partnerId') || {}).value || '' };
             let bad = null;
             def.fields.forEach(f => {
-                if (supplyFeeHidden(f)) { data[f.id] = rec && rec[f.id] !== undefined ? rec[f.id] : ''; return; }   // 가려진 수수료는 원래 값 유지
+                if (supplyFeeHidden(f, rec)) { data[f.id] = rec && rec[f.id] !== undefined ? rec[f.id] : ''; return; }   // 가려진 수수료는 원래 값 유지 ('***' 그대로 보내면 서버도 유지)
                 const el = document.getElementById('sup-' + f.id);
                 let v = el ? (el.value || '').trim() : '';
                 if (f.type === 'number' && v !== '') v = Number(v);
@@ -44188,14 +44190,19 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             const rows = [
                 [`${def.sheet} (${list.length}건 · ${today} 기준)`],
                 def.fields.map(f => f.label + (f.pct ? '(%)' : '')),
-                ...list.map(r => def.fields.map(f => (r[f.id] === undefined || r[f.id] === null || r[f.id] === '') ? '' : ((f.feeSecret && !showFee) ? FEE_MASK : r[f.id])))
+                ...list.map(r => def.fields.map(f => {
+                    const v = f.feeSecret ? dlFeeValue(r.id, f.id, r[f.id]) : r[f.id];
+                    if (v === undefined || v === null || v === '') return '';
+                    return (f.feeSecret && (!showFee || v === FEE_MASK)) ? FEE_MASK : v;
+                }))
             ];
             downloadBlobAs(buildXlsxBlob(rows, def.name), `거래처관리_${def.name}_${today.replace(/-/g, '')}.xlsx`);
-            markDlReqUsed(req, list.length);
+            markDlReqUsed(req, list.length, ch);
         }
         // 승인 1건 = 다운로드 1회
-        function markDlReqUsed(req, rows) {
-            if (!req) return;
+        function markDlReqUsed(req, rows, ch) {
+            if (!req) { if (ch && supplyHasSecret(ch) && canSeeMerchantFee()) feeLog('download', ch, rows); return; }   // 본부장급 바로 다운로드 기록
+            if (dlServerMode()) { showAppToast('승인받은 엑셀을 다운로드했습니다. 다시 받으려면 새로 승인을 요청해 주세요.', 'blue'); return; }   // 서버가 이미 사용 처리
             req.status = 'used'; req.usedAt = new Date().toISOString(); req.rows = rows;
             saveDlReq(req); renderDlReqModalIfOpen();
             showAppToast('승인받은 엑셀을 다운로드했습니다. 다시 받으려면 새로 승인을 요청해 주세요.', 'blue');
@@ -44219,7 +44226,44 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             const n = dlReqPendingForMe();
             return `<button onclick="openDlReqModal()" class="bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 px-3 py-1.5 rounded text-sm transition-colors whitespace-nowrap"><i class="fas fa-user-check mr-1"></i>다운로드 승인${n ? ` <span class="ml-1 px-1.5 rounded-full bg-red-600 text-white text-[11px]">${n}</span>` : ''}</button>`;
         }
-        function dlReqList() { return (loadJsonStore(DL_REQ_KEY, []) || []).filter(x => x && x.id); }
+        // ---------- 서버 모드 (2026-11-25 보안 1단계) ----------
+        // 실제 서버(Supabase)에서는 요청 · 승인 · 받기를 데이터베이스 함수가 처리합니다 (fee_dl_request · fee_dl_decide · fee_dl_fetch).
+        // 본부장급 미만은 승인받은 1회에만 fee_dl_fetch 로 수수료를 받습니다 — 화면을 조작해도 값이 오지 않습니다.
+        // 로컬 모드(시험)는 예전처럼 app_store 에 둡니다.
+        function dlServerMode() { return !!(window.kobDb && kobDb.mode === 'supabase'); }
+        let dlReqCache = [];
+        let dlReqLoadedOnce = false;
+        let dlFeeOverride = null;   // 승인받은 다운로드 중 — { ch, map: { 줄 id: { fee | merchantFee } }, req }
+        function dlFromServer(r) {
+            return { id: r.id, ch: r.ch, chName: r.chname || r.ch, reason: r.reason, by: r.by_name || r.by_email, byEmail: r.by_email, byDept: r.by_dept || '',
+                     at: r.created_at, status: r.status, approvers: Array.isArray(r.approvers) ? r.approvers : [], decidedBy: r.decided_by || '',
+                     decidedAt: r.decided_at || '', note: r.note || '', usedAt: r.used_at || '', rows: r.rows_n };
+        }
+        async function refreshDlReqs() {
+            if (!dlServerMode()) return;
+            try { dlReqCache = (await kobDb.list('fee_download_requests', { order: 'created_at', limit: 300 })).map(dlFromServer); }
+            catch (e) { console.warn('[수수료 승인] 목록을 받지 못했습니다', e); }
+            renderDlReqModalIfOpen();
+        }
+        function dlErrText(e) { return String((e && e.message) || e || '').replace(/^KOB_FEE:\s*/, ''); }
+        function feeLog(action, ch, rows) {
+            if (!dlServerMode()) return;
+            kobDb.rpc('fee_log', { p_action: action, p_ch: ch, p_rows: rows == null ? null : rows }).catch(e => console.warn('[수수료 기록] 실패', e));
+        }
+        const feeViewLogged = {};
+        function feeLogView(ch) {
+            if (!dlServerMode() || !supplyHasSecret(ch) || !canSeeMerchantFee() || feeViewLogged[ch]) return;
+            feeViewLogged[ch] = 1;
+            feeLog('view', ch, null);
+        }
+        // 승인 다운로드 중이면 받아 온 값, 아니면 화면 값
+        function dlFeeValue(id, field, cur) {
+            if (!dlFeeOverride) return cur;
+            const v = (dlFeeOverride.map || {})[id];
+            const x = v ? v[field] : undefined;
+            return (x === undefined || x === null) ? '' : x;
+        }
+        function dlReqList() { return dlServerMode() ? dlReqCache : (loadJsonStore(DL_REQ_KEY, []) || []).filter(x => x && x.id); }
         function saveDlReq(req) {
             const list = dlReqList();   // 저장 직전에 다시 읽고 한 건만 바꿉니다
             const i = list.findIndex(x => x.id === req.id);
@@ -44242,9 +44286,11 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
         }
         // 다운로드 직전 — 바로 받을 수 있으면 null, 승인으로 받으면 그 요청, 막으면 false
         function supplyDlGate(ch, approvedReqId) {
+            if (dlFeeOverride && dlFeeOverride.ch === ch) return dlFeeOverride.req;   // 서버에서 승인 값을 받아 온 다운로드
             if (!supplyHasSecret(ch) || canSeeMerchantFee()) return null;
             const mine = dlReqList().filter(r => r.by === currentUserName && r.ch === ch);
             const ok = mine.find(r => (approvedReqId ? r.id === approvedReqId : true) && dlReqStatusOf(r) === 'approved');
+            if (ok && dlServerMode()) { downloadApprovedSupply(ok.id); return false; }   // 서버에서 값을 받아 와서 다시 부릅니다
             if (ok) return ok;
             const pending = mine.find(r => r.status === 'pending');
             if (pending) { alert(`이미 본부장 승인을 요청했습니다.\n요청: ${String(pending.at).slice(0, 16).replace('T', ' ')} · 승인할 사람: ${(pending.approvers || []).join(', ') || '-'}\n\n승인되면 알림이 옵니다.`); openDlReqModal(); return false; }
@@ -44259,14 +44305,21 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             if (!reason.trim()) { alert('다운로드 사유를 입력해 주세요.'); return null; }
             if (!approvers.length) { alert('승인할 본부장급 직원이 없습니다. 관리자에게 문의해 주세요.'); return null; }
             const now = new Date();
-            const req = { id: 'DLR-' + now.getTime(), ch, chName: def.name, reason: reason.trim(), by: currentUserName || '', byDept: currentUserDept || '',
-                          at: now.toISOString(), status: 'pending', approvers };
-            saveDlReq(req);
-            approvers.forEach(name => pushNotification({
+            const notify = req => approvers.forEach(name => pushNotification({
                 id: 'cnoti_' + collabNotiIdCounter++, type: 'download-request', ticketId: '', projectId: '', dlReqId: req.id,
                 title: `[${def.name}] 거래처 엑셀`, toUser: name, toDept: '', toTeam: '',
                 detail: `요청: ${req.by}${deptNames[req.byDept] ? ' (' + deptNames[req.byDept] + ')' : ''} · 사유: ${req.reason}`, date: ymd(now)
             }));
+            if (dlServerMode()) {
+                kobDb.rpc('fee_dl_request', { p_ch: ch, p_chname: def.name, p_reason: reason.trim(), p_approvers: approvers })
+                    .then(row => { const req = dlFromServer(row); notify(req); showAppToast('본부장에게 엑셀 다운로드 승인을 요청했습니다. 승인되면 알림이 옵니다.', 'blue'); return refreshDlReqs(); })
+                    .catch(e => alert('승인 요청을 보내지 못했습니다.\n' + dlErrText(e)));
+                return null;
+            }
+            const req = { id: 'DLR-' + now.getTime(), ch, chName: def.name, reason: reason.trim(), by: currentUserName || '', byDept: currentUserDept || '',
+                          at: now.toISOString(), status: 'pending', approvers };
+            saveDlReq(req);
+            notify(req);
             showAppToast('본부장에게 엑셀 다운로드 승인을 요청했습니다. 승인되면 알림이 옵니다.', 'blue');
             return req;
         }
@@ -44278,6 +44331,17 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                 note = prompt('반려 사유를 입력해 주세요.', '');
                 if (note === null) return;
                 if (!note.trim()) { alert('반려 사유를 입력해 주세요.'); return; }
+            }
+            const tell = r => pushNotification({
+                id: 'cnoti_' + collabNotiIdCounter++, type: 'download-request-result', ticketId: '', projectId: '', dlReqId: r.id,
+                title: `[${r.chName}] 거래처 엑셀`, toUser: r.by, toDept: '', toTeam: '',
+                detail: approve ? `${r.decidedBy} 승인 · ${DL_REQ_HOURS}시간 안에 1회 다운로드할 수 있습니다.` : `${r.decidedBy} 반려 · 사유: ${r.note}`, date: ymd(new Date())
+            });
+            if (dlServerMode()) {
+                kobDb.rpc('fee_dl_decide', { p_id: id, p_approve: !!approve, p_note: note.trim() })
+                    .then(row => { tell(dlFromServer(row)); showAppToast(approve ? '승인했습니다. 요청자에게 알렸습니다.' : '반려했습니다. 요청자에게 알렸습니다.', approve ? 'green' : 'amber'); return refreshDlReqs(); })
+                    .catch(e => { alert('처리하지 못했습니다.\n' + dlErrText(e)); refreshDlReqs(); });
+                return;
             }
             r.status = approve ? 'approved' : 'rejected'; r.decidedBy = currentUserName || ''; r.decidedAt = new Date().toISOString(); r.note = note.trim();
             saveDlReq(r);
@@ -44294,6 +44358,17 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             const r = dlReqList().find(x => x.id === id);
             if (!r || r.by !== currentUserName || dlReqStatusOf(r) !== 'approved') { alert('다운로드할 수 있는 승인 건이 아닙니다.'); renderDlReqModalIfOpen(); return; }
             if (!canSeePage('supply-' + r.ch)) { alert('해당 거래처 채널을 볼 권한이 없습니다.'); return; }
+            if (dlServerMode() && !dlFeeOverride) {
+                // 데이터베이스가 승인 · 기한 · 1회를 확인하고 그 자료의 수수료를 돌려줍니다 (받으면 사용 처리)
+                kobDb.rpc('fee_dl_fetch', { p_id: r.id, p_rows: null })
+                    .then(map => {
+                        dlFeeOverride = { ch: r.ch, map: map || {}, req: r };
+                        try { downloadApprovedSupply(id); } finally { dlFeeOverride = null; }
+                        refreshDlReqs();
+                    })
+                    .catch(e => { alert('다운로드하지 못했습니다.\n' + dlErrText(e)); refreshDlReqs(); });
+                return;
+            }
             if (r.ch === 'partner') { downloadPartnersXlsx(r.id); return; }
             if (r.ch === 'payout') { downloadPayoutXlsx(r.id); return; }
             ensureSuppliesLoaded();
@@ -44326,6 +44401,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             }
             renderDlReqModal();
             m.classList.remove('hidden');
+            refreshDlReqs();   // 서버 모드 — 최신 요청으로 다시 그립니다
         }
         function closeDlReqModal() { const m = document.getElementById('dl-req-modal'); if (m) m.classList.add('hidden'); }
         function renderDlReqModalIfOpen() {
@@ -44359,6 +44435,30 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                         <p class="text-[11px] text-gray-400 mt-0.5">승인할 사람: ${escapeHtml((r.approvers || []).join(', ') || '-')}${r.decidedBy ? ` · 처리: ${escapeHtml(r.decidedBy)} ${escapeHtml(t(r.decidedAt))}` : ''}${r.note ? ` · 반려 사유: ${escapeHtml(r.note)}` : ''}${r.usedAt ? ` · 다운로드: ${escapeHtml(t(r.usedAt))} (${r.rows || 0}건)` : ''}</p>
                     </li>`; }).join('')}</ul>`
                 : '<p class="py-10 text-center text-sm text-gray-400">승인 요청이 없습니다.</p>';
+            // 관리자 — 수수료 열람 · 다운로드 기록 (서버 모드 · 2026-11-25)
+            if (dlServerMode() && isSystemAdmin()) {
+                body.insertAdjacentHTML('beforeend', `<div class="mt-4 border-t border-gray-100 pt-3">
+                    <div class="flex items-center justify-between gap-2"><p class="text-sm font-bold text-gray-700"><i class="fas fa-clipboard-list mr-1 text-gray-400"></i>수수료 열람 · 다운로드 기록 <span class="font-normal text-xs text-gray-400">관리자만</span></p>
+                        <button type="button" onclick="loadFeeAccessLog()" class="px-3 py-1.5 text-xs rounded border border-gray-300 bg-white text-gray-700 hover:bg-gray-50">최근 100건 보기</button></div>
+                    <div id="fee-log-body" class="mt-2"></div></div>`);
+            }
+        }
+        const FEE_LOG_ACTIONS = { view: '열람', download: '다운로드', request: '승인 요청', approve: '승인', reject: '반려' };
+        async function loadFeeAccessLog() {
+            const box = document.getElementById('fee-log-body');
+            if (!box) return;
+            box.innerHTML = '<p class="text-xs text-gray-400 py-2">불러오는 중…</p>';
+            try {
+                const rows = await kobDb.rpc('fee_log_list', { p_limit: 100 });
+                const t = v => v ? new Date(v).toLocaleString('ko-KR', { hour12: false }).slice(0, 20) : '';
+                const chName = c => (SUPPLY_CHANNELS[c] || {}).name || c || '';
+                box.innerHTML = (rows || []).length ? `<div class="overflow-x-auto"><table class="w-full text-xs min-w-[520px]"><thead><tr class="text-gray-500 border-b border-gray-200 text-left">
+                        <th class="py-1.5 pr-2 font-medium">일시</th><th class="py-1.5 pr-2 font-medium">직원</th><th class="py-1.5 pr-2 font-medium">구분</th><th class="py-1.5 pr-2 font-medium">자료</th><th class="py-1.5 pr-2 font-medium text-right">건수</th><th class="py-1.5 font-medium">내용</th></tr></thead>
+                        <tbody>${rows.map(r => `<tr class="border-b border-gray-50"><td class="py-1.5 pr-2 whitespace-nowrap text-gray-500">${escapeHtml(t(r.at))}</td><td class="py-1.5 pr-2 whitespace-nowrap">${escapeHtml(r.name || r.email || '')}</td>
+                            <td class="py-1.5 pr-2 whitespace-nowrap ${r.action === 'download' ? 'text-red-700 font-semibold' : ''}">${escapeHtml(FEE_LOG_ACTIONS[r.action] || r.action)}</td><td class="py-1.5 pr-2 whitespace-nowrap">${escapeHtml(chName(r.ch))}</td>
+                            <td class="py-1.5 pr-2 text-right">${r.rows_n == null ? '' : escapeHtml(String(r.rows_n))}</td><td class="py-1.5 text-gray-500">${escapeHtml(r.detail || '')}</td></tr>`).join('')}</tbody></table></div>`
+                    : '<p class="text-xs text-gray-400 py-2">기록이 없습니다.</p>';
+            } catch (e) { box.innerHTML = `<p class="text-xs text-red-600 py-2">기록을 불러오지 못했습니다: ${escapeHtml(dlErrText(e))}</p>`; }
         }
 
         // ==================== 공통관리: 공급 단가표 ====================
@@ -45630,7 +45730,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                 const last = pgFeeLatest(p);
                 const feeCells = PARTNER_FEE_GRADES.map(g => {
                     const v = partnerFee(p, g.key);
-                    if (v !== '' && !canSeeMerchantFee()) return `<td class="px-2 py-2 text-right whitespace-nowrap bg-indigo-50/20 text-gray-400 tracking-widest" title="본부장급 이상만 조회할 수 있습니다">${FEE_MASK}</td>`;
+                    if (v !== '' && (!canSeeMerchantFee() || v === FEE_MASK)) return `<td class="px-2 py-2 text-right whitespace-nowrap bg-indigo-50/20 text-gray-400 tracking-widest" title="본부장급 이상만 조회할 수 있습니다">${FEE_MASK}</td>`;
                     return `<td class="px-2 py-2 text-right whitespace-nowrap bg-indigo-50/20 ${v === '' ? 'text-gray-300' : 'text-indigo-800 font-medium'}">${v === '' ? (none ? '-' : '·') : v + '%'}</td>`;
                 }).join('');
                 return `
@@ -45692,7 +45792,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             document.getElementById('trade-fee-na').checked = partnerFeeNone(p);
             onTradeFeeNaChange();
             // 본부장급 미만 — 수수료 칸은 *** 로 막고, '해당사항 없음' 도 바꾸지 못하게 (저장할 때 원래 값 유지)
-            const feeLock = !canSeeMerchantFee();
+            const feeLock = !canSeeMerchantFee() || Object.values(p.fee || {}).indexOf(FEE_MASK) > -1;   // 서버에서 값을 못 받은 상태도 막음
             document.getElementById('trade-fee-na').disabled = feeLock;
             if (feeLock) PARTNER_FEE_GRADES.forEach(g => {
                 const el = document.getElementById('trade-fee-' + g.key);
@@ -45750,7 +45850,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             const na = document.getElementById('trade-fee-na').checked;
             const fee = {};
             PARTNER_FEE_GRADES.forEach(g => {
-                if (!canSeeMerchantFee()) { fee[g.key] = partnerFee(p, g.key); return; }   // 가려진 수수료는 원래 값 유지
+                if (!canSeeMerchantFee() || Object.values(p.fee || {}).indexOf(FEE_MASK) > -1) { fee[g.key] = partnerFee(p, g.key); return; }   // 가려진 수수료는 원래 값 유지
                 const raw = na ? '' : val('trade-fee-' + g.key);
                 fee[g.key] = raw === '' ? '' : Number(raw);
             });
@@ -47733,7 +47833,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                                     <td class="px-2 py-2 text-center" colspan="8">합계 · ${list.length}건</td>
                                     <td class="px-2 py-2 text-right">${t.cardCount.toLocaleString('en-US')}</td>
                                     <td class="px-2 py-2 text-right">${formatKRW(t.cardAmount)}</td>
-                                    <td class="px-2 py-2 text-right">${canSeeMerchantFee() ? formatKRW(t.merchantFee) : `<span class="text-gray-400 tracking-widest">${FEE_MASK}</span>`}</td>
+                                    <td class="px-2 py-2 text-right">${canSeeMerchantFee() && !list.some(r => r.merchantFee === FEE_MASK) ? formatKRW(t.merchantFee) : `<span class="text-gray-400 tracking-widest">${FEE_MASK}</span>`}</td>
                                     <td class="px-2 py-2 text-right">${formatKRW(t.fee)}</td>
                                     <td class="px-2 py-2 text-right">${formatKRW(t.vat)}</td>
                                     <td class="px-2 py-2 text-right">${formatKRW(t.total)}</td>
@@ -47776,7 +47876,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                         return `<td class="px-2 py-2 text-center whitespace-nowrap bg-violet-50/30">${r.cycle ? `<span class="px-1.5 py-0.5 text-[10px] rounded bg-violet-100 text-violet-700 font-semibold">${escapeHtml(r.cycle)}</span>` : '<span class="text-gray-300">-</span>'}</td>`;
                     }
                     const v = r[c.key];
-                    if (c.key === 'merchantFee' && !canSeeMerchantFee()) return `<td class="px-2 py-2 text-right whitespace-nowrap text-gray-400 tracking-widest" title="본부장급 이상만 조회할 수 있습니다">${FEE_MASK}</td>`;
+                    if (c.key === 'merchantFee' && (!canSeeMerchantFee() || v === FEE_MASK)) return `<td class="px-2 py-2 text-right whitespace-nowrap text-gray-400 tracking-widest" title="본부장급 이상만 조회할 수 있습니다">${FEE_MASK}</td>`;
                     if (c.num) {
                         const n = Number(v) || 0;
                         return `<td class="px-2 py-2 text-right whitespace-nowrap ${c.strong ? 'font-semibold text-gray-800' : (n ? 'text-gray-700' : 'text-gray-300')}">${c.money ? formatKRW(n) : n.toLocaleString('en-US')}</td>`;
@@ -47826,7 +47926,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                         <div class="p-3 text-sm">
                             <div class="flex justify-between py-1 border-b border-gray-50"><span class="text-gray-500">신용카드 건수</span><span class="text-gray-700">${(Number(r.cardCount) || 0).toLocaleString('en-US')}건</span></div>
                             ${money('신용카드 금액', r.cardAmount)}
-                            ${canSeeMerchantFee() ? money('가맹점수수료', r.merchantFee) : `<div class="flex justify-between py-1 border-b border-gray-50"><span class="text-gray-500">가맹점수수료</span><span class="text-gray-400 tracking-widest" title="본부장급 이상만 조회할 수 있습니다">${FEE_MASK}</span></div>`}
+                            ${canSeeMerchantFee() && r.merchantFee !== FEE_MASK ? money('가맹점수수료', r.merchantFee) : `<div class="flex justify-between py-1 border-b border-gray-50"><span class="text-gray-500">가맹점수수료</span><span class="text-gray-400 tracking-widest" title="본부장급 이상만 조회할 수 있습니다">${FEE_MASK}</span></div>`}
                             ${money('수수료', r.fee)}
                             ${money('부가세', r.vat)}
                             ${money('합계', r.total, true)}
@@ -47874,13 +47974,15 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             ].concat(list.map(r => PAYOUT_TABLE_COLS.map(c => {
                 if (c.key === '__name') return r.pathRaw;
                 if (c.key === '__level') return r.level;
-                const v = r[c.key];
+                const v = c.key === 'merchantFee' ? dlFeeValue(r.id, 'merchantFee', r.merchantFee) : r[c.key];
+                if (c.key === 'merchantFee' && v === FEE_MASK) return FEE_MASK;
                 return c.num ? (Number(v) || 0) : (v === undefined || v === null ? '' : v);
             })));
             const t = payoutTotals(list);
+            if (dlFeeOverride) t.merchantFee = list.reduce((n, r) => n + (Number(dlFeeValue(r.id, 'merchantFee', 0)) || 0), 0);
             rows.push(PAYOUT_TABLE_COLS.map(c => c.num ? (t[c.key] || 0) : (c.key === '__name' ? '합계' : '')));
             downloadBlobAs(buildXlsxBlob(rows, '지급보고서'), `킹오더_지급보고서_${ym.replace('-', '')}.xlsx`);
-            markDlReqUsed(req, list.length);
+            markDlReqUsed(req, list.length, 'payout');
         }
 
 
@@ -47922,7 +48024,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                 level: p.level, levelRaw: o.levelRaw || '', cycle: p.cycle,
                 vendorId: o.vendorId || '', feeMethod: o.feeMethod || '',
                 cardCount: num('cardCount'), cardAmount: num('cardAmount'),
-                merchantFee: num('merchantFee'), fee: num('fee'), vat: num('vat'),
+                merchantFee: o.merchantFee === FEE_MASK ? FEE_MASK : num('merchantFee'), fee: num('fee'), vat: num('vat'),
                 total: Math.round(calc.total),
                 subSettle: num('subSettle'), hold: num('hold'), holdRelease: num('holdRelease'), adjust: num('adjust'),
                 payAmount: Math.round(calc.payAmount),
@@ -47985,9 +48087,9 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             // 가맹점수수료 — 본부장급 미만은 *** 로 막습니다 (저장할 때 원래 값 유지 · readPayoutRowForm)
             const mf = document.getElementById('payout-row-merchantFee');
             if (mf) {
-                const lock = !canSeeMerchantFee();
+                const lock = !canSeeMerchantFee() || (!!r && r.merchantFee === FEE_MASK);
                 mf.type = lock ? 'text' : 'number'; mf.disabled = lock;
-                if (lock) mf.value = (r && Number(r.merchantFee)) ? FEE_MASK : '0';
+                if (lock) mf.value = (r && (r.merchantFee === FEE_MASK || Number(r.merchantFee))) ? FEE_MASK : '0';
                 mf.classList.toggle('bg-gray-100', lock); mf.classList.toggle('text-gray-400', lock);
                 mf.title = lock ? '본부장급 이상만 조회 · 수정할 수 있습니다' : '';
             }
@@ -48011,9 +48113,9 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                 fee: n('fee'), vat: n('vat'),
                 subSettle: n('subSettle'), hold: n('hold'), holdRelease: n('holdRelease'), adjust: n('adjust')
             };
-            if (!canSeeMerchantFee()) {   // 가려진 가맹점수수료는 원래 값 유지
-                const cur = payoutRowEditId ? payoutRecords.find(r => r.id === payoutRowEditId) : null;
-                o.merchantFee = cur ? (Number(cur.merchantFee) || 0) : 0;
+            const curRow = payoutRowEditId ? payoutRecords.find(r => r.id === payoutRowEditId) : null;
+            if (!canSeeMerchantFee() || (curRow && curRow.merchantFee === FEE_MASK)) {   // 가려진 가맹점수수료는 원래 값 유지 ('***' 그대로 보내면 서버도 유지)
+                o.merchantFee = curRow ? (curRow.merchantFee === FEE_MASK ? FEE_MASK : (Number(curRow.merchantFee) || 0)) : 0;
             }
             return o;
         }
@@ -49261,13 +49363,14 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                 head,
                 ...list.map(p => [partnerCustTypeName(p.custType) + ((p.franchiseName || p.parentPartnerName) ? ` (${p.franchiseName || p.parentPartnerName})` : ''), p.corp || '', p.name || '', partnerBizTypeName(p.bizType), p.contractDoc || '', partnerItemsText(p)]
                     .concat(PARTNER_FEE_GRADES.map(g => {
-                        const v = partnerFee(p, g.key);
+                        const v = dlFeeOverride ? ((dlFeeValue(p.id, 'fee', {}) || {})[g.key] ?? '') : partnerFee(p, g.key);
+                        if (v === FEE_MASK) return FEE_MASK;
                         return v === '' ? (partnerFeeNone(p) ? '해당사항없음' : '') : v;
                     }))
                     .concat([p.cycle || '', p.contact || '', p.phone || '', p.owner || '', p.subOwner || '', p.status || '', p.memo || '']))
             ];
             downloadBlobAs(buildXlsxBlob(rows, '파트너사별공급현황'), `파트너사별_공급현황_${today.replace(/-/g, '')}.xlsx`);
-            markDlReqUsed(req, list.length);
+            markDlReqUsed(req, list.length, 'partner');
         }
 
         // 예전 이름 — 업체 지우기로 이어 줍니다 (2026-10-05)
