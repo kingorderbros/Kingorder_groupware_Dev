@@ -42,13 +42,16 @@ srv.listen(8894,async()=>{const br=await pp.launch({executablePath:'/Application
    // ③ 카드 탭 → 건별 상세가 팝업 위에
    if(o.rowsOpen1){host.querySelector('.exec-rows-card').click();await sleep(40);
     o.itemOpen=vis('exec-item-modal');const el=document.elementFromPoint(window.innerWidth/2,window.innerHeight/2);o.itemOnTop=!!el.closest('#exec-item-modal');
-    closeExecItemModal();closeExecRowsModal();await sleep(20);o.backToList=vis('exec-list-modal')&&!vis('exec-rows-modal');}
+    closeExecItemModal();o.backLabel1=document.getElementById('exec-rows-back-label').textContent;document.querySelector('#exec-rows-modal button[onclick="backExecRowsModal()"].w-full').click();await sleep(20);o.backToList=vis('exec-list-modal')&&!vis('exec-rows-modal');}
    // 지연 숫자(카드 안) → 팝업 · 지연만
    const lateBtn=[...document.querySelectorAll('#exec-modal-extra .exec-fn-card button')].find(b=>b.textContent.includes('지연'));lateBtn.click();await sleep(30);
    o.lateRows=vis('exec-rows-modal')&&document.getElementById('exec-rows-title').textContent.includes('지연');
    closeExecListModal();await sleep(20);o.allClosed=!vis('exec-list-modal')&&!vis('exec-rows-modal');
    // ④ 한눈에 보기 '진행 중' — 카드가 없는 창은 바로 상세 내역
-   openExecListModal('open');await sleep(40);o.openView=vis('exec-rows-modal');closeExecListModal();
+   openExecListModal('open');await sleep(40);o.openView=vis('exec-rows-modal');
+   // 카드 없는 창에서 돌아가기 → 빈 목록 창이 남지 않고 현황판으로 (2026-11-26)
+   o.backLabel2=document.getElementById('exec-rows-back-label').textContent;document.querySelector('#exec-rows-modal button[onclick="backExecRowsModal()"].w-full').click();await sleep(20);o.directBack=!vis('exec-rows-modal')&&!vis('exec-list-modal');
+   openExecListModal('g:unassigned');await sleep(40);o.gView=vis('exec-rows-modal');document.querySelector('#exec-rows-modal button[aria-label="닫기"]').click();await sleep(20);o.gBack=!vis('exec-list-modal');closeExecListModal();
    // ⑤ 영업본부 현황 기능 카드 → 바로 팝업
    navigate('sales',document.getElementById('nav-sales'));await sleep(120);
    document.querySelector('#sdash-exec-panel .exec-fn-card[data-fn^="w:sales:consult"]').click();await sleep(40);
@@ -70,6 +73,9 @@ srv.listen(8894,async()=>{const br=await pp.launch({executablePath:'/Application
    ok(r.lateRows,'지연 숫자 → 지연 팝업',r);
    ok(r.allClosed,'닫기 → 모두 닫힘',r);
    ok(r.openView,'한눈에 보기(카드 없는 창) → 바로 상세 내역',r);
+   ok(r.backLabel1==='현황으로 돌아가기','카드 창에서 연 팝업 — [현황으로 돌아가기]',r.backLabel1);
+   ok(r.directBack&&r.backLabel2==='현황판으로 돌아가기','카드 없는 창 — [현황판으로 돌아가기] → 빈 창 없이 현황판',r);
+   ok(r.gView&&r.gBack,'조치 필요(담당자 미배정) — 닫기(×) → 현황판',r);
    ok(r.salesRows&&r.salesCount===r.salesExpected,'영업본부 현황 기능 카드 → 바로 팝업',r);
   } else {
    ok(r.listOpen&&r.tableShown&&!r.btnShown,'컴퓨터 — 표 그대로 · 단추 없음',r);

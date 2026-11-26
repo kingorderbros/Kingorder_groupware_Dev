@@ -70,7 +70,7 @@
     <script src="config/app-config.js"></script>
     <!-- 화면 버전 (2026-11-16) — 배포할 때마다 올립니다. 개발 · 운영 화면 아래에 "그룹웨어 v1.1.0 · 운영" 처럼 보입니다.
          groupware = 그룹웨어 화면 · calendar = 킹오더일정(?mode=calendar) -->
-    <script>window.KOB_VERSION = { groupware: '1.1.45', calendar: '1.0.8', date: '2026-11-26' };</script>
+    <script>window.KOB_VERSION = { groupware: '1.1.46', calendar: '1.0.8', date: '2026-11-26' };</script>
     <script>
         (function () {
             // manifest 는 **여기서 만들어 답니다.** (2026-09-05 고침)
@@ -7351,11 +7351,11 @@
                     <h3 id="exec-rows-title" class="text-base font-bold text-gray-800 truncate"></h3>
                     <p id="exec-rows-sub" class="text-xs text-gray-500 mt-0.5"></p>
                 </div>
-                <button type="button" onclick="closeExecRowsModal()" class="text-gray-400 hover:text-gray-600 shrink-0 p-1" aria-label="닫기"><i class="fas fa-times"></i></button>
+                <button type="button" onclick="backExecRowsModal()" class="text-gray-400 hover:text-gray-600 shrink-0 p-1" aria-label="닫기"><i class="fas fa-times"></i></button>
             </div>
             <div id="exec-rows-list" class="flex-1 min-h-0 overflow-y-auto p-3 space-y-2 bg-gray-50"></div>
             <div class="px-4 py-2.5 border-t border-gray-200 bg-white shrink-0" style="padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 0.625rem)">
-                <button type="button" onclick="closeExecRowsModal()" class="w-full px-4 py-2 bg-gray-200 text-gray-700 rounded text-sm"><i class="fas fa-arrow-left mr-1"></i>현황으로 돌아가기</button>
+                <button type="button" onclick="backExecRowsModal()" class="w-full px-4 py-2 bg-gray-200 text-gray-700 rounded text-sm"><i class="fas fa-arrow-left mr-1"></i><span id="exec-rows-back-label">현황으로 돌아가기</span></button>
             </div>
         </div>
     </div>
@@ -29382,7 +29382,7 @@ const QUOTE_TEMPLATES = [
             renderExecListRows();
             document.getElementById('exec-list-modal').classList.remove('hidden');
             closeExecRowsModal();
-            if (execIsPhone() && !extra) openExecRowsModal();   // 기능 카드가 없는 창은 상세 내역부터
+            if (execIsPhone() && !extra) openExecRowsModal(true);   // 기능 카드가 없는 창은 상세 내역부터 — 돌아가기는 현황판으로
         }
 
         // 직원별 · 팀원 담당 업무 창의 요약 카드 — 누르면 아래 목록을 그 상태로 거릅니다 (2026-11-23 다니엘님 "카드 누르면 해당 건 필터해서 상세 내용")
@@ -29549,7 +29549,13 @@ const QUOTE_TEMPLATES = [
                     </div>`;
             }).join('') : `<p class="text-center text-sm text-gray-400 py-10">${all.length ? '조건에 맞는 건이 없습니다.' : '해당하는 건이 없습니다.'}</p>`;
         }
-        function openExecRowsModal() {
+        // direct — 기능 카드가 없는 창(한눈에 보기 · 조치 필요 등)에서 바로 연 경우. 뒤에 보여 줄 카드가 없어 돌아가기는 현황판으로 (2026-11-26 다니엘님 "현황으로 돌아가기를 누르면 내용이 없는 페이지가 열려")
+        let execRowsDirect = false;
+        function backExecRowsModal() { if (execRowsDirect) closeExecListModal(); else closeExecRowsModal(); }
+        function openExecRowsModal(direct) {
+            execRowsDirect = direct === true;
+            const lb = document.getElementById('exec-rows-back-label');
+            if (lb) lb.textContent = execRowsDirect ? '현황판으로 돌아가기' : '현황으로 돌아가기';
             renderExecRowsMobile(execListFiltered(), (execListState && execListState.list) || []);
             const m = document.getElementById('exec-rows-modal');
             m.classList.remove('hidden');
