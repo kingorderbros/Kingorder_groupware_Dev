@@ -7,7 +7,7 @@ const srv=http.createServer((q,r)=>{let p=decodeURIComponent(q.url.split('?')[0]
 let pass=0,fail=0;const ok=(c,n,x)=>{if(c){pass++;console.log('  ✓',n);}else{fail++;console.log('  ✗',n,x===undefined?'':JSON.stringify(x));}};
 srv.listen(8894,async()=>{const br=await pp.launch({executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',headless:'new'});
  const errs=[];
- for(const [vw,vh] of [[390,844],[360,740],[1440,900]]){
+ for(const [vw,vh] of [[390,844],[360,740],[360,640],[1440,900]]){
   const phone=vw<640;console.log(`■ 화면 ${vw}x${vh} ${phone?'(휴대폰)':'(컴퓨터)'}`);
   const pg=await br.newPage();await pg.setViewport({width:vw,height:vh,isMobile:phone,hasTouch:phone});pg.on('pageerror',e=>errs.push(String(e).slice(0,200)));pg.on('dialog',d=>d.accept());
   await pg.goto('http://localhost:8894/',{waitUntil:'networkidle0'});
@@ -16,7 +16,8 @@ srv.listen(8894,async()=>{const br=await pp.launch({executablePath:'/Application
    const S=WORK_CENTERS.sales;S.works=[];WORK_CENTERS.ops.works=[];collabRequests.length=0;
    const w=(id,type,st,extra)=>S.works.push(Object.assign({id,type,title:id+' 아주 긴 업무 제목이 들어가도 줄이 바뀌어 화면 안에 표시되어야 합니다',status:st,priority:'normal',receivedAt:'2026-11-20',receiver:'대표',assignee:'김영업'},extra||{}));
    for(let k=1;k<=12;k++)w('S-'+k,k%3?'consult':'activity',k%4?'working':'done',k%4?{}:{doneAt:'2026-11-22'});
-   w('S-L','consult','working',{dueDate:'2026-01-01'});
+   w('S-L','consult','working',{dueDate:'2026-01-01'});w('S-C','contract','working');w('S-Q','quote','working');
+   collabRequests.push({id:'CR-1',title:'협업',status:'accepted',targetDept:'sales',assignee:'대표',date:'2026-11-30'});
    inboundRecords=[{id:'IB-1',company:'가',phone:'0101',flags:[],kob:{result:'진행중',dept:'영업',owner:'김영업'}}];
    enterApp(U[0]);await sleep(120);
    const vis=id=>{const e=document.getElementById(id);return !!e&&!e.classList.contains('hidden')&&getComputedStyle(e).display!=='none'&&e.getBoundingClientRect().width>0;};
@@ -29,6 +30,7 @@ srv.listen(8894,async()=>{const br=await pp.launch({executablePath:'/Application
    o.tableShown=getComputedStyle(tableBox()).display!=='none';
    o.btnShown=getComputedStyle(document.getElementById('exec-rows-open')).display!=='none';
    o.btnText=document.getElementById('exec-rows-open').textContent.replace(/\s+/g,' ').trim();
+   {const b=document.getElementById('exec-rows-open').getBoundingClientRect();o.btnInView=b.height>0&&b.top>=0&&b.bottom<=window.innerHeight;o.nCards=document.querySelectorAll('#exec-modal-extra .exec-fn-card').length;}
    const lm=document.querySelector('#exec-list-modal > div');o.listOverflowX=lm.scrollWidth>lm.clientWidth+1;
    // ② 기능 카드 클릭 → 팝업
    const card=document.querySelector('#exec-modal-extra .exec-fn-card[data-fn^="w:sales:consult"]');card.click();await sleep(40);
@@ -57,6 +59,7 @@ srv.listen(8894,async()=>{const br=await pp.launch({executablePath:'/Application
    ok(r.listOpen&&!r.rowsOpen0,'본부 상세 — 카드 화면',r);
    ok(!r.tableShown&&r.btnShown,'표 숨김 · [상세 내역 보기] 단추',r);
    ok(/상세 내역 \d+건 보기/.test(r.btnText),'단추에 건수',r.btnText);
+   ok(r.btnInView&&r.nCards>=5,'기능 카드가 많아도 [상세 내역 보기] 단추가 화면 안',[r.btnInView,r.nCards]);
    ok(!r.listOverflowX,'본부 상세 옆으로 넘침 없음');
    ok(r.rowsOpen1&&r.rowsTitle.includes('상담'),'기능 카드 클릭 → 상세 내역 팝업',r);
    ok(r.rowsCards===r.expected&&r.expected>0,'팝업 건수 = 거른 건수',[r.rowsCards,r.expected]);
