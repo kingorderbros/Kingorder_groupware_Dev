@@ -30,7 +30,7 @@
     <script src="config/app-config.js"></script>
     <!-- 화면 버전 (2026-11-16) — 배포할 때마다 올립니다. 개발 · 운영 화면 아래에 "그룹웨어 v1.1.0 · 운영" 처럼 보입니다.
          groupware = 그룹웨어 화면 · calendar = 킹오더일정(?mode=calendar) -->
-    <script>window.KOB_VERSION = { groupware: '1.1.43', calendar: '1.0.8', date: '2026-11-26' };</script>
+    <script>window.KOB_VERSION = { groupware: '1.1.44', calendar: '1.0.8', date: '2026-11-26' };</script>
     <script>
         (function () {
             // manifest 는 **여기서 만들어 답니다.** (2026-09-05 고침)
@@ -294,6 +294,22 @@
         #sec-admin-center .overflow-x-auto:has(> table) { max-height: calc(100vh - 260px); min-height: 160px; overflow-y: auto; }
         #sec-admin-center .overflow-x-auto > table > thead th { position: sticky; top: -1px; z-index: 3; background-color: #f9fafb; box-shadow: inset 0 -1px 0 #e5e7eb; }
         #sec-admin-center .overflow-x-auto > table > thead th.bg-rose-50\/60 { background-color: #fff5f6; }
+    
+        /* 휴대폰(가로 640 미만)에서 현황 화면 표를 한 건씩 카드로 — 옆으로 밀지 않고 위아래로만 (2026-11-26 다니엘님 "모바일은 상세 내역을 한 화면에서, 옆으로 스크롤 불편")
+           표에 kob-mstack 을 붙이면 됩니다. 칸 이름은 kobMStack() 이 머리줄(th)에서 data-label 로 붙입니다. */
+        @media (max-width: 639px) {
+            table.kob-mstack { min-width: 0 !important; display: block; width: 100%; }
+            table.kob-mstack thead { display: none; }
+            table.kob-mstack tbody { display: block; width: 100%; }
+            table.kob-mstack tr { display: grid; grid-template-columns: 1fr 1fr; column-gap: 1rem; border: 1px solid #e5e7eb; border-radius: 0.5rem; margin: 0 0 0.5rem; padding: 0.5rem 0.75rem; background: #fff; }
+            table.kob-mstack td:first-child, table.kob-mstack td[colspan] { grid-column: 1 / -1; }
+            table.kob-mstack td { display: flex; justify-content: space-between; align-items: baseline; gap: 0.75rem; padding: 0.15rem 0 !important; border: 0 !important; text-align: right !important; white-space: normal !important; max-width: none !important; min-width: 0 !important; }
+            table.kob-mstack td[data-label]::before { content: attr(data-label); color: #6b7280; font-size: 12px; font-weight: 400; text-align: left; flex-shrink: 0; }
+            table.kob-mstack td:not([data-label]), table.kob-mstack td[colspan] { display: block; text-align: left !important; }
+            table.kob-mstack td:first-child { font-weight: 600; justify-content: flex-start; text-align: left !important; padding-bottom: 0.3rem !important; }
+            table.kob-mstack td:first-child::before { display: none; }
+            table.kob-mstack td:empty { display: none; }
+        }
     </style>
     <!-- 저장된 테마를 첫 페인트 전에 적용 (색상 깜빡임 방지) -->
     <script>
@@ -7227,7 +7243,8 @@
 
     <!-- 2026-11-24 창 높이 안에 고정 — 위쪽(제목·거르기·요약 카드)은 그대로, 표만 남은 높이 안에서 넘겨 봅니다 -->
     <div id="exec-list-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 sm:p-4">
-        <div class="bg-white w-full max-w-6xl h-full rounded-lg shadow-xl flex flex-col min-h-0 overflow-y-auto">
+        <!-- 휴대폰: 창 전체는 고정하고 가운데(카드)만 넘기며, 아래 [상세 내역 보기] 단추는 늘 보이게 (2026-11-26 — 영업본부처럼 카드가 많으면 단추가 화면 밖으로 밀리던 것) -->
+        <div class="bg-white w-full max-w-6xl h-full rounded-lg shadow-xl flex flex-col min-h-0 overflow-hidden sm:overflow-y-auto">
             <div class="flex justify-between items-start px-6 py-3 border-b border-gray-200 bg-white rounded-t-lg shrink-0">
                 <div class="min-w-0">
                     <p id="exec-modal-eyebrow" class="text-xs font-semibold text-amber-700"></p>
@@ -7236,7 +7253,7 @@
                 </div>
                 <button type="button" onclick="closeExecListModal()" class="text-gray-400 hover:text-gray-600 shrink-0"><i class="fas fa-times"></i></button>
             </div>
-            <div class="px-4 sm:px-6 pt-3 shrink-0 sm:max-h-[45%] sm:overflow-y-auto">
+            <div class="px-4 sm:px-6 pt-3 flex-1 min-h-0 overflow-y-auto sm:flex-none sm:shrink-0 sm:max-h-[45%]">
                 <div id="exec-modal-chips" class="flex flex-wrap items-center gap-1.5 mb-2"></div>
                 <div id="exec-modal-filter" class="mb-3"></div>
                 <p id="exec-modal-hint" class="hidden text-xs text-gray-400 mb-3"><i class="fas fa-hand-pointer mr-1"></i><span class="hidden sm:inline">행을 클릭하면 해당 건의 <b>상세 내용</b>이 표시됩니다.</span><span class="sm:hidden">카드나 아래 <b>[상세 내역 보기]</b>를 누르면 건별 목록이 팝업으로 표시됩니다.</span></p>
@@ -7264,7 +7281,7 @@
                     </div>
                 </div>
             </div>
-            <div class="flex justify-end gap-2 px-4 sm:px-6 py-2.5 border-t border-gray-200 bg-gray-50 rounded-b-lg shrink-0 mt-auto">
+            <div class="flex justify-end gap-2 px-4 sm:px-6 py-2.5 border-t border-gray-200 bg-gray-50 rounded-b-lg shrink-0">
                 <!-- 휴대폰 — 표 대신 상세 내역을 팝업으로 (2026-11-26) -->
                 <button type="button" id="exec-rows-open" onclick="openExecRowsModal()" class="sm:hidden flex-1 px-4 py-2 bg-gray-800 text-white rounded text-sm font-semibold"><i class="fas fa-list mr-1"></i>상세 내역 <span id="exec-rows-open-n">0건</span> 보기</button>
                 <button type="button" onclick="closeExecListModal()" class="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition-colors text-sm">닫기</button>
@@ -18577,6 +18594,28 @@ const QUOTE_TEMPLATES = [
             try { navigate('ops-work-center', document.getElementById('nav-ops-allworks')); } finally { window.__wcKeepFilter = false; }
             if (wcAllWorksOn('ops')) renderWcAllWorks('ops');
         }
+        // ---------- 휴대폰 표 → 카드 (kob-mstack) ----------
+        // 머리줄(th) 이름을 각 칸에 data-label 로 붙입니다. 표가 다시 그려지면(거르기 등) 자동으로 다시 붙입니다.
+        function kobMStack(root) {
+            (root || document).querySelectorAll('table.kob-mstack').forEach(t => {
+                const heads = [...t.querySelectorAll('thead tr:first-child th')].map(th => th.textContent.replace(/\s+/g, ' ').trim());
+                if (!heads.length) return;
+                t.querySelectorAll('tbody tr').forEach(tr => {
+                    if (tr.querySelector('td[colspan]')) return;
+                    [...tr.children].forEach((td, k) => { if (!td.hasAttribute('data-label') && heads[k]) td.setAttribute('data-label', heads[k]); });
+                });
+            });
+        }
+        (function () {
+            let queued = false;
+            const run = () => { queued = false; kobMStack(document); };
+            new MutationObserver(ms => {
+                if (queued) return;
+                if (!ms.some(m => m.target.closest && m.target.closest('table.kob-mstack, #ops-dash, #payment-dash, #sec-exec-center'))) return;
+                queued = true; requestAnimationFrame(run);
+            }).observe(document.documentElement, { childList: true, subtree: true });
+        })();
+
         function renderOpsDashboard() {
             const host = document.getElementById('ops-dash');
             if (!host) return;
@@ -18633,7 +18672,7 @@ const QUOTE_TEMPLATES = [
                 <div class="grid grid-cols-1 xl:grid-cols-3 gap-4 mb-6">
                     <div class="xl:col-span-2 bg-white p-4 rounded-lg shadow-sm border border-gray-200 overflow-x-auto">
                         <h4 class="font-bold text-gray-700 mb-2"><i class="fas fa-layer-group text-green-600 mr-1"></i>업무유형별</h4>
-                        <table class="w-full text-sm min-w-[560px]"><thead><tr class="text-xs text-gray-500 border-b bg-gray-50">
+                        <table class="kob-mstack w-full text-sm min-w-[560px]"><thead><tr class="text-xs text-gray-500 border-b bg-gray-50">
                             <th class="p-2 text-left font-medium">업무유형</th>${['received', 'assigned', 'working', 'hold'].map(st => `<th class="p-2 text-right font-medium">${escapeHtml(sn[st] || st)}</th>`).join('')}
                             <th class="p-2 text-right font-medium">미완료</th><th class="p-2 text-right font-medium">완료</th></tr></thead>
                             <tbody>${typeRows}</tbody></table>
@@ -18645,7 +18684,7 @@ const QUOTE_TEMPLATES = [
                 <div class="bg-white p-4 rounded-lg shadow-sm border border-gray-200 overflow-x-auto">
                     <div class="flex items-center justify-between mb-2"><h4 class="font-bold text-gray-700"><i class="fas fa-clock-rotate-left text-green-600 mr-1"></i>최근 미완료 업무</h4>
                     ${canAll ? `<button type="button" onclick="${go('open')}" class="text-xs text-green-700 hover:underline">미완료 전체 보기 ›</button>` : ''}</div>
-                    <table class="w-full text-sm min-w-[640px]"><tbody>${recentRows || '<tr><td class="p-6 text-center text-gray-400">처리 중인 업무가 없습니다.</td></tr>'}</tbody></table>
+                    <table class="kob-mstack w-full text-sm min-w-[640px]"><tbody>${recentRows || '<tr><td class="p-6 text-center text-gray-400">처리 중인 업무가 없습니다.</td></tr>'}</tbody></table>
                 </div>`;
         }
         function renderPaymentDashboard() {
@@ -18687,7 +18726,7 @@ const QUOTE_TEMPLATES = [
                     <div class="xl:col-span-2 bg-white p-4 rounded-lg shadow-sm border border-gray-200 overflow-x-auto">
                         <div class="flex items-center justify-between mb-2"><h4 class="font-bold text-gray-700"><i class="fas fa-clock-rotate-left text-yellow-500 mr-1"></i>최근 미완료 요청</h4>
                         <button type="button" onclick="${go('open')}" class="text-xs text-yellow-700 hover:underline">미완료 전체 보기 ›</button></div>
-                        <table class="w-full text-sm min-w-[560px]"><tbody>${rows || '<tr><td class="p-6 text-center text-gray-400">처리 중인 요청이 없습니다.</td></tr>'}</tbody></table>
+                        <table class="kob-mstack w-full text-sm min-w-[560px]"><tbody>${rows || '<tr><td class="p-6 text-center text-gray-400">처리 중인 요청이 없습니다.</td></tr>'}</tbody></table>
                     </div>
                     <div class="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
                         <h4 class="font-bold text-gray-700 mb-2"><i class="fas fa-user-tie text-yellow-500 mr-1"></i>담당별 미완료</h4>${whoRows}
@@ -28889,7 +28928,7 @@ const QUOTE_TEMPLATES = [
                         </span>
                     </div>
                     <div class="overflow-x-auto max-h-[420px] overflow-y-auto">
-                        <table class="w-full text-left border-collapse text-sm min-w-[900px]">
+                        <table class="kob-mstack w-full text-left border-collapse text-sm min-w-[900px]">
                             <thead class="sticky top-0 bg-gray-50 z-10">
                                 <tr class="text-gray-500 text-xs border-b border-gray-200">
                                     <th class="px-3 py-2 font-medium whitespace-nowrap">본부 · 직원</th>
@@ -28914,7 +28953,7 @@ const QUOTE_TEMPLATES = [
                         <h4 class="text-sm font-bold text-gray-700"><i class="fas fa-diagram-project text-purple-500 mr-1"></i>프로젝트 현황 <span class="text-xs font-normal text-gray-400 ml-1">행을 클릭하면 WBS까지 조회합니다</span></h4>
                     </div>
                     <div class="overflow-x-auto">
-                        <table class="w-full text-left border-collapse text-sm min-w-[820px]">
+                        <table class="kob-mstack w-full text-left border-collapse text-sm min-w-[820px]">
                             <thead class="bg-gray-50">
                                 <tr class="text-gray-500 text-xs border-b border-gray-200">
                                     <th class="px-3 py-2 font-medium whitespace-nowrap">프로젝트</th>
