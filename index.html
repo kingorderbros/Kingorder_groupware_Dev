@@ -70,7 +70,7 @@
     <script src="config/app-config.js"></script>
     <!-- 화면 버전 (2026-11-16) — 배포할 때마다 올립니다. 개발 · 운영 화면 아래에 "그룹웨어 v1.1.0 · 운영" 처럼 보입니다.
          groupware = 그룹웨어 화면 · calendar = 킹오더일정(?mode=calendar) -->
-    <script>window.KOB_VERSION = { groupware: '1.1.47', calendar: '1.0.8', date: '2026-11-26' };</script>
+    <script>window.KOB_VERSION = { groupware: '1.1.48', calendar: '1.0.8', date: '2026-11-26' };</script>
     <script>
         (function () {
             // manifest 는 **여기서 만들어 답니다.** (2026-09-05 고침)
@@ -26631,7 +26631,25 @@ const QUOTE_TEMPLATES = [
                 });
                 if (WORK_CENTERS[k].seq <= max) WORK_CENTERS[k].seq = max + 1;
             });
+            salesDerivedSynced = false;
+            syncSalesDerivedWorks();
             updateOpsAllWorksBadge();
+        }
+        // 영업 파생 업무(상담 · 계약 진행 · 견적) 다시 만들기 (2026-11-26 다니엘님 "영업본부 현황 · 경영현황판 미처리 업무가 새로고침하면 40건 · 80건으로 바뀜")
+        //   업무를 DB 에서 다시 읽으면(loadWorksFromDb) 파생 업무가 지워지고, 예전에는 영업업무센터 화면을 열어야 다시 만들어져
+        //   어느 화면을 먼저 열었는지 · 자료가 어떤 순서로 왔는지에 따라 숫자가 달랐습니다. 이제 읽을 때마다 바로 다시 만듭니다.
+        //   (상담 · 계약 · 견적 자료가 아직 없으면 건너뛰고, 그 자료가 오면 각자 다시 만듭니다)
+        let salesDerivedSynced = false, salesDerivedSig = '';
+        // 파생 업무의 원본(고객사 · 계약 · 견적 · 상담) 수 — 바뀌면 다시 만듭니다 (고객사가 늦게 와도 계약 진행 업무가 빠지지 않게)
+        function salesDerivedSigNow() {
+            const n = (get) => { try { const v = get(); return Array.isArray(v) ? v.length : -1; } catch (e) { return -1; } };
+            return [n(() => customers), n(() => contracts), n(() => quotes), n(() => cases)].join('/');
+        }
+        function syncSalesDerivedWorks() {
+            let ok = true;
+            [() => syncCaseWorks(), () => syncContractPipelineWorks(), () => syncQuoteWorks()].forEach(f => { try { f(); } catch (e) { ok = false; } });
+            salesDerivedSynced = ok;
+            salesDerivedSig = salesDerivedSigNow();
         }
         loadWorksFromDb();
 
@@ -28599,9 +28617,11 @@ const QUOTE_TEMPLATES = [
             });
 
             // ② 업무센터 (영업 · 운영)
+            if (!salesDerivedSynced || salesDerivedSig !== salesDerivedSigNow()) syncSalesDerivedWorks();
             Object.keys(WORK_CENTERS).forEach(key => {
                 const c = WORK_CENTERS[key];
                 (c.works || []).forEach(w => {
+                    if (w.quoteId) return;   // 견적서에서 만든 업무는 아래 ④ 견적서로 셉니다 (두 번 세지 않게, 2026-11-26)
                     const sty = WC_STATUS_STYLE[w.status] || WC_STATUS_STYLE.received;
                     const open = WC_OPEN_STATUSES.includes(w.status);
                     const stale = open ? execDaysPast(w.receivedAt) : 0;
@@ -32693,8 +32713,11 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             const wc = WORK_CENTERS.sales;
             wc.works = wc.works.filter(w => !w.contractId);      // 이전 파생분 제거 후 재생성
             if (typeof contracts === 'undefined') return;
+            // 고객 연결은 한 번만 찾아 둡니다 — 계약마다 고객 전체를 훑으면 고객 1,000곳 이상에서 0.3초쯤 걸림 (2026-11-26)
+            const custByLink = new Map();
+            wcDef('sales').customers.forEach(x => { if (x.linkCustomerId && !custByLink.has(x.linkCustomerId)) custByLink.set(x.linkCustomerId, x.id); });
             contracts.forEach(c => {
-                const custId = ctWorkCenterCustomerId(c);
+                const custId = (c.customerId && custByLink.get(c.customerId)) || '';
                 if (!custId) return;                              // 업무센터 고객과 연결되지 않은 계약은 이력에 올리지 않습니다
                 const g = ctClosing(c);
                 const closed = ctIsClosed(c);
