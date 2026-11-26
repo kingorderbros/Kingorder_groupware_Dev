@@ -23,7 +23,8 @@ export const keyOf = (userId) => PREFIX + String(userId);
 export const MAX_SUBS = 10;                    // 한 사람 기기 수 (넘치면 오래된 것부터 뺌)
 export const MAX_TARGETS = 40;                 // 한 번에 보낼 기기 수 — Workers 한 요청의 하위 요청 한도(무료 50) 안에서
 // 받는 곳으로 허용하는 푸시 서버 (아무 https 주소나 등록해 서버가 그리로 요청을 보내게 하지 못하게)
-const PUSH_HOSTS = [/^fcm\.googleapis\.com$/, /^android\.googleapis\.com$/, /(^|\.)push\.apple\.com$/, /(^|\.)push\.services\.mozilla\.com$/, /(^|\.)notify\.windows\.com$/];
+// jmt숫자.google.com — 구글 크롬이 아닌 크로미움 계열 브라우저(ego Lite 등)가 받는 구글 푸시 주소 (2026-11-26 다니엘님 PC ego Lite '알림 구독 정보가 올바르지 않습니다')
+const PUSH_HOSTS = [/^fcm\.googleapis\.com$/, /^android\.googleapis\.com$/, /^jmt\d+\.google\.com$/, /(^|\.)push\.apple\.com$/, /(^|\.)push\.services\.mozilla\.com$/, /(^|\.)notify\.windows\.com$/];
 
 // 알림 종류 → 직원이 켜고 끄는 묶음
 export const CATEGORIES = [
