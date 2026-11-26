@@ -3,6 +3,46 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <script>
+    // 화면 보기 방식 (2026-11-26 다니엘님 "갤럭시 폴드 · 큰 화면 휴대폰도 모바일 화면으로" → A안 + C안)
+    //   A. 자동 — 손가락으로 쓰는 기기(마우스 없음)이고 가로가 640 ~ 960 이면 화면 폭을 600 으로 맞춰 모바일 화면을 보여 줍니다
+    //      (그룹웨어의 모바일 화면은 가로 640 미만 기준이라, 폭만 맞추면 전체 화면에 그대로 적용됩니다. 폴드를 펼치거나 돌리면 다시 판단)
+    //   C. 직접 선택 — 내 정보 › 화면 보기 (자동 · 모바일 화면 · PC 화면), 기기마다 기억(localStorage kobViewMode)
+    //   컴퓨터 브라우저는 이 설정(viewport)을 쓰지 않아 영향이 없습니다.
+    (function () {
+        var MOBILE_W = 600, MIN_W = 640, MAX_W = 960;
+        function mode() { try { var m = localStorage.getItem('kobViewMode'); return m === 'mobile' || m === 'pc' ? m : 'auto'; } catch (e) { return 'auto'; } }
+        function touchOnly() { return !!(window.matchMedia && window.matchMedia('(hover: none) and (pointer: coarse)').matches); }
+        function screenW() {
+            var a = screen.width || 0, b = screen.height || 0;
+            var land = window.matchMedia && window.matchMedia('(orientation: landscape)').matches;
+            return land ? Math.max(a, b) : Math.min(a, b);
+        }
+        function decide() {
+            var m = mode(), w = screenW(), t = touchOnly();
+            var mobile = m === 'mobile' ? w >= MIN_W : (m === 'pc' ? false : (t && w >= MIN_W && w <= MAX_W));
+            return { mode: m, touch: t, screenW: w, fitMobile: mobile };
+        }
+        function apply() {
+            var d = decide(), meta = document.querySelector('meta[name="viewport"]');
+            if (meta) {
+                var want = d.fitMobile ? 'width=' + MOBILE_W + ', viewport-fit=cover' : 'width=device-width, initial-scale=1.0, viewport-fit=cover';
+                if (meta.getAttribute('content') !== want) meta.setAttribute('content', want);
+            }
+            document.documentElement.setAttribute('data-kob-view', d.fitMobile ? 'fit-mobile' : 'normal');
+            window.kobViewState = d;
+            return d;
+        }
+        window.kobViewApply = apply;
+        window.kobViewSetMode = function (m) { try { localStorage.setItem('kobViewMode', m); } catch (e) {} return apply(); };
+        apply();
+        var t = null;
+        function later() { clearTimeout(t); t = setTimeout(apply, 150); }
+        window.addEventListener('orientationchange', later);
+        window.addEventListener('resize', later);
+        if (screen.orientation && screen.orientation.addEventListener) screen.orientation.addEventListener('change', later);
+    })();
+    </script>
     <title>킹오더브라더스 그룹웨어</title>
     <!-- 링크 미리보기 (카카오톡 · 슬랙 · 문자) — 메신저는 스크립트를 실행하지 않고 이 글자를 그대로 읽습니다 (2026-10-19).
          개발 · 운영이 같은 파일이라 환경 이름은 넣지 않습니다. 개발환경은 브라우저 창 제목에 [DEV] 가 붙습니다(아래 스크립트).
@@ -30,7 +70,7 @@
     <script src="config/app-config.js"></script>
     <!-- 화면 버전 (2026-11-16) — 배포할 때마다 올립니다. 개발 · 운영 화면 아래에 "그룹웨어 v1.1.0 · 운영" 처럼 보입니다.
          groupware = 그룹웨어 화면 · calendar = 킹오더일정(?mode=calendar) -->
-    <script>window.KOB_VERSION = { groupware: '1.1.44', calendar: '1.0.8', date: '2026-11-26' };</script>
+    <script>window.KOB_VERSION = { groupware: '1.1.45', calendar: '1.0.8', date: '2026-11-26' };</script>
     <script>
         (function () {
             // manifest 는 **여기서 만들어 답니다.** (2026-09-05 고침)
@@ -5252,6 +5292,18 @@
                 <button type="button" onclick="closeMyProfile()" class="shrink-0 text-gray-400 hover:text-gray-600"><i class="fas fa-times"></i></button>
             </div>
             <div id="my-profile-body" class="p-5"></div>
+            <!-- 화면 보기 (2026-11-26) — 기기마다 기억합니다 -->
+            <div id="my-view-mode" class="px-5 pb-5">
+                <div class="rounded border border-gray-200 bg-gray-50 p-3">
+                    <label for="my-view-mode-sel" class="block text-sm font-semibold text-gray-700 mb-1"><i class="fas fa-mobile-screen-button mr-1 text-gray-400"></i>화면 보기 (이 기기)</label>
+                    <select id="my-view-mode-sel" onchange="setMyViewMode(this.value)" class="w-full text-sm p-2 border border-gray-300 rounded bg-white">
+                        <option value="auto">자동 — 갤럭시 폴드 · 태블릿 등 손가락으로 쓰는 기기는 모바일 화면</option>
+                        <option value="mobile">모바일 화면</option>
+                        <option value="pc">PC 화면</option>
+                    </select>
+                    <p id="my-view-mode-now" class="text-xs text-gray-500 mt-1.5"></p>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -13015,10 +13067,27 @@ const QUOTE_TEMPLATES = [
         let myPhotoDraft = '';   // 저장을 눌러야 실제로 반영됩니다
         const MY_PHOTO_MAX_PX = 320;
 
+        // 내 정보 › 화면 보기 (2026-11-26) — head 의 kobViewApply 와 같은 판단
+        function renderMyViewMode() {
+            const sel = document.getElementById('my-view-mode-sel'), now = document.getElementById('my-view-mode-now');
+            if (!sel || !window.kobViewApply) return;
+            const d = window.kobViewState || window.kobViewApply();
+            sel.value = d.mode;
+            const cur = d.fitMobile || window.innerWidth < 640 ? '모바일 화면' : 'PC 화면';
+            now.textContent = `지금: ${cur}` + (d.mode === 'mobile' && !d.touch && window.innerWidth >= 640 ? ' · 컴퓨터 브라우저는 모바일 화면을 적용하지 않습니다 (창 폭을 좁히면 모바일 화면)' : '')
+                + (d.mode === 'auto' ? ' · 손가락으로 쓰는 기기이고 화면 가로가 640 ~ 960 이면 모바일 화면' : '');
+        }
+        function setMyViewMode(m) {
+            if (!window.kobViewSetMode) return;
+            window.kobViewSetMode(m);
+            setTimeout(renderMyViewMode, 200);
+            showAppToast(m === 'auto' ? '화면 보기를 자동으로 설정했습니다.' : m === 'mobile' ? '모바일 화면으로 설정했습니다.' : 'PC 화면으로 설정했습니다.', 'blue');
+        }
         function openMyProfile() {
             const me = myAccount();
             myPhotoDraft = (me && me.photo) || '';
             renderMyProfileBody();
+            renderMyViewMode();
             document.getElementById('my-profile-modal').classList.remove('hidden');
         }
         function closeMyProfile() {
