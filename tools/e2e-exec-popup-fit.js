@@ -20,7 +20,7 @@ srv.listen(8882,async()=>{const br=await pp.launch({executablePath:'/Application
      return {noOuterScroll:ov.scrollHeight<=ov.clientHeight+1,inView:box.top>=-1&&box.bottom<=innerHeight+1&&box.left>=-1&&box.right<=innerWidth+1,btn:b.height>0&&b.bottom<=innerHeight+1&&b.top>=0};};
    openExecListModal('s:김영업');await sleep(40);
    const list=fit('exec-list-modal','#exec-list-modal button[onclick="closeExecListModal()"]:last-of-type');
-   const tbl=document.querySelector('#exec-modal-rows').closest('.overflow-auto');list.tableScrolls=tbl.scrollHeight>tbl.clientHeight;list.tableH=tbl.clientHeight;
+   const tbl=document.querySelector('#exec-modal-rows').closest('.overflow-auto');list.tableScrolls=tbl.scrollHeight>tbl.clientHeight;list.tableH=tbl.clientHeight;list.phoneBtn=document.getElementById('exec-rows-open').getBoundingClientRect().height>0;
    document.querySelector('#exec-modal-rows tr[onclick]').click();await sleep(60);
    const item=fit('exec-item-modal','#exec-item-foot button:last-child');
    const cols=[...document.querySelectorAll('#exec-item-body > .grid:not(.exec-issue-guide) > *')].map(e=>Math.round(e.getBoundingClientRect().left));item.twoCols=cols.length===2&&cols[0]!==cols[1];
@@ -29,7 +29,8 @@ srv.listen(8882,async()=>{const br=await pp.launch({executablePath:'/Application
    return {list,item};});
   ok(r.list.noOuterScroll&&r.list.inView,'목록 팝업 창 안에 들어감 (바깥 넘김 없음)',r.list);
   ok(r.list.btn,'목록 팝업 [닫기] 보임',r.list);
-  ok(r.list.tableH>=(vh>=600?150:200),'목록 표 높이 확보',r.list.tableH);
+  // 2026-11-26 휴대폰(가로 640 미만)은 표 대신 [상세 내역 보기] 팝업 — tools/e2e-exec-mobile-rows.js
+  if(vw<640) ok(r.list.phoneBtn,'휴대폰 — [상세 내역 보기] 단추',r.list); else ok(r.list.tableH>=(vh>=600?150:200),'목록 표 높이 확보',r.list.tableH);
   ok(r.item.noOuterScroll&&r.item.inView,'상세 팝업 창 안에 들어감',r.item);
   ok(r.item.btn,'상세 팝업 [닫기] 보임',r.item);
   ok(r.item.goBtn,'상세 팝업 [원본 화면에서 열기] 보임');
