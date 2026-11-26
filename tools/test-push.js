@@ -94,6 +94,7 @@ async function decrypt(b, body) {
     const sub2 = { endpoint: 'https://fcm.googleapis.com/fcm/send/b', keys: { p256dh: b64u(b2.pub), auth: b64u(b2.auth) } };
     ok(P.validSubscription(sub1) && !P.validSubscription({ endpoint: 'http://fcm.googleapis.com/x', keys: sub1.keys }) && !P.validSubscription({ endpoint: 'https://fcm.googleapis.com/x', keys: { p256dh: 'x', auth: 'y' } }), '구독 정보 확인 (https · 키 길이)');
     ok(!P.validSubscription({ endpoint: 'https://evil.example/collect', keys: sub1.keys }) && P.validSubscription({ endpoint: 'https://web.push.apple.com/x', keys: sub1.keys }), '알려진 푸시 서버만 받는 곳으로 (아무 주소나 등록 못 함)');
+    ok(P.validSubscription({ endpoint: 'https://jmt17.google.com/fcm/send/x', keys: sub1.keys }) && !P.validSubscription({ endpoint: 'https://jmt17.google.com.evil.example/x', keys: sub1.keys }) && !P.validSubscription({ endpoint: 'https://xjmt17.google.com/x', keys: sub1.keys }), '크로미움 계열(ego Lite 등) 구글 푸시 주소 jmt숫자.google.com 받음 · 비슷한 가짜 주소는 거절');
     let r1 = P.addSub(null, sub1, '아이폰'); r1 = P.addSub(r1, sub1, '아이폰');
     ok(r1.subs.length === 1, '같은 기기는 한 번만');
     r1 = P.setPrefs(r1, { meeting: false, 이상한칸: true });
@@ -125,6 +126,8 @@ async function decrypt(b, body) {
     const now = () => new Date().toISOString();
     const noti = (id, data, by, extra) => { notis[id] = Object.assign({ data, rev: 1, updated_by: by, updated_at: now() }, extra || {}); };
     ok((await call('', 'POST', '/api/push/subscribe', { subscription: sub1 })).status === 401, '로그인 없으면 401');
+    { const bad = await call('kim@k.co', 'POST', '/api/push/subscribe', { subscription: { endpoint: 'https://push.unknown.example/fcm/send/SECRETTOKEN', keys: sub1.keys } });
+      ok(bad.status === 400 && /알림 서비스: push\.unknown\.example\)/.test(bad.j && bad.j.error) && !/SECRETTOKEN/.test(bad.j.error), '받지 않는 알림 서비스 — 오류에 서비스 이름만 (주소 뒤쪽 값은 안 보임)', bad); }
     ok((await call('kim@k.co', 'POST', '/api/push/subscribe', { subscription: sub1, device: '아이폰' })).status === 200, '김영업 폰 구독');
     ok((await call('park@k.co', 'POST', '/api/push/subscribe', { subscription: sub2, device: 'PC' })).status === 200, '박운영 PC 구독');
     ok(store['gwPushSubs.v1/u2'].subs.length === 1 && store['gwPushSubs.v1/u4'].subs.length === 1, '사람마다 따로 저장 (둘이 동시에 켜도 서로 안 지움)');

@@ -527,7 +527,11 @@ export async function onRequest(context) {
                                    thisApps: ep ? ((rec.subs.find(x => x.endpoint === ep) || {}).apps || []) : undefined });
             }
             if (path === '/api/push/subscribe' && method === 'POST') {
-                if (!push.validSubscription(input.subscription)) return bad('알림 구독 정보가 올바르지 않습니다.');
+                if (!push.validSubscription(input.subscription)) {
+                    // 받지 않는 알림 서비스면 그 이름(주소의 도메인)만 함께 알려 원인을 바로 알 수 있게 (2026-11-26)
+                    let host = ''; try { host = new URL(String(input.subscription && input.subscription.endpoint)).hostname.slice(0, 80); } catch (e) { }
+                    return bad('알림 구독 정보가 올바르지 않습니다.' + (host ? ` (알림 서비스: ${host})` : ''));
+                }
                 const ep = input.subscription.endpoint;
                 // 같은 기기를 전에 다른 사람이 쓰고 있었으면 그 사람 기록에서 뺍니다 (그 사람 알림이 이 기기로 오지 않게)
                 for (const r of await store.storeLike(push.PREFIX)) {
