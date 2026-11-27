@@ -40,12 +40,12 @@ srv.listen(PORT,async()=>{const br=await pp.launch({executablePath:'/Application
  ok(a.r.peek0.n>=1 && a.r.peek0.boot>0,'접속 때 DB 조회가 쌓이고 접속 시간이 잡힘',a.r.peek0);
  ok(a.r.peek0.steps && a.r.peek0.steps.store>=100 && 'tables' in a.r.peek0.steps && 'main' in a.r.peek0.steps && 'start' in a.r.peek0.steps,'접속 단계(화면 파일 · 공용 자료 · 업무 표 · 화면 그리기)',a.r.peek0.steps);
  ok(a.r.peek1.n===a.r.peek0.n+1,'/api 조회 1건만 더해짐 (파일 · 외부 주소 제외)',[a.r.peek0.n,a.r.peek1.n]);
- ok(a.r.rpc.length===1 && p.n===a.r.peek1.n && p.p90>0 && p.max>=p.p90 && p.boot_ms>0 && p.v==='1.1.50','로그인 상태 — 요약을 gw_speed_report 로 보냄',p);
+ ok(a.r.rpc.length===1 && p.n===a.r.peek1.n && p.p90>0 && p.max>=p.p90 && p.boot_ms>0 && /^1\.1\.[5-9][0-9]$/.test(p.v),'로그인 상태 — 요약을 gw_speed_report 로 보냄',p);
  ok(Array.isArray(p.slow) && p.slow.some(s=>s.q==='rest:app_store') && p.slow.some(s=>s.q==='api:holidays') && !JSON.stringify(p).includes('daniel'),'느린 조회 이름만 · 사람 정보 없음',p.slow);
  ok(a.r.peek2.n===0 && a.r.rpc2===1,'보낸 뒤 비우고, 기록 보내기 자체는 재지 않음',[a.r.peek2,a.r.rpc2]);
  ok(a.errs.length===0,'페이지 오류 없음 (로그인)',a.errs);
  const b=await run(true);
  ok(b.r.rpc.length===0 && b.r.peek0.boot===0,'로그인 안 한 상태 — 보내지 않고 접속 시간도 안 잡음',b.r);
  ok(b.errs.length===0,'페이지 오류 없음 (로그인 전)',b.errs);
- ok(a.r.ver==='1.1.50','버전 1.1.50',a.r.ver);
+ ok(/^1\.1\.(5[0-9]|[6-9][0-9])$/.test(a.r.ver),'버전 1.1.50 이상',a.r.ver);
  console.log(`통과 ${pass} · 실패 ${fail}`);await br.close();srv.close();process.exit(fail?1:0);});

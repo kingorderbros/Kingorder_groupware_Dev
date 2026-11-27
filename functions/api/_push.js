@@ -33,6 +33,7 @@ export const CATEGORIES = [
     { id: 'work',      label: '업무 접수' },
     { id: 'inbound',   label: '인바운드' },          // 인바운드 새 건 (2026-11-19)
     { id: 'collab',    label: '협업요청' },
+    { id: 'cc',        label: '참조' },              // 참조로 지정된 요청 (2026-11-27)
     { id: 'directive', label: '지시 업무' },
     { id: 'project',   label: '프로젝트' },
     { id: 'meeting',   label: '영업 회의' },
@@ -47,6 +48,7 @@ export function categoryOf(type) {
     if (t === 'schedule-cancelled' || t === 'schedule-deleted') return 'schedule';   // 일정 취소 · 삭제 (2026-10-30)
     if (t === 'schedule-invite' || t === 'schedule-new') return 'schedule';          // 일정 초대 · 새 일정 (킹오더일정 2026-11-12)
     if (t.startsWith('inbound-')) return 'inbound';        // 인바운드 새 건 (2026-11-19)
+    if (t.startsWith('cc-')) return 'cc';                  // 참조 (2026-11-27)
     if (t.startsWith('work-')) return 'work';
     if (t.startsWith('collab-') || t.startsWith('delay-') || t.startsWith('schedule-change')) return 'collab';
     if (t.startsWith('directive-')) return 'directive';
