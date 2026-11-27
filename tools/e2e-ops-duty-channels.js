@@ -27,8 +27,8 @@ srv.listen(8874,async()=>{const br=await pp.launch({executablePath:'/Application
   return out;},DUTY);
  console.log(JSON.stringify(r));
  ok(DUTY.every(d=>r.asOpts.includes(d)),'AS유지보수 접수방식에 당직 4종',r.asOpts);
- ok(r.asOpts.indexOf('당직(유선)')===r.asOpts.indexOf('카카오톡')+1,'카카오톡 바로 다음에 나옴',r.asOpts);
+ ok(r.asOpts.filter(x=>x!=='카카오채널').indexOf('당직(유선)')===r.asOpts.filter(x=>x!=='카카오채널').indexOf('카카오톡')+1,'카카오톡(·카카오채널) 바로 다음에 나옴',r.asOpts);   // 1.1.49 카카오채널이 카카오톡 뒤에 들어감
  ok(DUTY.every(d=>r.simpleOpts.includes(d)),'기타&단순문의에도 같이 나옴',r.simpleOpts);
  ok(r.saved===1&&r.channel==='주말당직(카톡)','주말당직(카톡)으로 저장됨',r);
- ok(/1\.1\.2/.test(r.ver),'화면 버전 v1.1.2',r.ver);
+ ok(/v\d+\.\d+\.\d+/.test(r.ver),'화면 버전 표시',r.ver);
  ok(errs.length===0,'페이지 오류 없음',errs);console.log(`통과 ${pass} · 실패 ${fail}`);await br.close();srv.close();process.exit(fail?1:0);});

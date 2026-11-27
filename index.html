@@ -70,7 +70,7 @@
     <script src="config/app-config.js"></script>
     <!-- 화면 버전 (2026-11-16) — 배포할 때마다 올립니다. 개발 · 운영 화면 아래에 "그룹웨어 v1.1.0 · 운영" 처럼 보입니다.
          groupware = 그룹웨어 화면 · calendar = 킹오더일정(?mode=calendar) -->
-    <script>window.KOB_VERSION = { groupware: '1.1.48', calendar: '1.0.8', date: '2026-11-26' };</script>
+    <script>window.KOB_VERSION = { groupware: '1.1.49', calendar: '1.0.8', date: '2026-11-27' };</script>
     <script>
         (function () {
             // manifest 는 **여기서 만들어 답니다.** (2026-09-05 고침)
@@ -26146,6 +26146,7 @@ const QUOTE_TEMPLATES = [
                     {
                         // 프랜차이즈지원 탭을 여기로 합쳤습니다(2026-08-18). 가맹본부·가맹점 요청도 이 탭에서 접수합니다.
                         id: 'as', name: 'AS유지보수', icon: 'fa-screwdriver-wrench', active: 'bg-red-600',
+                        extraChannels: ['카카오채널'],   // 이 탭에만 접수방식 추가 (2026-11-27)
                         desc: '설치 장비의 고장·오류와 가맹본부·가맹점 지원 요청을 함께 접수하고 처리 이력을 관리합니다. 처리방법을 "택배"로 선택하면 접수 단계에서 택배 정보를 함께 입력합니다.',
                         fields: [
                             // required: true — 대상 장비 · 증상 분류 · 처리방법은 접수 필수 항목입니다. (2026-09-05)
@@ -26173,6 +26174,7 @@ const QUOTE_TEMPLATES = [
                         // 단순 문의 전용 (보완사항 2026-11-06) — AS유지보수와 같은 접수 · 처리 흐름, 항목은 대상 장비 · 처리방법 · 접수내용만.
                         // 택배 접수는 AS유지보수에서 받으므로 처리방법에서 뺍니다.
                         id: 'simple', name: '기타&단순문의', icon: 'fa-comment-dots', active: 'bg-slate-600', memoLabel: '접수내용',
+                        extraChannels: ['카카오채널'],   // 이 탭에만 접수방식 추가 (2026-11-27)
                         desc: '장애 · 수리가 아닌 기타 · 단순 문의를 접수하고 처리 내용을 기록합니다.',
                         fields: [
                             { id: 'device', label: '대상 장비', type: 'select', required: true,
@@ -26185,6 +26187,7 @@ const QUOTE_TEMPLATES = [
                         // menuForm: true — 접수대장 → 처리 팝업 → 업무이력 흐름은 같고,
                         // 항목이 메뉴 수정 접수에 맞게 따로 구성돼 있습니다. (buildWorkMenuIntake / buildMenuActionBody)
                         id: 'menu', name: '메뉴유지보수', icon: 'fa-utensils', active: 'bg-amber-600', menuForm: true,
+                        extraChannels: ['카카오채널'],   // 이 탭에만 접수방식 추가 (2026-11-27)
                         desc: '메뉴 신규 등록·가격 변경·품절 처리 등 고객 요청 메뉴 수정 작업을 관리합니다.',
                         fields: []
                     },
@@ -26675,6 +26678,16 @@ const QUOTE_TEMPLATES = [
 
         function wcCustomer(key, id) { return wcDef(key).customers.find(c => c.id === id) || null; }
         function wcType(key, id) { return wcDef(key).types.find(t => t.id === id) || wcDef(key).types[0]; }
+        // 접수방식 목록 — 센터 공용 목록에 탭별 extraChannels 를 '카카오톡' 바로 뒤(없으면 끝)에 넣습니다.
+        function wcChannels(key, typeId) {
+            const base = (wcDef(key).channels || []).slice();
+            const t = typeId ? wcDef(key).types.find(x => x.id === typeId) : null;
+            const extra = ((t && t.extraChannels) || []).filter(x => base.indexOf(x) < 0);
+            if (!extra.length) return base;
+            const at = base.indexOf('카카오톡');
+            base.splice(at < 0 ? base.length : at + 1, 0, ...extra);
+            return base;
+        }
         // 업무유형 탭 하나하나가 메뉴 권한을 가집니다 — 권한 id 는 'sales-wc-quote' 처럼 만듭니다.
         function wcTypePerm(key, typeId) { return key + '-wc-' + typeId; }
         function wcVisibleTypes(key) {
@@ -27398,7 +27411,7 @@ const QUOTE_TEMPLATES = [
                                 <div>
                                     ${lbl('접수방식')}
                                     <select id="${wcId(key, 'mnu-channel')}" class="${inputCls}">
-                                        ${c.channels.map(ch => `<option>${escapeHtml(ch)}</option>`).join('')}
+                                        ${wcChannels(key, 'menu').map(ch => `<option>${escapeHtml(ch)}</option>`).join('')}
                                     </select>
                                 </div>
                                 <div>
@@ -33680,7 +33693,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                     <p class="text-xs font-semibold text-gray-600 mb-1.5"><i class="fas fa-inbox text-gray-400 mr-1"></i>업무접수</p>
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div>${lbl('연락처')}<input id="woe-contact" type="text" value="${escapeHtml(w.contact || '')}" class="${cls}" /></div>
-                        <div>${lbl('접수방식')}<select id="woe-channel" class="${cls}">${opt(def.channels, w.channel || '')}</select></div>
+                        <div>${lbl('접수방식')}<select id="woe-channel" class="${cls}">${opt(wcChannels(key, w.type), w.channel || '')}</select></div>
                         <div>${lbl('우선순위')}<select id="woe-priority" class="${cls}">${[['normal', '보통'], ['high', '긴급'], ['low', '낮음']].map(([v, l]) => `<option value="${v}" ${w.priority === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
                         ${fields.map(f => {
                             const v = ex[f.id] == null ? '' : String(ex[f.id]);
@@ -33960,6 +33973,12 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             if (prospect) prospect.classList.toggle('hidden', !wcIgnoresCustomer(key, st.activeType));
             const memoLabel = wcEl(key, 'intake-memo-label');
             if (memoLabel) memoLabel.textContent = t.memoLabel || '불만접수내용';
+            const chSel = wcEl(key, 'intake-channel');   // 탭마다 접수방식 목록이 다를 수 있어 다시 채웁니다 (고른 값은 유지)
+            if (chSel) {
+                const list = wcChannels(key, st.activeType), cur = chSel.value;
+                chSel.innerHTML = list.map(ch => `<option>${escapeHtml(ch)}</option>`).join('');
+                if (list.indexOf(cur) >= 0) chSel.value = cur;
+            }
             const cls = `w-full p-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 ${wcDef(key).accent.ring}`;
             const mk = f => {
                 const inputId = wcId(key, `extra-${f.id}`);
