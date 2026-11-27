@@ -70,7 +70,7 @@
     <script src="config/app-config.js"></script>
     <!-- 화면 버전 (2026-11-16) — 배포할 때마다 올립니다. 개발 · 운영 화면 아래에 "그룹웨어 v1.1.0 · 운영" 처럼 보입니다.
          groupware = 그룹웨어 화면 · calendar = 킹오더일정(?mode=calendar) -->
-    <script>window.KOB_VERSION = { groupware: '1.1.49', calendar: '1.0.8', date: '2026-11-27' };</script>
+    <script>window.KOB_VERSION = { groupware: '1.1.51', calendar: '1.0.8', date: '2026-11-27' };</script>
     <script>
         (function () {
             // manifest 는 **여기서 만들어 답니다.** (2026-09-05 고침)
@@ -2522,6 +2522,7 @@
                                 <p class="text-sm font-bold text-gray-800 whitespace-nowrap"><i class="far fa-bell text-gray-400 mr-1"></i>알림 <span id="noti-panel-count" class="ml-1 text-[11px] font-normal text-gray-400"></span></p>
                                 <div class="flex flex-wrap items-center justify-end gap-1 ml-auto">
                                     <button type="button" onclick="markAllNotiRead()" class="px-2 py-1 text-[11px] rounded bg-gray-100 hover:bg-gray-200 text-gray-600 whitespace-nowrap">모두 읽음</button>
+                                    <button type="button" id="cc-box-btn" onclick="closeNotiPanel(); openCcBox('')" class="px-2 py-1 text-[11px] rounded border border-sky-200 bg-white hover:bg-sky-50 text-sky-700 whitespace-nowrap" title="내가 참조로 지정된 요청"><i class="fas fa-user-group mr-0.5"></i>참조함</button>
                                     <button type="button" onclick="closeNotiPanel(); openDeleteLog()" class="px-2 py-1 text-[11px] rounded border border-gray-200 bg-white hover:bg-gray-50 text-gray-600 whitespace-nowrap" title="삭제된 자료 이력"><i class="fas fa-clock-rotate-left mr-0.5"></i>삭제 이력</button>
                                     <button type="button" id="delreq-btn" onclick="closeNotiPanel(); openDeleteRequests('pending')" class="hidden px-2 py-1 text-[11px] rounded border border-gray-200 bg-white hover:bg-gray-50 text-gray-600 whitespace-nowrap" title="관리자에게 보낸 삭제 요청"></button>
                                     <button type="button" id="noti-clear-btn" onclick="deleteAllMyNoti()" class="hidden px-2 py-1 text-[11px] rounded border border-red-200 text-red-600 bg-white hover:bg-red-50 whitespace-nowrap" title="관리자 — 받은 알림을 모두 삭제"><i class="fas fa-user-shield mr-0.5"></i>모두 삭제</button>
@@ -5033,6 +5034,8 @@
                     <label class="block text-sm font-medium text-gray-700 mb-1">요청 메모</label>
                     <textarea id="paydoc-memo" rows="2" class="w-full p-2 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-yellow-500" placeholder="예: PG 심사 반려 건, 아래 서류 보완 후 재심사 예정"></textarea>
                 </div>
+                <!-- 참조 (2026-11-27) -->
+                <div id="paydoc-cc-wrap" class="mb-4"></div>
 
                 <p id="paydoc-edit-items-note" class="hidden mb-4 text-xs text-gray-500 bg-gray-50 border border-gray-200 rounded p-2"><i class="fas fa-circle-info mr-1"></i>보완 서류 항목은 상세 창의 [서류 항목 추가] · 항목별 수정에서 변경합니다. (올린 파일이 지워지지 않게 이 창에서는 바꾸지 않습니다)</p>
                 <div id="paydoc-catalog-box" class="mb-4 border border-gray-200 rounded-lg">
@@ -5212,6 +5215,8 @@
                         <p id="task-directive-count" class="text-xs text-gray-500 mt-1">선택된 대상 0명</p>
                     </div>
                 </div>
+                <!-- 참조 (2026-11-27) — 처리하지 않고 내용만 함께 보고 알림을 받을 사람 -->
+                <div id="task-cc-wrap" class="mb-4 hidden"></div>
                 <!-- 요청 근거 첨부 (타부서/우리 팀 발행 시에만) — 받는 담당자가 요청 상세에서 바로 열어 봅니다 -->
                 <div id="task-file-wrap" class="mb-4 hidden">
                     <label class="block text-sm font-medium text-gray-700 mb-1"><i class="fas fa-paperclip text-blue-500 mr-1"></i>첨부자료 <span class="text-gray-400 text-xs">(선택, 요청 내용 관련 이미지·문서)</span></label>
@@ -12678,6 +12683,9 @@ const QUOTE_TEMPLATES = [
             'delay-answer':       { icon: 'fa-reply',             color: 'amber',  label: '지연사유 회신' },
             'collab-transferred': { icon: 'fa-share-from-square', color: 'indigo', label: '요청 이관' },
             'collab-comment':     { icon: 'fa-comment-dots',      color: 'indigo', label: '협업 코멘트' },
+            'cc-new':             { icon: 'fa-user-group',        color: 'blue',   label: '참조' },              // 참조 (2026-11-27)
+            'cc-update':          { icon: 'fa-user-group',        color: 'blue',   label: '참조 · 진행' },
+            'cc-comment':         { icon: 'fa-comment-dots',      color: 'blue',   label: '참조 · 코멘트' },
             'schedule-reminder':  { icon: 'fa-bell',              color: 'amber',  label: '일정 알림' },
             'schedule-invite':    { icon: 'fa-envelope-open-text', color: 'indigo', label: '일정 초대' },
             'schedule-cancelled': { icon: 'fa-ban',               color: 'red',    label: '일정 취소' },
@@ -12756,6 +12764,7 @@ const QUOTE_TEMPLATES = [
         // 알림을 눌렀을 때 갈 곳
         // 돌려주는 글은 onclick="…" 안에 들어갑니다 — 값은 모두 jsArg 로 (알림 내용은 파트너 · 다른 직원이 만든 것일 수 있음 · 2026-10-28)
         function notiClickJs(n) {
+            if (n.ccKind && n.ccId) return `openCcDetail(${jsArg(n.ccKind)}, ${jsArg(n.ccId)})`;   // 참조 알림 (2026-11-27)
             if (n.noticeId) return `navigate('dashboard-personal', document.getElementById('nav-dashboard-personal'))`;   // 공지사항 알림 → 공지가 있는 마이 대시보드
             if (n.scheduleId) return `openScheduleFromNotice(${jsArg(n.scheduleId)})`;   // 일정 알림 (2026-10-23)
             if (n.type === 'inbound-new') return `openInboundFromNotice(${jsArg(n.inboundId || '')})`;   // 인바운드 새 건 (2026-11-19)
@@ -12777,7 +12786,251 @@ const QUOTE_TEMPLATES = [
             refreshNotiBell();
             // 받는 사람의 폰 · PC 로도 (2026-09-29 · 9단계 — 끈 종류 · 보낸 사람 자신은 서버가 뺍니다)
             if (window.kobPush) kobPush.send(n, (NOTI_STYLE[n.type] || {}).label || '');
+            // 협업요청 · 업무지시 알림은 참조자에게도 (2026-11-27)
+            if (!n.ccKind && n.ticketId && /^(collab|delay|directive)-/.test(n.type || '')) { try { ccMirrorCollab(n); } catch (e) { console.warn('[참조] 알림 실패', e); } }
             return n;
+        }
+
+        // ==================== 참조 (2026-11-27, v1.1.51) ====================
+        // 이메일 참조처럼, 요청을 처리하지는 않지만 내용을 함께 보고 알림을 받을 사람을 지정합니다.
+        // 대상: 협업요청(업무지시 포함) · 업무이관(운영 · 영업업무센터 업무) · 보완서류 요청 · 계약 승인 요청
+        //   · 기록: 각 건의 ccUsers = [이름 …], 참조 코멘트는 ccComments = [{ id, by, at, time, text }] (협업요청은 기존 코멘트를 씀)
+        //   · 참조자는 우상단 알림함 › [참조함] 에서 모아 보고, 건을 열어 내용 · 진행 · 코멘트를 봅니다. 수락 · 처리 · 완료는 하지 않습니다.
+        //   · 알림: 등록 · 진행 변경 · 코멘트 때 참조자에게 (본인 제외). 종류 cc-new · cc-update · cc-comment (푸시 묶음 '참조')
+        const CC_KIND_NAME = { collab: '협업요청', work: '업무 · 이관', paydoc: '보완서류 요청', contract: '계약 승인' };
+        function ccUsersOf(rec) { return uniqueNames((rec && Array.isArray(rec.ccUsers)) ? rec.ccUsers : []); }
+        function ccHas(rec, name) { return !!name && ccUsersOf(rec).includes(name); }
+        function ccCandidates() { return pickableUsers().filter(u => u.name !== currentUserName); }
+        // 선택칸 — 접어 두었다가 펼쳐서 고릅니다 (선택 사항)
+        function ccPickerHtml(boxId, selected, hint) {
+            const sel = ccUsersOf({ ccUsers: selected || [] });
+            return `<div id="${escapeHtml(boxId)}" data-cc-box class="rounded border border-gray-200 bg-white">
+                <details${sel.length ? ' open' : ''}>
+                    <summary class="px-3 py-2 cursor-pointer select-none text-sm text-gray-700 flex flex-wrap items-center gap-x-2">
+                        <span class="font-medium"><i class="fas fa-user-group text-gray-400 mr-1"></i>참조</span>
+                        <span data-cc-count class="text-xs ${sel.length ? 'text-blue-600 font-medium' : 'text-gray-400'}">${sel.length ? `${sel.length}명 · ${escapeHtml(sel.join(', '))}` : '선택 안 함'}</span>
+                        <span class="text-[11px] text-gray-400">${escapeHtml(hint || '처리하지 않고 내용만 함께 보고 알림을 받을 사람 (선택)')}</span>
+                    </summary>
+                    <div class="border-t border-gray-100 max-h-44 overflow-y-auto">${peopleCheckTreeHtml(ccCandidates(), 'cc-pick', sel, { empty: '선택할 수 있는 직원이 없습니다.' })}</div>
+                </details>
+            </div>`;
+        }
+        function ccPicked(boxId) {
+            const box = document.getElementById(boxId);
+            return box ? uniqueNames(Array.from(box.querySelectorAll('.cc-pick:checked')).map(el => el.value)) : [];
+        }
+        function ccPickerSync(box) {
+            if (!box) return;
+            const l = uniqueNames(Array.from(box.querySelectorAll('.cc-pick:checked')).map(el => el.value));
+            const c = box.querySelector('[data-cc-count]');
+            if (c) { c.textContent = l.length ? `${l.length}명 · ${l.join(', ')}` : '선택 안 함'; c.className = 'text-xs ' + (l.length ? 'text-blue-600 font-medium' : 'text-gray-400'); }
+        }
+        document.addEventListener('change', (e) => { const t = e.target; if (t && t.matches && t.matches('.cc-pick, [data-ptree-grp]')) ccPickerSync(t.closest('[data-cc-box]')); });
+        document.addEventListener('reset', (e) => { const f = e.target; if (f && f.querySelectorAll) setTimeout(() => f.querySelectorAll('[data-cc-box]').forEach(ccPickerSync), 0); });
+        function ccChipsHtml(rec) {
+            const l = ccUsersOf(rec);
+            return l.length ? l.map(n => `<span class="inline-flex items-center px-1.5 py-0.5 mr-1 mb-0.5 rounded bg-sky-50 text-sky-700 text-xs">${escapeHtml(n)}</span>`).join('') : '<span class="text-gray-400">없음</span>';
+        }
+
+        // ---------- 건 찾기 · 요약 ----------
+        function ccFind(kind, id) {
+            if (kind === 'collab') { const r = collabRequests.find(x => x.id === id); return r ? { rec: r } : null; }
+            if (kind === 'work') {
+                for (const key of Object.keys(WORK_CENTERS)) {
+                    const w = (WORK_CENTERS[key].works || []).find(x => x.id === id);
+                    if (w) return { rec: w, key };
+                }
+                return null;
+            }
+            if (kind === 'paydoc') { const r = (typeof payDocRequests !== 'undefined' ? payDocRequests : []).find(x => x.id === id); return r ? { rec: r } : null; }
+            if (kind === 'contract') { const c = (typeof contracts !== 'undefined' ? contracts : []).find(x => x.id === id); return c ? { rec: c } : null; }
+            return null;
+        }
+        function ccSave(kind) {
+            if (kind === 'collab') saveCollabRequests();
+            else if (kind === 'work') saveWorks();
+            else if (kind === 'paydoc') savePayDocs();
+            else if (kind === 'contract') saveContracts();
+        }
+        const CC_COLLAB_STATUS = { pending: '대기', accepted: '수락', hold: '보류', rejected: '거절', completed: '완료', cancelled: '취소' };
+        function ccSummary(kind, f) {
+            const r = f.rec;
+            if (kind === 'collab') return { title: r.title || '(제목 없음)', who: r.assignee || '', status: CC_COLLAB_STATUS[r.status] || '대기', date: r.createdAt || r.date || '', sub: `${deptName(r.sourceDept)} → ${deptName(r.targetDept)}` };
+            if (kind === 'work') {
+                const to = r.retransferDept || r.transferDept || '';
+                const xf = r.xfer && (to && to !== (WORK_CENTER_DEPT[f.key] || f.key)) ? ` · 이관 ${xferStatusDef(r.xfer.status).name}` : '';
+                return { title: [r.company, r.title].filter(Boolean).join(' · ') || r.id, who: r.receiver || '', status: wcStatusName(f.key, r.status) + xf, date: r.receivedAt || '', sub: [WORK_CENTERS[f.key].title, wcType(f.key, r.type).name, to ? '이관 ' + xferName(to, r.retransferDept ? r.retransferTeam : r.transferTeam) : ''].filter(Boolean).join(' · ') };
+            }
+            if (kind === 'paydoc') return { title: `${r.merchant || '-'} 보완서류`, who: r.requester || '', status: (PAY_REQ_STATUS[r.status] || {}).name || r.status || '', date: r.requestedAt || '', sub: `수신 ${r.targetName || '-'} · 기한 ${r.dueDate || '-'}` };
+            if (kind === 'contract') {
+                const cu = (typeof customers !== 'undefined' ? customers : []).find(x => x.id === r.customerId);
+                return { title: `${cu ? cu.name : (r.customerName || r.id)} 계약`, who: r.owner || '', status: r.approvalStatus || r.status || '', date: r.ccSubmittedAt || '', sub: (r.approvalSteps || []).map((s, i) => `${i + 1}차 ${s.role} ${s.state}`).join(' · ') };
+            }
+            return { title: '', who: '', status: '', date: '', sub: '' };
+        }
+        // 이 건에 관계된 사람 (참조 코멘트 알림 · 열람 허용)
+        function ccPeople(kind, f) {
+            const r = f.rec, out = [];
+            if (kind === 'work') out.push(r.receiver, r.assignee, (r.xfer || {}).assignee, r.actionBy);
+            if (kind === 'paydoc') out.push(r.requester, r.claimedBy, ...(r.targetNames || []));
+            if (kind === 'contract') out.push(r.owner, ...(r.approvalSteps || []).map(s => s.approver));
+            if (kind === 'collab') out.push(r.assignee, ...collabReceivers(r));
+            return uniqueNames(out.concat(ccUsersOf(r)));
+        }
+
+        // ---------- 알림 ----------
+        function ccNotify(kind, rec, type, detail, skip) {
+            const me = currentUserName || '';
+            const s = ccSummary(kind, ccFind(kind, rec.id) || { rec });
+            ccUsersOf(rec).filter(n => n !== me && !(skip || []).includes(n)).forEach(who => pushNotification({
+                id: 'cnoti_' + collabNotiIdCounter++, type, ccKind: kind, ccId: rec.id, ticketId: kind === 'collab' ? rec.id : undefined,
+                toUser: who, toDept: '', title: `[참조] ${s.title}`, detail: `${CC_KIND_NAME[kind]} · ${detail || ''}`.trim(), date: ymd(new Date()), read: false
+            }));
+        }
+        // 협업요청 알림이 요청자 · 받는 사람에게 갈 때 참조자에게도 한 번씩 (같은 일로 여러 명에게 가는 알림은 한 번만)
+        let ccMirrorSeen = null;
+        let ccJustAdded = null;   // 방금 참조로 넣은 사람 — 같은 순간의 다른 알림은 겹쳐 보내지 않습니다
+        function ccMirrorCollab(n) {
+            const req = collabRequests.find(r => r.id === n.ticketId);
+            if (!req || !ccUsersOf(req).length) return;
+            const key = `${n.type}|${n.ticketId}|${n.detail || ''}`;
+            if (!ccMirrorSeen) { ccMirrorSeen = new Set(); setTimeout(() => { ccMirrorSeen = null; }, 0); }
+            if (ccMirrorSeen.has(key)) return;
+            ccMirrorSeen.add(key);
+            const type = n.type === 'collab-requested' ? 'cc-new' : n.type === 'collab-comment' ? 'cc-comment' : 'cc-update';
+            const label = (NOTI_STYLE[n.type] || {}).label || '진행';
+            ccNotify('collab', req, type, `${label}${n.detail ? ' — ' + n.detail : ''}`, [req.assignee].concat(collabReceivers(req), ccJustAdded ? Array.from(ccJustAdded) : []));
+        }
+        // 참조자를 바꿨을 때 — 새로 들어온 사람에게만 알립니다
+        function ccApplyChange(kind, rec, next) {
+            const before = ccUsersOf(rec), after = uniqueNames(next || []);
+            if (before.join('|') === after.join('|')) return '';
+            rec.ccUsers = after;
+            const added = after.filter(n => !before.includes(n));
+            if (added.length) { ccJustAdded = new Set(added); setTimeout(() => { ccJustAdded = null; }, 0); }
+            if (added.length) ccNotify(kind, rec, 'cc-new', `${currentUserName || ''} 님이 참조로 지정했습니다.`, after.filter(n => !added.includes(n)));
+            return `참조 ${before.join(', ') || '-'} → ${after.join(', ') || '-'}`;
+        }
+
+        // ---------- 참조함 · 상세 ----------
+        function ccMyList() {
+            const me = currentUserName || '';
+            const out = [];
+            const add = (kind, rec, key) => { if (ccHas(rec, me)) out.push(Object.assign({ kind, id: rec.id }, ccSummary(kind, { rec, key }))); };
+            collabRequests.forEach(r => add('collab', r));
+            Object.keys(WORK_CENTERS).forEach(key => (WORK_CENTERS[key].works || []).forEach(w => add('work', w, key)));
+            (typeof payDocRequests !== 'undefined' ? payDocRequests : []).forEach(r => add('paydoc', r));
+            (typeof contracts !== 'undefined' ? contracts : []).forEach(c => add('contract', c));
+            return out.sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')) || String(b.id).localeCompare(String(a.id)));
+        }
+        let ccBoxKind = '';
+        function ccModal(id) {
+            let m = document.getElementById(id);
+            if (!m) {
+                m = document.createElement('div');
+                m.id = id;
+                m.className = 'hidden fixed inset-0 bg-black/50 z-[75] flex items-center justify-center p-4';
+                m.addEventListener('click', (e) => { if (e.target === m) m.classList.add('hidden'); });
+                document.body.appendChild(m);
+            }
+            return m;
+        }
+        function openCcBox(kind) {
+            if (typeof kind === 'string') ccBoxKind = kind;
+            const all = ccMyList();
+            const list = ccBoxKind ? all.filter(x => x.kind === ccBoxKind) : all;
+            const chip = (k, label, n) => `<button type="button" onclick="openCcBox(${jsArg(k)})" class="px-2.5 py-1 rounded-full text-xs border ${ccBoxKind === k ? 'bg-sky-600 border-sky-600 text-white' : 'bg-white border-gray-300 text-gray-600 hover:bg-gray-50'}">${escapeHtml(label)} <b class="tabular-nums">${n}</b></button>`;
+            const m = ccModal('cc-box-modal');
+            m.innerHTML = `<div class="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[88vh] flex flex-col">
+                <div class="px-5 py-3 border-b border-gray-100 flex items-start justify-between gap-2">
+                    <div><h3 class="text-lg font-bold text-gray-800"><i class="fas fa-user-group text-sky-600 mr-1"></i>참조함</h3>
+                    <p class="text-xs text-gray-500 mt-0.5">내가 참조로 지정된 요청입니다. 클릭하면 내용 · 진행 상황 · 코멘트를 볼 수 있습니다.</p></div>
+                    <button type="button" onclick="document.getElementById('cc-box-modal').classList.add('hidden')" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times"></i></button>
+                </div>
+                <div class="px-5 pt-3 flex flex-wrap gap-1.5">${chip('', '전체', all.length)}${Object.keys(CC_KIND_NAME).map(k => chip(k, CC_KIND_NAME[k], all.filter(x => x.kind === k).length)).join('')}</div>
+                <div class="p-5 pt-3 overflow-y-auto">${list.length ? `<div class="divide-y divide-gray-100 border border-gray-100 rounded">${list.map(x => `
+                    <button type="button" data-cc-row="${escapeHtml(x.kind + ':' + x.id)}" onclick="openCcDetail(${jsArg(x.kind)}, ${jsArg(x.id)})" class="w-full text-left px-3 py-2.5 hover:bg-sky-50/60 flex items-start gap-3">
+                        <span class="shrink-0 mt-0.5 px-1.5 py-0.5 rounded bg-sky-50 text-sky-700 text-[11px] font-semibold whitespace-nowrap">${escapeHtml(CC_KIND_NAME[x.kind])}</span>
+                        <span class="flex-1 min-w-0"><span class="block text-sm font-medium text-gray-800 truncate">${escapeHtml(x.title)}</span>
+                        <span class="block text-xs text-gray-500 truncate">${escapeHtml([x.who ? '요청 ' + x.who : '', x.sub].filter(Boolean).join(' · '))}</span></span>
+                        <span class="shrink-0 text-right"><span class="block text-xs font-semibold text-gray-700 whitespace-nowrap">${escapeHtml(x.status)}</span><span class="block text-[11px] text-gray-400 whitespace-nowrap">${escapeHtml(x.date || '')}</span></span>
+                    </button>`).join('')}</div>` : '<p class="text-sm text-gray-400 text-center py-10">참조로 지정된 요청이 없습니다.</p>'}</div>
+            </div>`;
+            m.classList.remove('hidden');
+        }
+        function ccCanView(kind, f) {
+            return canManageAllData() || ccPeople(kind, f).includes(currentUserName || '');
+        }
+        function openCcDetail(kind, id) {
+            if (kind === 'collab') { openCollabDetailModal(id); return; }
+            const f = ccFind(kind, id);
+            if (!f) { alert('요청을 찾을 수 없습니다. 삭제되었을 수 있습니다.'); return; }
+            if (!ccCanView(kind, f)) { alert('이 요청의 참조자 · 요청자 · 처리자만 볼 수 있습니다.'); return; }
+            const r = f.rec, s = ccSummary(kind, f);
+            const row = (label, v) => v ? `<div class="flex gap-3"><span class="w-24 shrink-0 text-gray-500">${escapeHtml(label)}</span><span class="flex-1 min-w-0 text-gray-800 break-words whitespace-pre-line">${v}</span></div>` : '';
+            const t = (v) => v ? escapeHtml(String(v)) : '';
+            let body = '';
+            if (kind === 'work') {
+                const xf = r.xfer || {};
+                body = row('구분', t(s.sub)) + row('상태', t(s.status)) + row('접수', t([r.receivedAt, r.receivedTime, r.receiver].filter(Boolean).join(' · ')))
+                    + row('상호 · 연락처', t([r.company, r.contact].filter(Boolean).join(' · '))) + row('담당자', t(r.assignee))
+                    + row('접수 내용', t(r.memo || (Array.isArray(r.intakeEntries) && r.intakeEntries[0] ? r.intakeEntries[0].text : '')))
+                    + row('조치사항', t(r.actionNote || (Array.isArray(r.actionEntries) && r.actionEntries.length ? r.actionEntries[r.actionEntries.length - 1].text : '')))
+                    + (xf.status ? row('이관 처리', t([xferStatusDef(xf.status).name, xf.assignee ? '담당 ' + xf.assignee : '', xf.note, xf.returnReason ? '반려 사유 ' + xf.returnReason : ''].filter(Boolean).join(' · '))) : '');
+            } else if (kind === 'paydoc') {
+                body = row('상태', t(s.status)) + row('요청자', t([r.requester, r.requestedAt].filter(Boolean).join(' · '))) + row('수신', t(r.targetName)) + row('보완 기한', t(r.dueDate))
+                    + row('서류', t((r.items || []).map(i => `${(payDocCatalog.find(d => d.id === i.docId) || {}).name || i.docId}${i.reason ? ' (' + i.reason + ')' : ''}`).join('\n'))) + row('요청 메모', t(r.memo))
+                    + row('처리 이력', t((r.history || []).slice(-5).map(h => `${h.at} ${h.who} — ${h.text}`).join('\n')));
+            } else if (kind === 'contract') {
+                body = row('상태', t(s.status)) + row('영업 담당', t(r.owner)) + row('결재', t((r.approvalSteps || []).map((x, i) => `${i + 1}차 ${x.role} — ${x.state}${x.approver ? ' · ' + x.approver : ''}${x.date ? ' · ' + x.date : ''}${x.comment ? ' · ' + x.comment : ''}`).join('\n')))
+                    + row('계약 메모', t(r.memo));
+            }
+            const cm = (r.ccComments || []);
+            const m = ccModal('cc-detail-modal');
+            m.innerHTML = `<div class="bg-white rounded-lg shadow-xl w-full max-w-xl max-h-[88vh] overflow-y-auto p-5">
+                <div class="flex items-start justify-between gap-2 mb-3">
+                    <div class="min-w-0"><p class="text-xs text-sky-700 font-semibold">${escapeHtml(CC_KIND_NAME[kind])} · ${escapeHtml(r.id)}</p><h3 class="text-lg font-bold text-gray-800 break-words">${escapeHtml(s.title)}</h3></div>
+                    <button type="button" onclick="document.getElementById('cc-detail-modal').classList.add('hidden')" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times"></i></button>
+                </div>
+                <div class="bg-gray-50 rounded border border-gray-100 p-3 space-y-2 text-sm">${body}${row('참조', ccChipsHtml(r))}</div>
+                <p class="text-xs text-gray-400 mt-2"><i class="fas fa-circle-info mr-1"></i>참조자는 내용과 진행 상황을 확인하고 코멘트를 남길 수 있습니다. 처리는 담당 화면에서 담당자가 합니다.</p>
+                <div class="mt-4">
+                    <p class="text-sm font-semibold text-gray-700 mb-2"><i class="far fa-comment-dots text-gray-400 mr-1"></i>코멘트 <span class="text-xs font-normal text-gray-400">${cm.length}건</span></p>
+                    <div id="cc-comment-list" class="space-y-2">${cm.length ? cm.map(c => `<div class="rounded border border-gray-100 px-3 py-2"><p class="text-xs text-gray-500"><b class="text-gray-700">${escapeHtml(c.by)}</b> · ${escapeHtml([c.at, c.time].filter(Boolean).join(' '))}</p><p class="text-sm text-gray-800 whitespace-pre-line break-words">${escapeHtml(c.text)}</p></div>`).join('') : '<p class="text-xs text-gray-400">아직 코멘트가 없습니다.</p>'}</div>
+                    <textarea id="cc-comment-text" rows="2" class="mt-2 w-full p-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-sky-500" placeholder="코멘트를 입력해 주세요"></textarea>
+                    <div class="flex justify-end mt-1"><button type="button" onclick="addCcComment(${jsArg(kind)}, ${jsArg(id)})" class="px-3 py-1.5 text-sm rounded bg-sky-600 text-white hover:bg-sky-700">코멘트 등록</button></div>
+                </div>
+            </div>`;
+            m.classList.remove('hidden');
+        }
+        // 업무 접수 때 고른 참조자를 붙이고 알립니다 — 업무를 목록에 넣은 뒤 부릅니다 (2026-11-27)
+        function ccAttachNewWork(key, w, boxId) {
+            const l = ccPicked(boxId);
+            const box = document.getElementById(boxId);
+            if (box) { box.querySelectorAll('.cc-pick:checked').forEach(el => { el.checked = false; }); ccPickerSync(box); }
+            if (!l.length || !w) return;
+            w.ccUsers = l;
+            const to = w.retransferDept || w.transferDept || '';
+            const xfer = to && to !== (WORK_CENTER_DEPT[key] || key) ? ` → 이관 ${xferName(to, w.retransferDept ? w.retransferTeam : w.transferTeam)}` : '';
+            ccNotify('work', w, 'cc-new', `${WORK_CENTERS[key].title} · ${(wcType(key, w.type) || {}).name || ''} 접수 (${w.receiver || currentUserName || ''})${xfer}`);
+        }
+        // 참조 코멘트 — 요청자 · 처리자 · 다른 참조자에게 알립니다 (본인 제외)
+        function addCcComment(kind, id) {
+            const f = ccFind(kind, id);
+            if (!f || !ccCanView(kind, f)) return;
+            const el = document.getElementById('cc-comment-text');
+            const text = (el && el.value || '').trim();
+            if (!text) { alert('코멘트 내용을 입력해 주세요.'); if (el) el.focus(); return; }
+            const now = new Date(), me = currentUserName || '작성자';
+            f.rec.ccComments = (f.rec.ccComments || []).concat([{ id: gwUid('ccm_'), by: me, at: ymd(now), time: hhmm(now), text }]);
+            const s = ccSummary(kind, f);
+            ccPeople(kind, f).filter(n => n !== me).forEach(who => pushNotification({
+                id: 'cnoti_' + collabNotiIdCounter++, type: 'cc-comment', ccKind: kind, ccId: id,
+                toUser: who, toDept: '', title: s.title, detail: `${CC_KIND_NAME[kind]} 코멘트 · ${me}: ${text}`, date: ymd(now), read: false
+            }));
+            ccSave(kind);
+            openCcDetail(kind, id);
+            if (typeof showAppToast === 'function') showAppToast('코멘트가 등록되었습니다.', 'blue');
         }
 
         // 나에게 온 알림 — 본인 앞으로 온 것과 우리 부서 앞으로 온 것.
@@ -15717,6 +15970,11 @@ const QUOTE_TEMPLATES = [
             // 첨부자료는 협업 요청(타부서·우리 팀 발행)에만 붙습니다. 자체 진행 업무는 첨부 저장소가 없습니다.
             const fileWrap = document.getElementById('task-file-wrap');
             if (fileWrap) fileWrap.classList.toggle('hidden', targetDept === 'none');
+            const ccWrap = document.getElementById('task-cc-wrap');   // 참조 — 협업 요청 · 업무지시에만 (2026-11-27)
+            if (ccWrap) {
+                ccWrap.classList.toggle('hidden', targetDept === 'none');
+                if (targetDept !== 'none' && !ccWrap.firstElementChild) ccWrap.innerHTML = ccPickerHtml('task-cc', []);
+            }
             onTaskTypeChange();
         }
 
@@ -15744,6 +16002,8 @@ const QUOTE_TEMPLATES = [
             document.getElementById('task-assignee-user-wrap').classList.add('hidden');
             document.getElementById('task-directive-wrap').classList.add('hidden');
             document.getElementById('task-file-wrap').classList.add('hidden');
+            const ccWrap = document.getElementById('task-cc-wrap');
+            if (ccWrap) { ccWrap.classList.add('hidden'); ccWrap.innerHTML = ''; }
             clearCollabRequestFiles();                  // 발행하지 않고 닫으면 고른 파일도 함께 정리
         }
 
@@ -15791,6 +16051,7 @@ const QUOTE_TEMPLATES = [
                     return;
                 }
                 const groupId = 'dir_' + directiveGroupCounter++;
+                const dirCc = ccPicked('task-cc');   // 참조 (2026-11-27)
                 // 지시 대상 수만큼 첨부를 복사해 붙입니다 (열람 표시가 대상자별로 따로 남도록)
                 const dirFiles = takeCollabRequestFiles(targets.length);
                 targets.forEach((who, i) => {
@@ -15814,9 +16075,11 @@ const QUOTE_TEMPLATES = [
                         memo: '',
                         reason: '',
                         ageDays: 0,
-                        requestFiles: dirFiles[i] || []
+                        requestFiles: dirFiles[i] || [],
+                        ccUsers: dirCc.slice()
                     });
                 });
+                if (dirCc.length) ccNotify('collab', collabRequests[collabRequests.length - 1], 'cc-new', `업무지시 · ${assignee || ''} → ${targets.join(', ')} (완료기한 ${dueDate} ${dueTime})`, targets);
                 renderCollabs();
                 closeTaskModal();
                 switchCollabTab('directive');
@@ -15856,7 +16119,8 @@ const QUOTE_TEMPLATES = [
                     memo: '',
                     reason: '',
                     ageDays: 0,
-                    requestFiles: reqFiles[0] || []
+                    requestFiles: reqFiles[0] || [],
+                    ccUsers: ccPicked('task-cc')          // 참조 (2026-11-27) — 받는 쪽 알림이 나갈 때 참조자에게도 갑니다
                 };
                 if (whoList.length > 1) newReq.assigneeUsers = whoList.slice();
                 collabRequests.push(newReq);
@@ -16023,11 +16287,11 @@ const QUOTE_TEMPLATES = [
             if (scope === 'self') {
                 // 본부(부서) 전체로 온 요청은 조회 범위가 '본인'인 팀원도 봅니다 — 1건이지만 본부 모두가 받은 요청 (2026-10-23)
                 // 우리 부서로 온 요청은 담당자가 따로 있어도 부서원이 함께 봅니다 (보완사항 2026-11-06 · 처리는 담당자만, 업무지시는 제외)
-                return collabRequests.filter(r => collabIsReceiver(r, name) || r.assignee === name || collabIsDeptWideFor(r, dept) || collabDeptSees(r, dept));
+                return collabRequests.filter(r => collabIsReceiver(r, name) || r.assignee === name || collabIsDeptWideFor(r, dept) || collabDeptSees(r, dept) || ccHas(r, name));
             }
             // dept / hq: 발행 또는 수신 부서가 내 부서
             return collabRequests.filter(r => r.sourceDept === dept || r.targetDept === dept
-                || collabIsReceiver(r, name) || r.assignee === name);
+                || collabIsReceiver(r, name) || r.assignee === name || ccHas(r, name));   // 참조자도 봅니다 (2026-11-27)
         }
 
         // 필터 바 조건 적용
@@ -17883,6 +18147,7 @@ const QUOTE_TEMPLATES = [
                 ${row('구분', collabRoute(req))}
                 ${row(dir ? '지시자' : '요청자', escapeHtml(req.assignee || '-'))}
                 ${row(dir ? '지시받은 사람' : '수신 담당자', collabReceivers(req).length ? escapeHtml(collabReceiverText(req)) + (collabReceivers(req).length > 1 ? ` <span class="text-xs text-gray-500">(${collabReceivers(req).length}명 · 한 명이 처리하면 요청 전체에 반영)</span>` : '') : '<span class="text-gray-400">부서 전체</span>')}
+                ${ccUsersOf(req).length ? row('참조', ccChipsHtml(req)) : ''}
                 ${req.handledBy ? row('처리한 사람', escapeHtml(req.handledBy)) : ''}
                 ${(() => {   // 여러 명에게 함께 보낸 협업 요청 (2026-10-19)
                     if (dir || !req.collabGroupId) return '';
@@ -18376,6 +18641,11 @@ const QUOTE_TEMPLATES = [
             const reasonBox = document.getElementById('collab-edit-reason');
             reasonBox.classList.toggle('hidden', req.status !== 'hold');
             reasonBox.innerHTML = `<b>보류 사유</b> · ${escapeHtml(req.reason || '-')}`;
+            // 참조 (2026-11-27) — 요청자 · 관리자가 고칩니다
+            const noteEl = document.getElementById('collab-edit-note');
+            let ccWrap = document.getElementById('collab-edit-cc-wrap');
+            if (!ccWrap && noteEl) { ccWrap = document.createElement('div'); ccWrap.id = 'collab-edit-cc-wrap'; ccWrap.className = 'mb-3'; const host = noteEl.closest('div') || noteEl; host.parentNode.insertBefore(ccWrap, host); }
+            if (ccWrap) { const can = collabRoleOf(req) !== 'receiver'; ccWrap.classList.toggle('hidden', !can); ccWrap.innerHTML = can ? ccPickerHtml('collab-edit-cc', ccUsersOf(req)) : ''; }
             document.getElementById('collab-edit-modal').classList.remove('hidden');
         }
         function closeCollabEditModal() { const m = document.getElementById('collab-edit-modal'); if (m) m.classList.add('hidden'); }
@@ -18388,10 +18658,14 @@ const QUOTE_TEMPLATES = [
             const changes = [['title', '제목'], ['description', '요청 내용']]
                 .filter(([k]) => String(req[k] || '') !== String(next[k] || ''))
                 .map(([k, label]) => ({ field: k, label, from: String(req[k] || ''), to: String(next[k] || '') }));
-            if (!changes.length && !note) { alert('변경된 내용이 없습니다.'); return; }
+            const ccBox = document.getElementById('collab-edit-cc');
+            const ccBefore = ccUsersOf(req).join(', '), ccNext = ccBox ? ccPicked('collab-edit-cc') : ccUsersOf(req);
+            const ccChanged = ccBefore !== ccNext.join(', ');
+            if (!changes.length && !note && !ccChanged) { alert('변경된 내용이 없습니다.'); return; }
             const now = new Date();
             const role = collabRoleOf(req);
             changes.forEach(c => { req[c.field] = c.to; });
+            if (ccChanged) { ccApplyChange('collab', req, ccNext); changes.push({ field: 'ccUsers', label: '참조', from: ccBefore, to: ccNext.join(', ') }); }
             (req.edits = req.edits || []).push({ at: `${ymd(now)} ${hhmm(now)}`, by: currentUserName || '', role, changes, note });
             // 상대에게 알림 — 요청자가 고쳤으면 수신자에게, 수신자가 고쳤으면 요청자에게
             const toReceiver = role !== 'receiver';
@@ -26871,7 +27145,8 @@ const QUOTE_TEMPLATES = [
                                         <option value="normal">보통</option><option value="high">긴급</option><option value="low">낮음</option>
                                     </select>
                                 </div>
-                            </div>`;
+                            </div>
+                            <div>${ccPickerHtml(wcId(key, 'intake-cc'), [], '업무를 처리하지 않고 접수 · 이관 내용과 진행을 함께 보고 알림을 받을 사람 (선택)')}</div>`;
         }
 
         // ==================== 장비설치 전용 상수 ====================
@@ -27374,6 +27649,7 @@ const QUOTE_TEMPLATES = [
                                 </select>
                                 <p class="text-[11px] text-gray-400 mt-1">본부 단위로 선택하며, 팀이 있으면 팀까지 선택합니다. 담당자는 이관받은 팀이 업무처리에서 지정합니다.</p>
                             </div>
+                            <div class="sm:col-span-2">${ccPickerHtml(wcId(key, 'dst-cc'), [], '업무를 처리하지 않고 접수 · 이관 내용과 진행을 함께 보고 알림을 받을 사람 (선택)')}</div>
 
                             <div class="flex justify-end gap-2 pt-1">
                                 <button type="reset" onclick="setTimeout(function(){ resetDistIntake(${jsArg(key)}); }, 0)" class="px-3 py-2 bg-gray-100 text-gray-600 rounded text-sm hover:bg-gray-200 transition-colors">비우기</button>
@@ -27446,6 +27722,7 @@ const QUOTE_TEMPLATES = [
                                 </select>
                                 <p class="text-[11px] text-gray-400 mt-1">본부 단위로 선택하며, 팀이 있으면 팀까지 선택합니다. 팀 내 담당자는 <b>순차 배분하지 않으며</b>, 이관받은 팀이 업무처리에서 직접 지정합니다.</p>
                             </div>
+                            <div class="sm:col-span-2">${ccPickerHtml(wcId(key, 'mnu-cc'), [], '업무를 처리하지 않고 접수 · 이관 내용과 진행을 함께 보고 알림을 받을 사람 (선택)')}</div>
 
                             <div class="flex justify-end gap-2 pt-1">
                                 <button type="reset" onclick="setTimeout(function(){ renderWorkMenuIntake(${jsArg(key)}, true); }, 0)" class="px-3 py-2 bg-gray-100 text-gray-600 rounded text-sm hover:bg-gray-200 transition-colors">비우기</button>
@@ -32281,6 +32558,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                 xf.doneAt = ''; xf.doneTime = ''; xf.doneBy = '';
             }
 
+            ccNotify('work', w, 'cc-update', `이관 처리 — ${xferStatusDef(status).name}${xf.assignee ? ' · 담당 ' + xf.assignee : ''}${status === 'returned' ? ' · 반려 사유: ' + reason : (note ? ' · ' + note : '')}`);   // 참조 (2026-11-27)
             closeTransferModal();
             renderWorkTypePanel(myKey);
             renderWorkTypeTabs(myKey);
@@ -33691,6 +33969,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                         <button type="button" onclick="document.getElementById('work-own-edit-modal').classList.add('hidden')" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times"></i></button>
                     </div>
                     <p class="text-xs font-semibold text-gray-600 mb-1.5"><i class="fas fa-inbox text-gray-400 mr-1"></i>업무접수</p>
+                    <div class="mb-3">${ccPickerHtml('woe-cc', ccUsersOf(w))}</div>
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div>${lbl('연락처')}<input id="woe-contact" type="text" value="${escapeHtml(w.contact || '')}" class="${cls}" /></div>
                         <div>${lbl('접수방식')}<select id="woe-channel" class="${cls}">${opt(wcChannels(key, w.type), w.channel || '')}</select></div>
@@ -33746,6 +34025,10 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             };
             set('contact', '연락처', val('woe-contact'));
             set('channel', '접수방식', val('woe-channel'));
+            if (document.getElementById('woe-cc')) {   // 참조 (2026-11-27) — 새로 넣은 사람에게 알림
+                const ccBefore = ccUsersOf(w).join(', ');
+                if (ccApplyChange('work', w, ccPicked('woe-cc'))) { pushFieldEdit(w, '참조', ccBefore, ccUsersOf(w).join(', ')); n++; }
+            }
             set('priority', '우선순위', val('woe-priority'), (v) => pri[v] || v);
             workOwnEditSpec(ref.key, w).forEach(f => {
                 const to = val('woe-p-' + f.prop);
@@ -34988,6 +35271,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
 
             touchWork(work);
             c.works.unshift(work);
+            ccAttachNewWork(key, work, wcId(key, 'intake-cc'));   // 참조 (2026-11-27)
 
             // 접수대장 형식(운영업무센터)은 이관받을 팀에 접수 사실을 알립니다 — 토스트 + 마이 대시보드 알림
             if (c.receiptForm) notifyWorkIntake(key, work);
@@ -37545,6 +37829,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
 
             touchWork(work);
             c.works.unshift(work);
+            ccAttachNewWork(key, work, wcId(key, 'mnu-cc'));   // 참조 (2026-11-27)
             wcEl(key, 'menu-form').reset();
             renderWorkMenuIntake(key, true);   // 다음 접수번호 · 접수시간으로 폼을 새로 맞춤
             renderWorkIntakeReceipt(key);      // 다른 접수 폼의 접수번호 미리보기도 같이 밀어 줌
@@ -37865,6 +38150,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
 
             touchWork(work);
             c.works.unshift(work);
+            ccAttachNewWork(key, work, wcId(key, 'dst-cc'));   // 참조 (2026-11-27)
             const memoEl = wcEl(key, 'dst-memo');
             if (memoEl) memoEl.value = '';
             wcEl(key, 'dist-form').reset();
@@ -38263,6 +38549,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                                 </select>
                                 <p class="text-[11px] text-gray-400 mt-1">본부를 선택하고, 팀이 있으면 팀까지 선택합니다. 담당자는 이관받은 팀이 업무처리에서 지정합니다.</p>
                             </div>
+                            <div>${ccPickerHtml(wcId(key, s + '-cc'), [], '업무를 처리하지 않고 접수 · 이관 내용과 진행을 함께 보고 알림을 받을 사람 (선택)')}</div>
 
                             <div class="flex justify-end gap-2 pt-1">
                                 <button type="reset" onclick="setTimeout(function(){ resetConsultIntake(${jsArg(key)}, ${jsArg(cfg.typeId)}); }, 0)" class="px-3 py-2 bg-gray-100 text-gray-600 rounded text-sm hover:bg-gray-200 transition-colors">초기화</button>
@@ -38354,6 +38641,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
 
             touchWork(work);
             c.works.unshift(work);
+            ccAttachNewWork(key, work, wcId(key, cfg.short + '-cc'));   // 참조 (2026-11-27)
             const memoEl = wcEl(key, cfg.short + '-memo');
             if (memoEl) memoEl.value = '';
             wcEl(key, typeId + '-form').reset();
@@ -39050,7 +39338,9 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             if (salesProgOn(key, w) && w.status !== status && status !== 'working' && status !== 'done') {
                 salesProgPush(w, { kind: 'system', text: `${wcStatusName(key, w.status)} → ${wcStatusName(key, status)}` });
             }
+            const ccPrev = w.status;
             w.status = status;
+            if (ccPrev !== status && ccUsersOf(w).length) ccNotify('work', w, 'cc-update', `${wcStatusName(key, ccPrev)} → ${wcStatusName(key, status)} (${currentUserName || ''})`);   // 참조 (2026-11-27)
             touchWork(w);              // 탭의 '새 정보' 숫자에 반영
             w.doneAt = status === 'done' ? ymd(new Date()) : '';
             if (status !== 'received' && !w.assignee) {
@@ -43955,6 +44245,11 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             }
             // 모든 상태에 첨부 상태 안내를 상단에 표시
             actionsEl.innerHTML = attInfo + actionsEl.innerHTML;
+            // 참조 (2026-11-27) — 상신 전 · 반려 뒤에는 고르고, 결재 중 · 완료 뒤에는 보여 줍니다
+            const ccEditable = c.approvalStatus === '미승인' || c.approvalStatus === '반려';
+            actionsEl.innerHTML = (ccEditable
+                ? `<div class="mb-2">${ccPickerHtml('contract-cc', ccUsersOf(c), '승인은 하지 않고 계약 내용과 결재 진행을 함께 보고 알림을 받을 사람 (선택)')}</div>`
+                : (ccUsersOf(c).length ? `<p class="mb-2 text-xs text-gray-600"><b class="mr-1">참조</b>${ccChipsHtml(c)}</p>` : '')) + actionsEl.innerHTML;
         }
 
         function submitContractForApproval(contractId) {
@@ -43994,6 +44289,9 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             c.currentStep = 0;
             c.approvalStatus = '승인대기';
             c.status = '승인대기';
+            if (document.getElementById('contract-cc')) c.ccUsers = ccPicked('contract-cc');   // 참조 (2026-11-27)
+            c.ccSubmittedAt = ymd(new Date());
+            ccNotify('contract', c, 'cc-new', `${currentUserName || ''} 님이 승인을 상신했습니다 (결재 ${c.approvalSteps.map(x => x.role).join(' → ')})`);
             renderContractApproval(contractId);
             renderContracts();
             alert(c.noAttachment
@@ -44010,6 +44308,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             step.approver = document.getElementById('user-name').innerText;
             step.date = nowStamp();
             step.comment = comment;
+            ccNotify('contract', c, 'cc-update', `${c.currentStep + 1}차 ${step.role} 승인 (${step.approver})${c.currentStep < c.approvalSteps.length - 1 ? '' : ' — 최종 승인'}${comment ? ' · ' + comment : ''}`);   // 참조 (2026-11-27)
 
             if (c.currentStep < c.approvalSteps.length - 1) {
                 c.currentStep++;
@@ -44058,6 +44357,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             step.comment = comment;
             c.approvalStatus = '반려';
             c.status = '초안';
+            ccNotify('contract', c, 'cc-update', `${c.currentStep + 1}차 ${step.role} 반려 (${step.approver})${comment ? ' · ' + comment : ''}`);   // 참조 (2026-11-27)
             renderContractApproval(contractId);
             renderContracts();
         }
@@ -54836,6 +55136,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                 cands.map(c => `<option value="${escapeHtml(c.name)}"></option>`).join('');
 
             renderPayDocAssignees([]);
+            document.getElementById('paydoc-cc-wrap').innerHTML = ccPickerHtml('paydoc-cc', [], '보완 처리는 하지 않고 요청 내용과 진행을 함께 보고 알림을 받을 사람 (선택)');
 
             document.getElementById('paydoc-requester').value = currentUserName || '결제본부';
             document.getElementById('paydoc-due').value = dueIn(3);
@@ -54970,6 +55271,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
             const t = document.querySelector(`input[name="paydoc-target"][value="${r.targetType || 'team'}"]`);
             if (t) t.checked = true;
             renderPayDocAssignees(payDocTargetNames(r));
+            document.getElementById('paydoc-cc-wrap').innerHTML = ccPickerHtml('paydoc-cc', ccUsersOf(r), '보완 처리는 하지 않고 요청 내용과 진행을 함께 보고 알림을 받을 사람 (선택)');
             onPayDocTargetChange();
         }
 
@@ -55004,8 +55306,10 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                 memo: document.getElementById('paydoc-memo').value.trim(),
                 submittedAt: '', completedAt: '',
                 items: picked.map(d => payDocItem(d.id, (document.getElementById(`paydoc-reason-${d.id}`) || {}).value || '')),
-                history: [{ at: today, who: currentUserName || '결제본부', text: `보완요청 발송 (수신: ${targetName}, ${picked.length}건)` }]
+                history: [{ at: today, who: currentUserName || '결제본부', text: `보완요청 발송 (수신: ${targetName}, ${picked.length}건)` }],
+                ccUsers: ccPicked('paydoc-cc')     // 참조 (2026-11-27)
             });
+            ccNotify('paydoc', payDocRequests[0], 'cc-new', `${currentUserName || ''} 님이 보완요청을 보냈습니다 (수신: ${targetName}, ${picked.length}건)`);
 
             savePayDocs();
             closePayDocRequestModal();
@@ -55036,6 +55340,8 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
                 r.targetName = targetName;
                 r.targetNames = assignees;
             }
+            const ccMsg = document.getElementById('paydoc-cc') ? ccApplyChange('paydoc', r, ccPicked('paydoc-cc')) : '';   // 참조 (2026-11-27)
+            if (ccMsg) changes.push(ccMsg);
             if (!changes.length) { closePayDocRequestModal(); return; }
             payDocLog(r, `요청 내용 수정 — ${changes.join(' · ')}`);
             savePayDocs();
@@ -55529,6 +55835,7 @@ ${gwZipBtnHtml(r.items.filter(it => it.fileUrl).map(it => ({ name: `${it.name ||
 
         function payDocLog(r, text) {
             (r.history = r.history || []).push({ at: ymd(new Date()), who: currentUserName || '사용자', text });
+            if (ccUsersOf(r).length) ccNotify('paydoc', r, 'cc-update', `${text} (${currentUserName || ''})`);   // 참조 (2026-11-27) — 처리 이력이 남을 때마다
         }
 
         // ---------- 영업본부: 착수 / 업로드 / 제출 ----------

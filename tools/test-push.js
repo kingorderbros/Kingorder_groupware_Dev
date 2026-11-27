@@ -81,6 +81,7 @@ async function decrypt(b, body) {
     console.log('\n[1] 종류 · 받는 사람');
     ok(P.categoryOf('work-received') === 'work' && P.categoryOf('collab-requested') === 'collab' && P.categoryOf('delay-inquiry') === 'collab'
         && P.categoryOf('schedule-change-result') === 'collab' && P.categoryOf('dev-review') === 'dev' && P.categoryOf('뭔가') === 'etc', '알림 종류를 묶음으로');
+    ok(P.categoryOf('cc-new') === 'cc' && P.categoryOf('cc-comment') === 'cc' && P.CATEGORIES.some(c => c.id === 'cc'), '참조 알림은 참조 묶음 (2026-11-27)');
     ok(P.categoryOf('schedule-cancelled') === 'schedule' && P.categoryOf('schedule-deleted') === 'schedule' && P.categoryOf('schedule-reminder') === 'schedule', '일정 취소 · 삭제 알림은 일정 알림 묶음 (2026-10-30)');
     const names = (n) => P.recipientsOf(store['gwUsers.v1'], n, 'me@k.co').map(u => u.name).join();
     ok(names({ toUser: '김영업' }) === '김영업', '사람 앞 알림');
@@ -132,7 +133,7 @@ async function decrypt(b, body) {
     ok((await call('park@k.co', 'POST', '/api/push/subscribe', { subscription: sub2, device: 'PC' })).status === 200, '박운영 PC 구독');
     ok(store['gwPushSubs.v1/u2'].subs.length === 1 && store['gwPushSubs.v1/u4'].subs.length === 1, '사람마다 따로 저장 (둘이 동시에 켜도 서로 안 지움)');
     let r = await call('kim@k.co', 'GET', '/api/push/status');
-    ok(r.j.devices.length === 1 && r.j.prefs.work === true && r.j.categories.length === 11 && r.j.prefs.schedule === true && r.j.prefs.notice === true && r.j.prefs.inbound === true, '내 상태 — 기기 1대 · 모두 켜짐 (일정 · 공지 · 인바운드 포함 11종)');
+    ok(r.j.devices.length === 1 && r.j.prefs.work === true && r.j.categories.length === 12 && r.j.prefs.cc === true && r.j.prefs.schedule === true && r.j.prefs.notice === true && r.j.prefs.inbound === true, '내 상태 — 기기 1대 · 모두 켜짐 (일정 · 공지 · 인바운드 · 참조 포함 12종)');
     noti('N1', { type: 'work-received', title: '킹오더 강남점', detail: '<b>설치</b> 접수', toDept: 'sales', toTeam: '1팀' }, 'me@k.co');
     r = await call('me@k.co', 'POST', '/api/push/send', { id: 'N1', label: '업무접수' });
     ok(r.j.sent === 1 && pushed.length === 1 && pushed[0].url === sub1.endpoint, '영업 1팀 알림 → 김영업 폰에만 (박운영 · 보낸 사람 제외)');
