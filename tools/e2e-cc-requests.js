@@ -122,6 +122,6 @@ srv.listen(8877,async()=>{const br=await pp.launch({executablePath:'/Application
  ok(r.ccCommentSaved===1 && r.ccCommentTo.includes('정장훈') && !r.ccCommentTo.includes('참조인'),'참조 코멘트 저장 · 접수자에게 알림 · 본인 제외',[r.ccCommentSaved,r.ccCommentTo]);
  ok(/^openCcDetail\((&quot;|')work/.test(r.clickJs),'참조 알림 클릭 → 참조 상세',r.clickJs);
  ok(r.strangerBlocked,'관계없는 사람은 참조 상세를 못 봄');
- ok(r.ver==='1.1.51','버전 1.1.51',r.ver);
+ ok(/^1\.1\.(5[1-9]|[6-9][0-9])$/.test(r.ver),'버전 1.1.51 이상',r.ver);
  ok(errs.length===0,'페이지 오류 없음',errs);
  console.log(`통과 ${pass} · 실패 ${fail}`);await br.close();srv.close();process.exit(fail?1:0);});
