@@ -38,6 +38,65 @@
         catch (e) { return ''; }
     })();
     let authed = false;               // Supabase 로그인 세션이 있는지
+
+    // ---------- 사용 중 속도 기록 (2026-11-27, v1.1.50 · SQL 20261127_jh_speed_log.sql) ----------
+    // 그룹웨어 DB(Supabase) · 그룹웨어 서버(/api/*) 조회마다 걸린 시간을 재서, 10분마다 요약(건수 · 중간값 · 느린 조회 5개)을
+    // 서버에 남깁니다(gw_speed_report). 그룹웨어 서버 /api/speed 가 최근 1시간 요약을 보여 주고 운영 점검 플랫폼이 확인합니다.
+    // 남기는 것은 조회 이름(예: rest:app_store)과 시간(ms)뿐 — 자료 내용 · 이름 · 파일은 남기지 않습니다. 직원 로그인 상태에서만 보냅니다.
+    const speed = { list: [], boot: 0, steps: null, sent: 0 };
+    const nowMs = () => (typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now());
+    const supaBase = String(cfg.supabaseUrl || '').replace(/\/+$/, '');
+    function speedName(u) {
+        try {
+            const x = new URL(u, window.location.href);
+            const full = x.origin + x.pathname;
+            if (supaBase && full.indexOf(supaBase + '/') === 0) {   // Supabase 주소 (앞부분 전체로 구분)
+                const sp = full.slice(supaBase.length);
+                if (/^\/storage\/v1\/object\//.test(sp) && !/\/object\/sign\//.test(sp)) return null;   // 파일 올리기 · 받기는 크기에 따라 달라 뺍니다
+                if (/gw_speed_report/.test(sp)) return null;
+                return sp.replace(/^\/(rest|storage|auth|functions)\/v1\//, '$1:').replace(/\/object\/sign\/.*/, '/sign').slice(0, 60);
+            }
+            if (x.origin === window.location.origin && /^\/api\//.test(x.pathname)) {
+                if (/^\/api\/files\//.test(x.pathname)) return null;   // 자료실 파일 받기 · 올리기는 뺍니다
+                return 'api:' + x.pathname.split('/').slice(2, 4).join('/').slice(0, 50);
+            }
+        } catch (e) { /* 이름을 못 정하면 재지 않습니다 */ }
+        return null;
+    }
+    (function wrapFetch() {
+        if (VIEW_MODE === 'partner' || typeof window.fetch !== 'function' || window.fetch.__kobTimed) return;
+        const orig = window.fetch.bind(window);
+        const timed = function (input, init) {
+            const u = typeof input === 'string' ? input : (input && input.url) || String(input || '');
+            const name = speedName(u);
+            if (!name) return orig(input, init);
+            const t = nowMs();
+            return orig(input, init).finally(() => {
+                speed.list.push([name, Math.round(nowMs() - t)]);
+                if (speed.list.length > 3000) speed.list.splice(0, 1500);
+            });
+        };
+        timed.__kobTimed = true;
+        window.fetch = timed;
+    })();
+    function sendSpeed() {
+        if (!client || !authed || !speed.list.length || Date.now() - speed.sent < 270000) return;   // 서버는 한 사람당 4분에 1번만 받습니다
+        speed.sent = Date.now();
+        const l = speed.list.splice(0);
+        const ms = l.map(x => x[1]).sort((a, b) => a - b);
+        const pct = (q) => ms[Math.min(ms.length - 1, Math.floor(ms.length * q))];
+        const worst = new Map();
+        l.forEach(([q, t]) => { if (t > (worst.get(q) || 0)) worst.set(q, t); });
+        const ver = (window.KOB_VERSION && window.KOB_VERSION.groupware) || '';
+        let mobile = 0; try { mobile = window.matchMedia('(pointer: coarse)').matches ? 1 : 0; } catch (e) { /* 모르면 0 */ }
+        const p = { v: ver, n: ms.length, p50: pct(0.5), p90: pct(0.9), max: ms[ms.length - 1], mobile,
+            slow: [...worst].sort((a, b) => b[1] - a[1]).slice(0, 5).map(([q, t]) => ({ q, ms: t })) };
+        if (speed.boot) { p.boot_ms = speed.boot; speed.boot = 0; if (speed.steps) { p.boot_steps = speed.steps; speed.steps = null; } }
+        try { client.rpc('gw_speed_report', { p }).then(() => {}, () => {}); } catch (e) { /* 기록 실패는 화면에 영향 없음 */ }
+    }
+    if (typeof setInterval === 'function') setInterval(sendSpeed, 600000);
+    if (typeof document !== 'undefined' && document.addEventListener) document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') sendSpeed(); });
+    window.kobSpeed = { send: () => { speed.sent = 0; sendSpeed(); }, peek: () => ({ n: speed.list.length, boot: speed.boot, steps: speed.steps }) };   // 시험 · 확인용
     let warnedAnon = false;
     function canPush(k) { return authed; }
     function holdAnon(k) {
@@ -462,6 +521,7 @@
     }
 
     async function boot() {
+        speed.t0 = Math.round(nowMs());   // 화면 파일을 받고 이 코드가 시작될 때까지
         if (VIEW_MODE === 'partner' && cfg.supabaseUrl && cfg.supabaseAnonKey) {
             await bootPartner();
             if (window.kobDb && window.kobDb.__init) { try { await window.kobDb.__init(null, 'local'); } catch (e) { /* 파트너는 표를 쓰지 않습니다 */ } }
@@ -490,7 +550,9 @@
                         }
                     });
                 } catch (e) { /* 로그인 상태를 못 따라가면 처음 값(authed)을 그대로 씁니다 */ }
+                const tStore = nowMs();
                 const { data, error } = await client.from('app_store').select('key,value');
+                speed.steps = { store: Math.round(nowMs() - tStore) };   // 공용 자료(app_store) 받기
                 if (error) throw error;
                 (data || []).forEach(r => { cache.set(r.key, toStr(r.value)); synced.set(r.key, toStr(r.value)); });
                 mode = 'supabase';
@@ -526,11 +588,17 @@
         }
         // 업무 자료(표)도 본체가 시작하기 전에 받아 둡니다 — 본체가 맨 위에서부터 동기로 읽기 때문입니다.
         if (window.kobDb && window.kobDb.__init) {
-            try { await window.kobDb.__init(client, mode); }
+            const tTables = nowMs();
+            try { await window.kobDb.__init(client, mode); if (speed.steps) speed.steps.tables = Math.round(nowMs() - tTables); }
             catch (e) { console.error('[kob-store] 표 자료 준비 실패 — 그 화면은 비어 보입니다', e); }
         }
+        const tMain = nowMs();
         runMain();
         document.documentElement.setAttribute('data-kob-ready', '1');   // 로그인 버튼을 살립니다 (index.html 머리의 <style>)
+        if (authed && client) {   // 접속 ~ 첫 화면 준비까지 (로그인된 직원만) — 단계: 화면 파일 받기(start) · 공용 자료 · 업무 표 · 화면 그리기
+            speed.boot = Math.round(nowMs());
+            speed.steps = Object.assign({ start: speed.t0 }, speed.steps || {}, { main: Math.round(nowMs() - tMain) });
+        } else speed.steps = null;
         setStatus('ok');
         window.addEventListener('beforeunload', () => { if (pending.size) flush(); });
     }
