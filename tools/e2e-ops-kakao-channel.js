@@ -48,5 +48,5 @@ srv.listen(8875,async()=>{const br=await pp.launch({executablePath:'/Application
  ok(r.saved===1&&r.channel===K,'카카오채널로 저장됨',r);
  ok(r.editAs.includes(K)&&r.editMenu.includes(K)&&!r.editDist.includes(K),'업무 수정 창도 3곳만',{a:r.editAs,m:r.editMenu,d:r.editDist});
  ok(!r.sales.includes(K),'영업업무센터에는 없음',r.sales);
- ok(r.ver==='1.1.49','버전 1.1.49',r.ver);
+ ok(/^1\.1\.(49|[5-9][0-9])$/.test(r.ver),'버전 1.1.49 이상',r.ver);
  ok(errs.length===0,'페이지 오류 없음',errs);console.log(`통과 ${pass} · 실패 ${fail}`);await br.close();srv.close();process.exit(fail?1:0);});

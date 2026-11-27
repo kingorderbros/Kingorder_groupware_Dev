@@ -12,6 +12,7 @@
  *
  * 엔드포인트 (server.js 와 같음)
  *   GET  /api/health
+ *   GET  /api/speed           — 사용 중 속도 요약(최근 1시간, 숫자만) · 운영 점검용
  *   GET  /api/vehicles                     GET /api/drivers[?reservedOnly=1]
  *   GET  /api/reservations[?driver=이름]   POST /api/reservations   POST /api/reservations/action
  *   GET  /api/vehicle-logs[?status=&driver=]  POST /api/vehicle-logs   POST /api/vehicle-logs/complete
@@ -317,6 +318,26 @@ export async function onRequest(context) {
     const body = async () => { try { return await request.json(); } catch (e) { return {}; } };
 
     if (path === '/api/health') return json(200, { ok: true, time: new Date().toISOString(), env: env.KOB_ENV || 'dev' });
+
+    // 사용 중 속도 요약 (v1.1.50, SQL 20261127_jh_speed_log.sql) — 직원 화면이 남긴 조회 시간의 최근 N분 요약. 숫자와 조회 이름만(사람 · 자료 내용 없음)
+    //   ok=false: 사람별 p90 의 중간값이 기준(1.5초)보다 느림 → 운영 점검 플랫폼이 확인해 경고 (킹오더챗 /api/speed 와 같은 모양)
+    if (path === '/api/speed' && method === 'GET') {
+        const minutes = Math.max(5, Math.min(1440, Number(url.searchParams.get('minutes')) || 60));
+        const LIMIT = 1500;
+        const base = str(env.SUPABASE_URL).replace(/\/+$/, ''), key = str(env.SUPABASE_SERVICE_ROLE_KEY);
+        if (!base || !key) return json(200, { ok: false, ready: false, error: '서버 설정(SUPABASE_URL · 키)이 없습니다.' });
+        try {
+            const r = await fetch(base + '/rest/v1/rpc/gw_speed_summary', {
+                method: 'POST',
+                headers: { apikey: key, Authorization: 'Bearer ' + key, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ p_minutes: minutes }),
+            });
+            if (!r.ok) return json(200, { ok: false, ready: false, error: '속도 기록을 읽지 못했습니다 (SQL 20261127_jh_speed_log 실행 전이거나 조회 실패, ' + r.status + ')' });
+            const sm = (await r.json()) || {};
+            const slow = Number(sm.reports) > 0 && Number(sm.p90_ms) > LIMIT;
+            return json(200, Object.assign({ ok: !slow, ready: true, limit_ms: LIMIT }, sm));
+        } catch (e) { return json(200, { ok: false, ready: false, error: '속도 기록 조회 실패' }); }
+    }
 
     let store;
     try { store = db(env); } catch (e) { return json(500, { ok: false, error: e.message }); }
