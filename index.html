@@ -70,7 +70,7 @@
     <script src="config/app-config.js"></script>
     <!-- 화면 버전 (2026-11-16) — 배포할 때마다 올립니다. 개발 · 운영 화면 아래에 "그룹웨어 v1.1.0 · 운영" 처럼 보입니다.
          groupware = 그룹웨어 화면 · calendar = 킹오더일정(?mode=calendar) -->
-    <script>window.KOB_VERSION = { groupware: '1.1.49', calendar: '1.0.8', date: '2026-11-27' };</script>
+    <script>window.KOB_VERSION = { groupware: '1.1.52', calendar: '1.0.8', date: '2026-11-27' };</script>
     <script>
         (function () {
             // manifest 는 **여기서 만들어 답니다.** (2026-09-05 고침)
@@ -26532,11 +26532,20 @@ const QUOTE_TEMPLATES = [
             return wc;
         }
 
+        // 속도 (2026-11-27, v1.1.52) — wcDef(key).customers 를 읽을 때마다 업체 전체(수천 곳)를 다시 맞추던 것을,
+        //   한 번의 처리(같은 클릭 · 같은 화면 그리기) 안에서는 한 번만 만들어 다시 씁니다.
+        //   경영현황판 집계가 업무 한 건마다 이 목록을 새로 만들어 접속이 업무 수 × 업체 수만큼 느렸습니다 (업체 2천 곳 · 업무 1백 건이면 수 초).
+        //   다음 처리로 넘어가면(setTimeout 0) 비우고, 업체를 저장할 때(saveCustomers)도 바로 비웁니다.
+        const wcCustCache = {};
+        let wcCustCacheTimer = null;
+        function wcCustomersInvalidate() { Object.keys(wcCustCache).forEach(k => { delete wcCustCache[k]; }); }
         function wcCustomers(key) {
             const def = WORK_CENTERS[key];
             if (!def) return [];
             const base = def.baseCustomers || [];
             if (typeof customers === 'undefined') return base;
+            const hit = wcCustCache[key];
+            if (hit && hit.ref === customers && hit.len === customers.length && hit.baseLen === base.length) return hit.list;
             def._linkCache = def._linkCache || {};
             const seedKeys = new Set(base.map(c => custMatchKey(c.name, c.bizNo)));
             const out = base.slice();
@@ -26549,6 +26558,8 @@ const QUOTE_TEMPLATES = [
                 }
                 out.push(syncWorkCenterCustomer(wc, c));
             });
+            wcCustCache[key] = { list: out, ref: customers, len: customers.length, baseLen: base.length, byId: null };
+            if (!wcCustCacheTimer) wcCustCacheTimer = setTimeout(() => { wcCustCacheTimer = null; wcCustomersInvalidate(); }, 0);
             return out;
         }
         // 기존 코드가 쓰던 wcDef(key).customers 를 그대로 두고 값만 병합 목록으로 바꿉니다.
@@ -26676,7 +26687,15 @@ const QUOTE_TEMPLATES = [
             }
         });
 
-        function wcCustomer(key, id) { return wcDef(key).customers.find(c => c.id === id) || null; }
+        function wcCustomer(key, id) {
+            const list = wcDef(key).customers;
+            const hit = wcCustCache[key];
+            if (hit && hit.list === list) {   // 같은 처리 안에서는 번호로 바로 찾습니다 (2026-11-27)
+                if (!hit.byId) hit.byId = new Map(list.map(c => [c.id, c]));
+                return hit.byId.get(id) || null;
+            }
+            return list.find(c => c.id === id) || null;
+        }
         function wcType(key, id) { return wcDef(key).types.find(t => t.id === id) || wcDef(key).types[0]; }
         // 접수방식 목록 — 센터 공용 목록에 탭별 extraChannels 를 '카카오톡' 바로 뒤(없으면 끝)에 넣습니다.
         function wcChannels(key, typeId) {
@@ -28646,7 +28665,7 @@ const QUOTE_TEMPLATES = [
                     const xf = w.xfer || {};
                     if (xf.status === 'returned') issue = '이관 반려';
                     else if (!issue && xf.status === 'new') issue = '이관 확인 대기';
-                    const cust = (c.customers || []).find(x => x.id === w.customerId);
+                    const cust = wcCustomer(key, w.customerId);   // 업무마다 업체 전체를 다시 찾지 않게 (2026-11-27)
                     // 영업본부 진행 내역 — 완료 예정일 · 문제 · 지체 (2026-11-19)
                     const sp = salesProgOn(key, w) ? salesProgState(w) : null;
                     if (sp && open && !issue) {
@@ -40072,6 +40091,7 @@ await fetch('${escapeHtml(url)}', { method: 'POST', headers: { 'Content-Type': '
         }
 
         function saveCustomers() {
+            if (typeof wcCustomersInvalidate === 'function') wcCustomersInvalidate();   // 업체가 바뀌었으니 업무센터 업체 목록을 다시 만듭니다 (2026-11-27)
             if (!window.kobDb) return;
             const alive = new Set();
             customers.forEach(c => {
